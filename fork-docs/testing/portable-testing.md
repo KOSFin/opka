@@ -11,6 +11,8 @@ ORCA_BACKGROUND_LAUNCH=1 pnpm run build:desktop:assets
 
 CI: [PR Checks](https://github.com/KOSFin/opka/actions/workflows/pr.yml). Типы и changed-lines quality, регрессии задач/навигации/CLI/Source Control, desktop assets на Linux/macOS/Windows, Swift-компоненты и скрытые Electron journeys на macOS. Проверки не используют реальные модели, аккаунты, SSH-хосты или production-секреты. Это целевой набор регрессий форка, не весь upstream test suite и не обещание полной платформенной приёмки.
 
+Проверки запускаются автоматически при изменении PR и push в main, либо вручную через Run workflow в Actions. Draft PR не запускает дорогие jobs; Ready for review запускает полный набор. Для merge все проверки и единственный `PR checks passed` из `pr.yml:verify` должны пройти на текущем head. Ссылка на старый green run не подтверждает новый commit. Artifacts находятся внизу страницы соответствующего завершённого run; срок хранения — 7 дней.
+
 Артефакты `desktop-assets-*` содержат build outputs и commit provenance. Это не `.app`, DMG, APK или готовый установщик. Не копируйте их поверх рабочей Orca. Подпись, собственный update channel и установщики — следующий отдельный этап.
 
 ## Локальная учебная приёмка

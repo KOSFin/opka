@@ -2,7 +2,7 @@
 
 ## Статус и следующий шаг
 
-Исходники опубликованы в публичный KOSFin/opka: remote main 28374500e55f827c51f27f286c502c116bc66534 проверен, GitHub подтверждает 15 393 commits и MIT. Полная upstream-история и лицензия сохранены. [PR #1](https://github.com/KOSFin/opka/pull/1) содержит собственный CI. Первый run успешно собрал все три ОС, типы, quality и регрессии, но правильно заблокировал merge при сбое kanban drag в hidden GUI. Узкий viewport и порядок прокрутки теста исправлены; следующий шаг — новый полный CI точного head и только после green aggregate merge. Локальные типы, quality, desktop assets, Swift и 5 hidden journeys прошли. Рабочую Orca, старый сервер, аккаунты, секреты и установленные сервисы не меняем.
+Исходники опубликованы в публичный KOSFin/opka: remote main 28374500e55f827c51f27f286c502c116bc66534 проверен, GitHub подтверждает 15 393 commits и MIT. Полная upstream-история и лицензия сохранены. [PR #1](https://github.com/KOSFin/opka/pull/1) содержит собственный CI. [Второй run](https://github.com/KOSFin/opka/actions/runs/39867244884) полностью green для head 9d05229618b2d76c02c6b46d43599e444d768e6d, включая GUI и aggregate. Финальная сверка расширила regression selection до всех 62 изменённых unit-файлов; следующий шаг — полный CI нового head и только после green aggregate merge. Локальные типы, quality, desktop assets, Swift и 5 hidden journeys прошли. Рабочую Orca, старый сервер, аккаунты, секреты и установленные сервисы не меняем.
 
 ## План и границы
 
@@ -62,3 +62,10 @@
 - На узком CI desktop колонка Done прокручивается автоматически уже после mouse-down. Существующий upstream github-project-board.spec.ts документирует ту же особенность Playwright. Тест теперь заранее прокручивает target, ожидает закрытие Cancel dialog и всегда использует viewport 1000×760. Assertions, реальный drag и flow завершения сохранены; production UI не менялся. В synthetic-only тест включены failure trace/screenshot для следующей диагностики.
 - Три повторения узкого kanban сценария локально прошли. Это ещё не green GitHub CI; новый полный прогон обязателен.
 - Все три build artifacts первого PR доступны. Linux archive реально скачан: 5 396 файлов, CLI/main/renderer присутствуют, source-commit.txt = 88dddcdd9c579c842ad98dd02969854897f5758a. GitHub подтвердил его родителей: опубликованный main и точный PR head d7a15cf81f78ce168789d947015fef2cd427d034. Это CI merge-ref, не installer и не установленная версия.
+
+### 2026-10-23 03:54:00 +05:00 Полный green и сверка покрытия перед merge
+
+- Run 39867244884 полностью success: все шесть execution jobs и PR checks passed. Head 9d05229618b2d76c02c6b46d43599e444d768e6d; узкий kanban исправил CI drag, остальные проверки не отключались.
+- Обнаружен ошибочный filter floating-pane вместо floating-terminal и несколько изменённых unit tests вне selection. Добавлены все недостающие сценарии; сверка diff от v1.4.235 показывает 62 изменённых unit files, missing = 0 (два Node test файла запускаются отдельно). Новый контракт отклоняет фильтры, не соответствующие ни одному test file.
+- Локальная промежуточная попытка выделения импортируемого manifest завершилась без Vitest summary из-за пропущенного argv-параметра isDirectInvocation. Это не засчитано за тестирование; вызов исправлен и защищён контрактом. Расширенный прогон действительно выполнился. Единственный сбой suite был ссылкой на перемещённый upstream e2e.yml; исторический контракт теперь читает inactive archive, а активный CLI build проверяется новым fork CI contract.
+- Расширенные регрессии и changed quality прошли. Изменения selection требуют нового полного GitHub run; прежний green не разрешает merge нового head.
