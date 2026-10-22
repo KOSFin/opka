@@ -2,7 +2,7 @@
 
 ## Статус и следующий шаг
 
-Пользователь подтвердил работу navigation5 и разрешил публикацию исходников в публичный KOSFin/opka с сохранением истории, сборками и тестами GitHub Actions. Исходники сохранены commit 28374500e5, отправка полной истории начата. Локальные типы, changed quality и регрессии прошли; GitHub CI и артефакты ещё не подтверждены. Следующий шаг — проверить remote main, создать PR с собственным workflow, дождаться всех обязательных checks точного head и проверить artifacts. Рабочую Orca, старый сервер, аккаунты, секреты и установленные сервисы не меняем.
+Исходники опубликованы в публичный KOSFin/opka: remote main 28374500e55f827c51f27f286c502c116bc66534 проверен, GitHub подтверждает 15 393 commits и MIT. Полная upstream-история и лицензия сохранены. [PR #1](https://github.com/KOSFin/opka/pull/1) содержит собственный CI. Первый run успешно собрал все три ОС, типы, quality и регрессии, но правильно заблокировал merge при сбое kanban drag в hidden GUI. Узкий viewport и порядок прокрутки теста исправлены; следующий шаг — новый полный CI точного head и только после green aggregate merge. Локальные типы, quality, desktop assets, Swift и 5 hidden journeys прошли. Рабочую Orca, старый сервер, аккаунты, секреты и установленные сервисы не меняем.
 
 ## План и границы
 
@@ -49,3 +49,16 @@
 - Полная локальная build:desktop:assets прошла: desktop renderer/main, CLI, WSL relay, web projection, mobile-web bundle; CLI runtime verification — 826 closure files и 5 команд. Ничего не установлено поверх рабочей Orca.
 - На CI-ветке прошли все 5 выбранных hidden Electron journeys: пять независимых synthetic PTY workers, nested import/collapse/restart, Source Control navigation, два проекта с одинаковыми task names, полный ручной kanban flow. Git warm-switch — 105 мс и 0 дополнительных base/compare reads. Это protocol fixtures, не доказательство автономной работы настоящей модели.
 - Исполнялся background-only Electron из локального тестового каталога, без показа окон. $electron отсутствует в доступном каталоге skills; использованы существующие Playwright/CDP тесты проекта. Production profile и удалённый сервер не использовались.
+
+### 2026-10-23 03:39:00 +05:00 Публикация подтверждена, PR CI выполняется
+
+- GitHub remote main совпал с 28374500e55f827c51f27f286c502c116bc66534; исходный v1.4.235 — его предок, blob LICENSE идентичен upstream. Полная история отправлена обычным push, tags и чужие release workflows не активировались.
+- Открыт и прикреплён PR #1, head d7a15cf81f78ce168789d947015fef2cd427d034. GitHub подтвердил реальный pull_request run 39866280495 из .github/workflows/pr.yml; все шесть execution jobs стартовали. Green status/артефакты пока не объявляются.
+- Все три локальные Swift-компонента собраны из исходников (computer-use universal, keyboard layout, notification status); Apple toolchain и установленные приложения не менялись.
+
+### 2026-10-23 03:45:00 +05:00 Первый CI выявил хрупкий drag test
+
+- Run 39866280495: типы/quality, regression, desktop assets Linux/macOS/Windows — success. Swift compile — success. Hidden journeys — 4 passed, 1 failed: при втором drag в Done не открылся Complete task dialog. Aggregate тоже failure; PR не слит, failure не обходится.
+- На узком CI desktop колонка Done прокручивается автоматически уже после mouse-down. Существующий upstream github-project-board.spec.ts документирует ту же особенность Playwright. Тест теперь заранее прокручивает target, ожидает закрытие Cancel dialog и всегда использует viewport 1000×760. Assertions, реальный drag и flow завершения сохранены; production UI не менялся. В synthetic-only тест включены failure trace/screenshot для следующей диагностики.
+- Три повторения узкого kanban сценария локально прошли. Это ещё не green GitHub CI; новый полный прогон обязателен.
+- Все три build artifacts первого PR доступны. Linux archive реально скачан: 5 396 файлов, CLI/main/renderer присутствуют, source-commit.txt = 88dddcdd9c579c842ad98dd02969854897f5758a. GitHub подтвердил его родителей: опубликованный main и точный PR head d7a15cf81f78ce168789d947015fef2cd427d034. Это CI merge-ref, не installer и не установленная версия.
