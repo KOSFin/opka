@@ -1,0 +1,154 @@
+name: PR Checks
+run-name: Opka checks | ${{ github.event.pull_request.head.sha || github.sha }}
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opka-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+  ORCA_TELEMETRY_DISABLED: '1'
+  ORCA_DIAGNOSTICS_DISABLED: '1'
+  HUSKY: '0'
+
+jobs:
+  static:
+    name: Types and changed-code quality
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Reject new root-level files and folders
+        run: |
+          DIFF_BASE="$(node config/scripts/git-pull-request-diff-base.mjs HEAD^1)"
+          node .github/scripts/check-root-directory-entries.mjs "$DIFF_BASE" HEAD
+      - name: Check types
+        run: pnpm tc
+      - name: Check changed code
+        env:
+          ORCA_CODE_QUALITY_BASE: HEAD^1
+        run: pnpm run check:code-quality:changed
+      - name: Check required context ownership
+        run: pnpm exec bun .github/scripts/check-required-pr-context.mjs
+      - name: Check README links
+        run: node config/scripts/check-readme-local-links.mjs
+
+  regression:
+    name: Fork regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: node
+      - run: pnpm run test:fork
+
+  desktop:
+    name: Desktop assets (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Build desktop, CLI and web assets
+        uses: ./.github/actions/install-mobile-dependencies
+      - name: Compile desktop assets
+        run: pnpm run build:desktop:assets
+      - name: Save commit provenance
+        shell: bash
+        run: git rev-parse HEAD > out/source-commit.txt
+      - name: Upload build outputs (not installers)
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-assets-${{ matrix.os }}-${{ github.sha }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+  electron:
+    name: Hidden Electron journeys and Swift
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      ORCA_COMPUTER_MACOS_SIGN_IDENTITY: '-'
+      ORCA_KEYBOARD_LAYOUT_MACOS_SIGN_IDENTITY: '-'
+      ORCA_NOTIFICATION_STATUS_MACOS_SIGN_IDENTITY: '-'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: electron
+          cache-electron-package: 'true'
+      - name: Install Electron binary
+        run: node config/scripts/install-electron-package-binary.mjs
+      - name: Build Swift components from source
+        run: |
+          pnpm run build:computer-macos
+          pnpm run build:keyboard-layout-macos
+          pnpm run build:notification-status-macos
+      - name: Build test renderer
+        run: |
+          pnpm run build:cli
+          pnpm exec electron-vite build --mode e2e
+      - name: Prepare isolated background-only Electron
+        shell: bash
+        run: |
+          node config/scripts/prepare-fork-audit-electron.mjs
+          printf 'ORCA_FORK_AUDIT_ELECTRON=%s/.tmp/fork-audit/Electron Background.app/Contents/MacOS/Electron\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+      - name: Exercise project navigation and task boards
+        env:
+          SKIP_BUILD: '1'
+        run: >-
+          pnpm exec playwright test
+          tests/e2e/fork-nested-project-tree.spec.ts
+          tests/e2e/fork-project-navigation.spec.ts
+          tests/e2e/fork-project-task-scope.spec.ts
+          tests/e2e/fork-vibe-board.spec.ts
+          tests/e2e/fork-five-projects.spec.ts
+          --config tests/playwright.config.ts --project electron-headless --workers=1
+      - name: Save isolated failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: electron-failure-${{ github.sha }}
+          path: test-results/
+          retention-days: 7
+
+  verify:
+    name: PR checks passed
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    needs: [static, regression, desktop, electron]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every check to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs = Object.values(JSON.parse(process.env.RESULTS)); if (jobs.length !== 4 || jobs.some(job => job.result !== "success")) process.exit(1)'
