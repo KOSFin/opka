@@ -50,6 +50,7 @@ jobs:
 
   regression:
     name: Fork regression tests
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -63,6 +64,7 @@ jobs:
 
   desktop:
     name: Desktop assets (${{ matrix.os }})
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     strategy:
       fail-fast: false
       matrix:
@@ -91,6 +93,7 @@ jobs:
 
   electron:
     name: Hidden Electron journeys and Swift
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     runs-on: macos-15
     timeout-minutes: 35
     env:

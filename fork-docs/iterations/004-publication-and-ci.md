@@ -43,3 +43,9 @@
 - Commit 28374500e5 сохраняет все исходные commits, изменения завершённых итераций, переносимые руководства и inactive workflow archive. Upstream push отключён; origin указывает только на KOSFin/opka. Начата обычная отправка main без tags/force.
 - Локально прошли четыре проекта типизации, changed-code quality по всем изменениям от v1.4.235, README link check и контракт единственного PR aggregate. Расширенный набор: 856 passed, 12 skipped в 109 suites (две platform-only suites skipped), плюс 3 Node fixture/config tests. Реальные модели/SSH и рабочие профили не использовались. Ограничение двух test workers устранило конкуренцию временных CLI subprocess checks; проверки не исключались.
 - CI вынесен в отдельную ветку codex/ci-builds-tests для обязательной реальной PR-проверки. Публикация исходников не считается подтверждением зелёного CI или готового установщика.
+
+### 2026-10-23 03:34:00 +05:00 Проверка собираемых assets и скрытых journeys
+
+- Полная локальная build:desktop:assets прошла: desktop renderer/main, CLI, WSL relay, web projection, mobile-web bundle; CLI runtime verification — 826 closure files и 5 команд. Ничего не установлено поверх рабочей Orca.
+- На CI-ветке прошли все 5 выбранных hidden Electron journeys: пять независимых synthetic PTY workers, nested import/collapse/restart, Source Control navigation, два проекта с одинаковыми task names, полный ручной kanban flow. Git warm-switch — 105 мс и 0 дополнительных base/compare reads. Это protocol fixtures, не доказательство автономной работы настоящей модели.
+- Исполнялся background-only Electron из локального тестового каталога, без показа окон. $electron отсутствует в доступном каталоге skills; использованы существующие Playwright/CDP тесты проекта. Production profile и удалённый сервер не использовались.
