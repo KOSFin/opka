@@ -142,3 +142,15 @@ Source-control and review changes must consider GitLab and other supported git p
 ## GitHub CLI Usage
 
 Be mindful of the user's `gh` CLI API rate limit — batch requests where possible and avoid unnecessary calls. All code, commands, and scripts must be compatible with macOS, Linux, and Windows.
+
+# Fork Development Context
+
+Before non-trivial fork work, read [fork-docs/README.md](./fork-docs/README.md) and the active iteration it links to. The iteration file owns its plan, approval scope, verified results, progress journal, and next step; the roadmap is not authorization to implement every feature.
+
+- Preserve these upstream instructions and reuse existing subsystems before adding alternatives.
+- Follow the current user's approval scope. Do not install services, publish a GitHub fork, change working Orca installations, or migrate production data merely because the roadmap mentions them.
+- NetBird is excluded from the current setup. Keep the old `ai-agent` environment unchanged.
+- Append timestamped progress after meaningful actions, decisions, failures, and user corrections. Use `Asia/Yekaterinburg` with an explicit UTC offset. Before handoff or compaction, update the iteration checkpoint and next step.
+- Keep journal history append-only; update the current plan when scope changes and explain the change in a new journal entry.
+- Distinguish source inspection, completed builds, runtime checks, and published artifacts. Never mark an unexecuted check as passed.
+- Keep credentials, private key contents, pairing codes, raw auth configuration, and corporate project data out of source and journals. Do not create project memory or write project facts into global memory without an explicit request.

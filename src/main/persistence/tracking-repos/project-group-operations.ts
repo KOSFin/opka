@@ -7,6 +7,7 @@ import {
 } from '../../../shared/project-groups'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { removeWorkspaceSessionOwnersEverywhere } from '../restoring-sessions/session-owner-removal'
+import { mergeFolderProjectGroups } from '../../project-groups/folder-project-merge'
 
 export type ProjectGroupMutationOperations = {
   state: PersistedState
@@ -116,5 +117,11 @@ export class ProjectGroupPersistenceOperations {
     this.pruneMobileClientTabSelections((worktreeId) => removedFolderWorkspaceKeys.has(worktreeId))
     this.scheduleSave()
     return true
+  }
+
+  mergeProjectGroups(sourceId: string, targetId: string) {
+    const result = mergeFolderProjectGroups(this.state, sourceId, targetId)
+    this.scheduleSave()
+    return result
   }
 }

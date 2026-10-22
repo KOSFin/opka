@@ -38,6 +38,7 @@ import {
   useSourceControlBranchCompare
 } from './source-control/sync/use-branch-compare'
 import { deferred, flush, mountProbe, unmountProbes } from './source-control-hook-test-harness'
+import { clearBranchCompareTimingForTests } from './source-control/sync/branch-compare-freshness'
 import type { GitBranchCompareResult } from '../../../../shared/git-diff-compare-types'
 import type { GitUpstreamStatus } from '../../../../shared/git-status-types'
 
@@ -92,6 +93,7 @@ beforeEach(() => {
 
 afterEach(() => {
   unmountProbes()
+  clearBranchCompareTimingForTests()
   vi.useRealTimers()
   // Why: resetAllMocks also drops unconsumed mockReturnValueOnce queues; beforeEach restores the default.
   vi.resetAllMocks()
@@ -100,6 +102,52 @@ afterEach(() => {
 })
 
 describe('useSourceControlBranchCompare scheduler', () => {
+  it('joins an owner request still in flight when the panel is remounted', async () => {
+    const pending = deferred<typeof OK>()
+    mocks.getRuntimeGitBranchCompare.mockReturnValueOnce(pending.promise)
+    await mount({ isBranchVisible: true })
+    await flush()
+    unmountProbes()
+    await mount({ isBranchVisible: true })
+    await flush()
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(1)
+    await act(async () => pending.resolve(OK))
+  })
+  it('reuses successful timing across remounts but manual refresh and changed HEAD still read', async () => {
+    await mount({ isBranchVisible: true, statusHead: 'head-1' })
+    await flush()
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(1)
+    mocks.gitBranchCompareSummaryByWorktree.A = OK.summary
+    unmountProbes()
+    await mount({ isBranchVisible: true, statusHead: 'head-1' })
+    await flush()
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(1)
+    await act(async () => latest?.refreshBranchCompare())
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(2)
+    unmountProbes()
+    await mount({ isBranchVisible: true, statusHead: 'head-2' })
+    await flush()
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(3)
+  })
+
+  it('revalidates an expired remount without clearing existing summary', async () => {
+    vi.useFakeTimers()
+    await mount({ isBranchVisible: true })
+    await flush()
+    mocks.gitBranchCompareSummaryByWorktree.A = OK.summary
+    unmountProbes()
+    vi.setSystemTime(Date.now() + BRANCH_REFRESH_INTERVAL_MS + 1)
+    await mount({ isBranchVisible: true })
+    await flush()
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(2)
+    expect(mocks.beginGitBranchCompareRequest).toHaveBeenLastCalledWith(
+      'A',
+      expect.any(String),
+      'origin/main',
+      { preserveExistingSummary: true }
+    )
+  })
+
   it('collapses every call made during an in-flight run into a single trailing refresh', async () => {
     const first = deferred<typeof OK>()
     mocks.getRuntimeGitBranchCompare.mockReturnValueOnce(first.promise)
@@ -329,6 +377,34 @@ describe('useSourceControlBranchCompare scheduler', () => {
     await act(async () => {
       root.render(<Probe isBranchVisible statusHead="head-2" />)
     })
+    await flush()
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not treat initially loaded HEAD and remote metadata as mutations of a fresh result', async () => {
+    mocks.getRuntimeGitBranchCompare.mockResolvedValue({
+      ...OK,
+      summary: { ...OK.summary, headOid: 'head-1' }
+    })
+    const root = await mount({ isBranchVisible: true })
+    await flush()
+    mocks.gitBranchCompareSummaryByWorktree.A = OK.summary
+    const remote: GitUpstreamStatus = {
+      hasUpstream: true,
+      upstreamName: 'origin/feature',
+      ahead: 0,
+      behind: 0
+    }
+    await act(async () =>
+      root.render(<Probe isBranchVisible statusHead="head-1" remoteStatus={remote} />)
+    )
+    await flush()
+    expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(1)
+    await act(async () =>
+      root.render(
+        <Probe isBranchVisible statusHead="head-1" remoteStatus={{ ...remote, behind: 1 }} />
+      )
+    )
     await flush()
     expect(mocks.getRuntimeGitBranchCompare).toHaveBeenCalledTimes(2)
   })

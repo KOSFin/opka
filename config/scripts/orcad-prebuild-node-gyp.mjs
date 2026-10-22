@@ -1,12 +1,24 @@
 // node-gyp rebuild of one staged addon against the pinned Node headers, shared by every slot addon.
-import { cpSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { prebuildCompileGypi } from './orcad-prebuild-slot-contents.mjs'
 
 const require = createRequire(import.meta.url)
 const ROOT = join(import.meta.dirname, '..', '..')
+
+/** Make-generated include paths cannot safely carry whitespace, unlike the project path. */
+export async function withNativeBuildWorkspace(build, { tempRoot = tmpdir() } = {}) {
+  const parent = process.platform !== 'win32' && /\s/.test(tempRoot) ? '/tmp' : tempRoot
+  const workDir = mkdtempSync(join(parent, 'orcad-prebuild-'))
+  try {
+    return await build(workDir)
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+}
 
 /** Copies node-addon-api beside a staged addon, since scratch copies leave the pnpm tree behind. */
 export function stageNodeAddonApi(sourceDir, stagedDir) {

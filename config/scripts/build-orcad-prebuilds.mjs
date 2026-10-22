@@ -48,7 +48,11 @@ import {
   SLOT_NAPI_VERSION
 } from './orcad-prebuild-slot-contents.mjs'
 import { compileCompatAddons } from './orcad-prebuild-compat-addons.mjs'
-import { nodeGypRebuild, stageNodeAddonApi } from './orcad-prebuild-node-gyp.mjs'
+import {
+  nodeGypRebuild,
+  stageNodeAddonApi,
+  withNativeBuildWorkspace
+} from './orcad-prebuild-node-gyp.mjs'
 import { ensurePinnedNodeExecutable, preparePinnedNodeDir } from './pinned-node-downloads.mjs'
 
 export { readManifest }
@@ -58,7 +62,6 @@ const ROOT = join(import.meta.dirname, '..', '..')
 // Why outside out/orcad: build:orcad wipes that directory and copies its target's slot from here.
 export const ORCAD_PREBUILDS_DIR = join(ROOT, 'out', 'orcad-prebuilds')
 const PREBUILDS_DIR = ORCAD_PREBUILDS_DIR
-const WORK_DIR = join(ROOT, 'out', 'orcad-prebuild-work')
 
 /** Every slot a shipped matrix must fill. The single source of truth for the matrix. */
 export const MATRIX_SLOTS = [
@@ -190,10 +193,8 @@ function nodePtyDir() {
  * Compile in a scratch copy, never in node_modules/node-pty: that tree holds the Electron
  * build the desktop loads, and a Node-headers rebuild there would break the app.
  */
-async function compileNodePty(sourceDir, slot) {
-  const workDir = join(WORK_DIR, slot)
+async function compileNodePty(sourceDir, slot, workDir) {
   const stagedDir = join(workDir, 'node-pty')
-  rmSync(workDir, { recursive: true, force: true })
   mkdirSync(stagedDir, { recursive: true })
   for (const entry of ['package.json', 'src']) {
     cpSync(join(sourceDir, entry), join(stagedDir, entry), { recursive: true })
@@ -285,15 +286,15 @@ function linuxSlotRecord(slot, slotDir, libc) {
   }
 }
 
-async function build() {
+async function buildInWorkspace(workDir) {
   const sourceDir = nodePtyDir()
   assertNodePtyPatchApplied(sourceDir)
   const slot = slotName()
   assertCompatSlotHost(slot, { platform: process.platform, arch: process.arch, libc: detectLibc() })
   const slotDir = join(PREBUILDS_DIR, slot)
-  const { buildDir, nodeDir } = await compileNodePty(sourceDir, slot)
+  const { buildDir, nodeDir } = await compileNodePty(sourceDir, slot, workDir)
   const compatAddons = isCompatSlot(slot)
-    ? await compileCompatAddons({ slot, workDir: join(WORK_DIR, slot), nodeDir })
+    ? await compileCompatAddons({ slot, workDir, nodeDir })
     : []
 
   rmSync(slotDir, { recursive: true, force: true })
@@ -368,7 +369,7 @@ async function main() {
     await runOrcadPrebuildSmoke({ slot: slotName(), prebuildsDir: PREBUILDS_DIR })
     return
   }
-  await build()
+  await withNativeBuildWorkspace(buildInWorkspace)
 }
 
 if (process.argv[1] && process.argv[1].endsWith('build-orcad-prebuilds.mjs')) {

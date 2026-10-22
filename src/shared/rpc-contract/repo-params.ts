@@ -62,6 +62,11 @@ export const ProjectGroupSelector = z.object({
   groupId: requiredString('Missing group id')
 })
 
+export const ProjectGroupMerge = z.object({
+  sourceId: requiredString('Missing source project group'),
+  targetId: requiredString('Missing target project group')
+})
+
 // Why `connectionId` is optional: older clients omit it, and older hosts strip it (bare selector).
 export const ProjectGroupMoveProject = z.object({
   repo: requiredString('Missing repo selector'),

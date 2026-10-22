@@ -10,6 +10,7 @@ import { ALL_GROUP_KEY, getPRLaneKey, getProjectGroupHeaderKey } from './group-k
 import { buildProjectGroupingIndex, getProjectGroupingForRepo } from '../project-section-grouping'
 import type { ProjectSectionModel } from '../project-section-grouping'
 import type { SidebarPRGroupReader, WorktreeGroupBy } from './row-types'
+import { getRepoProjectSectionId, getSidebarProjectGroups } from './project-repository-navigation'
 
 export function getGroupKeyForWorktree(
   groupBy: WorktreeGroupBy,
@@ -61,9 +62,11 @@ export function getGroupKeysForWorktree(
   }
   const repo = repoMap.get(worktree.repoId)
   const groupIds: string[] = []
-  const groupsById = new Map(projectGroups.map((group) => [group.id, group]))
+  const groupsById = new Map(
+    getSidebarProjectGroups(projectGroups).map((group) => [group.id, group])
+  )
   const visited = new Set<string>()
-  let currentGroupId = repo?.projectGroupId ?? null
+  let currentGroupId = getRepoProjectSectionId(repo, projectGroups)
   while (currentGroupId && !visited.has(currentGroupId)) {
     const group = groupsById.get(currentGroupId)
     if (!group) {

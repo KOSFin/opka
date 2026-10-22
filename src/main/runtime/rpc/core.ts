@@ -130,6 +130,8 @@ export type RpcContext = {
   orchestrationCompatibilityEvidence?: OrchestrationCompatibilityEvidence
   // Why: resolved once at the dispatch entry from the caller's Orca session id; the session wins.
   orchestrationCaller?: OrchestrationSessionCaller
+  // Internal project adapter receipt; never copied from an RPC request or its params.
+  projectTaskAdmission?: { nativeTaskId: string; attemptId: string }
   // Why: only the compatibility authority router can set this trusted scope; user params cannot bypass Run consumer binding.
   legacyCoordinatorRunId?: string
   legacyCoordinatorAuthority?: LegacyCoordinatorAuthorityProof

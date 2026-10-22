@@ -6,6 +6,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   stat,
   symlink,
@@ -99,8 +100,16 @@ describe('packaged CLI assets', () => {
         )
       }
       await stagePackagedProcessHost(join(root, 'resources'))
+      // Redundant closure entries can exceed minimatch's single-pattern limit.
+      const unpackPatterns = builderConfig.asarUnpack?.filter(
+        (pattern, _index, patterns) =>
+          !patterns.some(
+            (other) =>
+              other !== pattern && other.endsWith('/**') && pattern.startsWith(other.slice(0, -2))
+          )
+      )
       await createPackageWithOptions(source, archive, {
-        unpack: `{${builderConfig.asarUnpack?.map((pattern) => join(source, pattern).split(sep).join('/')).join(',')}}`
+        unpack: `{${unpackPatterns?.map((pattern) => join(source, pattern).split(sep).join('/')).join(',')}}`
       })
       expect(statFile(archive, join('out', 'cli', 'index.js')).unpacked).toBe(true)
       const result = await runProcess({
@@ -351,7 +360,8 @@ node -e 'console.log(JSON.stringify({
           orcaNodeReplExternalModule: string | null
         }
 
-        expect(payload.argv).toEqual([cliPath, '--help', 'two words'])
+        const expectedCli = launcherFixture.name === 'macOS' ? await realpath(cliPath) : cliPath
+        expect(payload.argv).toEqual([expectedCli, '--help', 'two words'])
         expect(payload.runAsNode).toBe('1')
         // Why: Electron's node bootstrap must not inherit these, but the CLI
         // still needs to see what the user set.

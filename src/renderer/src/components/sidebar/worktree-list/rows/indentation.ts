@@ -19,7 +19,7 @@ const GROUPED_WORKTREE_CARD_SURFACE_INDENT = 14
 export const PROJECT_GROUP_HEADER_BASE_PADDING = 10
 // Why: shared with project headers so titles don't shift when grouping mode changes.
 export const WORKTREE_SECTION_HEADER_PADDING_LEFT = PROJECT_GROUP_HEADER_BASE_PADDING
-export const PROJECT_GROUP_HEADER_INDENT = 10
+export const PROJECT_GROUP_HEADER_INDENT = 18
 export const MAX_PROJECT_GROUP_HEADER_DEPTH = 6
 
 function clampDepth(depth: number): number {

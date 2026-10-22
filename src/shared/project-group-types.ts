@@ -18,6 +18,7 @@ export type ProjectGroup = {
 }
 
 export type NestedRepoScanOptions = {
+  includeNestedRepos?: boolean
   maxDepth?: number
   maxRepos?: number
   timeoutMs?: number | null

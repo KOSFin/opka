@@ -128,6 +128,10 @@ export async function scanNestedRepos(args: {
     if (noteAbort()) {
       break
     }
+    // Bare repositories contain object/ref storage, not a workspace to discover projects in.
+    if (currentFolder.isRepository && !entries.some((entry) => entry.name === '.git')) {
+      continue
+    }
     const currentIgnoreRules = [
       ...currentFolder.ignoreRules,
       ...(await readNestedRepoGitignoreRules({
@@ -172,14 +176,15 @@ export async function scanNestedRepos(args: {
           depth: currentFolder.depth + 1
         })
         emitProgress()
-        // Project Groups organize sibling repos; nested repos stay hidden until a
-        // later UI can explain and select submodule-style layouts explicitly.
-        continue
+        if (!options.includeNestedRepos) {
+          continue
+        }
       }
       // Why: group import should prefer nearby sibling repos over spending the
       // bounded scan inside an alphabetically early, deeply nested folder.
-      if (currentFolder.depth < options.maxDepth) {
+      if (currentFolder.depth + 1 < options.maxDepth) {
         foldersToTraverse.push({
+          isRepository: childHasGitMarker,
           path: childPath,
           depth: currentFolder.depth + 1,
           segments: childSegments,

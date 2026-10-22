@@ -162,6 +162,7 @@ export function createRestartSession(
   const launch = async (options?: LaunchOptions): Promise<LaunchedOrca> => {
     runtimeWsPort ??= await reserveRestartRuntimeWsPort()
     const app = await electron.launch({
+      ...(options?.executablePath ? { executablePath: options.executablePath } : {}),
       args: [...getOrcaElectronLaunchArgs(mainPath, headful), ...(options?.extraArgs ?? [])],
       env: {
         ...homeIsolation.env,

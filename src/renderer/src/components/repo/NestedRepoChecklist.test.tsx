@@ -38,4 +38,25 @@ describe('NestedRepoChecklist', () => {
     expect(html).not.toContain('Project group')
     expect(html).not.toContain('/workspace/platform/payments/api')
   })
+
+  it('shows a relative location for a uniquely named nested repository', () => {
+    const html = renderToStaticMarkup(
+      <NestedRepoChecklist
+        scan={{
+          ...scan,
+          repos: [
+            {
+              path: '/workspace/platform/services/payments/worker',
+              displayName: 'worker',
+              depth: 3
+            }
+          ]
+        }}
+        selectedPaths={new Set()}
+        onSelectedPathsChange={vi.fn()}
+      />
+    )
+    expect(html).toContain('services/payments/worker')
+    expect(html).not.toContain('/workspace/platform/services')
+  })
 })

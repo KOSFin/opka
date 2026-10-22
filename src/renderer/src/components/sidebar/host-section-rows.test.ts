@@ -16,6 +16,41 @@ function sectionRows(
   return addHostSectionRows({ ...args, localHostLabel: 'Local Mac' })
 }
 
+it('keeps a collapsed folder project inside its owning host even with no visible children', () => {
+  const group: ProjectGroup = {
+    id: 'project',
+    name: 'Project',
+    parentPath: '/project',
+    parentGroupId: null,
+    createdFrom: 'manual',
+    executionHostId: 'runtime:builder',
+    tabOrder: 0,
+    isCollapsed: true,
+    color: null,
+    createdAt: 0,
+    updatedAt: 0
+  }
+  const rows = sectionRows({
+    rows: [{ ...header('project-group:project'), projectGroup: group }],
+    hostOptions: [],
+    defaultHostId: 'local',
+    workspaceHostScope: 'all',
+    alwaysShowHostSections: true
+  })
+  expect(rows.map((row) => row.type)).toEqual(['host-header', 'header'])
+  expect(rows[0]).toMatchObject({ hostId: 'runtime:builder' })
+  expect(
+    sectionRows({
+      rows: [{ ...header('project-group:project'), projectGroup: group }],
+      hostOptions: [],
+      defaultHostId: 'local',
+      workspaceHostScope: 'all',
+      alwaysShowHostSections: true,
+      collapsedHostKeys: new Set(['host:runtime:builder'])
+    }).map((row) => row.type)
+  ).toEqual(['host-header'])
+})
+
 function repo(id: string, connectionId?: string | null): Repo {
   return {
     id,
@@ -26,6 +61,19 @@ function repo(id: string, connectionId?: string | null): Repo {
     connectionId
   }
 }
+
+it('does not move an unowned local repository to the focused remote host', () => {
+  const rows = sectionRows({
+    rows: [repoHeader(repo('local')), item('main', repo('local'))],
+    hostOptions: [],
+    defaultHostId: 'runtime:focused',
+    workspaceHostScope: 'all',
+    alwaysShowHostSections: true
+  })
+  expect(rows[0]).toMatchObject({ type: 'host-header', hostId: 'local' })
+  expect(rows.filter((row) => row.type === 'host-header')).toHaveLength(1)
+  expect(rows.map((row) => row.type)).toEqual(['host-header', 'header', 'item'])
+})
 
 function worktree(id: string, repoId: string): Worktree {
   return {
@@ -48,6 +96,32 @@ function worktree(id: string, repoId: string): Worktree {
     lastActivityAt: 0
   }
 }
+
+it('does not borrow the last local project path for an ungrouped remote repository', () => {
+  const group = folderWorkspaceRow(null).projectGroup
+  const remote: Repo = { ...repo('standalone'), executionHostId: 'runtime:remote' }
+  const rows = sectionRows({
+    rows: [
+      { ...header('project-group:group-1'), projectGroup: group },
+      folderWorkspaceRow(null),
+      repoHeader(remote),
+      item('main', remote)
+    ],
+    hostOptions: [],
+    defaultHostId: 'local',
+    workspaceHostScope: 'all',
+    alwaysShowHostSections: true
+  })
+  expect(rows.filter((row) => row.type === 'header' && row.projectGroup)).toHaveLength(1)
+  const remoteStart = rows.findIndex(
+    (row) => row.type === 'host-header' && row.hostId === 'runtime:remote'
+  )
+  expect(rows.slice(remoteStart).map((row) => row.type)).toEqual([
+    'host-header',
+    'header',
+    'item'
+  ])
+})
 
 function header(key: string, label = key): Extract<Row, { type: 'header' }> {
   return {
@@ -650,7 +724,7 @@ describe('addHostSectionRows', () => {
     })
   })
 
-  it('uses the focused runtime as the owner for non-SSH repos', () => {
+  it('keeps unstamped repository copies local when a runtime is focused', () => {
     const localOwned: Repo = { ...repo('local-project'), executionHostId: 'local' }
     const project = repo('runtime-project')
     const rows = [
@@ -679,20 +753,22 @@ describe('addHostSectionRows', () => {
         }
       ],
       workspaceHostScope: 'all',
+      alwaysShowHostSections: true,
       defaultHostId: 'runtime:env-1'
     })
 
     expect(
-      sectioned.find((row) => row.type === 'host-header' && row.hostId === 'runtime:env-1')
+      sectioned.find((row) => row.type === 'host-header' && row.hostId === 'local')
     ).toMatchObject({
-      key: 'host:runtime:env-1',
-      label: 'env-1'
+      key: 'host:local',
+      label: 'Local Mac'
     })
+    expect(sectioned.filter((row) => row.type === 'host-header')).toHaveLength(1)
   })
 
   it('passes host kind, blocked compatibility and reason through to the header row', () => {
     const localOwned: Repo = { ...repo('local-project'), executionHostId: 'local' }
-    const project = repo('runtime-project')
+    const project: Repo = { ...repo('runtime-project'), executionHostId: 'runtime:env-1' }
     const rows = [
       repoHeader(localOwned),
       item('local-wt', localOwned),

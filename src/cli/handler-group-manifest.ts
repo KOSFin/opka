@@ -76,6 +76,22 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     load: async () => (await import('./handlers/project.js')).PROJECT_HANDLERS
   },
   {
+    name: 'project-task',
+    keys: [
+      'project-task init',
+      'project-task list',
+      'project-task show',
+      'project-task context',
+      'project-task board',
+      'project-task workflow',
+      'project-task resume',
+      'project-task start',
+      'project-task create',
+      'project-task update'
+    ],
+    load: async () => (await import('./handlers/project-task.js')).PROJECT_TASK_HANDLERS
+  },
+  {
     name: 'repo',
     keys: [
       'repo list',

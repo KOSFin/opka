@@ -191,13 +191,15 @@ describe('Flat folder-scan project groups adaptation', () => {
 
     const store = createStore()
     const groups = store.getProjectGroups()
-    const shared = groups.find((group) => group.name === 'packages/shared')
+    const packages = groups.find((group) => group.name === 'packages')
+    const shared = groups.find((group) => group.name === 'shared')
 
     expect(groups.map((group) => [group.name, group.parentGroupId, group.parentPath])).toEqual([
       ['Platform', null, parentPath],
+      ['packages', 'root', normalizeRuntimePathSeparators(join(parentPath, 'packages'))],
       [
-        'packages/shared',
-        'root',
+        'shared',
+        packages?.id,
         normalizeRuntimePathSeparators(join(parentPath, 'packages', 'shared'))
       ]
     ])

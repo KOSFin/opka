@@ -29,6 +29,7 @@ import { WslCliRegistration } from './WslCliRegistration'
 import { useCliRegistrationActions } from './use-cli-registration-actions'
 import { useLocalCliSkillFreshnessName } from './use-local-cli-skill-freshness-name'
 import { translate } from '@/i18n/i18n'
+import { ProfileCliRegistration } from './ProfileCliRegistration'
 
 type CliSectionProps = {
   currentPlatform: string
@@ -157,6 +158,10 @@ export function CliSection({
   const revealLabel = getRevealLabel(currentPlatform)
   const canRevealCommandPath =
     status?.commandPath != null && ['installed', 'stale', 'conflict'].includes(status.state)
+
+  if (status?.registrationScope === 'profile') {
+    return <ProfileCliRegistration status={status} onStatusChange={handleStatusChange} />
+  }
 
   return (
     <section className="space-y-4" data-settings-section="cli">

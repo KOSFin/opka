@@ -15,6 +15,7 @@ export function useSourceControlBaseRefs({
   activeRepoConnectionId,
   activeRepoExecutionHostId,
   activeRepoId,
+  activeRepoPath,
   activeRepoWorktreeBaseRef,
   activeWorktreeBaseRef,
   hostedReview,
@@ -26,6 +27,7 @@ export function useSourceControlBaseRefs({
   activeRepoConnectionId: SourceControlWorktreeContext['activeRepoConnectionId']
   activeRepoExecutionHostId: SourceControlWorktreeContext['activeRepoExecutionHostId']
   activeRepoId: string | null
+  activeRepoPath?: string | null
   activeRepoWorktreeBaseRef: string | undefined
   activeWorktreeBaseRef: string | undefined
   hostedReview: HostedReviewInfo | null
@@ -38,6 +40,7 @@ export function useSourceControlBaseRefs({
     activeRepoConnectionId,
     activeRepoExecutionHostId,
     activeRepoId,
+    activeRepoPath,
     isBranchVisible,
     isFolder
   })

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useMemo } from 'react'
 import { ChevronDown, CircleHelp, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -11,7 +11,12 @@ import {
   buildGitHistoryViewModels
 } from '../../../../../../shared/git-history-graph'
 import { GitHistoryRow } from './git-history-row'
-import { GitHistoryCommitFiles, type GitHistoryCommitFilesState } from './git-history-commit-files'
+import { GitHistoryCommitFiles } from './git-history-commit-files'
+import {
+  useGitHistoryView,
+  MIN_GIT_HISTORY_PANEL_HEIGHT,
+  MAX_GIT_HISTORY_PANEL_HEIGHT
+} from './use-git-history-view'
 import {
   GitHistoryCommitContextMenu,
   type GitHistoryCommitAction
@@ -24,24 +29,11 @@ export type GitHistoryPanelState =
   | { status: 'refreshing' | 'ready'; result: GitHistoryResult; error?: string }
   | { status: 'error'; result?: GitHistoryResult; error: string }
 
-const DEFAULT_GIT_HISTORY_PANEL_HEIGHT = 256
-const MIN_GIT_HISTORY_PANEL_HEIGHT = 96
-const MAX_GIT_HISTORY_PANEL_HEIGHT = 520
 const MAX_GIT_HISTORY_PANEL_VIEWPORT_HEIGHT = '33vh'
-
-type GitHistoryResizeSession = {
-  startY: number
-  startHeight: number
-  previousCursor: string
-  previousUserSelect: string
-}
-
-function clampGitHistoryPanelHeight(height: number): number {
-  return Math.min(MAX_GIT_HISTORY_PANEL_HEIGHT, Math.max(MIN_GIT_HISTORY_PANEL_HEIGHT, height))
-}
 
 export function GitHistoryPanel({
   state,
+  viewKey,
   collapsed,
   onToggle,
   onRefresh,
@@ -51,6 +43,7 @@ export function GitHistoryPanel({
   onCommitAction
 }: {
   state: GitHistoryPanelState
+  viewKey?: string | null
   collapsed: boolean
   onToggle: () => void
   onRefresh: () => void
@@ -82,144 +75,15 @@ export function GitHistoryPanel({
 
   const loading = state.status === 'loading' || state.status === 'refreshing'
   const count = result?.items.length ?? 0
-  const [panelHeight, setPanelHeight] = useState(DEFAULT_GIT_HISTORY_PANEL_HEIGHT)
-  const resizeSessionRef = useRef<GitHistoryResizeSession | null>(null)
-
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
-  const [filesByCommit, setFilesByCommit] = useState<Record<string, GitHistoryCommitFilesState>>({})
-  // Tracks commits whose files have been loaded (or are in flight) so re-expanding
-  // never refetches; an entry is cleared on error to allow a retry.
-  const loadedCommitsRef = useRef<{
-    result: GitHistoryResult | undefined
-    ids: Set<string>
-  }>(undefined!)
-  loadedCommitsRef.current ??= { result, ids: new Set() }
-
-  // A new history result can reorder or replace commits, so drop any expansion
-  // and cached file lists rather than risk showing stale files under a row.
-  const [historyResult, setHistoryResult] = useState(result)
-  if (historyResult !== result) {
-    setHistoryResult(result)
-    setExpanded(new Set())
-    setFilesByCommit({})
-  }
-
-  const handleToggleExpand = useCallback(
-    (item: GitHistoryItem): void => {
-      const id = item.id
-      const willExpand = !expanded.has(id)
-      setExpanded((prev) => {
-        const next = new Set(prev)
-        if (willExpand) {
-          next.add(id)
-        } else {
-          next.delete(id)
-        }
-        return next
-      })
-      // Why: clear the in-flight lock in the click handler, not during render —
-      // a new history result can reuse commit ids with different file lists.
-      if (loadedCommitsRef.current.result !== result) {
-        loadedCommitsRef.current = { result, ids: new Set() }
-      }
-      if (!willExpand || !onLoadCommitFiles || loadedCommitsRef.current.ids.has(id)) {
-        return
-      }
-      loadedCommitsRef.current.ids.add(id)
-      setFilesByCommit((prev) => ({ ...prev, [id]: { status: 'loading' } }))
-      onLoadCommitFiles(item)
-        .then((entries) => {
-          setFilesByCommit((prev) => ({ ...prev, [id]: { status: 'ready', entries } }))
-        })
-        .catch((error: unknown) => {
-          if (loadedCommitsRef.current.result === result) {
-            loadedCommitsRef.current.ids.delete(id)
-          }
-          setFilesByCommit((prev) => ({
-            ...prev,
-            [id]: {
-              status: 'error',
-              error:
-                error instanceof Error
-                  ? error.message
-                  : translate(
-                      'auto.components.right.sidebar.GitHistoryPanel.6d1e0a7c3b',
-                      'Failed to load commit files'
-                    )
-            }
-          }))
-        })
-    },
-    [expanded, onLoadCommitFiles, result]
-  )
-
-  const stopResize = useCallback((): void => {
-    const session = resizeSessionRef.current
-    if (!session) {
-      return
-    }
-    resizeSessionRef.current = null
-    document.body.style.cursor = session.previousCursor
-    document.body.style.userSelect = session.previousUserSelect
-  }, [])
-
-  const handleResizePointerMove = useCallback((event: PointerEvent): void => {
-    const session = resizeSessionRef.current
-    if (!session) {
-      return
-    }
-    setPanelHeight(clampGitHistoryPanelHeight(session.startHeight + session.startY - event.clientY))
-  }, [])
-
-  useEffect(() => {
-    window.addEventListener('pointermove', handleResizePointerMove)
-    window.addEventListener('pointerup', stopResize)
-    window.addEventListener('pointercancel', stopResize)
-    window.addEventListener('blur', stopResize)
-    return () => {
-      window.removeEventListener('pointermove', handleResizePointerMove)
-      window.removeEventListener('pointerup', stopResize)
-      window.removeEventListener('pointercancel', stopResize)
-      window.removeEventListener('blur', stopResize)
-      stopResize()
-    }
-  }, [handleResizePointerMove, stopResize])
-
-  const startResize = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>): void => {
-      if (collapsed) {
-        return
-      }
-      event.preventDefault()
-      resizeSessionRef.current = {
-        startY: event.clientY,
-        startHeight: panelHeight,
-        previousCursor: document.body.style.cursor,
-        previousUserSelect: document.body.style.userSelect
-      }
-      document.body.style.cursor = 'row-resize'
-      document.body.style.userSelect = 'none'
-      event.currentTarget.setPointerCapture(event.pointerId)
-    },
-    [collapsed, panelHeight]
-  )
-
-  const handleResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>): void => {
-    const step = event.shiftKey ? 32 : 16
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setPanelHeight((height) => clampGitHistoryPanelHeight(height + step))
-    } else if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setPanelHeight((height) => clampGitHistoryPanelHeight(height - step))
-    } else if (event.key === 'Home') {
-      event.preventDefault()
-      setPanelHeight(MIN_GIT_HISTORY_PANEL_HEIGHT)
-    } else if (event.key === 'End') {
-      event.preventDefault()
-      setPanelHeight(MAX_GIT_HISTORY_PANEL_HEIGHT)
-    }
-  }, [])
+  const {
+    panelHeight,
+    expanded,
+    filesByCommit,
+    handleToggleExpand,
+    handleResizeKeyDown,
+    startResize,
+    setScrollElement
+  } = useGitHistoryView(viewKey, result, collapsed, onLoadCommitFiles)
 
   const expandedBodyClassName = 'overflow-y-auto scrollbar-sleek'
   const expandedBodyStyle = {
@@ -318,10 +182,11 @@ export function GitHistoryPanel({
           </Tooltip>
         </div>
       </div>
-      {!collapsed && state.status === 'error' && !result && (
+      {!collapsed && state.status === 'error' && (
         <div
-          className={cn(expandedBodyClassName, 'px-6 py-2 text-[11px] text-destructive')}
-          style={expandedBodyStyle}
+          role="alert"
+          className="px-6 py-2 text-[11px] text-destructive"
+          style={result ? undefined : expandedBodyStyle}
         >
           {state.error}
         </div>
@@ -352,7 +217,7 @@ export function GitHistoryPanel({
         </div>
       )}
       {!collapsed && viewModels.length > 0 && (
-        <div className={expandedBodyClassName} style={expandedBodyStyle}>
+        <div ref={setScrollElement} className={expandedBodyClassName} style={expandedBodyStyle}>
           {viewModels.map((viewModel) => {
             const item = viewModel.historyItem
             const isBoundaryNode =

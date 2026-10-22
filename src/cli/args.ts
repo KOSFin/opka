@@ -146,6 +146,7 @@ export function supportsBrowserPageFlag(commandPath: string[]): boolean {
       'artifacts',
       'automations',
       'project',
+      'project-task',
       'repo',
       'reference',
       'worktree',

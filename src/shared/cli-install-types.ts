@@ -10,6 +10,8 @@ export type CliInstallUnsupportedReason =
 export type CliInstallMethod = 'symlink' | 'wrapper'
 
 export type CliInstallStatus = {
+  /** A private profile command, not a registration in the user's PATH. */
+  registrationScope?: 'profile'
   platform: NodeJS.Platform
   commandName: string
   commandPath: string | null

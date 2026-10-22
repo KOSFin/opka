@@ -1,3 +1,5 @@
+> **Opka — experimental Orca fork.** Sources retain the history and MIT license of [stablyai/orca](https://github.com/stablyai/orca). See [fork documentation](fork-docs/README.md) and [CI/testing](fork-docs/testing/portable-testing.md). The upstream downloads and services described below are not fork releases. Do not replace a working Orca installation with CI build outputs.
+
 <h1 align="center">
   <a href="https://onOrca.dev"><img src="resources/build/icon.png" alt="Orca" width="64" valign="middle" /></a> Orca
 </h1>

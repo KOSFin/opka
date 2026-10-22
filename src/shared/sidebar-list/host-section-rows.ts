@@ -52,7 +52,7 @@ function getRepoHostId(
 ): ExecutionHostId {
   // Why: explicit executionHostId must win over the focused/default host, or
   // runtime-owned repos group under whichever host happens to be focused.
-  if (repo?.connectionId || repo?.executionHostId) {
+  if (repo) {
     return getRepoExecutionHostId(repo)
   }
   return defaultHostId
@@ -61,7 +61,11 @@ function getRepoHostId(
 function getRowHostId(row: Row, defaultHostId: ExecutionHostId): ExecutionHostId | null {
   switch (row.type) {
     case 'item':
-      return getWorktreeExecutionHostId(row.worktree, row.repo, defaultHostId)
+      return getWorktreeExecutionHostId(
+        row.worktree,
+        row.repo,
+        getRepoHostId(row.repo, defaultHostId)
+      )
     case 'pending-creation':
     case 'imported-worktrees-card':
     case 'new-external-worktrees-inbox':
@@ -184,6 +188,7 @@ export function addHostSectionRows(args: {
   // and host is context inside it. Explicit host filters still keep host
   // headers as an operational/troubleshooting view.
   preferProjectGrouping?: boolean
+  alwaysShowHostSections?: boolean
 }): HostSectionRow[] {
   const visibleHostIds =
     args.visibleWorkspaceHostIds ??
@@ -195,7 +200,10 @@ export function addHostSectionRows(args: {
   ) {
     return [...args.rows]
   }
-  if ((visibleHostIds && visibleHostIds.length <= 1) || args.hostOptions.length <= 1) {
+  if (
+    !args.alwaysShowHostSections &&
+    ((visibleHostIds && visibleHostIds.length <= 1) || args.hostOptions.length <= 1)
+  ) {
     return [...args.rows]
   }
 
@@ -214,7 +222,21 @@ export function addHostSectionRows(args: {
     }
     const hostScopedRow = unused.some((row) => row.hostWorktreeCounts)
     if (!hostScopedRow) {
-      globalRows.push(...unused)
+      for (const row of unused) {
+        const group = row.projectGroup
+        if (
+          group &&
+          'createdFrom' in group &&
+          (group.parentPath || group.executionHostId || group.connectionId)
+        ) {
+          const hostId = getRepoExecutionHostId(group)
+          const hostRows = rowsByHostId.get(hostId) ?? []
+          hostRows.push(row)
+          rowsByHostId.set(hostId, hostRows)
+        } else {
+          globalRows.push(row)
+        }
+      }
       return
     }
     for (const row of unused) {
@@ -236,6 +258,16 @@ export function addHostSectionRows(args: {
   }
 
   for (const row of args.rows) {
+    if (row.type === 'header' && row.repo) {
+      const ownerIndex = pendingRows.findIndex(
+        (pending) => pending.projectGroup?.id === row.repo?.projectGroupId
+      )
+      const kept = pendingRows.filter(
+        (pending, index) => !pending.projectGroup || (ownerIndex !== -1 && index <= ownerIndex)
+      )
+      flushUnusedPendingRows(pendingRows.filter((pending) => !kept.includes(pending)))
+      pendingRows = kept
+    }
     const rowHostId = getRowHostId(row, args.defaultHostId)
     if (rowHostId) {
       const hostRows = rowsByHostId.get(rowHostId) ?? []
@@ -290,7 +322,7 @@ export function addHostSectionRows(args: {
   // Why: a lone host section is pure noise — the grouping only earns its keep
   // when there are at least two host sections to tell apart. Registered-but-
   // empty hosts stay visible in the scope picker, not as headers.
-  if (rowsByHostId.size <= 1) {
+  if (!args.alwaysShowHostSections && rowsByHostId.size <= 1) {
     return [...args.rows]
   }
 
@@ -318,7 +350,15 @@ export function addHostSectionRows(args: {
       count: countWorkspaceRows(hostRows)
     })
     if (!collapsed) {
-      result.push(...hostRows)
+      result.push(
+        ...hostRows.map((row) =>
+          row.type === 'header'
+            ? { ...row, hostId }
+            : args.alwaysShowHostSections && row.type === 'item'
+              ? { ...row, hostContextLabel: undefined }
+              : row
+        )
+      )
     }
   }
 

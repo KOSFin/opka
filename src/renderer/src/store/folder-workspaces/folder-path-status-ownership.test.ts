@@ -30,6 +30,26 @@ beforeEach(() => {
 })
 
 describe('folder path status ownership', () => {
+  it('reuses a fresh probe during sidebar remounts but still honors force and expiration', async () => {
+    const store = createTestStore()
+    store.setState({ folderWorkspaces: folders })
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+    try {
+      const owner = owners[0]
+      mocks.getPathStatus.mockResolvedValue({ path: owner.path, exists: true })
+      await store.getState().fetchFolderWorkspacePathStatus(request, owner)
+      await store.getState().fetchFolderWorkspacePathStatus(request, owner)
+      expect(mocks.getPathStatus).toHaveBeenCalledOnce()
+      await store.getState().fetchFolderWorkspacePathStatus(request, { ...owner, force: true })
+      expect(mocks.getPathStatus).toHaveBeenCalledTimes(2)
+      clock.mockReturnValue(12000)
+      await store.getState().fetchFolderWorkspacePathStatus(request, owner)
+      expect(mocks.getPathStatus).toHaveBeenCalledTimes(3)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it.each(owners)(
     'keeps the $executionHostId cache valid after catalog reordering',
     async (owner) => {

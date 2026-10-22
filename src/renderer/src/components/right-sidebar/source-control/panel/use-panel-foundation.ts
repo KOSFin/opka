@@ -9,8 +9,8 @@ import { useSourceControlPanelState } from './use-panel-state'
  * listing and the AI surface. Split from the flows so no action hook can be read as a dependency
  * of the data it acts on.
  */
-export function useSourceControlPanelFoundation() {
-  const panelState = useSourceControlPanelState()
+export function useSourceControlPanelFoundation(worktreeId?: string) {
+  const panelState = useSourceControlPanelState(worktreeId)
   const reviewContext = useSourceControlReviewContext(panelState)
   const {
     activeConnectionId,
@@ -43,6 +43,7 @@ export function useSourceControlPanelFoundation() {
     sourceControlGroupOrder,
     sourceControlRef,
     sourceControlViewMode,
+    sourceControlViewKey,
     updateRepo,
     updateSettings,
     worktreeMap,
@@ -72,6 +73,7 @@ export function useSourceControlPanelFoundation() {
     sourceControlGroupOrder,
     sourceControlRef,
     sourceControlViewMode,
+    sourceControlViewKey,
     worktreeMap,
     worktreePath
   })

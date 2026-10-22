@@ -58,12 +58,7 @@ export default function WorkspaceKanbanDrawerHeader({
             <h2>, so the field must be its sibling, not a descendant. */}
         <div className="flex items-center gap-2">
           <SheetTitle className="flex shrink-0 items-center gap-2 text-sm">
-            <span>
-              {translate(
-                'auto.components.sidebar.WorkspaceKanbanDrawerHeader.c6a77ab0f4',
-                'Workspace board'
-              )}
-            </span>
+            <span>{translate('fork.workingCopies.title', 'Working copies')}</span>
             {selectedCount > 1 ? (
               <span className="rounded-full bg-worktree-sidebar-accent px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                 {selectedCount}{' '}
@@ -85,10 +80,10 @@ export default function WorkspaceKanbanDrawerHeader({
             onClose={onClose}
           />
         </div>
-        <SheetDescription className="sr-only">
+        <SheetDescription>
           {translate(
-            'auto.components.sidebar.WorkspaceKanbanDrawerHeader.e1a34450fc',
-            'Organize workspaces by status and open workspace cards.'
+            'fork.workingCopies.description',
+            'Moving a card changes the workspace status, not its Git branch. Plans and acceptance belong in Project tasks.'
           )}
         </SheetDescription>
       </SheetHeader>

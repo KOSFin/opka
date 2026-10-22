@@ -14,6 +14,7 @@ import { getCanonicalUserDataPath } from '../persistence'
 import { hydrateShellPath, mergePathSegments } from '../startup/hydrate-shell-path'
 import { getDefaultWslDistro } from '../wsl'
 import { resolveAppImageRuntimeIdentity } from '../appimage-runtime-identity'
+import { ProfileCliRegistration } from '../cli/profile-cli-registration'
 
 const APPIMAGE_REPAIR_RETRY_MS = 30_000
 const localCliRegistrationQueues = new Map<string, Promise<void>>()
@@ -85,12 +86,19 @@ async function hydrateLocalShellPathForCli(force = false): Promise<void> {
 }
 
 export function registerCliHandlers(): void {
+  const profileCli =
+    process.env.ORCA_FORK_PROFILE_CLI === '1'
+      ? new ProfileCliRegistration(getCanonicalUserDataPath(), process.resourcesPath)
+      : null
   let staleAppImageRepairAttempt: {
     promise: Promise<CliInstallStatus | null>
     retryAfter: number
   } | null = null
 
   ipcMain.handle('cli:getInstallStatus', async (): Promise<CliInstallStatus> => {
+    if (profileCli) {
+      return profileCli.getStatus()
+    }
     await hydrateLocalShellPathForCli()
     const installer = new CliInstaller()
     const status = await installer.getStatus()
@@ -129,11 +137,17 @@ export function registerCliHandlers(): void {
   })
 
   ipcMain.handle('cli:install', async (): Promise<CliInstallStatus> => {
+    if (profileCli) {
+      return runLocalCliRegistrationOperation(() => profileCli.install())
+    }
     await hydrateLocalShellPathForCli(true)
     return runLocalCliRegistrationOperation(() => new CliInstaller().install())
   })
 
   ipcMain.handle('cli:remove', async (): Promise<CliInstallStatus> => {
+    if (profileCli) {
+      return runLocalCliRegistrationOperation(() => profileCli.remove())
+    }
     await hydrateLocalShellPathForCli()
     return runLocalCliRegistrationOperation(() => new CliInstaller().remove())
   })

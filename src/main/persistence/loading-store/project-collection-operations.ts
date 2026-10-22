@@ -132,6 +132,10 @@ export class ProjectCollectionOperations {
     return getProjectGroupOperations(this).deleteProjectGroup(groupId)
   }
 
+  mergeProjectGroups(sourceId: string, targetId: string) {
+    return getProjectGroupOperations(this).mergeProjectGroups(sourceId, targetId)
+  }
+
   getFolderWorkspaces(): FolderWorkspace[] {
     return getFolderWorkspaceOperations(this).getFolderWorkspaces()
   }

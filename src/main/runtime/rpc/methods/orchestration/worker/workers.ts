@@ -15,6 +15,7 @@ import {
 import { assertWorkerStartTaskSpecWithinPromptBudget } from './worker-start-prompt-budget'
 import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../../../../shared/orca-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as SESSION_CODES } from '../../../../../../shared/orchestration-session-caller-codes'
+import { assertProjectTaskNativeAdmission } from '../../../../../project-tasks/task-native-admission'
 
 export const ORCHESTRATION_WORKER_START_METHODS = [
   defineMethod({
@@ -23,7 +24,13 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
     params: WorkerStartParams,
     handler: async (
       params,
-      { runtime, orchestrationMutation, orchestrationCompatibilityEvidence, orchestrationCaller }
+      {
+        runtime,
+        orchestrationMutation,
+        orchestrationCompatibilityEvidence,
+        orchestrationCaller,
+        projectTaskAdmission
+      }
     ) => {
       if (!isWorkerStartTimeoutWithinTimerLimit(params.timeoutMs)) {
         throw new OrchestrationError(
@@ -52,6 +59,7 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
           `Task ${params.task} was not found in Run ${run.id}.`
         )
       }
+      assertProjectTaskNativeAdmission(db, existingTask?.id, projectTaskAdmission)
       await assertWorkerStartTaskSpecWithinPromptBudget(params.spec ?? existingTask!.spec)
       const mode = decideWorkerStartMode({
         params,

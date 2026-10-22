@@ -7,6 +7,7 @@ import {
   getRepoDisplayLabelsByPath
 } from '../../../../shared/repo-display-labels'
 import { translate } from '@/i18n/i18n'
+import { relativePathInsideRoot } from '../../../../shared/cross-platform-path'
 
 function NestedRepoSelectAllRow({
   total,
@@ -94,38 +95,49 @@ export function NestedRepoChecklist({
         }}
       />
       <ul className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        {scan.repos.map((repo) => (
-          <li key={repo.path}>
-            <label className="flex min-w-0 max-w-full cursor-pointer items-center gap-2.5 overflow-hidden border-t border-border px-3 py-2 text-sm hover:bg-accent">
-              <input
-                type="checkbox"
-                className="size-3.5"
-                checked={selectedPaths.has(repo.path)}
-                disabled={disabled}
-                onChange={(event) => {
-                  onSelectedPathsChange((previous) => {
-                    const next = new Set(previous)
-                    if (event.target.checked) {
-                      next.add(repo.path)
-                    } else {
-                      next.delete(repo.path)
-                    }
-                    return next
-                  })
-                }}
-              />
-              <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-              <span
-                className={cn(
-                  'min-w-0 flex-1 truncate text-[13px] font-medium',
-                  selectedPaths.has(repo.path) ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                {displayLabelsByPath.get(getRepoDisplayLabelKey(repo)) ?? repo.displayName}
-              </span>
-            </label>
-          </li>
-        ))}
+        {scan.repos.map((repo) => {
+          const label = displayLabelsByPath.get(getRepoDisplayLabelKey(repo)) ?? repo.displayName
+          const relativePath = relativePathInsideRoot(scan.selectedPath, repo.path)
+          return (
+            <li key={repo.path}>
+              <label className="flex min-w-0 max-w-full cursor-pointer items-center gap-2.5 overflow-hidden border-t border-border px-3 py-2 text-sm hover:bg-accent">
+                <input
+                  type="checkbox"
+                  className="size-3.5"
+                  checked={selectedPaths.has(repo.path)}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    onSelectedPathsChange((previous) => {
+                      const next = new Set(previous)
+                      if (event.target.checked) {
+                        next.add(repo.path)
+                      } else {
+                        next.delete(repo.path)
+                      }
+                      return next
+                    })
+                  }}
+                />
+                <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1" title={relativePath ?? undefined}>
+                  <span
+                    className={cn(
+                      'block truncate text-[13px] font-medium',
+                      selectedPaths.has(repo.path) ? 'text-foreground' : 'text-muted-foreground'
+                    )}
+                  >
+                    {label}
+                  </span>
+                  {relativePath && relativePath !== label ? (
+                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                      {relativePath}
+                    </span>
+                  ) : null}
+                </span>
+              </label>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

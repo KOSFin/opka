@@ -21,14 +21,16 @@ const EMPTY_BRANCH_CHANGE_ENTRIES: GitBranchChangeEntry[] = []
  * about it: git status, branch compare, conflict + upstream state, hosted-review cache entries and
  * the repo-owner-routed settings that every git call must be pinned to.
  */
-export function useSourceControlWorktreeContext() {
-  const activeWorktree = useActiveWorktree()
-  const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
+export function useSourceControlWorktreeContext(worktreeId?: string) {
+  const selectedWorktree = useActiveWorktree()
+  const selectedWorktreeId = useAppStore((s) => s.activeWorktreeId)
+  const worktreeMap = useWorktreeMap()
+  const activeWorktreeId = worktreeId ?? selectedWorktreeId
+  const activeWorktree = worktreeId ? worktreeMap.get(worktreeId) : selectedWorktree
   const activeWorktreeInstanceId = activeWorktree?.instanceId
   const activeGroupId = useAppStore((s) =>
     activeWorktreeId ? s.activeGroupIdByWorktree[activeWorktreeId] : undefined
   )
-  const worktreeMap = useWorktreeMap()
   const rightSidebarTab = useAppStore((s) => s.rightSidebarTab)
   const activeRepo = useRepoById(activeWorktree?.repoId ?? null)
   const activeRepoId = activeRepo?.id ?? null

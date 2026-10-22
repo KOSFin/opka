@@ -217,6 +217,7 @@ export function SourceControlPanelContent(props: SourceControlPanelReadyProps) {
         // Why: the graph is reference context, so keep it docked at the bottom as the pane scrolls.
         <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-sidebar/95 backdrop-blur-sm">
           <GitHistoryPanel
+            viewKey={model.sourceControlViewKey}
             state={gitHistoryState}
             collapsed={collapsedSections.has('history')}
             onToggle={() => toggleSection('history')}

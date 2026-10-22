@@ -3,6 +3,7 @@ import type {
   ProjectGroup,
   ProjectGroupImportMode
 } from '../../shared/project-group-types'
+import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import {
   getRuntimePathBasename,
   isPathInsideOrEqual,
@@ -87,54 +88,31 @@ function getNearestScopePath(
   return null
 }
 
-function buildSparseFolderScopes(args: {
+function buildFolderScopes(args: {
   parentPath: string
   repoPaths: readonly string[]
 }): FolderScope[] {
-  // Why: folder-backed workspaces should expose meaningful launch scopes
-  // without turning every one-child filesystem segment into sidebar structure.
-  const folderStats = new Map<string, { directRepoCount: number; totalRepoCount: number }>()
-  const noteFolder = (relativePath: string, field: 'directRepoCount' | 'totalRepoCount'): void => {
-    const normalized = normalizeRelativePath(relativePath)
-    const stats = folderStats.get(normalized) ?? { directRepoCount: 0, totalRepoCount: 0 }
-    stats[field] += 1
-    folderStats.set(normalized, stats)
-  }
+  const folderPaths = new Set<string>()
 
   for (const repoPath of args.repoPaths) {
     const folderRelativePath = getFolderRelativePathForRepo(args.parentPath, repoPath)
     if (folderRelativePath === null) {
       continue
     }
-    noteFolder(folderRelativePath, 'directRepoCount')
     const segments = folderRelativePath.split('/').filter(Boolean)
     for (let length = 1; length <= segments.length; length += 1) {
-      noteFolder(segments.slice(0, length).join('/'), 'totalRepoCount')
+      folderPaths.add(segments.slice(0, length).join('/'))
     }
   }
 
-  const meaningfulPaths = [...folderStats.entries()]
-    .filter(([relativePath, stats]) => {
-      if (!relativePath) {
-        return false
-      }
-      return (
-        stats.directRepoCount >= 2 ||
-        (stats.directRepoCount > 0 && stats.totalRepoCount > stats.directRepoCount)
-      )
-    })
-    .map(([relativePath]) => relativePath)
-    .sort(
-      (left, right) => left.split('/').length - right.split('/').length || left.localeCompare(right)
-    )
-  const meaningfulPathSet = new Set(meaningfulPaths)
-
-  return meaningfulPaths.map((relativePath) => {
-    const parentRelativePath =
-      getNearestScopePath(relativePath.split('/').slice(0, -1).join('/'), meaningfulPathSet) ?? null
+  const orderedPaths = [...folderPaths].sort(
+    (left, right) => left.split('/').length - right.split('/').length || left.localeCompare(right)
+  )
+  return orderedPaths.map((relativePath) => {
+    const parentRelativePath = relativePath.split('/').slice(0, -1).join('/') || null
     return {
       relativePath,
-      name: relativePath,
+      name: relativePath.split('/').at(-1)!,
       folderPath: resolveFolderPath(args.parentPath, relativePath),
       parentRelativePath
     }
@@ -147,6 +125,11 @@ export function createNestedProjectGroupResolver(args: {
   mode: ProjectGroupImportMode
   connectionId?: string | null
   repoPaths?: readonly string[]
+  existingGroups?: readonly ProjectGroup[]
+  folderWorkspaces?: readonly Pick<
+    FolderWorkspace,
+    'projectGroupId' | 'folderPath' | 'connectionId'
+  >[]
   createGroup: (input: CreateGroupInput) => ProjectGroup
 }): NestedProjectGroupResolver {
   const createdGroups: ProjectGroup[] = []
@@ -154,13 +137,42 @@ export function createNestedProjectGroupResolver(args: {
   // unreachable. One flag drives both so the skip can never drift from the guard that justifies it.
   const createsGroups = args.mode === 'group'
   const folderScopes = createsGroups
-    ? buildSparseFolderScopes({ parentPath: args.parentPath, repoPaths: args.repoPaths ?? [] })
+    ? buildFolderScopes({ parentPath: args.parentPath, repoPaths: args.repoPaths ?? [] })
     : []
   const folderScopesByRelativePath = new Map(
     folderScopes.map((scope) => [scope.relativePath, scope])
   )
   const folderScopeGroups = new Map<string, ProjectGroup>()
   let rootGroup: ProjectGroup | undefined
+
+  const groupKey = (
+    input: Pick<ProjectGroup, 'parentPath' | 'connectionId' | 'parentGroupId'>
+  ): string =>
+    JSON.stringify([
+      input.connectionId ?? null,
+      input.parentGroupId ?? null,
+      normalizeRuntimePathForComparison(input.parentPath ?? '')
+    ])
+  const existingGroups = new Map(
+    (args.existingGroups ?? [])
+      .filter((group) => group.createdFrom === 'folder-scan' && group.parentPath)
+      .map((group) => [groupKey(group), group])
+  )
+  const getOrCreateGroup = (input: CreateGroupInput): ProjectGroup => {
+    const existing = existingGroups.get(
+      groupKey({
+        parentPath: input.parentPath ?? null,
+        connectionId: input.connectionId,
+        parentGroupId: input.parentGroupId ?? null
+      })
+    )
+    if (existing) {
+      return existing
+    }
+    const group = args.createGroup(input)
+    createdGroups.push(group)
+    return group
+  }
 
   const ensureRootGroup = (): ProjectGroup | undefined => {
     if (!createsGroups) {
@@ -169,15 +181,35 @@ export function createNestedProjectGroupResolver(args: {
     if (rootGroup) {
       return rootGroup
     }
+    const registered = (args.existingGroups ?? []).filter(
+      (group) =>
+        group.parentPath &&
+        groupKey(group) ===
+          groupKey({
+            parentPath: args.parentPath,
+            connectionId: args.connectionId,
+            parentGroupId: null
+          }) &&
+        args.folderWorkspaces?.some(
+          (folder) =>
+            folder.projectGroupId === group.id &&
+            normalizeRuntimePathForComparison(folder.folderPath) ===
+              normalizeRuntimePathForComparison(args.parentPath) &&
+            (folder.connectionId ?? null) === (args.connectionId ?? null)
+        )
+    )
+    if (registered.length === 1) {
+      rootGroup = registered[0]
+      return rootGroup
+    }
     const fallbackName = getRuntimePathBasename(trimPathSeparators(args.parentPath))
-    rootGroup = args.createGroup({
+    rootGroup = getOrCreateGroup({
       name: args.groupName.trim() || fallbackName,
       parentPath: trimPathSeparators(args.parentPath),
       connectionId: args.connectionId ?? null,
       parentGroupId: null,
       createdFrom: 'folder-scan'
     })
-    createdGroups.push(rootGroup)
     return rootGroup
   }
 
@@ -197,7 +229,7 @@ export function createNestedProjectGroupResolver(args: {
     const parentGroup = scope.parentRelativePath
       ? ensureFolderScopeGroup(scope.parentRelativePath)
       : root
-    const group = args.createGroup({
+    const group = getOrCreateGroup({
       name: scope.name,
       parentPath: scope.folderPath,
       connectionId: args.connectionId ?? null,
@@ -205,7 +237,6 @@ export function createNestedProjectGroupResolver(args: {
       createdFrom: 'folder-scan'
     })
     folderScopeGroups.set(relativePath, group)
-    createdGroups.push(group)
     return group
   }
 

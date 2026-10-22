@@ -15,6 +15,7 @@ export function useBranchCompareRefreshTriggers({
   isBranchVisible,
   activeGitStatusHead,
   remoteStatus,
+  isCurrentResultFresh,
   refreshBranchCompareRef
 }: {
   activeWorktreeId: string | null
@@ -24,6 +25,7 @@ export function useBranchCompareRefreshTriggers({
   isBranchVisible: boolean
   activeGitStatusHead: string | null
   remoteStatus: GitUpstreamStatus | undefined
+  isCurrentResultFresh?: () => boolean
   refreshBranchCompareRef: MutableRefObject<() => Promise<void>>
 }) {
   const branchCompareStatusHeadRef = useRef<BranchCompareStatusHeadSnapshot | null>(null)
@@ -41,7 +43,7 @@ export function useBranchCompareRefreshTriggers({
     }
     const previous = branchCompareStatusHeadRef.current
     branchCompareStatusHeadRef.current = current
-    if (shouldRefreshBranchCompareForStatusHead(previous, current)) {
+    if (shouldRefreshBranchCompareForStatusHead(previous, current) && !isCurrentResultFresh?.()) {
       void refreshBranchCompareRef.current()
     }
   }, [
@@ -50,6 +52,7 @@ export function useBranchCompareRefreshTriggers({
     compareBaseRef,
     isBranchVisible,
     isFolder,
+    isCurrentResultFresh,
     refreshBranchCompareRef,
     worktreePath
   ])
@@ -70,7 +73,7 @@ export function useBranchCompareRefreshTriggers({
     }
     const previous = branchCompareRemoteStatusRef.current
     branchCompareRemoteStatusRef.current = current
-    if (shouldRefreshBranchCompareForRemoteStatus(previous, current)) {
+    if (shouldRefreshBranchCompareForRemoteStatus(previous, current) && !isCurrentResultFresh?.()) {
       void refreshBranchCompareRef.current()
     }
   }, [
@@ -78,6 +81,7 @@ export function useBranchCompareRefreshTriggers({
     compareBaseRef,
     isBranchVisible,
     isFolder,
+    isCurrentResultFresh,
     refreshBranchCompareRef,
     remoteStatus?.ahead,
     remoteStatus?.behind,

@@ -40,7 +40,7 @@ function createGroupRecorder(): {
 }
 
 describe('createNestedProjectGroupResolver', () => {
-  it('creates sparse folder scopes for nested repos in grouped imports', () => {
+  it('creates folder levels for nested repos in grouped imports', () => {
     const groups: ProjectGroup[] = []
     const resolver = createNestedProjectGroupResolver({
       parentPath: '/workspace',
@@ -75,16 +75,17 @@ describe('createNestedProjectGroupResolver', () => {
     const sibling = resolver.getGroupForRepo('/workspace/services/payments/worker')
 
     expect(direct?.name).toBe('workspace')
-    expect(nested?.name).toBe('services/payments')
+    expect(nested?.name).toBe('payments')
     expect(sibling?.id).toBe(nested?.id)
     expect(groups.map((group) => [group.name, group.parentGroupId, group.parentPath])).toEqual([
       ['workspace', null, '/workspace'],
-      ['services/payments', 'group-0', '/workspace/services/payments']
+      ['services', 'group-0', '/workspace/services'],
+      ['payments', 'group-1', '/workspace/services/payments']
     ])
     expect(resolver.getRootGroup()?.id).toBe('group-0')
   })
 
-  it('skips intermediate folders that only lead to one meaningful child scope', () => {
+  it('preserves intermediate folders that lead to one child scope', () => {
     const { groups, createGroup } = createGroupRecorder()
     const resolver = createNestedProjectGroupResolver({
       parentPath: '/workspace/platform',
@@ -104,11 +105,12 @@ describe('createNestedProjectGroupResolver', () => {
     const repo2 = resolver.getGroupForRepo('/workspace/platform/packages/shared/repo2')
 
     expect(api?.name).toBe('Platform')
-    expect(repo1?.name).toBe('packages/shared')
+    expect(repo1?.name).toBe('shared')
     expect(repo2?.id).toBe(repo1?.id)
     expect(groups.map((group) => [group.name, group.parentGroupId, group.parentPath])).toEqual([
       ['Platform', null, '/workspace/platform'],
-      ['packages/shared', 'group-0', '/workspace/platform/packages/shared']
+      ['packages', 'group-0', '/workspace/platform/packages'],
+      ['shared', 'group-1', '/workspace/platform/packages/shared']
     ])
   })
 
@@ -126,10 +128,11 @@ describe('createNestedProjectGroupResolver', () => {
     const nested = resolver.getGroupForRepo('/workspace/platform/services/jobs/worker')
 
     expect(direct?.name).toBe('services')
-    expect(nested?.id).toBe(direct?.id)
+    expect(nested?.parentGroupId).toBe(direct?.id)
     expect(groups.map((group) => [group.name, group.parentGroupId, group.parentPath])).toEqual([
       ['Platform', null, '/workspace/platform'],
-      ['services', 'group-0', '/workspace/platform/services']
+      ['services', 'group-0', '/workspace/platform/services'],
+      ['jobs', 'group-1', '/workspace/platform/services/jobs']
     ])
   })
 
@@ -202,7 +205,7 @@ describe('createNestedProjectGroupResolver', () => {
     resolver.getGroupForRepo('/api')
     resolver.getGroupForRepo('/services/api')
 
-    expect(groups.map((group) => group.parentPath)).toEqual(['/'])
+    expect(groups.map((group) => group.parentPath)).toEqual(['/', '/services'])
   })
 
   it('preserves Windows drive roots when creating the root group', () => {
@@ -233,10 +236,10 @@ describe('createNestedProjectGroupResolver', () => {
     resolver.getGroupForRepo('C:\\api')
     resolver.getGroupForRepo('C:\\services\\api')
 
-    expect(groups.map((group) => group.parentPath)).toEqual(['C:/'])
+    expect(groups.map((group) => group.parentPath)).toEqual(['C:/', 'C:/services'])
   })
 
-  it('creates sparse folder scopes for Windows repo paths', () => {
+  it('creates each folder level for Windows repo paths', () => {
     const { groups, createGroup } = createGroupRecorder()
     const resolver = createNestedProjectGroupResolver({
       parentPath: 'C:\\workspace\\platform',
@@ -253,11 +256,13 @@ describe('createNestedProjectGroupResolver', () => {
     const web = resolver.getGroupForRepo('C:\\workspace\\platform\\apps\\web')
     const repo1 = resolver.getGroupForRepo('C:\\workspace\\platform\\packages\\shared\\repo1')
 
-    expect(web?.name).toBe('Platform')
-    expect(repo1?.name).toBe('packages/shared')
+    expect(web?.name).toBe('apps')
+    expect(repo1?.name).toBe('shared')
     expect(groups.map((group) => [group.name, group.parentGroupId, group.parentPath])).toEqual([
       ['Platform', null, 'C:/workspace/platform'],
-      ['packages/shared', 'group-0', 'C:/workspace/platform/packages/shared']
+      ['apps', 'group-0', 'C:/workspace/platform/apps'],
+      ['packages', 'group-0', 'C:/workspace/platform/packages'],
+      ['shared', 'group-2', 'C:/workspace/platform/packages/shared']
     ])
   })
 
@@ -279,7 +284,8 @@ describe('createNestedProjectGroupResolver', () => {
 
     expect(groups.map((group) => [group.name, group.connectionId])).toEqual([
       ['Platform', 'ssh-1'],
-      ['packages/shared', 'ssh-1']
+      ['packages', 'ssh-1'],
+      ['shared', 'ssh-1']
     ])
   })
 

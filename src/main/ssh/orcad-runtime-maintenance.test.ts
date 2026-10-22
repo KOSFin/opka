@@ -51,6 +51,10 @@ vi.mock('../managed-server/install/orcad-remote-build-hash', () => ({
 vi.mock('../orcad/orcad-artifact-materializer', () => ({
   materializeOrcadArtifact: async () => '/local/orcad'
 }))
+vi.mock(import('../managed-server/install/remote-versioned-install'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readLocalFullVersion: () => '0.3.0+new'
+}))
 vi.mock('./orcad-local-build-hash', () => ({ computeLocalOrcadBuildHash: () => 'local-hash' }))
 vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
   ensureOrcadManagedTunnel: mocks.ensureTunnel,
@@ -104,17 +108,29 @@ describe('updateManagedOrcadEnvironment', () => {
       selector: 'Managed'
     })
     expect(result).toMatchObject({ outcome: 'deferred', forceable: false })
-    expect(mocks.deploy.mock.calls[0]?.[0]).toMatchObject({
-      census: { liveSessions: null },
-      port: 6_768,
-      nodePath: ''
-    })
+    expect(mocks.deploy).not.toHaveBeenCalled()
     const status = await getManagedOrcadRuntimeStatus(harness.userDataPath, 'Managed')
     expect(status.deferredUpdate).toMatchObject({
       candidateVersion: '0.3.0+new',
       code: 'orcad_update_terminal_census_unavailable'
     })
     expect(status.terminals.liveSessions).toBeNull()
+  })
+
+  it('defers before a potentially slow candidate upload when terminals are live', async () => {
+    mocks.census.mockResolvedValue({ ...idle, liveSessions: 2 })
+    mocks.deploy.mockImplementation(() => {
+      throw new Error('A connect must not upload a candidate that cannot activate')
+    })
+    await expect(
+      updateManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    ).resolves.toMatchObject({
+      outcome: 'deferred',
+      code: 'orcad_update_terminals_running',
+      candidateVersion: '0.3.0+new',
+      forceable: true
+    })
+    expect(mocks.deploy).not.toHaveBeenCalled()
   })
 
   it('clears the deferral once an update goes through and keeps an unchanged pairing as is', async () => {

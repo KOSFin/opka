@@ -1,4 +1,4 @@
-import { FileText, Globe, Minus, TerminalSquare } from 'lucide-react'
+import { FileText, Globe, ListTodo, Minus, TerminalSquare } from 'lucide-react'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { Button } from '@/components/ui/button'
 import type { ShortcutKeyComboDetails } from '@/hooks/useShortcutLabel'
@@ -6,6 +6,7 @@ import { translate } from '@/i18n/i18n'
 
 type FloatingTerminalEmptyStateProps = {
   onNewTerminal: () => void
+  onOpenProjectTasks: () => void
   onNewMarkdown: () => void
   onOpenMarkdown: () => void
   onNewBrowser: () => void
@@ -21,6 +22,7 @@ type FloatingTerminalEmptyStateProps = {
 
 export function FloatingTerminalEmptyState({
   onNewTerminal,
+  onOpenProjectTasks,
   onNewMarkdown,
   onOpenMarkdown,
   onNewBrowser,
@@ -41,6 +43,15 @@ export function FloatingTerminalEmptyState({
       onPointerDown={onFocusPanel}
     >
       <div className="flex w-[360px] flex-col items-center gap-1.5" data-floating-terminal-no-drag>
+        <Button
+          type="button"
+          variant="ghost"
+          className="grid h-8 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-3 py-0 text-sm font-normal text-foreground hover:bg-muted/40 hover:text-foreground"
+          onClick={onOpenProjectTasks}
+        >
+          <ListTodo className="size-3.5 opacity-90" />
+          <span className="truncate text-left leading-none">Open project tasks</span>
+        </Button>
         <Button
           type="button"
           variant="ghost"

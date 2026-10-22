@@ -1,4 +1,5 @@
 import type Database from '../../../sqlite/sync-database'
+import { scheduleProjectTaskActivity } from '../../../project-tasks/task-activity'
 import { OrchestrationError } from '../orchestration-error'
 import type { OrchestrationDb } from './orchestration-db'
 
@@ -193,6 +194,7 @@ export function transitionLifecycleWithDb(
     )
   }
 
+  scheduleProjectTaskActivity(db)
   return { changed: true }
 }
 

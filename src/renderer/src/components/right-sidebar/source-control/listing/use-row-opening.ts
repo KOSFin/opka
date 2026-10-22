@@ -2,6 +2,8 @@ import { useCallback, useMemo } from 'react'
 import { detectLanguage } from '@/lib/language-detect'
 import { openUncommittedEntry } from './open-uncommitted-entry'
 import { useAppStore } from '@/store'
+import { revealSourceControlWorkspace } from './reveal-source-control-workspace'
+import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import type {
   GitBranchChangeEntry,
   GitBranchCompareSummary
@@ -18,12 +20,14 @@ import {
 export function useSourceControlRowOpening({
   isMac,
   activeWorktreeId,
+  activeRepoTarget,
   worktreePath,
   visibleSelectionEntries,
   branchSummary
 }: {
   isMac: boolean
   activeWorktreeId: string | null
+  activeRepoTarget: RuntimeClientTarget | null
   worktreePath: string | null
   visibleSelectionEntries: FlatEntry[]
   branchSummary: GitBranchCompareSummary | null
@@ -87,6 +91,9 @@ export function useSourceControlRowOpening({
       if (!activeWorktreeId || !worktreePath) {
         return
       }
+      if (!revealSourceControlWorkspace(activeWorktreeId, activeRepoTarget)) {
+        return
+      }
       const targetGroupId = resolveSplitTargetGroupId(event)
       const openAsPreview = shouldOpenSourceControlRowAsPreview(event, targetGroupId)
       openUncommittedEntry(
@@ -99,6 +106,7 @@ export function useSourceControlRowOpening({
     },
     [
       activeWorktreeId,
+      activeRepoTarget,
       worktreePath,
       resolveSplitTargetGroupId,
       trackConflictPath,
@@ -119,6 +127,9 @@ export function useSourceControlRowOpening({
       ) {
         return
       }
+      if (!revealSourceControlWorkspace(activeWorktreeId, activeRepoTarget)) {
+        return
+      }
       const targetGroupId = resolveSplitTargetGroupId(event)
       openBranchDiff(
         activeWorktreeId,
@@ -129,7 +140,14 @@ export function useSourceControlRowOpening({
         { targetGroupId, preview: shouldOpenSourceControlRowAsPreview(event, targetGroupId) }
       )
     },
-    [activeWorktreeId, branchSummary, openBranchDiff, resolveSplitTargetGroupId, worktreePath]
+    [
+      activeWorktreeId,
+      activeRepoTarget,
+      branchSummary,
+      openBranchDiff,
+      resolveSplitTargetGroupId,
+      worktreePath
+    ]
   )
 
   return { resolveSplitTargetGroupId, activeOpenRowKeys, handleOpenDiff, openCommittedDiff }

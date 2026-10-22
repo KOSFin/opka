@@ -181,3 +181,11 @@ ci-shards/
 /.build/windows-native-benchmark/
 
 .local/static-analysis-research/
+
+# Private workstation evidence; portable fork docs and the publication journal are tracked.
+/.impeccable/
+/fork-docs/audits/
+/fork-docs/iterations/001-source-build-update-audit.md
+/fork-docs/iterations/002-nested-repositories-and-project-tree.md
+/fork-docs/iterations/003-tasks-plans-and-journal.md
+/fork-docs/testing/README.md

@@ -98,10 +98,10 @@ describe('SidebarToolbar moved workspace board hint', () => {
     })
     const { container, rerender } = await renderToolbar(onWorkspaceBoardToggle)
 
-    expect(container.textContent).not.toContain('Workspace board moved to the bottom bar')
+    expect(container.textContent).not.toContain('Working copies are in the bottom bar')
 
     const boardButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Workspace board"]'
+      'button[aria-label="Working copies"]'
     )
     expect(boardButton).not.toBeNull()
     await act(async () => {
@@ -110,7 +110,7 @@ describe('SidebarToolbar moved workspace board hint', () => {
     await rerender()
 
     expect(onWorkspaceBoardToggle).toHaveBeenCalledOnce()
-    expect(container.textContent).not.toContain('Workspace board moved to the bottom bar')
+    expect(container.textContent).not.toContain('Working copies are in the bottom bar')
     expect(window.localStorage.getItem('orca.workspaceBoardMovedHintSeen.v1')).toBeNull()
   })
 
@@ -124,7 +124,7 @@ describe('SidebarToolbar moved workspace board hint', () => {
 
     const { container } = await renderToolbar()
 
-    expect(container.textContent).toContain('Workspace board moved to the bottom bar')
+    expect(container.textContent).toContain('Working copies are in the bottom bar')
     expect(window.localStorage.getItem('orca.workspaceBoardMovedHintSeen.v1')).toBe('true')
   })
 
@@ -134,7 +134,7 @@ describe('SidebarToolbar moved workspace board hint', () => {
   // asynchronously, after the lazy catalog loads).
   it('relabels itself when the UI language changes after mount', async () => {
     const { container } = await renderToolbar()
-    expect(container.querySelector('button[aria-label="Workspace board"]')).not.toBeNull()
+    expect(container.querySelector('button[aria-label="Working copies"]')).not.toBeNull()
 
     await act(async () => {
       await i18n.changeLanguage('ko')
@@ -144,7 +144,7 @@ describe('SidebarToolbar moved workspace board hint', () => {
     // editing the Korean wording cannot fail this test as a bogus stale-render
     // report.
     const localized = ko.auto.components.sidebar.SidebarToolbar['49f62c5665']
-    expect(localized).not.toBe('Workspace board')
+    expect(localized).not.toBe('Working copies')
     expect(container.querySelector(`button[aria-label="${localized}"]`)).not.toBeNull()
   })
 

@@ -155,6 +155,7 @@ export const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktr
   })
 
   const virtualization = useWorktreeListVirtualizer({
+    stickyHeadersEnabled: groupBy !== 'repo',
     renderRows,
     firstHeaderIndex,
     scrollRef,
@@ -194,6 +195,7 @@ export const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktr
   })
 
   const { virtualItems, measureVirtualRowElement } = useVirtualRowMeasurementSync({
+    animateRemovals: groupBy !== 'repo',
     renderRows,
     virtualization,
     scrollRef,

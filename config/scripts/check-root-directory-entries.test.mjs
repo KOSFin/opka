@@ -84,6 +84,14 @@ afterEach(() => {
 })
 
 describe('root directory guard', () => {
+  it('allows fork iteration documentation without allowing other new root folders', () => {
+    const fixture = makeFixture()
+    const docs = commitFiles(fixture.root, [['fork-docs/README.md', 'iteration journal\n']])
+    expect(runGuard({ ...fixture, head: docs }).status).toBe(0)
+    const unknown = commitFiles(fixture.root, [['other-fork-files/readme.md', 'unreviewed\n']])
+    expect(runGuard({ ...fixture, head: unknown }).status).toBe(1)
+  })
+
   it('allows additions inside an existing top-level directory', () => {
     const fixture = makeFixture()
     const head = commitFiles(fixture.root, [['config/new.txt', 'nested\n']])
@@ -233,7 +241,7 @@ describe('root directory guard', () => {
 
   it('is wired into the ready PR verify gate', () => {
     const workflow = parse(readFileSync(join(projectDir, '.github/workflows/pr.yml'), 'utf8'))
-    const guardJob = workflow.jobs.code_paths
+    const guardJob = workflow.jobs.static
     const guardStep = guardJob.steps.find(
       (step) => step.name === 'Reject new root-level files and folders'
     )
@@ -256,6 +264,6 @@ describe('root directory guard', () => {
     // The base side must come from the merge ref, not the event payload, or a shallow checkout
     // cannot resolve it.
     expect(guardStep.run).toContain('git-pull-request-diff-base.mjs')
-    expect(workflow.jobs.verify.needs).toContain('code_paths')
+    expect(workflow.jobs.verify.needs).toContain('static')
   })
 })

@@ -4,6 +4,15 @@ import type { HostHeaderRow } from '../../../../../../shared/sidebar-list/host-s
 export function getHostHeaderDetail(
   row: Pick<HostHeaderRow, 'health' | 'blockedReason' | 'connectionStatus' | 'kind' | 'detail'>
 ): { text: string; isWarning: boolean } | null {
+  if (row.health === 'connecting') {
+    return { text: translate('fork.navigation.connecting', 'Connecting…'), isWarning: false }
+  }
+  if (row.health === 'error') {
+    return {
+      text: translate('fork.navigation.connectionError', 'Connection error'),
+      isWarning: true
+    }
+  }
   // Why: a host that revoked this client's pairing needs a new link, not an update.
   if (row.health === 'blocked' && row.blockedReason === 'access-revoked') {
     return {

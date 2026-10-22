@@ -73,6 +73,7 @@ export function useVirtualRowRemovalAnimation(args: {
   rekeyedRowKeys: ReadonlyMap<string, string>
   scrollRef: React.RefObject<HTMLDivElement | null>
   virtualItems: readonly VirtualItem[]
+  enabled?: boolean
 }): void {
   const { renderRows, rekeyedRowKeys, scrollRef, virtualItems } = args
   const previousSnapshotRef = useRef<VirtualRowLayoutSnapshot | null>(null)
@@ -94,7 +95,11 @@ export function useVirtualRowRemovalAnimation(args: {
       rekeyedRowKeys
     })
     previousSnapshotRef.current = current
-    if (motions.length === 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (
+      args.enabled === false ||
+      motions.length === 0 ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
       return
     }
 
@@ -117,5 +122,5 @@ export function useVirtualRowRemovalAnimation(args: {
         easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
       })
     }
-  }, [rekeyedRowKeys, rowIdentityKeys, scrollRef, virtualItems])
+  }, [args.enabled, rekeyedRowKeys, rowIdentityKeys, scrollRef, virtualItems])
 }

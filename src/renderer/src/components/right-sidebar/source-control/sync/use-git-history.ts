@@ -3,21 +3,19 @@ import { requireGitOwnerTarget } from '../../worktree-git-owner-target'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import { getConnectionId } from '@/lib/connection-context'
 import { getRuntimeGitHistory } from '@/runtime/runtime-git-status-client'
+import { useAppStore } from '@/store'
 import type { GitHistoryPanelState } from './git-history-panel'
+import {
+  forgetGitHistorySnapshot,
+  readGitHistorySnapshot,
+  loadGitHistorySnapshot,
+  GIT_HISTORY_SNAPSHOT_FRESH_MS
+} from './git-history-snapshots'
 
 const EMPTY_GIT_HISTORY_STATE: GitHistoryPanelState = { status: 'idle' }
 
-/**
- * Loads commit history for the active worktree.
- *
- * State is kept per worktree so switching tabs restores the previous result instead of reloading,
- * and entries are pruned when `worktreeMap` drops a worktree. Fetching is gated on the panel being
- * expanded and visible, and stale responses are discarded by per-worktree request id.
- *
- * `refreshGitHistoryRef` exists for callers that must refresh from an effect without re-subscribing
- * whenever the callback identity changes.
- */
 export function useSourceControlGitHistory({
+  viewKey,
   activeRepoTarget,
   activeWorktreeId,
   worktreePath,
@@ -28,6 +26,7 @@ export function useSourceControlGitHistory({
   isGitHistoryVisible,
   worktreeMap
 }: {
+  viewKey?: string | null
   activeRepoTarget: RuntimeClientTarget | null
   activeWorktreeId: string | null
   worktreePath: string | null
@@ -42,41 +41,41 @@ export function useSourceControlGitHistory({
   refreshGitHistory: () => Promise<void>
   refreshGitHistoryRef: RefObject<() => Promise<void>>
 } {
-  const [gitHistoryByWorktree, setGitHistoryByWorktree] = useState<
-    Record<string, GitHistoryPanelState>
-  >({})
-  const gitHistoryRequestSeqRef = useRef(0)
-  const gitHistoryRequestByWorktreeRef = useRef<Record<string, number>>({})
-  const gitHistoryState = activeWorktreeId
-    ? (gitHistoryByWorktree[activeWorktreeId] ?? EMPTY_GIT_HISTORY_STATE)
-    : EMPTY_GIT_HISTORY_STATE
-  // Why: the read is routed by owner host, so track it as a stable string — a new settings object alone must not refetch.
-  const ownerHostKey =
-    activeRepoTarget?.kind === 'environment' ? activeRepoTarget.environmentId : ''
-
-  useEffect(() => {
-    setGitHistoryByWorktree((prev) => {
-      let changed = false
-      const next: Record<string, GitHistoryPanelState> = {}
-      for (const key of Object.keys(prev)) {
-        if (worktreeMap.has(key)) {
-          next[key] = prev[key]
-        } else {
-          changed = true
-        }
-      }
-      return changed ? next : prev
-    })
-    for (const key of Object.keys(gitHistoryRequestByWorktreeRef.current)) {
-      if (!worktreeMap.has(key)) {
-        delete gitHistoryRequestByWorktreeRef.current[key]
-      }
-    }
-  }, [worktreeMap])
-
-  const refreshGitHistory = useCallback(async (): Promise<void> => {
+  const head = useAppStore((s) =>
+    activeWorktreeId ? s.gitStatusHeadByWorktree?.[activeWorktreeId] : undefined
+  )
+  const owner = JSON.stringify([
+    viewKey,
+    activeRepoTarget,
+    activeWorktreeId,
+    worktreePath,
+    getConnectionId(activeWorktreeId ?? ''),
+    compareBaseRef
+  ])
+  const key = JSON.stringify([owner, head ?? null])
+  const requestGeneration = useRef(0)
+  const [state, setState] = useState<{ key: string; owner: string; value: GitHistoryPanelState }>({
+    key,
+    owner,
+    value: EMPTY_GIT_HISTORY_STATE
+  })
+  const snapshot = readGitHistorySnapshot(key)
+  const retained = state.owner === owner ? state.value.result : undefined
+  const fallback: GitHistoryPanelState = snapshot
+    ? { status: 'ready', result: snapshot.result }
+    : retained
+      ? { status: 'refreshing', result: retained }
+      : EMPTY_GIT_HISTORY_STATE
+  const gitHistoryState =
+    activeWorktreeId && !worktreeMap.has(activeWorktreeId)
+      ? EMPTY_GIT_HISTORY_STATE
+      : state.key === key && (state.value.result || state.value.status !== 'idle')
+        ? state.value
+        : fallback
+  const refreshGitHistory = useCallback(async () => {
     if (
       !activeWorktreeId ||
+      !worktreeMap.has(activeWorktreeId) ||
       !worktreePath ||
       isFolder ||
       !isBranchVisible ||
@@ -85,87 +84,77 @@ export function useSourceControlGitHistory({
     ) {
       return
     }
-    const worktreeId = activeWorktreeId
-    const requestId = gitHistoryRequestSeqRef.current + 1
-    gitHistoryRequestSeqRef.current = requestId
-    gitHistoryRequestByWorktreeRef.current[worktreeId] = requestId
-    setGitHistoryByWorktree((prev) => {
-      const previous = prev[worktreeId]
-      return {
-        ...prev,
-        [worktreeId]: previous?.result
-          ? { status: 'refreshing', result: previous.result }
-          : { status: 'loading' }
-      }
+    const previous = readGitHistorySnapshot(key)?.result ?? retained
+    const generation = ++requestGeneration.current
+    setState({
+      key,
+      owner,
+      value: previous ? { status: 'refreshing', result: previous } : { status: 'loading' }
     })
     try {
-      const connectionId = getConnectionId(worktreeId) ?? undefined
-      const result = await getRuntimeGitHistory(
-        {
-          // Why: route the history read by the repo OWNER host, not the focused runtime.
-          target: requireGitOwnerTarget(activeRepoTarget),
-          worktreeId,
-          worktreePath,
-          connectionId
-        },
-        { limit: 50, baseRef: compareBaseRef }
+      const result = await loadGitHistorySnapshot(
+        key,
+        () =>
+          getRuntimeGitHistory(
+            {
+              target: requireGitOwnerTarget(activeRepoTarget),
+              worktreeId: activeWorktreeId,
+              worktreePath,
+              connectionId: getConnectionId(activeWorktreeId) ?? undefined
+            },
+            { limit: 50, baseRef: compareBaseRef }
+          ),
+        true
       )
-      if (gitHistoryRequestByWorktreeRef.current[worktreeId] !== requestId) {
-        return
+      if (generation === requestGeneration.current) {
+        setState({ key, owner, value: { status: 'ready', result } })
       }
-      setGitHistoryByWorktree((prev) => ({
-        ...prev,
-        [worktreeId]: { status: 'ready', result }
-      }))
     } catch (error) {
-      if (gitHistoryRequestByWorktreeRef.current[worktreeId] !== requestId) {
-        return
+      if (generation === requestGeneration.current) {
+        setState({
+          key,
+          owner,
+          value: {
+            status: 'error',
+            result: previous,
+            error: error instanceof Error ? error.message : 'Failed to load commits'
+          }
+        })
       }
-      const message = error instanceof Error ? error.message : 'Failed to load commits'
-      setGitHistoryByWorktree((prev) => {
-        const previous = prev[worktreeId]
-        return {
-          ...prev,
-          [worktreeId]: previous?.result
-            ? { status: 'error', result: previous.result, error: message }
-            : { status: 'error', error: message }
-        }
-      })
     }
   }, [
     activeRepoTarget,
     activeWorktreeId,
+    worktreePath,
     compareBaseRef,
-    isBranchVisible,
     isFolder,
+    isBranchVisible,
     isGitHistoryExpanded,
     isGitHistoryVisible,
-    worktreePath
+    key,
+    owner,
+    retained,
+    worktreeMap
   ])
   const refreshGitHistoryRef = useRef(refreshGitHistory)
-  // Why: publish in an effect, not the render body — a discarded render must not install its callback. Declared first so the effect below sees the fresh one.
   useEffect(() => {
     refreshGitHistoryRef.current = refreshGitHistory
   }, [refreshGitHistory])
-
   useEffect(() => {
-    // Why: history shells out to git; defer first load until the user expands Commits so source control stays cheap for large/remote repos.
+    if (activeWorktreeId && !worktreeMap.has(activeWorktreeId)) {
+      requestGeneration.current += 1
+      forgetGitHistorySnapshot(key)
+      setState({ key, owner, value: EMPTY_GIT_HISTORY_STATE })
+    }
+  }, [activeWorktreeId, key, owner, worktreeMap])
+  useEffect(() => {
     if (!isBranchVisible || !isGitHistoryExpanded || !isGitHistoryVisible) {
       return
     }
-    void refreshGitHistoryRef.current()
-  }, [
-    // Why: history is fetched with compareBaseRef, so re-run when it changes (effectiveBaseRef can stay put while it moves).
-    activeWorktreeId,
-    compareBaseRef,
-    isBranchVisible,
-    isFolder,
-    isGitHistoryExpanded,
-    isGitHistoryVisible,
-    // Why: same worktree + path can switch owner host; without this the panel keeps the previous host's commits.
-    ownerHostKey,
-    worktreePath
-  ])
-
+    const cached = readGitHistorySnapshot(key)
+    if (!cached || Date.now() - cached.checkedAt >= GIT_HISTORY_SNAPSHOT_FRESH_MS) {
+      void refreshGitHistoryRef.current()
+    }
+  }, [key, isBranchVisible, isGitHistoryExpanded, isGitHistoryVisible])
   return { gitHistoryState, refreshGitHistory, refreshGitHistoryRef }
 }

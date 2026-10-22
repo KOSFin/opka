@@ -4,6 +4,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 
 export function makeFolderWorkspacePathStatusMockState(): Record<string, unknown> {
   return {
+    runtimeEnvironments: [],
     fetchFolderWorkspacePathStatus: vi.fn(),
     folderWorkspaces: [],
     folderWorkspacePathStatuses: {},

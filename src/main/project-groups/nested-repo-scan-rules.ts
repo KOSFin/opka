@@ -27,6 +27,7 @@ type IgnoreRule = {
 type GlobSegment = string | { pattern: string }
 
 export type TraversalFolder = {
+  isRepository?: boolean
   path: string
   depth: number
   segments: string[]
@@ -34,6 +35,7 @@ export type TraversalFolder = {
 }
 
 export type NormalizedNestedRepoScanOptions = {
+  includeNestedRepos: boolean
   maxDepth: number
   maxRepos: number
   timeoutMs: number | null
@@ -59,6 +61,7 @@ const VCS_METADATA_DIRS = new Set(['.git', '.svn', '.hg', '.jj', '.sl', '.repo',
 export function normalizeNestedRepoScanOptions(options: unknown): NormalizedNestedRepoScanOptions {
   const raw = options && typeof options === 'object' ? (options as NestedRepoScanOptions) : {}
   return {
+    includeNestedRepos: raw.includeNestedRepos !== false,
     maxDepth:
       typeof raw.maxDepth === 'number' && Number.isFinite(raw.maxDepth)
         ? Math.max(1, Math.min(8, Math.floor(raw.maxDepth)))

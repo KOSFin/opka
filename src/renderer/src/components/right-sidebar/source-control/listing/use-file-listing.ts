@@ -40,6 +40,7 @@ export function useSourceControlFileListing({
   sourceControlGroupOrder,
   sourceControlRef,
   sourceControlViewMode,
+  sourceControlViewKey,
   worktreeMap,
   worktreePath
 }: {
@@ -65,6 +66,7 @@ export function useSourceControlFileListing({
   sourceControlGroupOrder: SourceControlPanelViewState['sourceControlGroupOrder']
   sourceControlRef: SourceControlPanelViewState['sourceControlRef']
   sourceControlViewMode: SourceControlPanelViewState['sourceControlViewMode']
+  sourceControlViewKey?: string | null
   worktreeMap: SourceControlWorktreeContext['worktreeMap']
   worktreePath: string | null
 }) {
@@ -103,6 +105,7 @@ export function useSourceControlFileListing({
     collapsedSections
   })
   const { gitHistoryState, refreshGitHistory, refreshGitHistoryRef } = useSourceControlGitHistory({
+    viewKey: sourceControlViewKey,
     activeRepoTarget,
     activeWorktreeId,
     worktreePath,
@@ -119,6 +122,7 @@ export function useSourceControlFileListing({
     useSourceControlRowOpening({
       isMac,
       activeWorktreeId,
+      activeRepoTarget,
       worktreePath,
       visibleSelectionEntries,
       branchSummary

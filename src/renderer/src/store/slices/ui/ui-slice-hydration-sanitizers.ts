@@ -170,9 +170,9 @@ export function sanitizeWorkspaceCleanupDismissals(
 }
 
 export function sanitizeHydratedActiveView(value: PersistedUIState['activeView']): TopLevelView {
-  // Why: older data (pre-activeView) or a view a different build doesn't have falls back to terminal rather than rendering nothing.
+  // Restore a valid saved screen; otherwise start with project planning, not an unnamed checkout.
   if (!isTopLevelView(value)) {
-    return 'terminal'
+    return 'tasks'
   }
   return value
 }

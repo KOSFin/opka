@@ -177,6 +177,29 @@ function collectRuntimeClosure(outDir, artifactRoot = dirname(outDir)) {
   return [...visited].sort()
 }
 
+/** Keep plain Node's unpacked import graph aligned with the compiled CLI, not a hand list. */
+function cliRuntimeUnpackPatterns(outDir, artifactRoot = dirname(outDir)) {
+  if (!existsSync(join(outDir, 'cli', 'index.js'))) {
+    return []
+  }
+  const root = realpathSync(artifactRoot)
+  return [
+    ...new Set(
+      collectRuntimeClosure(outDir, artifactRoot).map((file) => {
+        const name = relative(root, file).split(sep).join('/')
+        const marker = '/node_modules/'
+        const index = name.lastIndexOf(marker)
+        const dependency = name.startsWith('node_modules/')
+          ? index !== -1
+            ? name.slice(index + marker.length)
+            : name.slice('node_modules/'.length)
+          : null
+        return dependency ? `node_modules/${bareSpecifierPackage(dependency)}/**` : name
+      })
+    )
+  ].sort()
+}
+
 function runCli(outDir, args, timeoutMs = CLI_COMMAND_TIMEOUT_MS) {
   const entry = resolve(outDir, 'cli', 'index.js')
   const env = { ...process.env, NODE_PATH: '' }
@@ -268,4 +291,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { collectRuntimeClosure, runCli, verifySkillsCliRuntime }
+module.exports = { cliRuntimeUnpackPatterns, collectRuntimeClosure, runCli, verifySkillsCliRuntime }

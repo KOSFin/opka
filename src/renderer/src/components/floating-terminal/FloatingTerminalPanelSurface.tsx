@@ -11,11 +11,20 @@ import { FloatingTerminalOrchestrationDialog } from './FloatingTerminalOrchestra
 import { FloatingTerminalResizeHandles } from './FloatingTerminalResizeHandles'
 import { FloatingTerminalWindowControls } from './FloatingTerminalWindowControls'
 import type { useFloatingTerminalPanelController } from './use-floating-terminal-panel-controller'
+import { lazy, Suspense } from 'react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+const ProjectTasksPage = lazy(() =>
+  import('../task-page/ProjectTasksPage').then((module) => ({ default: module.ProjectTasksPage }))
+)
 
 const NO_ACTIVITY_TERMINAL_PORTALS: [] = []
 
 export function renderFloatingTerminalPanelSurface({
   open,
+  showTasks,
+  tasksMounted,
+  setContent,
   onOpenChange,
   bounds,
   maximized,
@@ -110,7 +119,7 @@ export function renderFloatingTerminalPanelSurface({
           reportFloatingFocusFromTarget(event.relatedTarget)
         }
       }}
-      onKeyDownCapture={handleShortcutSurfaceKeyDown}
+      onKeyDownCapture={showTasks ? undefined : handleShortcutSurfaceKeyDown}
     >
       {/* Why one drag layer around titlebar AND body: the titlebar strip's sortables and the
           body tree's split/pane-body drop targets must live in the same dnd-kit scope, so a
@@ -131,7 +140,7 @@ export function renderFloatingTerminalPanelSurface({
               onPointerCancel={handleDragEnd}
               onDoubleClick={handleTitlebarDoubleClick}
             >
-              <div className="flex h-full min-w-0 flex-1">
+              <div className={cn('flex h-full min-w-0 flex-1', showTasks && 'hidden')}>
                 <TabBar
                   tabs={terminalItems}
                   activeTabId={
@@ -190,7 +199,22 @@ export function renderFloatingTerminalPanelSurface({
                   tabStripChrome="floating-panel"
                 />
               </div>
+              {showTasks && (
+                <span className="min-w-0 flex-1 truncate px-3 text-sm font-medium">
+                  Project tasks
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="xs"
+                onPointerDown={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+                onClick={() => setContent(showTasks ? 'workspace' : 'tasks')}
+              >
+                {showTasks ? 'Workspace' : 'Project tasks'}
+              </Button>
               <FloatingTerminalWindowControls
+                hideAgentLauncher={showTasks}
                 maximized={maximized}
                 onToggleMaximized={toggleMaximized}
                 onMinimize={() => onOpenChange(false)}
@@ -205,61 +229,87 @@ export function renderFloatingTerminalPanelSurface({
             >
               {/* Why also gated on resolvable items: stale unified tabs whose entities are gone
                   must show the empty state (with its CTAs), not a blank group body. */}
-              {surface.kind === 'workspace' && hasVisibleFloatingTabs ? (
-                // Why the flex frame: the tree's nodes size themselves as flex items (flex-1), so
-                // the host must own their rect with a flex container — same contract as
-                // WorktreeSplitSurface. In a block parent every pane collapses to 0px.
-                <div className="absolute inset-0 flex" data-floating-workspace-surface-frame>
-                  <TabGroupSplitNodeTree
-                    layout={surface.layout}
-                    worktreeId={FLOATING_TERMINAL_WORKTREE_ID}
-                    focusedGroupId={surface.focusedGroupId}
-                    isWorktreeActive={open}
-                    isTabDragActive={isTabDragActive}
-                    hoveredTabInsertion={hoveredTabInsertion}
-                    // Why external: the titlebar strip above is the panel's one tab row.
-                    tabStrip="external"
-                    // Why: floating workspace markdown is scratch/local context,
-                    // not a repo review surface that should expose agent notes.
-                    markdownAnnotationsEnabled={false}
-                    rootTouchesBottomEdge={true}
-                  />
-                  {/* Why also gated on a settled viewport: a restored-maximized panel derives its
+              <div className="absolute inset-0" inert={showTasks} aria-hidden={showTasks}>
+                {surface.kind === 'workspace' && hasVisibleFloatingTabs ? (
+                  // Why the flex frame: the tree's nodes size themselves as flex items (flex-1), so
+                  // the host must own their rect with a flex container — same contract as
+                  // WorktreeSplitSurface. In a block parent every pane collapses to 0px.
+                  <div className="absolute inset-0 flex" data-floating-workspace-surface-frame>
+                    <TabGroupSplitNodeTree
+                      layout={surface.layout}
+                      worktreeId={FLOATING_TERMINAL_WORKTREE_ID}
+                      focusedGroupId={surface.focusedGroupId}
+                      isWorktreeActive={open && !showTasks}
+                      isTabDragActive={isTabDragActive}
+                      hoveredTabInsertion={hoveredTabInsertion}
+                      // Why external: the titlebar strip above is the panel's one tab row.
+                      tabStrip="external"
+                      // Why: floating workspace markdown is scratch/local context,
+                      // not a repo review surface that should expose agent notes.
+                      markdownAnnotationsEnabled={false}
+                      rootTouchesBottomEdge={true}
+                    />
+                    {/* Why also gated on a settled viewport: a restored-maximized panel derives its
                       rect from the live viewport, so mounting terminals before the window finishes
                       maximizing fits them to a grid it is about to leave, and the correcting fit
                       reflows the buffer under a live TUI. An empty worktreePath mounts no
                       terminal panes; browser/editor/chat panes are not viewport-fitted. */}
-                  <WorkspacePaneOverlayLayers
-                    worktreeId={FLOATING_TERMINAL_WORKTREE_ID}
-                    worktreePath={cwd && panelViewportSettled ? cwd : ''}
-                    isVisible={open}
-                    shouldMeasureHiddenWorktree={false}
-                    shouldColdParkTerminalPanes={false}
-                    isForceParked={false}
-                    activityTerminalPortals={NO_ACTIVITY_TERMINAL_PORTALS}
-                    backgroundMountTabIds={null}
-                    activationDeferredMountTabIds={null}
-                    mountRetainedBrowserOverlay={true}
-                    mountEmulatorOverlay={true}
-                    // Why: the active workspace's listener owns the chord while the panel overlays it.
-                    ownsNativeChatToggleShortcut={false}
+                    <WorkspacePaneOverlayLayers
+                      worktreeId={FLOATING_TERMINAL_WORKTREE_ID}
+                      worktreePath={cwd && panelViewportSettled ? cwd : ''}
+                      isVisible={open && !showTasks}
+                      shouldMeasureHiddenWorktree={false}
+                      shouldColdParkTerminalPanes={false}
+                      isForceParked={false}
+                      activityTerminalPortals={NO_ACTIVITY_TERMINAL_PORTALS}
+                      backgroundMountTabIds={null}
+                      activationDeferredMountTabIds={null}
+                      mountRetainedBrowserOverlay={true}
+                      mountEmulatorOverlay={true}
+                      // Why: the active workspace's listener owns the chord while the panel overlays it.
+                      ownsNativeChatToggleShortcut={false}
+                    />
+                  </div>
+                ) : (
+                  <FloatingTerminalEmptyState
+                    onOpenProjectTasks={() => setContent('tasks')}
+                    onNewTerminal={() => createFloatingTerminalTab()}
+                    onNewMarkdown={createFloatingMarkdownTab}
+                    onOpenMarkdown={openFloatingMarkdownTab}
+                    onNewBrowser={createFloatingBrowserTab}
+                    showNewBrowser={managedBrowserCreationEnabled}
+                    onClose={() => onOpenChange(false)}
+                    onFocusPanel={focusPanelForShortcuts}
+                    newTerminalShortcut={newTerminalShortcut}
+                    newBrowserShortcut={newBrowserShortcut}
+                    newMarkdownShortcut={newMarkdownShortcut}
+                    openMarkdownShortcut={openMarkdownShortcut}
+                    closeShortcut={closeShortcut}
                   />
+                )}
+              </div>
+              {tasksMounted && (
+                <div
+                  data-floating-project-tasks
+                  aria-hidden={!open || !showTasks}
+                  inert={!open || !showTasks}
+                  className="absolute inset-0 z-20 flex flex-col bg-background"
+                  style={{
+                    display: open && showTasks ? undefined : 'none',
+                    visibility: open && showTasks ? 'visible' : 'hidden',
+                    pointerEvents: open && showTasks ? undefined : 'none'
+                  }}
+                >
+                  <Suspense
+                    fallback={
+                      <p role="status" className="p-4 text-xs text-muted-foreground">
+                        Loading project tasks…
+                      </p>
+                    }
+                  >
+                    <ProjectTasksPage embedded />
+                  </Suspense>
                 </div>
-              ) : (
-                <FloatingTerminalEmptyState
-                  onNewTerminal={() => createFloatingTerminalTab()}
-                  onNewMarkdown={createFloatingMarkdownTab}
-                  onOpenMarkdown={openFloatingMarkdownTab}
-                  onNewBrowser={createFloatingBrowserTab}
-                  showNewBrowser={managedBrowserCreationEnabled}
-                  onClose={() => onOpenChange(false)}
-                  onFocusPanel={focusPanelForShortcuts}
-                  newTerminalShortcut={newTerminalShortcut}
-                  newBrowserShortcut={newBrowserShortcut}
-                  newMarkdownShortcut={newMarkdownShortcut}
-                  openMarkdownShortcut={openMarkdownShortcut}
-                  closeShortcut={closeShortcut}
-                />
               )}
             </div>
           </div>

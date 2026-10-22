@@ -175,7 +175,13 @@ export function WorktreeCardHeader({
 
         {/* Why: unread alert lives in the left status lane; title-row contrast comes from weight and dimmed read titles. */}
         <WorktreeTitleInlineRename
-          displayName={visibleCardTitle}
+          displayName={
+            worktree.isMainWorktree &&
+            !isFolder &&
+            visibleCardTitle === worktree.branch?.replace(/^refs\/heads\//, '')
+              ? translate('fork.navigation.mainWorkspace', 'Main workspace')
+              : visibleCardTitle
+          }
           disabled={isDeleting || affiliateListMode}
           showUnreadEmphasis={showUnreadEmphasis}
           dimReadTitle={newCardStyle}
@@ -228,13 +234,13 @@ export function WorktreeCardHeader({
                 variant="outline"
                 className="h-[16px] px-1.5 text-[10px] font-medium rounded shrink-0 leading-none text-foreground/70 border-foreground/20 bg-foreground/[0.06]"
               >
-                {translate('auto.components.sidebar.WorktreeCard.7d517f82e2', 'primary')}
+                {translate('fork.navigation.workspace', 'workspace')}
               </Badge>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>
               {translate(
                 'auto.components.sidebar.WorktreeCard.0777de5970',
-                'Primary worktree (original clone directory)'
+                'Original checkout. Open it for its chats and terminals; the Git branch is shown below.'
               )}
             </TooltipContent>
           </Tooltip>

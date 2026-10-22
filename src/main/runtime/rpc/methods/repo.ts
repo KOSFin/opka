@@ -13,6 +13,7 @@ import {
 } from '../repo-visibility-projection'
 import {
   ProjectGroupCreate,
+  ProjectGroupMerge,
   ProjectGroupImportNested,
   ProjectGroupMoveProject,
   ProjectGroupScanNested,
@@ -29,8 +30,18 @@ import {
   RepoUpdate
 } from '../../../../shared/rpc-contract/repo-params'
 import { RepoAddRemote } from '../../../../shared/rpc-contract/ssh-params'
+import { requireInteractiveTaskOperator } from '../../project-task-workflow-service'
 
 export const REPO_METHODS = [
+  defineMethod({
+    name: 'projectGroup.merge',
+    permission: 'workspace',
+    params: ProjectGroupMerge,
+    handler: async (params, context) => {
+      requireInteractiveTaskOperator(context)
+      return context.runtime.mergeProjectGroups(params.sourceId, params.targetId)
+    }
+  }),
   defineMethod({
     name: 'repo.list',
     permission: 'workspace',

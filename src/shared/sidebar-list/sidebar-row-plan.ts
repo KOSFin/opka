@@ -48,7 +48,9 @@ import type {
 } from './row-types'
 import { orderMainWorktreeFirst, getRenderedNaturalAnchorRepoIds } from './section-order'
 import { withRepoSectionDisplayLabels } from '../project-section-order'
+import { omitEmptyDuplicateProjectGroups } from './project-group-empty-duplicates'
 import { buildOrderedGroups } from './worktree-grouping'
+import { getRepoProjectSectionId } from './project-repository-navigation'
 
 type SidebarOccurrenceSection = WorktreeOccurrenceSection<Worktree> & { group: WorktreeGroupEntry }
 
@@ -91,7 +93,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     lineageById,
     worktreeMap,
     nestLineage,
-    projectGroups,
+    projectGroups: catalogProjectGroups,
     placeholderRepoIds,
     importedWorktreesByRepo,
     newExternalWorktreesInboxByRepo,
@@ -103,6 +105,11 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     pinnedDisplayPolicy,
     filterRepoIds
   } = inputs
+  const projectGroups = omitEmptyDuplicateProjectGroups(
+    catalogProjectGroups,
+    [...repoMap.values()],
+    folderWorkspaces
+  )
   const projectIndex = buildProjectGroupingIndex(projectGrouping)
   // Membership is decided once, above the groupBy switch: every mode renders the
   // same set of folder workspaces and only chooses where they land (#15362).
@@ -150,9 +157,10 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
         groups.unshift([PINNED_GROUP_KEY, { label: '', items: pinned, repoIds: new Set() }])
       }
       return groups.map(([key, group]): SidebarOccurrenceSection => {
+        const folderSection = getRepoProjectSectionId(group.repo, projectGroups)
         const revealPath =
-          groupBy === 'repo' && key !== PINNED_GROUP_KEY && group.repo?.projectGroupId
-            ? projectGroupPaths.get(group.repo.projectGroupId)
+          groupBy === 'repo' && key !== PINNED_GROUP_KEY && folderSection
+            ? projectGroupPaths.get(folderSection)
             : undefined
         return {
           key,

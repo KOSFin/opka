@@ -129,6 +129,16 @@ export class RuntimeProjectGroupController {
     return { deleted }
   }
 
+  async mergeGroups(sourceId: string, targetId: string) {
+    const store = this.deps.getStore()
+    if (!store?.mergeProjectGroups) {
+      throw new Error('runtime_unavailable')
+    }
+    const result = store.mergeProjectGroups(sourceId, targetId)
+    this.deps.notifyReposChanged()
+    return result
+  }
+
   async moveProject(
     repoSelector: string,
     groupId: string | null,

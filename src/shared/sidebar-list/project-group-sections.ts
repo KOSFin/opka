@@ -17,6 +17,12 @@ import {
   withRepoSectionDisplayLabels
 } from '../project-section-order'
 import { buildFolderWorkspaceRow } from './row-builders'
+import {
+  getRepoProjectSectionId,
+  getSidebarProjectGroupId,
+  getSidebarProjectGroups,
+  getProjectRepositoryLabel
+} from './project-repository-navigation'
 
 export function appendProjectGroupSections(
   ctx: SectionAppendContext,
@@ -34,7 +40,7 @@ export function appendProjectGroupSections(
   const groupByProjectGroupId = new Map<string | null, OrderedGroupEntry[]>()
   for (const entry of orderedGroups) {
     const repo = entry[1].repo
-    const projectGroupId = repo?.projectGroupId ?? null
+    const projectGroupId = getRepoProjectSectionId(repo, projectGroups)
     const list = groupByProjectGroupId.get(projectGroupId) ?? []
     list.push(entry)
     groupByProjectGroupId.set(projectGroupId, list)
@@ -60,12 +66,13 @@ export function appendProjectGroupSections(
     })
   }
 
-  const projectGroupsById = new Map(projectGroups.map((group) => [group.id, group]))
+  const visibleGroups = getSidebarProjectGroups(projectGroups)
+  const projectGroupsById = new Map(visibleGroups.map((group) => [group.id, group]))
   // Membership already decided by getRenderableFolderWorkspaces in planSidebarRows, so
   // repo grouping no longer owns the filter — it only groups and orders (#15362).
   const folderWorkspacesByProjectGroupId = new Map<string, RenderableFolderWorkspace[]>()
   for (const pair of folderWorkspaces) {
-    const groupId = pair.folderWorkspace.projectGroupId
+    const groupId = getSidebarProjectGroupId(pair.projectGroup, projectGroups)
     const list = folderWorkspacesByProjectGroupId.get(groupId) ?? []
     list.push(pair)
     folderWorkspacesByProjectGroupId.set(groupId, list)
@@ -77,7 +84,7 @@ export function appendProjectGroupSections(
   }
   const childGroupsByParentId = new Map<string | null, ProjectGroup[]>()
   // Why distinct: membership is id-keyed, so a same-id copy's header would sit empty (#30045).
-  for (const group of getDistinctProjectGroups(projectGroups)) {
+  for (const group of getDistinctProjectGroups(visibleGroups)) {
     const parentId =
       group.parentGroupId && projectGroupsById.has(group.parentGroupId) ? group.parentGroupId : null
     const children = childGroupsByParentId.get(parentId) ?? []
@@ -121,10 +128,23 @@ export function appendProjectGroupSections(
       for (const pair of folderWorkspacesByProjectGroupId.get(projectGroup.id) ?? []) {
         result.push(buildFolderWorkspaceRow(pair, depth + 1))
       }
-      appendOrderedGroups(ctx, withRepoSectionDisplayLabels(repoEntries), depth + 1)
       for (const childGroup of childGroups) {
         appendProjectGroup(childGroup, depth + 1)
       }
+      appendOrderedGroups(
+        ctx,
+        repoEntries.map(([entryKey, entry]) => [
+          entryKey,
+          {
+            ...entry,
+            label:
+              entry.repo && projectGroup.parentPath
+                ? getProjectRepositoryLabel(entry.repo, projectGroup)
+                : entry.label
+          }
+        ]),
+        depth + 1
+      )
     }
     groupByProjectGroupId.delete(projectGroup.id)
   }
@@ -151,6 +171,7 @@ export function appendProjectGroupSections(
 
 /** The same group parents used by section emission, including missing-parent roots. */
 export function getProjectGroupOccurrencePaths(projectGroups: readonly ProjectGroup[]) {
+  projectGroups = getSidebarProjectGroups(projectGroups)
   const groupsById = new Map(projectGroups.map((group) => [group.id, group]))
   const paths = new Map<string, OccurrenceSectionPath>()
   for (const group of getDistinctProjectGroups(projectGroups)) {

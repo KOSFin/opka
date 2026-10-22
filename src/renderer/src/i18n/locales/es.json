@@ -5608,9 +5608,9 @@
         "SidebarToolbar": {
           "19e32d0e5f": "Abrir el selector de carpetas para agregar un proyecto",
           "abc62b6328": "Agregar proyecto",
-          "87d0064026": "El tablero de espacios de trabajo se movió a la barra inferior",
-          "a30e34eb5c": "Cerrar tablero de espacios de trabajo",
-          "49f62c5665": "Tablero de espacios de trabajo"
+          "87d0064026": "Las copias de trabajo están en la barra inferior",
+          "a30e34eb5c": "Cerrar copias de trabajo",
+          "49f62c5665": "Copias de trabajo"
         },
         "SidebarWorkspaceFilterSection": {
           "c3fa13dc2e": "Ocultar rama predeterminada",

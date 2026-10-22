@@ -8,13 +8,13 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 
 describe('project groups', () => {
-  it('renders nested Project Groups before repos assigned to their leaf group', () => {
+  it('renders manual nested Project Groups before repos assigned to their leaf group', () => {
     const rootGroup: ProjectGroup = {
       id: 'group-root',
       name: 'Services',
       parentPath: '/monorepo',
       parentGroupId: null,
-      createdFrom: 'folder-scan',
+      createdFrom: 'manual',
       tabOrder: 0,
       isCollapsed: false,
       color: null,
@@ -138,7 +138,7 @@ describe('project groups', () => {
     ])
   })
 
-  it('preserves nested Project Group depth for folder workspace rows', () => {
+  it('folds scanned containers while preserving the owning folder workspace', () => {
     const rootGroup: ProjectGroup = {
       id: 'group-root',
       name: 'Platform',
@@ -208,14 +208,9 @@ describe('project groups', () => {
         projectGroupDepth: 0
       },
       {
-        type: 'header',
-        key: 'project-group:group-shared',
-        projectGroupDepth: 1
-      },
-      {
         type: 'folder-workspace',
         folderWorkspace: { id: 'folder-workspace-nested' },
-        groupDepth: 2
+        groupDepth: 1
       }
     ])
   })
@@ -281,7 +276,7 @@ describe('project groups', () => {
     expect(rows.some((row) => row.type === 'folder-workspace')).toBe(false)
   })
 
-  it('renders imported repos under nested Project Groups before worktree rows load', () => {
+  it('renders imported repos under their project before worktree rows load', () => {
     const rootGroup: ProjectGroup = {
       id: 'group-root',
       name: 'Root',
@@ -348,13 +343,11 @@ describe('project groups', () => {
 
     expect(rows.filter((row) => row.type === 'header').map((row) => row.key)).toEqual([
       'project-group:group-root',
-      'project-group:group-platform',
-      'project-group:group-services',
       'repo:repo-service-a',
       'repo:repo-service-b'
     ])
     expect(rows.filter((row) => row.type === 'header').map((row) => row.projectGroupDepth)).toEqual(
-      [0, 1, 2, 3, 3]
+      [0, 1, 1]
     )
   })
 

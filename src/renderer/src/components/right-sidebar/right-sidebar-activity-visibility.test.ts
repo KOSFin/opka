@@ -55,7 +55,7 @@ describe('getVisibleRightSidebarActivityItems', () => {
     ).toEqual(['explorer', 'source-control', 'ports', 'plugin:orca-samples.my-plugin/dashboard'])
   })
 
-  it('shows Workspaces only for folder workspaces and hides git tabs for all folder scopes', () => {
+  it('keeps the repository overview for project folders but hides repository-only checks', () => {
     expect(
       getVisibleRightSidebarActivityItems(items, {
         isFolder: true,
@@ -66,6 +66,7 @@ describe('getVisibleRightSidebarActivityItems', () => {
       'explorer',
       'workspaces',
       'pr-checks',
+      'source-control',
       'ports',
       'plugin:orca-samples.my-plugin/dashboard'
     ])

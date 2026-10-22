@@ -57,7 +57,10 @@ const {
   orcadTemplateNodeModulesExtraResource,
   orcadTemplateMacSignIgnore
 } = require('./scripts/packaged-orcad-template.cjs')
-const { verifySkillsCliRuntime } = require('./scripts/verify-skills-cli-runtime.cjs')
+const {
+  cliRuntimeUnpackPatterns,
+  verifySkillsCliRuntime
+} = require('./scripts/verify-skills-cli-runtime.cjs')
 const { assertNotDarkBuild } = require('./dark-build-switches.cjs')
 const { verifyStaticAppImagePackage } = require('./scripts/static-appimage-package-contract.cjs')
 const {
@@ -252,6 +255,8 @@ module.exports = {
     buildResources: 'resources/build'
   },
   files: [
+    '!.tmp{,/**/*}',
+    '!fork-docs{,/**/*}',
     '!**/.vscode/*',
     // Why: these repo-only inputs are either bundled into out/ or copied via
     // extraResources. Shipping them in app.asar bloats the desktop bundle.
@@ -361,6 +366,7 @@ module.exports = {
   // Why out/renderer and out/mobile-web: their assets are opened by path, and opening a packed file
   // reads a /tmp extract Electron makes once and never remakes, so a /tmp sweep broke them (#27976).
   asarUnpack: [
+    ...cliRuntimeUnpackPatterns(join(__dirname, '..', 'out')),
     'out/package.json',
     'out/cli/**',
     'out/shared/**',
@@ -407,15 +413,20 @@ module.exports = {
     context,
     mobileWebBundleDir = MOBILE_WEB_BUNDLE_DIR,
     ensureWaylandClipboard = ensureBundledWaylandClipboard,
-    orcadTemplateDir = join(__dirname, '..', orcadTemplateExtraResource.from)
+    orcadTemplateDir = join(__dirname, '..', orcadTemplateExtraResource.from),
+    rebuildNative = electronBuilderNativeRebuild
   ) => {
     // The template is the server every SSH host gets, so a dark test template must never ship.
     assertNotDarkBuild([join(__dirname, '..', 'out', 'main'), mobileWebBundleDir, orcadTemplateDir])
-    assertPackagedNativeVariantsInstalled(context.electronPlatformName, context.arch)
     assertBundledRipgrepInstalled()
     assertProcessHostOutputBuilt()
     assertOrcadTemplateBuilt()
     assertMobileWebBundleBuilt(mobileWebBundleDir)
+    rebuildNative({
+      platform: { nodeName: context.electronPlatformName },
+      arch: require('builder-util').Arch[context.arch]
+    })
+    assertPackagedNativeVariantsInstalled(context.electronPlatformName, context.arch)
     if (context.electronPlatformName === 'linux') {
       ensureWaylandClipboard(context.arch)
     }
@@ -800,14 +811,8 @@ module.exports = {
     // Why: only an AppImage's files can vanish under a running daemon (see appimage-node-runtime.cjs).
     fpm: appImageNodeRuntimeFpmArgs
   },
-  beforeBuild: electronBuilderNativeRebuild,
-  // Why: must be true so that electron-builder rebuilds native modules
-  // (node-pty) for each target architecture when producing dual-arch macOS
-  // builds (x64 + arm64). With npmRebuild disabled, CI on an arm64 runner
-  // packages arm64 binaries into the x64 DMG, causing "posix_spawnp failed"
-  // on Intel Macs. The beforeBuild hook performs Orca's targeted rebuild and
-  // returns false so electron-builder does not rebuild optional cpu-features.
-  npmRebuild: true,
+  // beforePack rebuilds the target slice; beforeBuild:false also drops production deps in 26.x.
+  npmRebuild: false,
   publish: {
     provider: 'github',
     owner: 'stablyai',

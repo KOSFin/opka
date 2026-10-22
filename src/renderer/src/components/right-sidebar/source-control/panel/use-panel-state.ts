@@ -5,13 +5,14 @@ import { useSourceControlBranchLineTotalGate } from '../sync/use-branch-line-tot
 import { useSourceControlStatusRefresh } from '../sync/use-status-refresh'
 import { useSourceControlPanelViewState } from './use-panel-view-state'
 import { useSourceControlWorktreeOperationState } from './use-worktree-operation-state'
+import { sourceControlViewKey } from './source-control-view-memory'
 
 /**
  * The panel's ground floor: what worktree/repo is active, the store actions it drives, and the
  * state it owns itself. Everything else in the panel is derived from this.
  */
-export function useSourceControlPanelState() {
-  const context = useSourceControlWorktreeContext()
+export function useSourceControlPanelState(worktreeId?: string) {
+  const context = useSourceControlWorktreeContext(worktreeId)
   const storeActions = useSourceControlStoreActions()
   const {
     activeConnectionId,
@@ -36,6 +37,13 @@ export function useSourceControlPanelState() {
   })
   const viewState = useSourceControlPanelViewState({
     activeWorktreeId,
+    viewKey: sourceControlViewKey({
+      target: activeRepoTarget,
+      worktreeId: activeWorktreeId,
+      path: worktreePath,
+      instanceId: activeWorktreeInstanceId,
+      connectionId: activeConnectionId
+    }),
     settings,
     updateSettings: storeActions.updateSettings
   })

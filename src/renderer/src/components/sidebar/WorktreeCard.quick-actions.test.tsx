@@ -228,7 +228,7 @@ describe('WorktreeCard quick actions', () => {
     expect(markup).toContain('data-worktree-card-meta-row=""')
   })
 
-  it('renders synthetic folder workspace directory name in the detailed metadata row without a Folder badge', () => {
+  it('identifies the overall project workspace without a Git or Folder badge', () => {
     const markup = renderToStaticMarkup(
       <WorktreeCard
         worktree={makeWorktree({
@@ -244,7 +244,7 @@ describe('WorktreeCard quick actions', () => {
 
     expect(markup).toContain('Docs folder')
     expect(markup).not.toContain('>Folder</span>')
-    expect(markup).toContain('>quick-action</span>')
+    expect(markup).toContain('>Chats &amp; terminals · entire project</span>')
     expect(markup).toContain('data-worktree-card-meta-row=""')
   })
 
@@ -410,7 +410,7 @@ describe('WorktreeCard quick actions', () => {
       />
     )
 
-    expect(markup).toContain('primary')
+    expect(markup).toContain('workspace')
     expect(markup).not.toContain('aria-label="Primary worktree"')
     expect(markup).toContain('data-worktree-card-meta-row=""')
   })

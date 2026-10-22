@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const {
+  cliRuntimeUnpackPatterns,
   collectRuntimeClosure,
   runCli,
   verifySkillsCliRuntime
@@ -21,6 +22,46 @@ async function writeSkillsCliFixture(outDir, handlerSource) {
 }
 
 describe('skills CLI runtime closure', () => {
+  it('unpacks scoped runtime dependencies', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-cli-unpack-deps-'))
+    const out = join(root, 'out')
+    const dependency = join(root, 'node_modules', '@audit', 'dependency')
+    try {
+      await writeSkillsCliFixture(out, "require('@audit/dependency')\n")
+      await mkdir(dependency, { recursive: true })
+      await writeFile(
+        join(dependency, 'package.json'),
+        '{"name":"@audit/dependency","main":"index.js"}'
+      )
+      await writeFile(join(dependency, 'index.js'), '')
+      expect(cliRuntimeUnpackPatterns(out, root)).toEqual([
+        'node_modules/@audit/dependency/**',
+        'out/cli/handlers/skills.js',
+        'out/cli/index.js'
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+  it('unpacks newly imported modules without including unrelated output', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-cli-unpack-'))
+    const out = join(root, 'out')
+    try {
+      expect(cliRuntimeUnpackPatterns(out, root)).toEqual([])
+      await writeSkillsCliFixture(out, "require('../../main/codex-accounts/fs-utils')\n")
+      await mkdir(join(out, 'main', 'codex-accounts'), { recursive: true })
+      await writeFile(join(out, 'main', 'codex-accounts', 'fs-utils.js'), '')
+      await writeFile(join(out, 'main', 'unrelated.js'), '')
+      expect(cliRuntimeUnpackPatterns(out, root)).toEqual([
+        'out/cli/handlers/skills.js',
+        'out/cli/index.js',
+        'out/main/codex-accounts/fs-utils.js'
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('runs after Electron composes the final output', async () => {
     const packageJson = JSON.parse(
       await readFile(new URL('../../package.json', import.meta.url), 'utf8')

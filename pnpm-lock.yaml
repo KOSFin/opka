@@ -202,6 +202,9 @@ importers:
       '@linear/sdk':
         specifier: ^97.0.0
         version: 97.0.0(graphql@16.14.2)
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
       '@orca/process-host':
         specifier: workspace:*
         version: link:src/packages/process-host
@@ -293,9 +296,6 @@ importers:
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(monaco-editor@0.55.1(patch_hash=53b71f7d8a7c00b76ffdb73ce83d18e31692f193f5fafa6a390e48f5b3fdd636))(react-dom@19.2.8(@types/react@19.2.18)(react@19.2.8))(react@19.2.8)
-      '@noble/hashes':
-        specifier: 1.8.0
-        version: 1.8.0
       '@oxlint/plugins':
         specifier: 1.88.0
         version: 1.88.0

@@ -54,6 +54,7 @@ export function useSourceControlReviewContext(panelState: SourceControlPanelStat
     hostedReviewCreationProviderHintRef
   } = hostedReviewState
   const baseRefs = useSourceControlBaseRefs({
+    activeRepoPath: activeRepo?.path,
     activeRepoConnectionId,
     activeRepoExecutionHostId,
     activeRepoId,
@@ -67,6 +68,7 @@ export function useSourceControlReviewContext(panelState: SourceControlPanelStat
   })
   const { compareBaseRef, effectiveBaseRef } = baseRefs
   const branchCompare = useSourceControlBranchCompare({
+    viewKey: panelState.sourceControlViewKey,
     activeRepoTarget,
     activeWorktreeId,
     worktreePath,

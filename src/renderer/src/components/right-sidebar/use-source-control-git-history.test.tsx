@@ -13,8 +13,10 @@ vi.mock('@/runtime/runtime-git-status-client', () => ({
 vi.mock('@/lib/connection-context', () => ({ getConnectionId: () => undefined }))
 
 import { useSourceControlGitHistory } from './source-control/sync/use-git-history'
+import { clearGitHistorySnapshotsForTests } from './source-control/sync/git-history-snapshots'
 import { deferred, flush, mountProbe, unmountProbes } from './source-control-hook-test-harness'
 import type { GitHistoryResult } from '../../../../shared/git-history-types'
+import { useAppStore } from '@/store'
 
 function historyResult(subject: string): GitHistoryResult {
   return {
@@ -66,6 +68,8 @@ async function mount(props: Parameters<typeof Probe>[0] = {}): Promise<Root> {
 }
 
 beforeEach(() => {
+  useAppStore.setState({ gitStatusHeadByWorktree: {} })
+  clearGitHistorySnapshotsForTests()
   mocks.getRuntimeGitHistory.mockResolvedValue(historyResult('default'))
 })
 
@@ -73,9 +77,68 @@ afterEach(() => {
   unmountProbes()
   vi.clearAllMocks()
   latest = null
+  vi.restoreAllMocks()
 })
 
 describe('useSourceControlGitHistory stale completion', () => {
+  it('invalidates on HEAD change without clearing the current owner rows', async () => {
+    await mount()
+    await flush()
+    const next = deferred<GitHistoryResult>()
+    mocks.getRuntimeGitHistory.mockReturnValueOnce(next.promise)
+    await act(async () => {
+      useAppStore.setState({ gitStatusHeadByWorktree: { A: 'new-head' } })
+    })
+    expect(latest?.gitHistoryState).toEqual({
+      status: 'refreshing',
+      result: historyResult('default')
+    })
+    expect(mocks.getRuntimeGitHistory).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      next.resolve(historyResult('new-head'))
+    })
+    expect(latest?.gitHistoryState).toEqual({ status: 'ready', result: historyResult('new-head') })
+  })
+
+  it('reuses fresh history on repository return and keyed panel remount', async () => {
+    const root = await mount()
+    await flush()
+    await act(async () => {
+      root.render(<Probe worktreeId="B" worktreePath="/b" />)
+    })
+    await flush()
+    await act(async () => {
+      root.render(<Probe key="remount-a" />)
+    })
+    await flush()
+    expect(latest?.gitHistoryState).toEqual({ status: 'ready', result: historyResult('default') })
+    expect(mocks.getRuntimeGitHistory).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps cached rows visible during an expired snapshot refresh and its failure', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000)
+    const root = await mount()
+    await flush()
+    now.mockReturnValue(32000)
+    const delayed = deferred<GitHistoryResult>()
+    mocks.getRuntimeGitHistory.mockReturnValueOnce(delayed.promise)
+    await act(async () => {
+      root.render(<Probe key="expired" />)
+    })
+    expect(latest?.gitHistoryState).toEqual({
+      status: 'refreshing',
+      result: historyResult('default')
+    })
+    await act(async () => {
+      delayed.reject(new Error('Disconnected'))
+    })
+    expect(latest?.gitHistoryState).toEqual({
+      status: 'error',
+      result: historyResult('default'),
+      error: 'Disconnected'
+    })
+  })
+
   it('drops a stale response for a worktree the user already left and returned to', async () => {
     const firstA = deferred<GitHistoryResult>()
     const b = deferred<GitHistoryResult>()

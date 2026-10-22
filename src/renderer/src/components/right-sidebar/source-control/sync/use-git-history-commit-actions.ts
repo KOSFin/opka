@@ -23,6 +23,7 @@ import {
 } from '../listing/split-open'
 import type { GitHistoryCommitAction } from './git-history-commit-context-menu'
 import { openWorkspaceBrowserTab } from '@/lib/workspace-browser-tab-open'
+import { revealSourceControlWorkspace } from '../listing/reveal-source-control-workspace'
 
 const EMPTY_BRANCH_CHANGE_ENTRIES: GitBranchChangeEntry[] = []
 
@@ -105,11 +106,22 @@ export function useGitHistoryCommitActions({
         return
       }
       try {
+        const selectedWorkspace = useAppStore.getState().activeWorktreeId
+        const selectedHost = useAppStore.getState().activeWorkspaceExecutionHostId
         // Reuses loadCommitFiles' fetch + cache so expanding a commit and then
         // opening its combined diff costs a single round-trip.
         await loadCommitFiles(item)
+        if (
+          useAppStore.getState().activeWorktreeId !== selectedWorkspace ||
+          useAppStore.getState().activeWorkspaceExecutionHostId !== selectedHost
+        ) {
+          return
+        }
         const cached = commitCompareCacheRef.current.get(item.id)
         if (!cached) {
+          return
+        }
+        if (!revealSourceControlWorkspace(activeWorktreeId, activeRepoTarget)) {
           return
         }
         openCommitAllDiffs(
@@ -131,7 +143,7 @@ export function useGitHistoryCommitActions({
         )
       }
     },
-    [activeWorktreeId, loadCommitFiles, openCommitAllDiffs, worktreePath]
+    [activeWorktreeId, activeRepoTarget, loadCommitFiles, openCommitAllDiffs, worktreePath]
   )
 
   const openCommitFile = useCallback(
@@ -147,6 +159,9 @@ export function useGitHistoryCommitActions({
       // missing entry means the files never loaded — nothing to open.
       const cached = commitCompareCacheRef.current.get(item.id)
       if (!cached) {
+        return
+      }
+      if (!revealSourceControlWorkspace(activeWorktreeId, activeRepoTarget)) {
         return
       }
       const targetGroupId = resolveSplitTargetGroupId(event)
@@ -166,7 +181,7 @@ export function useGitHistoryCommitActions({
         { targetGroupId, preview: shouldOpenSourceControlRowAsPreview(event, targetGroupId) }
       )
     },
-    [activeWorktreeId, openCommitDiff, resolveSplitTargetGroupId, worktreePath]
+    [activeWorktreeId, activeRepoTarget, openCommitDiff, resolveSplitTargetGroupId, worktreePath]
   )
 
   const copyCommitText = useCallback(async (text: string, label: string): Promise<void> => {

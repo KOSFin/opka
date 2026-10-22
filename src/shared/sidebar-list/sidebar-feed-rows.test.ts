@@ -120,9 +120,11 @@ describe('buildSidebarFeedRows keeps same-id workspaces on two hosts apart', () 
   it.each(['recent', 'name'] as const)('orders each twin by its own %s stamp', (sortBy) => {
     const built = buildSidebarFeedRows(domains({ workspaces }), catalog(repos), view({ sortBy }))
     expect(outline(built.sectionRows)).toEqual([
-      'ssh:box|r::/w/same@0',
+      '## This computer',
       'local|r::/w/other@0',
-      'local|r::/w/same@0'
+      'local|r::/w/same@0',
+      '## box',
+      'ssh:box|r::/w/same@0'
     ])
   })
 
@@ -139,7 +141,12 @@ describe('buildSidebarFeedRows keeps same-id workspaces on two hosts apart', () 
       catalog(repos),
       view({ filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true } })
     )
-    expect(outline(built.sectionRows)).toEqual(['ssh:box|r::/w/same@0', 'local|r::/w/other@0'])
+    expect(outline(built.sectionRows)).toEqual([
+      '## This computer',
+      'local|r::/w/other@0',
+      '## box',
+      'ssh:box|r::/w/same@0'
+    ])
   })
 })
 
@@ -174,10 +181,12 @@ describe('buildSidebarFeedRows nests each paired server’s own lineage', () => 
   it.each([false, true])('in either server order (reversed: %s)', (reversed) => {
     const built = buildSidebarFeedRows(feed(reversed), catalog(repos), view())
     expect(outline(built.sectionRows)).toEqual([
-      'runtime:b|r::/r/p@0',
-      'runtime:b|r::/r/c@1',
+      '## a',
       'runtime:a|r::/r/p@0',
-      'runtime:a|r::/r/c@1'
+      'runtime:a|r::/r/c@1',
+      '## b',
+      'runtime:b|r::/r/p@0',
+      'runtime:b|r::/r/c@1'
     ])
   })
 
@@ -190,10 +199,12 @@ describe('buildSidebarFeedRows nests each paired server’s own lineage', () => 
       view({ filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true } })
     )
     expect(outline(built.sectionRows)).toEqual([
-      'runtime:b|r::/r/p@0',
-      'runtime:b|r::/r/c@1',
+      '## a',
       'runtime:a|r::/r/p@0',
-      'runtime:a|r::/r/c@1'
+      'runtime:a|r::/r/c@1',
+      '## b',
+      'runtime:b|r::/r/p@0',
+      'runtime:b|r::/r/c@1'
     ])
   })
 })

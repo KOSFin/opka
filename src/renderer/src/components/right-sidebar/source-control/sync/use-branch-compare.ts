@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { requireGitOwnerTarget } from '../../worktree-git-owner-target'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import { installWindowVisibilityInterval } from '@/lib/window-visibility-interval'
-import { getConnectionId } from '@/lib/connection-context'
-import { getRuntimeGitBranchCompare } from '@/runtime/runtime-git-diff-client'
 import { useAppStore } from '@/store'
-import { createLoadingBranchCompareSummary } from '@/store/slices/editor/git/branch-compare-state'
 import type { GitUpstreamStatus } from '../../../../../../shared/git-status-types'
 import { shouldClearBranchCompareForMissingBase } from './base-ref-resolution'
 import { slowTaskRequiredIdleMs } from '../../coalesced-poll-runner'
 import { useBranchCompareRefreshTriggers } from './use-branch-compare-refresh-triggers'
+import { readBranchCompareTiming, saveBranchCompareTiming } from './branch-compare-freshness'
+import { useBranchCompareRead, type BranchCompareRefreshKind } from './use-branch-compare-read'
 
 // Why: 30s poll — slow runs idle for their own duration; explicit commit/remote/manual/base-ref refreshes still run immediately.
 export const BRANCH_REFRESH_INTERVAL_MS = 30_000
 const BRANCH_REFRESH_IDLE_MULTIPLIER = 1
 const BRANCH_REFRESH_MAX_INTERVAL_MS = 5 * 60_000
-
-type BranchCompareRefreshKind = 'immediate' | 'interval'
 
 export function useSourceControlBranchCompare({
   activeRepoTarget,
@@ -27,7 +23,8 @@ export function useSourceControlBranchCompare({
   branchName,
   isBranchVisible,
   activeGitStatusHead,
-  remoteStatus
+  remoteStatus,
+  viewKey
 }: {
   activeRepoTarget: RuntimeClientTarget | null
   activeWorktreeId: string | null
@@ -38,9 +35,20 @@ export function useSourceControlBranchCompare({
   isBranchVisible: boolean
   activeGitStatusHead: string | null
   remoteStatus: GitUpstreamStatus | undefined
+  viewKey?: string | null
 }) {
-  const beginGitBranchCompareRequest = useAppStore((s) => s.beginGitBranchCompareRequest)
-  const setGitBranchCompareResult = useAppStore((s) => s.setGitBranchCompareResult)
+  const timingKey = JSON.stringify([
+    viewKey ?? [activeRepoTarget, activeWorktreeId, worktreePath],
+    compareBaseRef
+  ])
+  const remoteSignature = remoteStatus
+    ? JSON.stringify([
+        remoteStatus.hasUpstream,
+        remoteStatus.upstreamName,
+        remoteStatus.ahead,
+        remoteStatus.behind
+      ])
+    : null
   const clearGitBranchCompare = useAppStore((s) => s.clearGitBranchCompare)
   const branchCompareInFlightRef = useRef(false)
   const branchCompareRerunRef = useRef<BranchCompareRefreshKind | null>(null)
@@ -55,54 +63,26 @@ export function useSourceControlBranchCompare({
   const branchComparePollEnabledRef = useRef(false)
   const branchCompareLastRunEndedAtRef = useRef(-Infinity)
   const branchCompareLastRunDurationRef = useRef(0)
+  useEffect(() => {
+    const timing = readBranchCompareTiming(timingKey, activeGitStatusHead, remoteSignature)
+    branchCompareLastRunEndedAtRef.current = timing?.endedAt ?? -Infinity
+    branchCompareLastRunDurationRef.current = timing?.duration ?? 0
+    if (timing && !timing.remote && remoteSignature) {
+      saveBranchCompareTiming(timingKey, { ...timing, remote: remoteSignature })
+    }
+  }, [timingKey, activeGitStatusHead, remoteSignature])
 
-  const runBranchCompare = useCallback(
-    async (kind: BranchCompareRefreshKind) => {
-      if (!activeWorktreeId || !worktreePath || !compareBaseRef || isFolder) {
-        return
-      }
-      const requestKey = `${activeWorktreeId}:${compareBaseRef}:${Date.now()}`
-      const summary = useAppStore.getState().gitBranchCompareSummaryByWorktree[activeWorktreeId]
-      // Why: polling should preserve results unless the comparison base changed.
-      beginGitBranchCompareRequest(activeWorktreeId, requestKey, compareBaseRef, {
-        preserveExistingSummary: !!summary && summary.baseRef === compareBaseRef
-      })
-      try {
-        const result = await getRuntimeGitBranchCompare(
-          {
-            // Why: route the branch compare by the repo OWNER host, not the focused runtime.
-            target: requireGitOwnerTarget(activeRepoTarget),
-            worktreeId: activeWorktreeId,
-            worktreePath,
-            connectionId: getConnectionId(activeWorktreeId) ?? undefined
-          },
-          compareBaseRef,
-          kind === 'interval' ? 'background' : 'interactive'
-        )
-        setGitBranchCompareResult(activeWorktreeId, requestKey, result)
-      } catch (error) {
-        setGitBranchCompareResult(activeWorktreeId, requestKey, {
-          summary: {
-            ...createLoadingBranchCompareSummary(compareBaseRef),
-            compareRef: branchName,
-            status: 'error',
-            errorMessage: error instanceof Error ? error.message : 'Branch compare failed'
-          },
-          entries: []
-        })
-      }
-    },
-    [
-      activeRepoTarget,
-      activeWorktreeId,
-      beginGitBranchCompareRequest,
-      branchName,
-      compareBaseRef,
-      isFolder,
-      setGitBranchCompareResult,
-      worktreePath
-    ]
-  )
+  const runBranchCompare = useBranchCompareRead({
+    activeRepoTarget,
+    activeGitStatusHead,
+    activeWorktreeId,
+    branchName,
+    compareBaseRef,
+    isFolder,
+    timingKey,
+    remoteSignature,
+    worktreePath
+  })
 
   const clearBranchComparePollTimer = useCallback((): void => {
     if (branchComparePollTimerRef.current !== null) {
@@ -232,6 +212,17 @@ export function useSourceControlBranchCompare({
     isBranchVisible,
     activeGitStatusHead,
     remoteStatus,
+    isCurrentResultFresh: () => {
+      const timing = readBranchCompareTiming(timingKey, activeGitStatusHead, remoteSignature)
+      const summary =
+        useAppStore.getState().gitBranchCompareSummaryByWorktree[activeWorktreeId ?? '']
+      return Boolean(
+        timing &&
+        summary?.status === 'ready' &&
+        summary.baseRef === compareBaseRef &&
+        Date.now() - timing.endedAt < BRANCH_REFRESH_INTERVAL_MS
+      )
+    },
     refreshBranchCompareRef
   })
 

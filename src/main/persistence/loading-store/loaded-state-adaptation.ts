@@ -36,7 +36,7 @@ export class LoadedStateAdaptationOperations {
   }
 
   adaptFlatFolderScanProjectGroups(): boolean {
-    // Why: older folder imports kept a real parent path but flat repos; upgrade that shape into v1 sparse folder scopes.
+    // Older folder imports kept a real parent path but flat repos; retain their identities in a folder tree.
     const groups = this.runtime.state.projectGroups ?? []
     const repos = this.runtime.state.repos
     if (groups.length === 0 || repos.length === 0) {

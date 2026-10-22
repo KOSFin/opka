@@ -148,8 +148,7 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
     [hostOptions]
   )
 
-  const hostScopedGroups =
-    args.workspaceHostScope !== 'all' || args.visibleWorkspaceHostIds !== null
+  const hostScopedGroups = true
   const rowPlan = useMemo(
     () =>
       planSidebarRows({
@@ -255,8 +254,7 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
       localHostLabel: getLocalExecutionHostLabel(),
       collapsedHostKeys: effectiveCollapsedGroups,
       forceCollapseHosts: hostDragActive,
-      // Why: projects/workspaces are the primary sidebar object; host sections are only an explicit host-filter view.
-      preferProjectGrouping: true
+      alwaysShowHostSections: true
     })
     return hostScopedGroups
       ? scopeHostSectionCollapse({

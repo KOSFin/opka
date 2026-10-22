@@ -95,7 +95,7 @@ export function useFolderWorkspacePathStatusRows(args: {
       addRequest({ scope: 'folder-workspace' as const, folderWorkspaceId: workspace.id })
     }
     for (const { request, options } of requests.values()) {
-      void fetchFolderWorkspacePathStatus(request, { force: true, ...options })
+      void fetchFolderWorkspacePathStatus(request, options)
     }
   }, [
     fetchFolderWorkspacePathStatus,

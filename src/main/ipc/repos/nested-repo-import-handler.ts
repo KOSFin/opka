@@ -52,6 +52,8 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
         mode: args.mode,
         connectionId: args.connectionId ?? null,
         repoPaths: selection.selectedPaths,
+        existingGroups: store.getProjectGroups(),
+        folderWorkspaces: store.getFolderWorkspaces(),
         createGroup: (input) => store.createProjectGroup(input)
       })
       const results: ProjectGroupImportResult['projects'] = selection.rejectedPaths.map(
@@ -101,7 +103,7 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
             )
           const group = groupResolver.getGroupForRepo(repoPath)
           if (existing) {
-            if (group) {
+            if (group && existing.projectGroupId !== group.id) {
               store.moveProjectToGroup(existing, group.id, projectGroupOrder)
             }
             importedProjectIdsByRepoPath.set(normalizedImportRepoPath, existing.id)

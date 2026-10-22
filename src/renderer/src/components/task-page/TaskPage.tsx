@@ -40,8 +40,43 @@ import { useTaskPageLinearCollectionEffects } from '../use-task-page-linear-coll
 import { useTaskPageJiraListEffects } from '../use-task-page-jira-list-effects'
 import { useTaskPageComposerActions } from '../use-task-page-composer-actions'
 import { TaskPageSurface } from './Surface'
+import { ProjectTasksPage } from './ProjectTasksPage'
+import { Button } from '@/components/ui/button'
+import { TOGGLE_WORKSPACE_BOARD_EVENT } from '../sidebar/useWorkspaceBoardPanel'
 
 export default function TaskPage(): React.JSX.Element {
+  const [source, setSource] = React.useState<'files' | 'providers'>('files')
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <nav
+        className="scrollbar-sleek flex shrink-0 gap-2 overflow-x-auto border-b px-5 py-2"
+        aria-label="Task sources"
+      >
+        <Button
+          variant={source === 'files' ? 'secondary' : 'ghost'}
+          onClick={() => setSource('files')}
+        >
+          Project tasks
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => window.dispatchEvent(new Event(TOGGLE_WORKSPACE_BOARD_EVENT))}
+        >
+          Working copies
+        </Button>
+        <Button
+          variant={source === 'providers' ? 'secondary' : 'ghost'}
+          onClick={() => setSource('providers')}
+        >
+          External trackers
+        </Button>
+      </nav>
+      {source === 'files' ? <ProjectTasksPage /> : <ProviderTaskPage />}
+    </div>
+  )
+}
+
+function ProviderTaskPage(): React.JSX.Element {
   const stage1 = useTaskPageStoreBindings()
   const stage2 = useTaskPageRepoSelection(stage1)
   const stage3 = useTaskPageRuntimeHosts(stage2)

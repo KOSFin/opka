@@ -1,5 +1,14 @@
 import React from 'react'
 import { SourceControlPanel } from './source-control/panel/panel'
+import { useAppStore } from '@/store'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { FolderProjectRepositories } from './FolderProjectRepositories'
+import { getFolderProjectRepositories } from './folder-project-repositories'
+import { findFolderWorkspaceOwner } from '@/lib/folder-workspace-runtime-owner'
+import { useActiveWorktree } from '@/store/selectors'
+import { getRepoExecutionHostId } from '../../../../shared/execution-host'
+import { getFolderWorkspaceHostId } from '../../../../shared/folder-workspace-execution-host'
+import { translate } from '@/i18n/i18n'
 
 export { HostedReviewHeaderLink } from './source-control/review/hosted-review-header-chrome'
 
@@ -55,6 +64,48 @@ export {
 } from './source-control/ai/text-generation-defaults'
 
 function SourceControlInner(): React.JSX.Element {
+  const workspaceKey = useAppStore((s) => s.activeWorkspaceKey ?? s.activeWorktreeId)
+  const activeHost = useAppStore((s) => s.activeWorkspaceExecutionHostId)
+  const folders = useAppStore((s) => s.folderWorkspaces) ?? []
+  const projectGroups = useAppStore((s) => s.projectGroups) ?? []
+  const repos = useAppStore((s) => s.repos) ?? []
+  const worktree = useActiveWorktree()
+  const repo = repos.find((entry) => entry.id === worktree?.repoId)
+  const scope = parseWorkspaceKey(workspaceKey ?? '')
+  const state = { folderWorkspaces: folders, projectGroups, repos }
+  const owner =
+    scope?.type === 'folder'
+      ? findFolderWorkspaceOwner(state, scope.folderWorkspaceId, activeHost ?? undefined)
+      : repo
+        ? folders.find((folder) =>
+            getFolderProjectRepositories(state, folder).some(
+              (entry) =>
+                entry.id === repo.id &&
+                getRepoExecutionHostId(entry) === getRepoExecutionHostId(repo)
+            )
+          )
+        : null
+  const project = folders.find((entry) => entry === owner)
+  if (project) {
+    return (
+      <FolderProjectRepositories
+        key={`${getFolderWorkspaceHostId(project, projectGroups)}:${project.id}`}
+        project={project}
+        repositories={getFolderProjectRepositories(state, project)}
+        activeWorktreeId={scope?.type === 'folder' ? null : (worktree?.id ?? null)}
+      />
+    )
+  }
+  if (scope?.type === 'folder') {
+    return (
+      <div role="alert" className="p-3 text-xs text-muted-foreground">
+        {translate(
+          'fork.navigation.projectUnavailable',
+          'Project folder unavailable. Reconnect its host and select the project again.'
+        )}
+      </div>
+    )
+  }
   return <SourceControlPanel />
 }
 const SourceControl = React.memo(SourceControlInner)

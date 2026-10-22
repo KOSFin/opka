@@ -177,7 +177,7 @@ describe('scanNestedRepos', () => {
     })
   })
 
-  it('does not scan inside an already discovered repo', async () => {
+  it('finds repositories inside an already discovered working repository', async () => {
     const root = await tempRoot()
     await mkdir(join(root, 'service', 'nested'), { recursive: true })
     await makeGitRepo(join(root, 'service'))
@@ -185,7 +185,34 @@ describe('scanNestedRepos', () => {
 
     const result = await scanNestedRepos({ path: root })
 
+    expect(result.repos.map((repo) => repo.displayName)).toEqual(['service', 'nested'])
+  })
+
+  it('can explicitly limit discovery to sibling repositories', async () => {
+    const root = await tempRoot()
+    await makeGitRepo(join(root, 'service'))
+    await makeGitRepo(join(root, 'service', 'nested'))
+    const result = await scanNestedRepos({ path: root, options: { includeNestedRepos: false } })
     expect(result.repos.map((repo) => repo.displayName)).toEqual(['service'])
+  })
+
+  it('never discovers repositories below the requested maximum depth', async () => {
+    const root = await tempRoot()
+    await makeGitRepo(join(root, 'one'))
+    await makeGitRepo(join(root, 'one', 'two'))
+    const result = await scanNestedRepos({ path: root, options: { maxDepth: 1 } })
+    expect(result.repos.map((repo) => repo.depth)).toEqual([1])
+  })
+
+  it('discovers a submodule-style .git file without traversing ignored dependencies', async () => {
+    const root = await tempRoot()
+    const service = join(root, 'service')
+    await makeGitRepo(service)
+    await mkdir(join(service, 'module'), { recursive: true })
+    await writeFile(join(service, 'module', '.git'), 'gitdir: ../.git/modules/module\n')
+    await makeGitRepo(join(service, 'node_modules', 'ignored'))
+    const result = await scanNestedRepos({ path: root })
+    expect(result.repos.map((repo) => repo.path)).toEqual([service, join(service, 'module')])
   })
 
   it('skips symlinked directories reported by remote filesystems', async () => {
@@ -259,6 +286,7 @@ describe('scanNestedRepos', () => {
 
     const result = await scanNestedRepos({
       path: '/workspace',
+      options: { includeNestedRepos: false },
       filesystem: {
         ...posixTestFilesystem({ directories, gitRepos }),
         readDirectory: async (dirPath) => {

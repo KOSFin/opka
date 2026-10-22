@@ -1,5 +1,4 @@
 import React from 'react'
-import { ChevronDown } from 'lucide-react'
 import { ProjectHeaderHostLabel, ProjectHeaderHostTooltip } from './ProjectHeaderHostLabel'
 import type { ProjectHeaderHostContext } from './project-header-host-context'
 import type { VirtualItem } from '@tanstack/react-virtual'
@@ -8,10 +7,8 @@ import type { RepoSshGateResolver } from '@/hooks/use-repo-ssh-gate-resolver'
 import { RepoIconGlyph } from '@/components/repo/repo-icon'
 import { RepoForkIndicator } from '@/components/repo/repo-fork-indicator'
 import type { FolderWorkspacePathStatus } from '../../../../../../shared/folder-workspace-path-status'
-import { isConfirmedStaleFolderPathStatus } from '../../../../../../shared/folder-workspace-path-status'
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
-import { getProjectGroupHostId } from '@/store/slices/project-group-owner-routing'
 import type {
   WorkspaceStatus,
   WorkspaceStatusDefinition
@@ -25,29 +22,20 @@ import { getWorkspaceStatusFromGroupKey } from '../../workspace-status'
 import { getVirtualRowTransform } from '../viewport/virtual-rows'
 import { getSidebarHeaderVisual } from './header-visuals'
 import { resolveProjectGroupHeaderColor } from '../../project-header-color'
-import { getRepoHeaderCreateState } from '../../repo-header-create-state'
-import { ProjectHeaderActions } from '../../ProjectHeaderActions'
 import {
   getProjectGroupHeaderPaddingLeft,
   WORKTREE_SECTION_HEADER_PADDING_LEFT
 } from './indentation'
 import { FolderPathStatusIndicator } from './FolderPathStatusIndicator'
 import { RepoScanUnavailableIndicator } from './RepoScanUnavailableIndicator'
-import {
-  ProjectGroupCreateWorkspaceButton,
-  ProjectGroupHeaderMenu
-} from './project-group-header-actions'
-import {
-  RepoHeaderCreateWorkspaceButton,
-  RepoHeaderProjectActionsMenu,
-  type RepoHeaderProjectActions
-} from './repo-header-project-actions'
-import {
-  handleRepoHeaderCollapseAffordancePointerDown,
-  shouldIgnoreRepoHeaderToggle
-} from './header-event-guards'
+import type { RepoHeaderProjectActions } from './repo-header-project-actions'
+import { shouldIgnoreRepoHeaderToggle } from './header-event-guards'
 import type { WorktreeSidebarHeaderDrag } from '../drag/use-header-drag'
 import { getWorktreeOptionId } from './option-dom'
+import { ProjectTreeTitle } from './ProjectTreeTitle'
+import { openProjectFolder } from './open-project-folder'
+import { SectionHeaderActions } from './SectionHeaderActions'
+import { openRepositoryWorkingCopy } from './open-repository-working-copy'
 
 export type SectionHeaderRowContext = {
   groupBy: WorktreeGroupBy
@@ -76,14 +64,6 @@ export type SectionHeaderRowContext = {
   onWorkspaceStatusDrop: (event: React.DragEvent, status: WorkspaceStatus) => void
 }
 
-// The folder-scan project group whose parent path is gone can't create new workspaces.
-function isFolderWorkspaceCreateDisabled(status: FolderWorkspacePathStatus | null): boolean {
-  return (
-    status?.exists === false &&
-    (isConfirmedStaleFolderPathStatus(status) || status.reason === 'ambiguous-connection')
-  )
-}
-
 export function renderWorktreeSectionHeaderRow(args: {
   ctx: SectionHeaderRowContext
   row: GroupHeaderRow
@@ -102,11 +82,6 @@ export function renderWorktreeSectionHeaderRow(args: {
   const projectGroupIdForHeader =
     isProjectGroupHeader && !row.repo && typeof row.projectGroup?.id === 'string'
       ? row.projectGroup.id
-      : undefined
-  // Why: rename/delete must route to the host that owns this row, not to whichever host has focus.
-  const projectGroupHostIdForHeader =
-    row.projectGroup && 'createdFrom' in row.projectGroup
-      ? getProjectGroupHostId(row.projectGroup)
       : undefined
   const repoHeaderIndex =
     projectIdForHeader !== undefined
@@ -160,13 +135,6 @@ export function renderWorktreeSectionHeaderRow(args: {
     headerKey: row.key,
     badgeColor: row.repo?.badgeColor
   })
-  const createState = row.repo
-    ? getRepoHeaderCreateState({
-        repo: row.repo,
-        label,
-        sshGate: ctx.getRepoSshGate(row.repo)
-      })
-    : null
   const folderBackedProjectGroup =
     isProjectGroupHeader &&
     !row.repo &&
@@ -245,8 +213,11 @@ export function renderWorktreeSectionHeaderRow(args: {
           className={cn(
             // Why: no row-level grab — only the title surface below shows the hand;
             // actions use cursor-pointer so … / + never look reorderable.
-            'group relative flex h-7 w-full items-center gap-1.5 pr-2 text-left transition-all',
-            !(isDraggableRepoHeader || isDraggableProjectGroupHeader) && 'cursor-pointer',
+            'group relative flex h-7 w-full items-center gap-1.5 pr-2 text-left transition-colors',
+            folderBackedProjectGroup &&
+              (row.projectGroupDepth ?? 0) === 0 &&
+              'border-y border-worktree-sidebar-border bg-worktree-sidebar-accent/40',
+            'cursor-pointer',
             ctx.highlightedRevealRowKey === row.key &&
               'rounded-md bg-worktree-sidebar-accent ring-1 ring-worktree-sidebar-ring/50',
             (isDraggingThis || isDraggingThisProjectGroup) &&
@@ -285,19 +256,17 @@ export function renderWorktreeSectionHeaderRow(args: {
               ? (event) => ctx.onWorkspaceStatusDrop(event, headerWorkspaceStatus)
               : undefined
           }
-          onPointerDown={
-            isDraggableRepoHeader && headerRepo
-              ? (event) => headerDrag.repoDrag.onHandlePointerDown(event, headerRepo)
-              : isDraggableProjectGroupHeader && projectGroupIdForHeader
-                ? (event) =>
-                    headerDrag.projectGroupDrag.onHandlePointerDown(event, projectGroupIdForHeader)
-                : undefined
-          }
           onClick={(event) => {
             if (shouldIgnoreRepoHeaderToggle(event)) {
               return
             }
-            ctx.toggleGroupWithScrollAnchor(collapseKey)
+            if (folderBackedProjectGroup && (row.projectGroupDepth ?? 0) === 0) {
+              openProjectFolder(folderBackedProjectGroup)
+            } else if (row.repo) {
+              openRepositoryWorkingCopy(row.repo)
+            } else {
+              ctx.toggleGroupWithScrollAnchor(collapseKey)
+            }
           }}
           onKeyDown={(e) => {
             if (shouldIgnoreRepoHeaderToggle(e)) {
@@ -305,44 +274,78 @@ export function renderWorktreeSectionHeaderRow(args: {
             }
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              ctx.toggleGroupWithScrollAnchor(collapseKey)
+              if (folderBackedProjectGroup && (row.projectGroupDepth ?? 0) === 0) {
+                openProjectFolder(folderBackedProjectGroup)
+              } else if (row.repo) {
+                openRepositoryWorkingCopy(row.repo)
+              } else {
+                ctx.toggleGroupWithScrollAnchor(collapseKey)
+              }
             }
           }}
         >
-          {/* Why: grab cursor on icon+title only. Row still has handle attrs so
-            indent/padding can arm drag; actions are excluded via data-repo-header-actions.
-            self-stretch fills h-7 so grab matches the full title column height. */}
-          <div
-            data-repo-header-drag-handle={isDraggableRepoHeader ? '' : undefined}
-            data-project-group-header-drag-handle={isDraggableProjectGroupHeader ? '' : undefined}
-            className={cn(
-              'flex min-w-0 flex-1 items-center gap-1.5 self-stretch',
-              hostContext && 'can-hover:pr-18',
-              (isDraggableRepoHeader || isDraggableProjectGroupHeader) &&
-                'cursor-grab active:cursor-grabbing'
+          <div className={cn('flex min-w-0 flex-1 items-center gap-1.5 self-stretch')}>
+            {isRepoHeader || isProjectGroupHeader ? (
+              <ProjectTreeTitle
+                label={label}
+                repoIcon={row.repo?.repoIcon}
+                repoColor={repoHeaderColor}
+                kind={
+                  isRepoHeader
+                    ? 'repository'
+                    : (row.projectGroupDepth ?? 0) === 0
+                      ? 'project'
+                      : 'folder'
+                }
+                collapsed={isHeaderCollapsed}
+                collapsible={showHeaderCollapseAffordance}
+                onToggle={() => ctx.toggleGroupWithScrollAnchor(collapseKey)}
+                onReorderPointerDown={
+                  isDraggableRepoHeader && headerRepo
+                    ? (event) => headerDrag.repoDrag.onHandlePointerDown(event, headerRepo)
+                    : isDraggableProjectGroupHeader && projectGroupIdForHeader
+                      ? (event) =>
+                          headerDrag.projectGroupDrag.onHandlePointerDown(
+                            event,
+                            projectGroupIdForHeader
+                          )
+                      : undefined
+                }
+                onOpen={
+                  folderBackedProjectGroup && (row.projectGroupDepth ?? 0) === 0
+                    ? () => openProjectFolder(folderBackedProjectGroup)
+                    : row.repo
+                      ? () => openRepositoryWorkingCopy(row.repo!)
+                      : undefined
+                }
+              />
+            ) : (
+              <div
+                className={cn(
+                  'flex size-4 shrink-0 items-center justify-center rounded-[4px]',
+                  repoHeaderColor ? 'text-muted-foreground' : headerVisual.tone
+                )}
+              >
+                {row.repo ? (
+                  <RepoIconGlyph
+                    repoIcon={row.repo.repoIcon}
+                    color={repoHeaderColor}
+                    className="size-4"
+                    iconClassName="size-3.5"
+                  />
+                ) : (
+                  <headerVisual.icon className="size-3" />
+                )}
+              </div>
             )}
-          >
-            <div
-              className={cn(
-                'flex size-4 shrink-0 items-center justify-center rounded-[4px]',
-                repoHeaderColor ? 'text-muted-foreground' : headerVisual.tone
-              )}
-            >
-              {row.repo ? (
-                <RepoIconGlyph
-                  repoIcon={row.repo.repoIcon}
-                  color={repoHeaderColor}
-                  className="size-4"
-                  iconClassName="size-3.5"
-                />
-              ) : (
-                <headerVisual.icon className="size-3" />
-              )}
-            </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1.5">
-                <div className="min-w-0 truncate text-[13px] font-semibold leading-4">{label}</div>
+                {!isRepoHeader && !isProjectGroupHeader && (
+                  <div className="min-w-0 truncate text-[13px] font-semibold leading-4">
+                    {label}
+                  </div>
+                )}
                 {hostContext ? <ProjectHeaderHostLabel context={hostContext} /> : null}
                 <RepoForkIndicator upstream={row.repo?.upstream} />
                 <FolderPathStatusIndicator status={projectGroupPathStatus} />
@@ -351,63 +354,18 @@ export function renderWorktreeSectionHeaderRow(args: {
             </div>
           </div>
 
-          <ProjectHeaderActions>
-            {showHeaderCollapseAffordance ? (
-              <div
-                className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
-                data-repo-header-collapse-affordance=""
-                aria-hidden
-                onPointerDown={handleRepoHeaderCollapseAffordancePointerDown}
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  ctx.toggleGroupWithScrollAnchor(collapseKey)
-                }}
-              >
-                <ChevronDown
-                  className={cn('size-3.5 transition-transform', isHeaderCollapsed && '-rotate-90')}
-                />
-              </div>
-            ) : null}
-
-            {isProjectGroupHeader && !row.repo && projectGroupIdForHeader ? (
-              <ProjectGroupHeaderMenu
-                groupId={projectGroupIdForHeader}
-                hostId={projectGroupHostIdForHeader}
-                label={label}
-                onRename={ctx.onRenameProjectGroup}
-                onDelete={ctx.onDeleteProjectGroup}
-              />
-            ) : null}
-
-            {folderBackedProjectGroup ? (
-              <ProjectGroupCreateWorkspaceButton
-                projectGroup={folderBackedProjectGroup}
-                label={label}
-                pathStatus={projectGroupPathStatus}
-                disabled={isFolderWorkspaceCreateDisabled(projectGroupPathStatus)}
-                onCreate={ctx.onCreateFolderWorkspace}
-              />
-            ) : null}
-
-            {row.repo && ctx.groupBy === 'repo' ? (
-              <RepoHeaderProjectActionsMenu
-                repo={row.repo}
-                label={label}
-                projectGroups={ctx.projectGroups}
-                actions={ctx.projectActions}
-              />
-            ) : null}
-
-            {row.repo && ctx.groupBy === 'repo' ? (
-              <RepoHeaderCreateWorkspaceButton
-                repo={row.repo}
-                label={label}
-                createState={createState}
-                onCreateForRepo={ctx.projectActions.onCreateForRepo}
-              />
-            ) : null}
-          </ProjectHeaderActions>
+          <SectionHeaderActions
+            ctx={ctx}
+            row={row}
+            label={label}
+            folderGroup={folderBackedProjectGroup}
+            pathStatus={projectGroupPathStatus}
+            collapse={{
+              visible: showHeaderCollapseAffordance && !isRepoHeader && !isProjectGroupHeader,
+              key: collapseKey,
+              collapsed: isHeaderCollapsed
+            }}
+          />
         </div>
       </ProjectHeaderHostTooltip>
     </div>

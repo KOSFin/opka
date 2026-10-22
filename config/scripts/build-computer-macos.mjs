@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { chmodSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { withSwiftPmLibraries } from './swiftpm-libraries.mjs'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
 const packagePath = path.join(repoRoot, 'native', 'computer-use-macos')
@@ -23,13 +24,13 @@ if (process.platform !== 'darwin') {
   process.exit(0)
 }
 
-buildUniversalBinary()
+withSwiftPmLibraries((env) => buildUniversalBinary(env))
 chmodSync(binaryPath, 0o755)
 createHelperApp()
 
-function buildUniversalBinary() {
+function buildUniversalBinary(env) {
   const builtBinaries = universalTriples.map((triple) => {
-    run('swift', ['build', '-c', 'release', '--package-path', packagePath, '--triple', triple])
+    run('swift', ['build', '-c', 'release', '--package-path', packagePath, '--triple', triple], env)
     return path.join(packagePath, '.build', triple, 'release', 'orca-computer-use-macos')
   })
   mkdirSync(path.dirname(binaryPath), { recursive: true })
@@ -83,13 +84,13 @@ function resolveSigningIdentity() {
   return releaseMatch?.[1] ?? developmentMatch?.[1] ?? '-'
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { stdio: 'inherit' })
+function run(command, args, env = process.env) {
+  const result = spawnSync(command, args, { stdio: 'inherit', env })
   if (result.signal) {
     process.kill(process.pid, result.signal)
   }
   if (result.status !== 0) {
-    process.exit(result.status ?? 1)
+    throw new Error(`${command} failed with exit ${result.status ?? 1}`)
   }
 }
 

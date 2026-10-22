@@ -38,6 +38,7 @@ export function useVirtualRowMeasurementSync(args: {
   scrollAnchorRef: React.MutableRefObject<VirtualizedScrollAnchor>
   hasDirectScrollInput: () => boolean
   shouldSkipScrollAnchorRestore: () => boolean
+  animateRemovals?: boolean
 }) {
   const {
     renderRows,
@@ -114,6 +115,7 @@ export function useVirtualRowMeasurementSync(args: {
   })
 
   useVirtualRowRemovalAnimation({
+    enabled: args.animateRemovals,
     renderRows,
     rekeyedRowKeys: lineageRowRekeys,
     scrollRef,

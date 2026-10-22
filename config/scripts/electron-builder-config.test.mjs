@@ -12,7 +12,6 @@ const require = createRequire(import.meta.url)
 const electronBuilderConfig = require('../electron-builder.config.cjs')
 const { copyFiles, FileMatcher } = require('app-builder-lib/out/fileMatcher')
 const FpmTarget = require('app-builder-lib/out/targets/FpmTarget').default
-const electronBuilderNativeRebuild = require('./electron-builder-native-rebuild.cjs')
 
 describe('electron-builder config', () => {
   it('keeps the packaged app identity aligned with local-build validation', () => {
@@ -563,10 +562,6 @@ describe('electron-builder config', () => {
     }
   })
 
-  it('uses Orca native rebuild hook instead of electron-builder default rebuild', () => {
-    expect(electronBuilderConfig.beforeBuild).toBe(electronBuilderNativeRebuild)
-    expect(electronBuilderConfig.npmRebuild).toBe(true)
-  })
 })
 
 describe('arch-aware packaging guard', () => {
@@ -595,6 +590,8 @@ describe('arch-aware packaging guard', () => {
     electronBuilderConfig.beforePack(
       { electronPlatformName: process.platform, arch },
       bundleDir,
+      () => undefined,
+      undefined,
       () => undefined
     )
 
@@ -626,7 +623,8 @@ describe('arch-aware packaging guard', () => {
           { electronPlatformName: process.platform, arch: HOST_ARCH },
           bundleDir,
           () => undefined,
-          templateDir
+          templateDir,
+          () => undefined
         )
       ).toThrow(`${templateDir} holds an ORCA_LAYOUT_OWNER=main build`)
     } finally {
@@ -665,7 +663,13 @@ describe('arch-aware packaging guard', () => {
       (resource) => resource.to === join('node_modules', '@vscode', 'windows-process-tree')
     )
     const packWindows = () =>
-      electronBuilderConfig.beforePack({ electronPlatformName: 'win32', arch: 1 }, bundleDir)
+      electronBuilderConfig.beforePack(
+        { electronPlatformName: 'win32', arch: 1 },
+        bundleDir,
+        undefined,
+        undefined,
+        () => undefined
+      )
     if (process.platform === 'win32' || windowsAddon) {
       expect(packWindows).not.toThrow()
     } else {

@@ -191,6 +191,13 @@ export function createUiSurfaceActions(set: UISliceSet, _get: UISliceGet): Parti
     // Why restored: leaving the panel closed forces the user to reopen and re-maximize it,
     // and that size jump reflows a live TUI's buffer (see floating-terminal-panel-view-state).
     floatingWorkspacePanelOpen: readPersistedFloatingTerminalPanelViewState()?.open === true,
+    floatingWorkspaceContent: 'workspace',
+    floatingProjectTasksMounted: false,
+    setFloatingWorkspaceContent: (content) =>
+      set((state) => ({
+        floatingWorkspaceContent: content,
+        floatingProjectTasksMounted: state.floatingProjectTasksMounted || content === 'tasks'
+      })),
     setFloatingWorkspacePanelOpen: (open) =>
       set((state) =>
         state.floatingWorkspacePanelOpen === open ? state : { floatingWorkspacePanelOpen: open }

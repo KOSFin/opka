@@ -14,11 +14,13 @@ const LOCK_RETRIES = {
 export async function withFileTransactionLock<T>(
   filePath: string,
   apply: () => Promise<T>,
-  options: { retries?: number } = {}
+  options: { retries?: number; preserveDirectoryPermissions?: boolean } = {}
 ): Promise<T> {
   const directory = dirname(filePath)
   await mkdir(directory, { recursive: true, mode: 0o700 })
-  await chmod(directory, 0o700)
+  if (!options.preserveDirectoryPermissions) {
+    await chmod(directory, 0o700)
+  }
   const release = await lock(filePath, {
     realpath: false,
     retries: options.retries ?? LOCK_RETRIES

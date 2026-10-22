@@ -190,7 +190,7 @@ export function getDefaultUIState(): PersistedUIState {
   return {
     lastActiveRepoId: null,
     lastActiveWorktreeId: null,
-    activeView: 'terminal',
+    activeView: 'tasks',
     sidebarWidth: 280,
     rightSidebarOpen: true,
     rightSidebarTab: 'explorer',

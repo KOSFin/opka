@@ -17,6 +17,7 @@ import { useFloatingTerminalPanelMaximize } from './use-floating-terminal-panel-
 import { useFloatingTerminalPanelShortcuts } from './use-floating-terminal-panel-shortcuts'
 import { useFloatingTerminalPanelStoreState } from './use-floating-terminal-panel-store-state'
 import { useFloatingTerminalShortcutDetails } from './use-floating-terminal-shortcut-details'
+import { useAppStore } from '@/store'
 
 export function useFloatingTerminalPanelController({
   open,
@@ -27,6 +28,9 @@ export function useFloatingTerminalPanelController({
   const shortcutDetails = useFloatingTerminalShortcutDetails()
   const localState = useFloatingTerminalPanelLocalState()
   const items = useFloatingWorkspaceChromeModel()
+  const showTasks = useAppStore((s) => s.floatingWorkspaceContent === 'tasks')
+  const tasksMounted = useAppStore((s) => s.floatingProjectTasksMounted)
+  const setContent = useAppStore((s) => s.setFloatingWorkspaceContent)
 
   useContextualTour('floating-workspace', open, 'floating_workspace_visible', {
     recordFeatureInteraction: tourInteractionSnapshot?.recordFeatureInteractionForTour ?? false,
@@ -35,7 +39,7 @@ export function useFloatingTerminalPanelController({
   })
 
   const geometry = useFloatingTerminalPanelGeometry({ ...storeState, ...localState })
-  useFloatingTerminalInitialFocusEffects({ ...items, ...localState, open })
+  useFloatingTerminalInitialFocusEffects({ ...items, ...localState, open: open && !showTasks })
   const orchestrationVisibility = useFloatingTerminalOrchestrationVisibility({
     ...localState,
     open
@@ -60,12 +64,16 @@ export function useFloatingTerminalPanelController({
     ...createActions,
     ...closeActions,
     ...maximize,
-    open,
+    open: open && !showTasks,
     onOpenChange
   })
-  useFloatingTerminalGlobalShortcutListeners({ ...localState, ...shortcuts, open })
-  useFloatingTerminalGuestBridge({ ...shortcuts, open })
-  useFloatingTerminalFocusLifecycle({ ...localState, ...items, open })
+  useFloatingTerminalGlobalShortcutListeners({
+    ...localState,
+    ...shortcuts,
+    open: open && !showTasks
+  })
+  useFloatingTerminalGuestBridge({ ...shortcuts, open: open && !showTasks })
+  useFloatingTerminalFocusLifecycle({ ...localState, ...items, open: open && !showTasks })
   const dragActions = createFloatingTerminalPanelDragActions({
     ...localState,
     ...geometry,
@@ -75,6 +83,9 @@ export function useFloatingTerminalPanelController({
   const orchestrationDismissal = useFloatingTerminalOrchestrationDismissal(localState)
 
   return {
+    showTasks,
+    tasksMounted,
+    setContent,
     open,
     onOpenChange,
     ...storeState,

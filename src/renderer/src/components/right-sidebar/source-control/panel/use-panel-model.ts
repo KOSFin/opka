@@ -16,8 +16,8 @@ import { useSourceControlPanelFoundation } from './use-panel-foundation'
  * The panel's single entry point: foundation, then the flows that act on it, then the action model
  * the chrome renders from. The rendered tree reads only this.
  */
-export function useSourceControlPanelModel() {
-  const foundation = useSourceControlPanelFoundation()
+export function useSourceControlPanelModel(worktreeId?: string) {
+  const foundation = useSourceControlPanelFoundation(worktreeId)
   const commitFlows = useSourceControlCommitFlows(foundation)
   const reviewFlows = useSourceControlReviewFlows(foundation)
   const createPrIntentFlows = useSourceControlCreatePrIntentFlows(

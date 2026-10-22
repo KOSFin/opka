@@ -549,7 +549,7 @@ describe('createUISlice page navigation history', () => {
 
   it('records and rewinds Automations visits on close', () => {
     const store = createUIStore()
-    store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
+    store.setState({ activeView: 'terminal', worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
     store.getState().recordWorktreeVisit('a')
     store.getState().openAutomationsPage()
@@ -582,7 +582,7 @@ describe('createUISlice page navigation history', () => {
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
 
     store.getState().closeAutomationsPage()
-    expect(store.getState().activeView).toBe('terminal')
+    expect(store.getState().activeView).toBe('tasks')
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
   })
 
@@ -694,7 +694,7 @@ describe('createUISlice space navigation', () => {
 
   it('records and rewinds Artifacts visits on close', () => {
     const store = createUIStore()
-    store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
+    store.setState({ activeView: 'terminal', worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
     store.getState().recordWorktreeVisit('a')
     store.getState().openArtifactsPage()
@@ -708,7 +708,7 @@ describe('createUISlice space navigation', () => {
 
   it('records and rewinds Skills visits on close', () => {
     const store = createUIStore()
-    store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
+    store.setState({ activeView: 'terminal', worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
     store.getState().recordWorktreeVisit('a')
     store.getState().openSkillsPage()

@@ -1,5 +1,5 @@
 import React from 'react'
-import { GitMerge } from 'lucide-react'
+import { GitBranch, GitMerge } from 'lucide-react'
 
 import { DetachedHeadBadge } from '@/components/DetachedHeadBadge'
 import { RepoBadgeMark } from '@/components/repo/RepoBadgeLabel'
@@ -9,6 +9,7 @@ import { WorktreeHostContextBadge } from './WorktreeHostContextBadge'
 import { CONFLICT_OPERATION_LABELS } from './WorktreeCardHelpers'
 import { TruncatedSidebarLabel } from './truncated-sidebar-label'
 import { getDirectoryName } from './worktree-card-model'
+import { translate } from '@/i18n/i18n'
 import type { WorktreeCardPresentation } from './worktree-card-presentation'
 import type { WorktreeCardController } from './use-worktree-card-controller'
 
@@ -66,18 +67,26 @@ export function WorktreeCardMetaRow({
           />
         ) : isFolder && !newCardStyle ? (
           <span
-            className="min-w-0 truncate font-mono text-[11px] leading-none text-muted-foreground"
+            className="min-w-0 truncate text-2xs leading-none text-muted-foreground"
             title={worktree.path}
           >
-            {getDirectoryName(worktree.path)}
+            {worktree.id.startsWith('folder:')
+              ? translate('fork.navigation.projectChats', 'Chats & terminals · entire project')
+              : getDirectoryName(worktree.path)}
           </span>
         ) : showBranch ? (
-          <TruncatedSidebarLabel
-            text={branch}
-            className="text-[11px] text-muted-foreground leading-none"
-            // Why: whole-card details hover already shows full identity; a nested tooltip would compete for it.
-            tooltipEnabled={!hasHoverDetails}
-          />
+          <>
+            <GitBranch aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+            <span className="text-2xs text-muted-foreground">
+              {translate('fork.navigation.branch', 'Branch')}
+            </span>
+            <TruncatedSidebarLabel
+              text={branch}
+              className="text-[11px] text-muted-foreground leading-none"
+              // Why: whole-card details hover already shows full identity; a nested tooltip would compete for it.
+              tooltipEnabled={!hasHoverDetails}
+            />
+          </>
         ) : showDetachedHeadInMetaRow && detachedHeadDisplay ? (
           <DetachedHeadBadge
             display={detachedHeadDisplay}

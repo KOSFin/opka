@@ -477,10 +477,28 @@ import {
   ProjectHostSetupUpdate,
   ProjectUpdate
 } from './project-runtime-params'
+import {
+  ProjectTaskCreate,
+  ProjectTaskIdentity,
+  ProjectTaskInit,
+  ProjectTaskList,
+  ProjectTaskTarget,
+  ProjectTaskUpdate
+} from './project-task-params'
+import {
+  ProjectTaskAction,
+  ProjectTaskArchive,
+  ProjectTaskDecision,
+  ProjectTaskMove,
+  ProjectTaskRename,
+  ProjectTaskStart,
+  ProjectTaskStop
+} from './project-task-workflow-params'
 import { ReferenceFind, ReferenceList } from './reference-params'
 import {
   ProjectGroupCreate,
   ProjectGroupImportNested,
+  ProjectGroupMerge,
   ProjectGroupMoveProject,
   ProjectGroupScanNested,
   ProjectGroupSelector,
@@ -1226,6 +1244,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'projectGroup.delete': ProjectGroupSelector,
   'projectGroup.importNested': ProjectGroupImportNested,
   'projectGroup.list': null,
+  'projectGroup.merge': ProjectGroupMerge,
   'projectGroup.moveProject': ProjectGroupMoveProject,
   'projectGroup.scanNested': ProjectGroupScanNested,
   'projectGroup.update': ProjectGroupUpdate,
@@ -1235,6 +1254,27 @@ export const RPC_PARAMS_BY_METHOD = {
   'projectHostSetup.list': null,
   'projectHostSetup.setupExistingFolder': ProjectHostSetupExistingFolder,
   'projectHostSetup.update': ProjectHostSetupUpdate,
+  'projectTask.approve': ProjectTaskAction,
+  'projectTask.archive': ProjectTaskArchive,
+  'projectTask.board': ProjectTaskList,
+  'projectTask.catalog': null,
+  'projectTask.context': ProjectTaskIdentity,
+  'projectTask.create': ProjectTaskCreate,
+  'projectTask.decide': ProjectTaskDecision,
+  'projectTask.delete': ProjectTaskAction,
+  'projectTask.init': ProjectTaskInit,
+  'projectTask.list': ProjectTaskList,
+  'projectTask.move': ProjectTaskMove,
+  'projectTask.rename': ProjectTaskRename,
+  'projectTask.resume': ProjectTaskIdentity,
+  'projectTask.retryExport': ProjectTaskTarget,
+  'projectTask.show': ProjectTaskIdentity,
+  'projectTask.start': ProjectTaskStart,
+  'projectTask.stop': ProjectTaskStop,
+  'projectTask.target': ProjectTaskTarget,
+  'projectTask.update': ProjectTaskUpdate,
+  'projectTask.watch': ProjectTaskTarget,
+  'projectTask.workflow': ProjectTaskIdentity,
   'reference.find': ReferenceFind,
   'reference.list': ReferenceList,
   'repo.add': RepoPath,

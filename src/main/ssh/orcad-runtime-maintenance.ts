@@ -21,6 +21,8 @@ import { recoverInterruptedOrcadActivation } from '../managed-server/activation/
 import { probeActiveOrcadReadiness } from './orcad-active-readiness'
 import { materializeOrcadArtifact } from '../orcad/orcad-artifact-materializer'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'
+import { planOrcadUpdate } from './orcad-update-plan'
+import { readLocalFullVersion } from '../managed-server/install/remote-versioned-install'
 import { rebuildOrcadManagedTunnel } from '../managed-server/lifecycle/orcad-managed-tunnel'
 import { wakeAlreadyActiveOrcad } from './orcad-already-active-wake'
 import {
@@ -126,6 +128,23 @@ export async function runManagedOrcadUpdate(
   const localOrcadDir =
     args.localOrcadDir ??
     (await materializeOrcadArtifact(context.serverTarget, { signal: args.signal }))
+  const candidateVersion = readLocalFullVersion(localOrcadDir)
+  const preflight = planOrcadUpdate({
+    record: context.activationRecord,
+    candidateVersion,
+    census,
+    candidateDaemonProtocol: CURRENT_ORCAD_DAEMON_PROTOCOL,
+    force: args.force
+  })
+  // The locked activation still recounts; a known deferral must not pay for an unused upload.
+  if (preflight.action === 'defer') {
+    return recordDeferredOrcadUpdate(
+      environment.id,
+      candidateVersion,
+      preflight.code,
+      preflight.reason
+    )
+  }
   const slot = managedOrcadSlot(context, deployment.remotePort, args.signal)
   const result = await deployOrcad({
     ...slot,
@@ -139,18 +158,7 @@ export async function runManagedOrcadUpdate(
     ...(args.admitRecord ? { admitRecord: args.admitRecord } : {})
   })
   if (result.outcome === 'installed-not-activated') {
-    const deferral = {
-      outcome: 'deferred' as const,
-      candidateVersion: result.fullVersion,
-      code: result.code,
-      reason: result.reason,
-      forceable: isForceableOrcadDeferral(result.code)
-    }
-    // A policy refusal is a decision about this host, not an update waiting to be retried.
-    if (result.code !== ORCAD_ACTIVATION_POLICY_REFUSED_CODE) {
-      recordManagedOrcadUpdateDeferral(environment.id, deferral)
-    }
-    return deferral
+    return recordDeferredOrcadUpdate(environment.id, result.fullVersion, result.code, result.reason)
   }
   clearManagedOrcadUpdateDeferral(environment.id)
   const started = result.outcome === 'already-active' && (await wakeAlreadyActiveOrcad(slot))
@@ -175,6 +183,26 @@ export async function runManagedOrcadUpdate(
     environment: redactRuntimeEnvironment(updated),
     activeVersion: result.fullVersion
   }
+}
+
+function recordDeferredOrcadUpdate(
+  environmentId: string,
+  candidateVersion: string,
+  code: string,
+  reason: string
+) {
+  const deferral = {
+    outcome: 'deferred' as const,
+    candidateVersion,
+    code,
+    reason,
+    forceable: isForceableOrcadDeferral(code)
+  }
+  // A policy refusal is not an update waiting to be retried.
+  if (code !== ORCAD_ACTIVATION_POLICY_REFUSED_CODE) {
+    recordManagedOrcadUpdateDeferral(environmentId, deferral)
+  }
+  return deferral
 }
 
 export function rollbackManagedOrcadEnvironment(

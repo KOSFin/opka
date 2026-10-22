@@ -73,4 +73,14 @@ describe('runtime nested repo import with an SSH row at the same path', () => {
     ])
     expect(repos).toHaveLength(1)
   })
+
+  it('keeps the manual order of a repository already in its destination group', async () => {
+    const native = row('native-api', { executionHostId: 'runtime:env-1' })
+    native.projectGroupId = 'group-1'
+    native.projectGroupOrder = 42
+    const { run, moveProjectToGroup } = createImporter([native])
+    expect((await run()).alreadyKnownCount).toBe(1)
+    expect(moveProjectToGroup).not.toHaveBeenCalled()
+    expect(native.projectGroupOrder).toBe(42)
+  })
 })

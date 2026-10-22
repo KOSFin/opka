@@ -14,7 +14,7 @@ const LINEAR_TASK_PREFETCH_LIMIT = 36
 
 export function createUiTaskActions(set: UISliceSet, get: UISliceGet): Partial<UISlice> {
   return {
-    activeView: 'terminal',
+    activeView: 'tasks',
     previousViewBeforeTasks: 'terminal',
     previousViewBeforeSettings: 'terminal',
     previousViewBeforeActivity: 'terminal',

@@ -13,8 +13,9 @@ describe('shared E2E CLI capability', () => {
   it('uses the same preparation for locally compiled and downloaded CLI output', () => {
     expect(scripts['build:cli']).toContain('&& pnpm run prepare:cli-output')
     expect(scripts['prepare:cli-output']).toBe(
-      'node config/scripts/verify-cli-bin.mjs --fix-executable --fix-package-json && node config/scripts/install-dev-cli.mjs'
+      'node config/scripts/verify-cli-bin.mjs --fix-executable --fix-package-json'
     )
+    expect(scripts['install:dev-cli']).toBe('node config/scripts/install-dev-cli.mjs')
   })
 
   it.skipIf(process.platform === 'win32').each([

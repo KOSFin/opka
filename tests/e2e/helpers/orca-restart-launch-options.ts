@@ -2,6 +2,8 @@ import type { ElectronApplication } from '@stablyai/playwright-test'
 
 /** Per-launch options for `createRestartSession().launch`. */
 export type LaunchOptions = {
+  /** Exact isolated Electron bundle; never resolve a user's installed application by name. */
+  executablePath?: string
   extraArgs?: string[]
   /**
    * Called for each chunk the relaunched main process writes to stderr. The

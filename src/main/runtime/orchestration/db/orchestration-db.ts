@@ -1,4 +1,8 @@
 import Database from '../../../sqlite/sync-database'
+import {
+  closeProjectTaskActivity,
+  installProjectTaskActivity
+} from '../../../project-tasks/task-activity'
 import { attachOrchestrationDbMethods } from './attach-orchestration-db-methods'
 import { hardenOrchestrationDatabaseFiles } from './database-file-permissions'
 import { backfillFederatedStubHomeRuns } from './federation/federated-stub-home-run-backfill'
@@ -39,9 +43,11 @@ class OrchestrationDbCore {
     createCoordinatorMailRoutingTrigger.call(this as unknown as OrchestrationDb)
     rememberCurrentRunCoordinatorHandles.call(this as unknown as OrchestrationDb)
     hardenOrchestrationDatabaseFiles(dbPath)
+    installProjectTaskActivity(this.db)
   }
 
   close(): void {
+    closeProjectTaskActivity(this.db)
     this.db.close()
   }
 }

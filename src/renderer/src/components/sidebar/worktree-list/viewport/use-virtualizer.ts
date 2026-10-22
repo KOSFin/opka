@@ -30,9 +30,13 @@ export function useWorktreeListVirtualizer(args: {
   scrollRef: React.RefObject<HTMLDivElement | null>
   scrollOffsetRef: React.MutableRefObject<number>
   suppressMeasurementAdjustmentUntilRef: React.MutableRefObject<number>
+  stickyHeadersEnabled?: boolean
 }) {
   const { renderRows, firstHeaderIndex, scrollRef, scrollOffsetRef } = args
-  const stickyHeaderIndexes = useMemo(() => getStickyHeaderIndexes(renderRows), [renderRows])
+  const stickyHeaderIndexes = useMemo(
+    () => (args.stickyHeadersEnabled === false ? [] : getStickyHeaderIndexes(renderRows)),
+    [args.stickyHeadersEnabled, renderRows]
+  )
   const activeStickyHeaderIndexRef = useRef<number | null>(null)
   const activeStickyHostIndexRef = useRef<number | null>(null)
   const stickyRangeStartIndexRef = useRef(0)

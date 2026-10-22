@@ -69,7 +69,7 @@ it('preserves max depth and result caps during broad traversal', async () => {
     options: { maxDepth: 1 },
     filesystem: depth.filesystem
   })
-  expect(depth.visits).toEqual([depth.root, ...depth.branches])
+  expect(depth.visits).toEqual([depth.root])
   expect(boundedDepth.repos).toEqual([])
   const capped = fixture(posix)
   const boundedResults = await scanNestedRepos({

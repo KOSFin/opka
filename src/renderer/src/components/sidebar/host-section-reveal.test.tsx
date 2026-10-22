@@ -146,12 +146,13 @@ for (const hostId of ['ssh:builder', 'runtime:builder'] as const) {
       expect(after.some((row) => row.type === 'item' && row.worktree.id === remote.id)).toBe(true)
       expect(after.some((row) => row.type === 'item' && row.worktree.id === local.id)).toBe(false)
     })
-    it(`${hostId} ${groupBy}: combined view retains its single section collapse key`, () => {
+    it(`${hostId} ${groupBy}: all-host view keeps lane collapse independent per host`, () => {
       const { local, remote } = setup(hostId)
       const worktrees = [local, remote]
       const rows = sections(hostId, groupBy, worktrees, new Set([laneKey]), {}, null)
-      expect(rows.filter((row) => row.type === 'header' && row.key === laneKey)).toHaveLength(1)
-      expect(rows.some((row) => row.type === 'item')).toBe(false)
+      expect(rows.filter((row) => row.type === 'header' && row.key === laneKey)).toHaveLength(2)
+      expect(rows.some((row) => row.type === 'item' && row.worktree.id === local.id)).toBe(false)
+      expect(rows.some((row) => row.type === 'item' && row.worktree.id === remote.id)).toBe(true)
       const expanded = sections(
         hostId,
         groupBy,
@@ -160,10 +161,8 @@ for (const hostId of ['ssh:builder', 'runtime:builder'] as const) {
         {},
         null
       )
-      expect(expanded.filter((row) => row.type === 'item')).toHaveLength(2)
-      expect(expanded.some((row) => row.type === 'header' && row.collapseKey !== undefined)).toBe(
-        false
-      )
+      expect(expanded.filter((row) => row.type === 'item')).toHaveLength(1)
+      expect(expanded.some((row) => row.type === 'item' && row.worktree.id === local.id)).toBe(true)
     })
   }
 }

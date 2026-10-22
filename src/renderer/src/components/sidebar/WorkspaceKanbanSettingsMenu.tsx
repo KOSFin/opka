@@ -86,7 +86,7 @@ export default function WorkspaceKanbanSettingsMenu({
               <span className="block text-[12px] font-medium leading-4 text-foreground">
                 {translate(
                   'auto.components.sidebar.WorkspaceKanbanSettingsMenu.87d24a0c2f',
-                  'Sync board and issue status'
+                  'Sync linked Linear issue status'
                 )}
               </span>
               <span className="block text-[11px] leading-4 text-muted-foreground">
@@ -103,7 +103,7 @@ export default function WorkspaceKanbanSettingsMenu({
               }
               ariaLabel={translate(
                 'auto.components.sidebar.WorkspaceKanbanSettingsMenu.87d24a0c2f',
-                'Sync board and issue status'
+                'Sync linked Linear issue status'
               )}
             />
           </div>

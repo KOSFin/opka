@@ -157,6 +157,9 @@ export type UISliceSurfaces = {
   setFloatingWorkspacePath: (path: string | null) => void
   /** Whether the floating workspace overlay is open; on screen only while the feature is enabled too. */
   floatingWorkspacePanelOpen: boolean
+  floatingWorkspaceContent: 'workspace' | 'tasks'
+  floatingProjectTasksMounted: boolean
+  setFloatingWorkspaceContent: (content: 'workspace' | 'tasks') => void
   setFloatingWorkspacePanelOpen: (open: boolean) => void
 }
 

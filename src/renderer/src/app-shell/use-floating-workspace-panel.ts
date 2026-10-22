@@ -33,6 +33,7 @@ export function useFloatingWorkspacePanel() {
   )
   const statusBarVisible = useAppStore((s) => s.statusBarVisible)
   const visibleTabCount = useAppStore(selectFloatingVisibleTabCount)
+  const taskBoardMounted = useAppStore((s) => s.floatingProjectTasksMounted)
 
   // Why: floating workspace is a transient overlay; hotkey minimize returns focus to the surface the user came from.
   const returnFocusRef = useRef<HTMLElement | null>(null)
@@ -132,7 +133,7 @@ export function useFloatingWorkspacePanel() {
     openMaximized,
     setOpenWithFocus,
     // Why: once the floating workspace owns tabs, keep it mounted while closed so hidden terminal/browser/editor panes retain local state.
-    shouldMountPanel: enabled && (open || visibleTabCount > 0),
+    shouldMountPanel: enabled && (open || visibleTabCount > 0 || taskBoardMounted),
     showToggleButton: enabled && (triggerLocation === 'floating-button' || !statusBarVisible),
     tourInteractionSnapshotRef,
     visibleTabCount

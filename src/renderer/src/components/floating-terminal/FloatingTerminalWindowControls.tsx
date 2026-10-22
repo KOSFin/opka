@@ -17,6 +17,7 @@ import { translate } from '@/i18n/i18n'
 import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 
 type FloatingTerminalWindowControlsProps = {
+  hideAgentLauncher?: boolean
   maximized: boolean
   onToggleMaximized: () => void
   onMinimize: () => void
@@ -34,6 +35,7 @@ function withShortcutHint(label: string, shortcutLabel: string | null): string {
 }
 
 export function FloatingTerminalWindowControls({
+  hideAgentLauncher = false,
   maximized,
   onToggleMaximized,
   onMinimize
@@ -103,7 +105,7 @@ export function FloatingTerminalWindowControls({
 
   return (
     <div className="flex items-center gap-1 px-2" data-floating-terminal-no-drag>
-      {defaultAgent ? (
+      {defaultAgent && !hideAgentLauncher ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

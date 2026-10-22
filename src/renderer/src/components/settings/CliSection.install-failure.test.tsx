@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { CliInstallStatus } from '../../../../shared/cli-install-types'
@@ -89,6 +89,29 @@ afterEach(() => {
 })
 
 describe('CliSection install failure surfacing', () => {
+  it('uses private profile setup without the global PATH dialog or success claim', async () => {
+    const initial = notInstalledStatus({
+      registrationScope: 'profile',
+      commandName: 'orca-fork',
+      commandPath: '/test/profile/cli/bin/orca-fork',
+      pathConfigured: false,
+      detail: null
+    })
+    const install = vi.fn().mockResolvedValue({ ...initial, state: 'installed' })
+    Object.assign(window, {
+      api: {
+        cli: { getInstallStatus: vi.fn().mockResolvedValue(initial), install, remove: vi.fn() }
+      }
+    })
+    render(<CliSection currentPlatform="darwin" settings={getDefaultSettings('/tmp')} />)
+    const button = await screen.findByRole('button', { name: 'Create profile launcher' })
+    expect(screen.queryByRole('switch')).toBeNull()
+    await act(async () => fireEvent.click(button))
+    await screen.findByRole('button', { name: 'Remove profile launcher' })
+    expect(screen.getByText(/Profile launcher ready/).textContent).toContain('PATH are unchanged')
+    expect(install).toHaveBeenCalledTimes(1)
+    expect(toasts.success).not.toHaveBeenCalled()
+  })
   it('shows the thrown conflict reason and its remedy instead of a success toast', async () => {
     await renderCliSectionAndInstall(async () => {
       throw new Error(
