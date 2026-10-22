@@ -9,7 +9,7 @@ import type { ElectronApplication } from '@stablyai/playwright-test'
 
 const executablePath = process.env.ORCA_FORK_AUDIT_ELECTRON
 test.skip(!executablePath, 'Explicit isolated background Electron required')
-test.use({ trace: 'off', screenshot: 'off' })
+test.use({ trace: 'retain-on-failure', screenshot: 'only-on-failure' })
 
 test('project-wide kanban supports a complete manual task, safe drafts, and returning to externally updated files', async ({
   testRepoPath
@@ -27,6 +27,7 @@ test('project-wide kanban supports a complete manual task, safe drafts, and retu
     const launched = await session.launch({ executablePath })
     app = launched.app
     const page = launched.page
+    await page.setViewportSize({ width: 1000, height: 760 })
     await page.waitForFunction(() => window.__store?.getState().workspaceSessionReady === true)
     await page.evaluate(async (folderPath) => {
       const group = await window.api.projectGroups.create({
@@ -100,13 +101,18 @@ test('project-wide kanban supports a complete manual task, safe drafts, and retu
         .getByRole('region', { name: 'In progress', exact: true })
         .getByTestId('project-task-card')
     ).toHaveCount(1)
-    await card.dragTo(page.getByRole('region', { name: 'Done', exact: true }))
+    const done = page.getByRole('region', { name: 'Done', exact: true })
+    // Scroll before pressing the card: scrolling during a drag moves its press point.
+    await done.scrollIntoViewIfNeeded()
+    await card.dragTo(done)
     const complete = page.getByRole('dialog', { name: 'Complete task', exact: true })
     await complete
       .getByRole('textbox', { name: 'Review evidence' })
       .fill('Cancelled draft; must not be reused')
     await complete.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await card.dragTo(page.getByRole('region', { name: 'Done', exact: true }))
+    await expect(complete).not.toBeVisible()
+    await done.scrollIntoViewIfNeeded()
+    await card.dragTo(done)
     await expect(complete.getByRole('textbox', { name: 'Review evidence' })).toHaveValue('')
     await complete
       .getByRole('textbox', { name: 'Review evidence' })

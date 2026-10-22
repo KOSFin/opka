@@ -5,11 +5,11 @@ import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
 import { runProcessSync } from '@orca/process-host'
 
-const workflow = parse(readFileSync('.github/workflows/e2e.yml', 'utf8'))
+const workflow = parse(readFileSync('.github/upstream-workflows/e2e.yml', 'utf8'))
 const build = workflow.jobs.build.steps.find((step) => step.id === 'e2e-cli')
 const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
 
-describe('shared E2E CLI capability', () => {
+describe('archived upstream shared E2E CLI capability', () => {
   it('uses the same preparation for locally compiled and downloaded CLI output', () => {
     expect(scripts['build:cli']).toContain('&& pnpm run prepare:cli-output')
     expect(scripts['prepare:cli-output']).toBe(
