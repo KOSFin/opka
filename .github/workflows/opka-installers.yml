@@ -60,6 +60,8 @@ jobs:
         run: pnpm exec electron-builder --config config/electron-builder.config.cjs --mac dmg zip --arm64 --publish never
       - name: Qualify release files and record provenance
         run: node config/scripts/opka-release-assets.mjs mac dist
+      - name: Exercise the packaged CLI from a disposable home
+        run: node config/scripts/smoke-packaged-cli.mjs --app-dir=dist/mac-arm64/Opka.app
       - uses: actions/upload-artifact@v7
         with:
           name: opka-macos-${{ github.sha }}

@@ -28,6 +28,7 @@ export const FORK_TEST_FILTERS = [
   'src/main/opencode/hook-service-startup-refresh.test.ts',
   'src/main/opencode/opencode-status-plugin-startup-refresh.test.ts',
   'config/scripts/opka-release-assets.test.mjs',
+  'config/scripts/opka-packaged-launcher.test.mjs',
   'src/main/project-groups/',
   'src/main/project-tasks/',
   'src/main/persistence-folder-scan-project-groups.test.ts',
