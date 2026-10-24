@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
@@ -7,6 +8,7 @@ import { parse } from 'yaml'
 import {
   completeRelease,
   fileDigest,
+  serverLauncher,
   serverPackagePaths,
   validateBetaVersion
 } from './opka-release-assets.mjs'
@@ -43,6 +45,28 @@ async function releaseFixture() {
   return root
 }
 describe('Opka release assets', () => {
+  it.skipIf(process.platform === 'win32')(
+    'reports the installed content version instead of an inherited caller version',
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'opka-server-launcher-'))
+      roots.push(root)
+      await mkdir(join(root, 'orcad'))
+      await mkdir(join(root, 'runtimes'), { recursive: true })
+      await writeFile(join(root, 'orcad', '.version'), '0.1.0+123456abcdef\n')
+      await writeFile(
+        join(root, 'runtimes', 'node'),
+        '#!/bin/sh\nprintf "%s\\n" "$ORCA_VERSION"\n',
+        { mode: 0o700 }
+      )
+      await writeFile(join(root, 'opka-server'), serverLauncher('runtimes/node'))
+      expect(
+        execFileSync('sh', [join(root, 'opka-server')], {
+          encoding: 'utf8',
+          env: { ...process.env, ORCA_VERSION: 'other-app' }
+        }).trim()
+      ).toBe('0.1.0+123456abcdef')
+    }
+  )
   it('uses a full slot beside its pinned runtime rather than deleted template scratch output', () => {
     const root = join(tmpdir(), 'opka-package-fixture')
     expect(serverPackagePaths(root)).toEqual({
@@ -57,9 +81,12 @@ describe('Opka release assets', () => {
     })
   })
   it('requires an explicit beta version rather than a local or stable build', () => {
-    expect(validateBetaVersion('0.1.0-rc.1')).toBe('0.1.0-rc.1')
+    expect(validateBetaVersion('1.4.236-rc.1')).toBe('1.4.236-rc.1')
     for (const bad of ['', '0.1.0', '0.1.0-rc.0', '0.1.0-local.1', '../a', '$(command)']) {
       expect(() => validateBetaVersion(bad)).toThrow()
+    }
+    for (const older of ['0.1.0-rc.1', '1.4.213-rc.1', '1.4.235-rc.1']) {
+      expect(() => validateBetaVersion(older)).toThrow('compatibility version')
     }
   })
   it('checks the complete asset set and hashes both payloads and provenance', async () => {
@@ -77,8 +104,10 @@ describe('Opka release assets', () => {
     const pr = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
     const installers = parse(readFileSync('.github/workflows/opka-installers.yml', 'utf8'))
     const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
+    const server = parse(readFileSync('.github/workflows/opka-server-template.yml', 'utf8'))
     expect(pr.jobs.verify.needs).toContain('installers')
     expect(pr.jobs.installers.uses).toBe('./.github/workflows/opka-installers.yml')
+    expect(pr.jobs.installers.with.version).toContain('1.4.236-rc.')
     expect(installers.permissions).toEqual({ contents: 'read' })
     expect(installers.jobs.mac.env.CSC_IDENTITY_AUTO_DISCOVERY).toBe('false')
     expect(installers.jobs.mac.env.CSC_FOR_PULL_REQUEST).toBe('true')
@@ -88,6 +117,7 @@ describe('Opka release assets', () => {
       ).run
     ).toContain('--config.mac.identity=-')
     expect(installers.jobs.mac.env.ORCA_REQUIRE_ORCAD_TEMPLATE).toBe('1')
+    expect(server.jobs.desktop_template.env.OPKA_VERSION).toBe('${{ inputs.version }}')
     expect(Object.keys(release.on)).toEqual(['workflow_dispatch'])
     expect(release.jobs.admission.if).toBe("github.ref == 'refs/heads/main'")
     expect(release.jobs.qualification.uses).toBe('./.github/workflows/pr.yml')

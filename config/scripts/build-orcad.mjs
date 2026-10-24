@@ -245,7 +245,8 @@ const childResults = await Promise.all(
 
 const result = await buildOrcadEntry(SERVER_OUT_FILE)
 const cliResult = await buildOrcadCli(join(OUT_DIR, ORCAD_CLI_ENTRY_FILENAME))
-const { version: cliVersion } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
+const { version: sourceVersion } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
+const cliVersion = process.env.OPKA_VERSION || sourceVersion
 // Why commit: `orca skills install|update` pins official skills to it, as the desktop CLI does.
 const cliPackage = {
   type: 'commonjs',

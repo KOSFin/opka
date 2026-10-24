@@ -154,7 +154,7 @@ jobs:
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     uses: ./.github/workflows/opka-installers.yml
     with:
-      version: ${{ inputs.release_version || format('0.1.0-rc.{0}', github.run_number) }}
+      version: ${{ inputs.release_version || format('1.4.236-rc.{0}', github.run_number) }}
 
   verify:
     name: PR checks passed

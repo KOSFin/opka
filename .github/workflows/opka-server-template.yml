@@ -506,6 +506,8 @@ jobs:
       needs.linux_glibc217_compat.result == 'success' && needs.linux_musl.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      OPKA_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:

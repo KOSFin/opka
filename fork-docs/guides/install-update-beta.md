@@ -21,6 +21,8 @@ Intel Mac, Android и Windows installers не входят в эту beta. CI п
 
 У Opka собственные bundle ID `io.github.kosfin.opka`, протокол `opka:` и профиль `~/Library/Application Support/Opka`. Installation-home файлы находятся в `~/.opka`; управляемые remote binaries — в `~/.opka-remote`. Имена `.orca/project.yaml` внутри проектов сохраняются ради совместимости файлов задач.
 
+Desktop beta сохраняет линию версий 1.4.x: например, 1.4.236-rc.1. Обнуление до 0.1.x мешало бы унаследованным проверкам совместимости профиля. Это отдельный канал Opka, а не обещание совпадения с релизом upstream Orca.
+
 CLI регистрируется в приватном каталоге профиля командой `opka`; глобальная `orca` не заменяется. Settings → CLI показывает точный путь. Для вызова из внешнего shell используйте этот полный путь либо добавьте показанный каталог в PATH самостоятельно. Авторизация Codex/Claude — отдельная настройка, не часть установки приложения. Автоматическая перезапись user-global hooks отключена; собственные account/runtime homes и OpenCode profile overlays обслуживаются отдельно.
 
 ## Mac: обновление

@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
-import { createReadStream } from 'node:fs'
+import { createReadStream, readFileSync } from 'node:fs'
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { basename, join, resolve } from 'node:path'
 import { parse, stringify } from 'yaml'
+import semver from 'semver'
 import { NODE_RUNTIME_ASSETS } from '../../src/shared/node-runtime-pin.ts'
 import { productReleaseDownloadUrl } from '../../src/shared/product-identity.ts'
 import { isDirectInvocation } from './script-entry-detection.mjs'
@@ -26,7 +27,13 @@ export async function fileDigest(path, algorithm = 'sha256', encoding = 'hex') {
 
 export function validateBetaVersion(version) {
   if (!/^\d+\.\d+\.\d+-rc\.[1-9]\d*$/.test(version ?? '')) {
-    throw new Error('OPKA_VERSION must be an explicit beta version, such as 0.1.0-rc.1')
+    throw new Error('OPKA_VERSION must be an explicit beta version, such as 1.4.236-rc.1')
+  }
+  const sourceVersion = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
+  ).version
+  if (!semver.valid(version) || semver.lt(version, sourceVersion)) {
+    throw new Error('OPKA_VERSION must not precede the source compatibility version')
   }
   productReleaseDownloadUrl(version)
   return version
@@ -105,6 +112,19 @@ export function serverPackagePaths(root) {
   return { slot, node: packagedNodeRuntimePath(slot, target) }
 }
 
+export function serverLauncher(node) {
+  return [
+    '#!/bin/sh',
+    'set -eu',
+    'OPKA_INSTALL_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+    'export ORCA_USER_DATA="${ORCA_USER_DATA:-${HOME:?}/.opka}"',
+    'IFS= read -r ORCA_VERSION < "$OPKA_INSTALL_DIR/orcad/.version"',
+    'export ORCA_VERSION',
+    `exec "$OPKA_INSTALL_DIR/${node.split('\\').join('/')}" "$OPKA_INSTALL_DIR/orcad/orcad.js" "$@"`,
+    ''
+  ].join('\n')
+}
+
 async function prepareServer(directory, version, commit) {
   if (process.platform !== 'linux' || process.arch !== 'x64') {
     throw new Error('Server qualification requires Linux x64')
@@ -126,6 +146,10 @@ async function packageServer(stage, directory, version, commit) {
     { stdio: 'inherit', env: { ...process.env, ORCAD_OMIT_AGENT_BROWSER: '1' } }
   )
   const runtime = NODE_RUNTIME_ASSETS[target]
+  const metadata = JSON.parse(await readFile(join(paths.slot, 'out', 'package.json'), 'utf8'))
+  if (metadata.version !== version) {
+    throw new Error('Server CLI and release versions disagree')
+  }
   const node = join('runtimes', `node-${runtime.executableSha256}`, 'bin', 'node')
   if ((await fileDigest(paths.node)) !== runtime.executableSha256) {
     throw new Error('Server Node pin disagrees')
@@ -134,18 +158,7 @@ async function packageServer(stage, directory, version, commit) {
     stdio: 'inherit'
   })
   await cp(resolve('LICENSE'), join(stage, 'LICENSE'))
-  await writeFile(
-    join(stage, 'opka-server'),
-    [
-      '#!/bin/sh',
-      'set -eu',
-      'OPKA_INSTALL_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
-      'export ORCA_USER_DATA="${ORCA_USER_DATA:-${HOME:?}/.opka}"',
-      `exec "$OPKA_INSTALL_DIR/${node.split('\\').join('/')}" "$OPKA_INSTALL_DIR/orcad/orcad.js" "$@"`,
-      ''
-    ].join('\n'),
-    { mode: 0o755 }
-  )
+  await writeFile(join(stage, 'opka-server'), serverLauncher(node), { mode: 0o755 })
   await chmod(join(stage, 'opka-server'), 0o755)
   await writeFile(
     join(stage, 'opka-release.json'),

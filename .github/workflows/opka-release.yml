@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'New immutable beta version, for example 0.1.0-rc.1'
+        description: 'New immutable beta version, for example 1.4.236-rc.1'
         type: string
         required: true
 
