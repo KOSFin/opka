@@ -325,7 +325,7 @@ describe('configureDevUserDataPath', () => {
     const { app } = await import('electron')
     const { configureDevUserDataPath } = await import('./configure-process')
     const originalOverride = process.env.ORCA_DEV_USER_DATA_PATH
-    process.env.ORCA_DEV_USER_DATA_PATH = '/tmp/orca-dev-repro'
+    process.env.ORCA_DEV_USER_DATA_PATH = '/tmp/opka-dev-repro'
 
     try {
       configureDevUserDataPath(true)
@@ -337,29 +337,29 @@ describe('configureDevUserDataPath', () => {
       }
     }
 
-    expect(app.setPath).toHaveBeenCalledWith('userData', '/tmp/orca-dev-repro')
+    expect(app.setPath).toHaveBeenCalledWith('userData', '/tmp/opka-dev-repro')
   })
 
-  it('moves dev runs onto an orca-dev userData path', async () => {
+  it('moves dev runs onto an opka-dev userData path', async () => {
     const { app } = await import('electron')
     const { configureDevUserDataPath } = await import('./configure-process')
 
     delete process.env.ORCA_DEV_USER_DATA_PATH
     configureDevUserDataPath(true)
 
-    // Why: production code uses path.join(app.getPath('appData'), 'orca-dev')
+    // Why: production code uses path.join(app.getPath('appData'), 'opka-dev')
     // which produces platform-specific separators.
-    expect(app.setPath).toHaveBeenCalledWith('userData', join('/tmp/app-data', 'orca-dev'))
+    expect(app.setPath).toHaveBeenCalledWith('userData', join('/tmp/app-data', 'opka-dev'))
   })
 
-  it('leaves packaged runs on the default userData path', async () => {
+  it('isolates packaged Opka from the upstream default profile', async () => {
     const { app } = await import('electron')
     const { configureDevUserDataPath } = await import('./configure-process')
 
     vi.mocked(app.setPath).mockClear()
     configureDevUserDataPath(false)
 
-    expect(app.setPath).not.toHaveBeenCalled()
+    expect(app.setPath).toHaveBeenCalledWith('userData', join('/tmp/app-data', 'Opka'))
   })
 })
 
@@ -415,16 +415,16 @@ describe('configureOrcaUserDataPathEnv', () => {
 })
 
 describe('shouldInstallManagedHooks', () => {
-  it('keeps managed hook auto-install enabled for default dev runs', async () => {
+  it('does not rewrite global agent settings during dev startup', async () => {
     const { shouldInstallManagedHooks } = await import('./configure-process')
 
-    expect(shouldInstallManagedHooks(true)).toBe(true)
+    expect(shouldInstallManagedHooks(true)).toBe(false)
   })
 
-  it('allows managed hook auto-install for packaged runs', async () => {
+  it('does not rewrite global agent settings during packaged Opka startup', async () => {
     const { shouldInstallManagedHooks } = await import('./configure-process')
 
-    expect(shouldInstallManagedHooks(false)).toBe(true)
+    expect(shouldInstallManagedHooks(false)).toBe(false)
   })
 })
 

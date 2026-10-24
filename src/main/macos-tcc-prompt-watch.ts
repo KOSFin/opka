@@ -19,12 +19,12 @@ export type LogStreamChild = ChildProcessByStdio<Writable, Readable, Readable>
 
 /** Why: terminals run from the detached helper, which TCC can hold responsible independently. */
 const ORCA_RESPONSIBLE_IDENTIFIERS = new Set([
-  'com.stablyai.orca',
-  'com.stablyai.orca.helper',
-  'com.stablyai.orca.dev',
-  'com.stablyai.orca.dev.helper',
-  'com.stablyai.orca.local',
-  'com.stablyai.orca.local.helper'
+  'io.github.kosfin.opka',
+  'io.github.kosfin.opka.helper',
+  'io.github.kosfin.opka.dev',
+  'io.github.kosfin.opka.dev.helper',
+  'io.github.kosfin.opka.local',
+  'io.github.kosfin.opka.local.helper'
 ])
 
 /** Why: the prompt classes #9756 is about — other-apps' data plus the protected home folders agents sweep. */

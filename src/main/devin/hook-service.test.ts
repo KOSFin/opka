@@ -165,7 +165,7 @@ describe('DevinHookService', () => {
     const previous = process.platform
     Object.defineProperty(process, 'platform', { value: 'win32' })
     try {
-      const scriptPath = 'C:\\Users\\Ada Lovelace\\.orca\\agent-hooks\\devin-hook.cmd'
+      const scriptPath = 'C:\\Users\\Ada Lovelace\\.opka\\agent-hooks\\devin-hook.cmd'
       const command = getDevinManagedCommand(scriptPath)
       const encoded = command.match(/ -EncodedCommand (\S+)$/)?.[1]
       expect(encoded).toBeDefined()
@@ -181,13 +181,13 @@ describe('DevinHookService', () => {
     const previous = process.platform
     Object.defineProperty(process, 'platform', { value: 'win32' })
     try {
-      const scriptPath = 'C:\\Users\\ada\\.orca\\agent-hooks\\devin-hook.cmd'
+      const scriptPath = 'C:\\Users\\ada\\.opka\\agent-hooks\\devin-hook.cmd'
       const command = getDevinManagedCommand(scriptPath)
       // Why: Git Bash strips backslashes from a bare path; forward slashes survive every host.
-      expect(command).toBe('C:/Users/ada/.orca/agent-hooks/devin-hook.cmd')
+      expect(command).toBe('C:/Users/ada/.opka/agent-hooks/devin-hook.cmd')
       // A UNC home is cmd-safe but has no drive letter, so it keeps the encoded launcher.
       expect(
-        getDevinManagedCommand('\\\\server\\share\\ada\\.orca\\agent-hooks\\devin-hook.cmd')
+        getDevinManagedCommand('\\\\server\\share\\ada\\.opka\\agent-hooks\\devin-hook.cmd')
       ).toMatch(/ -EncodedCommand \S+$/)
 
       const next = applyDevinManagedHooks(

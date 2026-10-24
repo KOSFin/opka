@@ -148,7 +148,7 @@ describe.skipIf(process.platform !== 'win32')('Claude statusLine delivery on Win
       statusLine: { type: 'command', command: LEGACY_COMMAND }
     })
     expect(command).toBe(
-      join(home, '.orca', 'agent-hooks', 'claude-statusline.cmd').replaceAll('\\', '/')
+      join(home, '.opka', 'agent-hooks', 'claude-statusline.cmd').replaceAll('\\', '/')
     )
 
     // Pinned so this suite proves the regression it guards.

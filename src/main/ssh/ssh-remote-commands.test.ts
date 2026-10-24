@@ -134,7 +134,7 @@ function runPowerShellCommand(executable: string, script: string): Promise<strin
 describe('ssh remote command builders', () => {
   it('keeps POSIX deploy commands POSIX-native', () => {
     expect(readRemoteHomeCommand(posix)).toBe('echo $HOME')
-    expect(removeRemoteTreeCommand(posix, '/home/me/.orca-remote/x')).toContain('rm -rf')
+    expect(removeRemoteTreeCommand(posix, '/home/me/.opka-remote/x')).toContain('rm -rf')
     const probe = probeOrcadInstalledCommand(posix, '/home/me/orcad')
     expect(probe).toContain('test -d')
     expect(probe).toContain(ORCAD_INSTALL_MODEL.installCompleteFilename)
@@ -183,7 +183,7 @@ describe('ssh remote command builders', () => {
 
   it('uses encoded PowerShell for Windows deploy commands', () => {
     expect(readRemoteHomeCommand(windows)).toContain('powershell.exe')
-    expect(removeRemoteTreeCommand(windows, 'C:/Users/me/.orca-remote/x')).toContain(
+    expect(removeRemoteTreeCommand(windows, 'C:/Users/me/.opka-remote/x')).toContain(
       '-EncodedCommand'
     )
     const probe = probeOrcadInstalledCommand(windows, 'C:/Users/me/orcad')
@@ -195,15 +195,15 @@ describe('ssh remote command builders', () => {
     const owner = { fileName: '.orca-wake-owner', token: 'tok-1' }
     const posixLock = tryCreateInstallLockCommand(
       posix,
-      '/home/u/.orca-remote/t/.install-lock',
+      '/home/u/.opka-remote/t/.install-lock',
       owner
     )
     expect(posixLock).toMatch(
-      /^if mkdir .*; then .*printf %s 'tok-1' > '\/home\/u\/\.orca-remote\/t\/\.install-lock\/\.orca-wake-owner'; echo OK;/u
+      /^if mkdir .*; then .*printf %s 'tok-1' > '\/home\/u\/\.opka-remote\/t\/\.install-lock\/\.orca-wake-owner'; echo OK;/u
     )
     expect(tryCreateInstallLockCommand(posix, '/l')).not.toContain('orca-wake-owner')
     const windowsLock = decodePowerShellCommand(
-      tryCreateInstallLockCommand(windows, 'C:/Users/me/.orca-remote/t/.install-lock', owner)
+      tryCreateInstallLockCommand(windows, 'C:/Users/me/.opka-remote/t/.install-lock', owner)
     )
     expect(windowsLock).toContain(
       "[System.IO.File]::WriteAllText((Join-Path $lock '.orca-wake-owner'), 'tok-1'); 'OK'"
@@ -224,7 +224,7 @@ describe('ssh remote command builders', () => {
 
   it('uses a legacy-visible Windows lock directory with an exclusive owner file', () => {
     const lockScript = decodePowerShellCommand(
-      tryCreateInstallLockCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock')
+      tryCreateInstallLockCommand(windows, 'C:/Users/me/.opka-remote/relay/.install-lock')
     )
 
     expect(lockScript).toContain('[System.IO.FileMode]::CreateNew')
@@ -308,7 +308,7 @@ describe('ssh remote command builders', () => {
       commandWithNodePath(
         windows,
         'C:/Program Files/nodejs/node.exe',
-        'C:/Users/me/.orca-remote/relay-0.1.0',
+        'C:/Users/me/.opka-remote/relay-0.1.0',
         "'READY'"
       )
     )
@@ -318,7 +318,7 @@ describe('ssh remote command builders', () => {
 
   it('keeps the Windows install-lock try/catch parseable', () => {
     const script = decodePowerShellCommand(
-      tryCreateInstallLockCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock')
+      tryCreateInstallLockCommand(windows, 'C:/Users/me/.opka-remote/relay/.install-lock')
     )
 
     expect(script).toContain('$stream = $null; try {')
@@ -327,9 +327,9 @@ describe('ssh remote command builders', () => {
   })
 
   it('computes install-lock age on the remote host clock', () => {
-    const posixCommand = lockAgeSecondsCommand(posix, '/home/me/.orca-remote/relay/.install-lock')
+    const posixCommand = lockAgeSecondsCommand(posix, '/home/me/.opka-remote/relay/.install-lock')
     const windowsScript = decodePowerShellCommand(
-      lockAgeSecondsCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock')
+      lockAgeSecondsCommand(windows, 'C:/Users/me/.opka-remote/relay/.install-lock')
     )
 
     expect(posixCommand).toContain('date +%s')
@@ -341,11 +341,11 @@ describe('ssh remote command builders', () => {
   it('serializes stale recovery with unbounded numbered sibling claims', () => {
     const posixCommand = tryStealInstallLockCommand(
       posix,
-      '/home/me/.orca-remote/relay/.install-lock',
+      '/home/me/.opka-remote/relay/.install-lock',
       20 * 60
     )
     const windowsScript = decodePowerShellCommand(
-      tryStealInstallLockCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock', 20 * 60)
+      tryStealInstallLockCommand(windows, 'C:/Users/me/.opka-remote/relay/.install-lock', 20 * 60)
     )
 
     expect(posixCommand).toContain('.install-lock')
@@ -372,7 +372,7 @@ describe('ssh remote command builders', () => {
       const script = decodePowerShellCommand(
         tryStealInstallLockCommand(
           windows,
-          'C:/Users/orca-missing/.orca-remote/relay/.install-lock',
+          'C:/Users/orca-missing/.opka-remote/relay/.install-lock',
           20 * 60
         )
       )
@@ -640,13 +640,13 @@ describe('ssh remote command builders', () => {
       commandWithNodePath(
         windows,
         'C:/Program Files/nodejs/node.exe',
-        'C:/Users/me/.orca-remote/relay-0.1.0',
+        'C:/Users/me/.opka-remote/relay-0.1.0',
         "'READY'"
       )
     )
 
     expect(nodeScopedCommand).toContain(
-      "Set-Location -ErrorAction Stop -LiteralPath 'C:/Users/me/.orca-remote/relay-0.1.0'"
+      "Set-Location -ErrorAction Stop -LiteralPath 'C:/Users/me/.opka-remote/relay-0.1.0'"
     )
   })
 })

@@ -111,7 +111,7 @@ function decodePowerShellEncodedCommand(command: string): string | null {
 
 // Why: prod/dev/parallel Orca instances must write the same managed entry, not race between per-userData script paths.
 export function getSharedManagedScriptPath(scriptFileName: string): string {
-  return join(homedir(), '.orca', 'agent-hooks', scriptFileName)
+  return join(homedir(), '.opka', 'agent-hooks', scriptFileName)
 }
 
 export { wrapPosixHookCommand } from './posix-hook-command'

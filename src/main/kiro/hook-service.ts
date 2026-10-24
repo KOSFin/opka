@@ -215,7 +215,7 @@ export class KiroHookService {
     kiroHomeDir?: string
   ): Promise<AgentHookInstallStatus> {
     const agentsDir = getKiroRemoteAgentsDir(remoteHome, kiroHomeDir)
-    const scriptPath = `${remoteHome.replace(/\/$/, '')}/.orca/agent-hooks/kiro-hook.sh`
+    const scriptPath = `${remoteHome.replace(/\/$/, '')}/.opka/agent-hooks/kiro-hook.sh`
     try {
       const fileNames = ((await listRemoteDirectory(sftp, agentsDir)) ?? [])
         .filter(isKiroAgentConfigFileName)

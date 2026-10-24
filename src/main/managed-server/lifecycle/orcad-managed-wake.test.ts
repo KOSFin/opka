@@ -77,7 +77,7 @@ describe('wakeStoppedManagedOrcad', () => {
     expect(host.fence).toBe(false)
     expect(launches()).toHaveLength(1)
     expect(launches()[0]).toContain(
-      `${ORCAD_MANAGED_ACTIVATION_ROOT_ENV}='/home/u/.orca-remote/.orcad-activation-transaction'`
+      `${ORCAD_MANAGED_ACTIVATION_ROOT_ENV}='/home/u/.opka-remote/.orcad-activation-transaction'`
     )
     expect(launches()[0]).not.toContain(ORCAD_E2E_IDLE_TIMEOUT_ENV)
   })

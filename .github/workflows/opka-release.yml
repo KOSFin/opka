@@ -1,0 +1,87 @@
+name: Publish Opka beta
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New immutable beta version, for example 1.4.236-rc.1'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opka-beta-publication
+  cancel-in-progress: false
+
+jobs:
+  admission:
+    name: Admit a main-only beta release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Validate the version without interpreting input as shell code
+        env:
+          OPKA_VERSION: ${{ inputs.version }}
+        run: node --input-type=module -e 'import {validateBetaVersion} from "./config/scripts/opka-release-assets.mjs"; validateBetaVersion(process.env.OPKA_VERSION)'
+
+  qualification:
+    name: Qualify this exact source and installers
+    needs: admission
+    uses: ./.github/workflows/pr.yml
+    with:
+      release_version: ${{ inputs.version }}
+
+  publish:
+    name: Publish the complete verified beta
+    needs: qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      OPKA_VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - uses: actions/download-artifact@v8
+        with:
+          name: opka-beta-release-${{ github.sha }}
+          path: dist
+      - name: Recheck provenance and content before publication
+        run: node config/scripts/opka-release-assets.mjs complete dist
+      - name: Refuse replacing any existing tag or release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/v$OPKA_VERSION"; then
+            echo 'This version already exists; choose a new version.' >&2
+            exit 1
+          else
+            result=$?
+            [ "$result" = 2 ] || exit "$result"
+          fi
+          if gh release view "v$OPKA_VERSION" >/dev/null 2>&1; then
+            echo 'This release already exists; choose a new version.' >&2
+            exit 1
+          fi
+      - name: Upload as a draft before making the channel visible
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "v$OPKA_VERSION" dist/* --target "$GITHUB_SHA" --draft --prerelease --title "Opka $OPKA_VERSION — unsigned Mac beta" --notes-file fork-docs/releases/beta-notes.md
+          gh release edit "v$OPKA_VERSION" --draft=false --prerelease --latest=false
+      - name: Verify the remote release and immutable tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "v$OPKA_VERSION" --json url,isDraft,isPrerelease,assets
+          published=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$OPKA_VERSION" --jq '.object.sha')
+          [ "$published" = "$GITHUB_SHA" ]

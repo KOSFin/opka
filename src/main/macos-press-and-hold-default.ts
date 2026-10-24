@@ -12,7 +12,7 @@ import { writeFileAtomically } from './codex-accounts/fs-utils'
  * The key is unset by default, which is why every terminal-hosting Mac app ships this opt-out.
  *
  * Written once and never again: a user who wants the accent picker back sets
- * `defaults write com.stablyai.orca ApplePressAndHoldEnabled -bool true` (or deletes the key), and
+ * `defaults write io.github.kosfin.opka ApplePressAndHoldEnabled -bool true` (or deletes the key), and
  * the recorded decision below keeps a later launch from overwriting that choice.
  *
  * A fresh write is assumed to land for the *next* launch, not the current one: it goes out through
@@ -43,7 +43,7 @@ const DEFAULTS_TIMEOUT_MS = 5_000
 /** Why: `defaults` exits 1 for "does not exist"; anything else means the probe itself failed. */
 const DEFAULTS_MISSING_STATUS = 1
 
-const ORCA_BUNDLE_ID = 'com.stablyai.orca'
+const ORCA_BUNDLE_ID = 'io.github.kosfin.opka'
 
 export type PressAndHoldDecision =
   /** Not macOS — nothing is read or written. */

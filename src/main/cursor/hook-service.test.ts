@@ -129,7 +129,7 @@ describe('CursorHookService', () => {
     }
 
     const script = readFileSync(
-      join(homeDir, '.orca', 'agent-hooks', CURSOR_SCRIPT_FILE_NAME),
+      join(homeDir, '.opka', 'agent-hooks', CURSOR_SCRIPT_FILE_NAME),
       'utf8'
     )
     expect(script).toContain('/hook/cursor')
@@ -184,10 +184,10 @@ describe('CursorHookService', () => {
           hooks: {
             beforeSubmitPrompt: [
               { command: '/usr/local/bin/user-hook' },
-              { command: '/old/path/.orca/agent-hooks/cursor-hook.sh' }
+              { command: '/old/path/.opka/agent-hooks/cursor-hook.sh' }
             ],
             retiredEvent: [
-              { command: '/old/path/.orca/agent-hooks/cursor-hook.sh' },
+              { command: '/old/path/.opka/agent-hooks/cursor-hook.sh' },
               { command: '/usr/local/bin/retired-user-hook' }
             ]
           }
@@ -251,7 +251,7 @@ describe('CursorHookService', () => {
       homedirMock.mockReturnValue(installHome)
       expect(new CursorHookService().install().state).toBe('installed')
       const config = readInstalledCursorHooks(installHome)
-      unlinkSync(join(installHome, '.orca', 'agent-hooks', CURSOR_SCRIPT_FILE_NAME))
+      unlinkSync(join(installHome, '.opka', 'agent-hooks', CURSOR_SCRIPT_FILE_NAME))
 
       for (const eventName of CURSOR_EVENTS) {
         const command = requireRegisteredCommand(config, eventName)

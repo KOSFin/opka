@@ -15,6 +15,7 @@ import { hydrateShellPath, mergePathSegments } from '../startup/hydrate-shell-pa
 import { getDefaultWslDistro } from '../wsl'
 import { resolveAppImageRuntimeIdentity } from '../appimage-runtime-identity'
 import { ProfileCliRegistration } from '../cli/profile-cli-registration'
+import { PRODUCT_IDENTITY } from '../../shared/product-identity'
 
 const APPIMAGE_REPAIR_RETRY_MS = 30_000
 const localCliRegistrationQueues = new Map<string, Promise<void>>()
@@ -89,7 +90,13 @@ export function registerCliHandlers(): void {
   const profileCli =
     process.env.ORCA_FORK_PROFILE_CLI === '1'
       ? new ProfileCliRegistration(getCanonicalUserDataPath(), process.resourcesPath)
-      : null
+      : new ProfileCliRegistration(
+          getCanonicalUserDataPath(),
+          process.resourcesPath,
+          process.platform,
+          PRODUCT_IDENTITY.command,
+          false
+        )
   let staleAppImageRepairAttempt: {
     promise: Promise<CliInstallStatus | null>
     retryAfter: number

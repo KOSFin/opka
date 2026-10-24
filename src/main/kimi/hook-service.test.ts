@@ -55,7 +55,7 @@ afterEach(() => {
 
 const configPath = (): string => join(home, '.kimi-code', 'config.toml')
 const scriptPath = (fileName = 'kimi-hook.sh'): string =>
-  join(home, '.orca', 'agent-hooks', fileName)
+  join(home, '.opka', 'agent-hooks', fileName)
 const supportsPosixFileModes = process.platform !== 'win32'
 
 describe('KimiHookService', () => {
@@ -75,10 +75,10 @@ describe('KimiHookService', () => {
     })
 
     it('registers the .cmd by bare forward-slash path, else the encoded launcher', () => {
-      expect(getManagedCommand('C:\\Users\\alice\\.orca\\agent-hooks\\kimi-hook.cmd')).toBe(
-        'C:/Users/alice/.orca/agent-hooks/kimi-hook.cmd'
+      expect(getManagedCommand('C:\\Users\\alice\\.opka\\agent-hooks\\kimi-hook.cmd')).toBe(
+        'C:/Users/alice/.opka/agent-hooks/kimi-hook.cmd'
       )
-      const spacedPath = 'C:\\Users\\Bob Smith\\.orca\\agent-hooks\\kimi-hook.cmd'
+      const spacedPath = 'C:\\Users\\Bob Smith\\.opka\\agent-hooks\\kimi-hook.cmd'
       expect(getManagedCommand(spacedPath)).toBe(wrapWindowsHookCommand(spacedPath))
     })
 

@@ -18,7 +18,7 @@ export function resolveLaunchUserDataPath(env: NodeJS.ProcessEnv = process.env):
   if (launchesDevApp(env)) {
     // Mirrors the dev app's own default (`<appData>/orca-dev`).
     return resolve(
-      env.ORCA_DEV_USER_DATA_PATH || join(dirname(getPlatformUserDataPath()), 'orca-dev')
+      env.ORCA_DEV_USER_DATA_PATH || join(dirname(getPlatformUserDataPath()), 'opka-dev')
     )
   }
   return getPlatformUserDataPath()

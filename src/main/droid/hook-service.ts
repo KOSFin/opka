@@ -256,7 +256,7 @@ export class DroidHookService {
   async installRemote(sftp: SFTPWrapper, remoteHome: string): Promise<AgentHookInstallStatus> {
     const home = remoteHome.replace(/\/$/, '')
     const remoteConfigPath = `${home}/.factory/settings.json`
-    const remoteScriptPath = `${home}/.orca/agent-hooks/droid-hook.sh`
+    const remoteScriptPath = `${home}/.opka/agent-hooks/droid-hook.sh`
     try {
       const config = await readHooksJsonRemote(sftp, remoteConfigPath)
       if (!config) {

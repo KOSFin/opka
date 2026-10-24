@@ -45,7 +45,7 @@ describe('quitting during an orcad bundle upload', () => {
           sftp: async () => flushingSftp()
         },
         localDir,
-        '/home/u/.orca-remote/orcad-candidate'
+        '/home/u/.opka-remote/orcad-candidate'
       )
       const settled = upload.then(
         () => 'resolved',

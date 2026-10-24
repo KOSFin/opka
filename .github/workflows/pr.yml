@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_version:
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -134,6 +139,7 @@ jobs:
           tests/e2e/fork-project-task-scope.spec.ts
           tests/e2e/fork-vibe-board.spec.ts
           tests/e2e/fork-five-projects.spec.ts
+          tests/e2e/fork-beta-update.spec.ts
           --config tests/playwright.config.ts --project electron-headless --workers=1
       - name: Save isolated failure evidence
         if: failure()
@@ -143,10 +149,17 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  installers:
+    name: Beta installer qualification
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    uses: ./.github/workflows/opka-installers.yml
+    with:
+      version: ${{ inputs.release_version || format('1.4.236-rc.{0}', github.run_number) }}
+
   verify:
     name: PR checks passed
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    needs: [static, regression, desktop, electron]
+    needs: [static, regression, desktop, electron, installers]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -154,4 +167,4 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
-          node -e 'const jobs = Object.values(JSON.parse(process.env.RESULTS)); if (jobs.length !== 4 || jobs.some(job => job.result !== "success")) process.exit(1)'
+          node -e 'const jobs = Object.values(JSON.parse(process.env.RESULTS)); if (jobs.length !== 5 || jobs.some(job => job.result !== "success")) process.exit(1)'

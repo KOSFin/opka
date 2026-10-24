@@ -48,7 +48,7 @@ const target = {
   host: getRemoteHostPlatform('linux-x64')
 }
 const fence = {
-  lockDir: '/home/u/.orca-remote/.orcad-activation-transaction/.install-lock',
+  lockDir: '/home/u/.opka-remote/.orcad-activation-transaction/.install-lock',
   token: 't1'
 }
 

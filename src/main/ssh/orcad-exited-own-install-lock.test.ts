@@ -49,7 +49,7 @@ afterEach(() => {
 function versionDirWithLock(owner: string, heldToken: string) {
   const home = mkdtempSync(join(tmpdir(), 'orcad-exited-install-'))
   homes.push(home)
-  const dir = join(home, '.orca-remote', 'orcad-0.1.0+aa01')
+  const dir = join(home, '.opka-remote', 'orcad-0.1.0+aa01')
   const lock = join(dir, '.install-lock')
   mkdirSync(lock, { recursive: true })
   writeFileSync(join(lock, '.orca-fence-owner'), owner)
@@ -67,7 +67,7 @@ function versionDirWithLock(owner: string, heldToken: string) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: execCommand is mocked to a local shell, so the connection is never used.
   const target = { conn: {} as never, host: getRemoteHostPlatform('linux-x64') }
   const proof = exitedOwnLockProof(target, {
-    baseDir: join(home, '.orca-remote'),
+    baseDir: join(home, '.opka-remote'),
     guardsStateMutation: false
   })
   const store = join(home, 'data', ORCAD_HELD_FENCE_TOKENS_FILE_NAME)

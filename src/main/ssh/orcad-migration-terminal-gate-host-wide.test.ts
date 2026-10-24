@@ -68,7 +68,7 @@ describe('a desktop converting while another desktop runs a shell on the account
 
   it('never reads exited on a POSIX host where only desktop B’s socket runs a shell', async () => {
     const host = getRemoteHostPlatform('linux-x64')
-    const dir = '/home/dev/.orca-remote/relay-0.1.0+aaaaaaaaaaaa'
+    const dir = '/home/dev/.opka-remote/relay-0.1.0+aaaaaaaaaaaa'
     const aSock = `${dir}/${relaySocketNameForInstanceId('desktop-a')}`
     const bSock = `${dir}/${relaySocketNameForInstanceId('desktop-b')}`
     execCommand.mockResolvedValue(`${aSock}\n${bSock}\n`)
@@ -102,7 +102,7 @@ describe('a desktop converting while another desktop runs a shell on the account
   it('never reads exited on a Windows host where only desktop B’s pipe runs a shell', async () => {
     const host = getRemoteHostPlatform('win32-x64')
     const version = 'relay-0.1.0+aaaaaaaaaaaa'
-    const dir = joinRemotePath(host, 'C:\\Users\\dev', '.orca-remote', version)
+    const dir = joinRemotePath(host, 'C:\\Users\\dev', '.opka-remote', version)
     const sockA = relaySocketNameForInstanceId('desktop-a')
     const sockB = relaySocketNameForInstanceId('desktop-b')
     const [aPipe] = windowsRelayPipePathsForSocketName(host, dir, sockA)

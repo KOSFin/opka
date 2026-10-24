@@ -195,14 +195,14 @@ export class OpenCodeHookService {
 
   // Why: a running OpenCode 2 service reloads a changed plugin file, so refreshing Orca's existing
   // installs at app start upgrades it without waiting for the next pane. Never creates an install.
-  refreshInstalledPlugins(): void {
+  refreshInstalledPlugins(includeUserConfig = true): void {
     this.refreshLegacySharedPlugin()
     const overlayRoot = this.getOverlayRoot()
     const overlays = existsSync(overlayRoot)
       ? readdirSync(overlayRoot).map((name) => join(overlayRoot, name))
       : []
     const configDir = resolveOpenCodeConfigDirectory()
-    for (const dir of [configDir, ...overlays]) {
+    for (const dir of [...(includeUserConfig ? [configDir] : []), ...overlays]) {
       if (!existsSync(join(dir, 'plugins', this.pluginFileName))) {
         continue
       }

@@ -39,7 +39,7 @@ import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 const mockExec = vi.mocked(execCommand)
 const host = getRemoteHostPlatform('win32-x64')
 const VERSION = '0.2.0+bb01'
-const SLOT_NODE = 'C:\\Users\\u\\.orca-remote\\runtimes\\node-ab\\node.exe'
+const SLOT_NODE = 'C:\\Users\\u\\.opka-remote\\runtimes\\node-ab\\node.exe'
 const record = withActivatedVersion(emptyOrcadActivationRecord(), VERSION, null, new Date(0))
 const encoded = (marker: string, value: string): string =>
   `${marker} ${Buffer.from(value).toString('base64')}\r\n`
@@ -135,7 +135,7 @@ describe('Windows orcad GC', () => {
     conn: conn(),
     host,
     remoteHome: 'C:/Users/u',
-    currentDirAbsPath: 'C:/Users/u/.orca-remote/orcad-0.3.0+cc01',
+    currentDirAbsPath: 'C:/Users/u/.opka-remote/orcad-0.3.0+cc01',
     record
   })
 
@@ -167,7 +167,7 @@ describe('Windows orcad GC', () => {
     )
     expect(screens).toHaveLength(1)
     expect(String(screens[0]?.[1])).toContain(
-      'C:/Users/u/.orca-remote/orcad-a C:/Users/u/.orca-remote/orcad-b C:/Users/u/.orca-remote/orcad-c'
+      'C:/Users/u/.opka-remote/orcad-a C:/Users/u/.opka-remote/orcad-b C:/Users/u/.opka-remote/orcad-c'
     )
   })
 

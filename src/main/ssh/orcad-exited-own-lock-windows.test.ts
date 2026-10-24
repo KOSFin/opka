@@ -25,7 +25,7 @@ const { getRemoteHostPlatform } = await import('./ssh-remote-platform')
 // Above every Linux and macOS pid_max, so no process can hold it.
 const EXITED_PID = 4_194_304 + 1
 const host = getRemoteHostPlatform('win32-x64')
-const baseDir = 'C:/Users/me/.orca-remote'
+const baseDir = 'C:/Users/me/.opka-remote'
 const lockDir = `${baseDir}/.orcad-activation-transaction/.install-lock`
 let store = ''
 let home = ''
@@ -88,7 +88,7 @@ describe('reclaiming this desktop’s exited lock on a Windows host', () => {
   it('falls back to the stale window when the check would not fit cmd.exe', async () => {
     hold({ token: 't-exited', pid: EXITED_PID })
     remote.reply = 'EXITED_OWNER t-exited\n'
-    const deep = `C:/Users/me/${'nested-folder/'.repeat(200)}.orca-remote`
+    const deep = `C:/Users/me/${'nested-folder/'.repeat(200)}.opka-remote`
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: execCommand is mocked, so the connection is never used.
     const target = { conn: {} as never, host }
     await expect(

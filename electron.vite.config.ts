@@ -264,6 +264,7 @@ export const electronViteConfig: UserConfig = {
     // Why: compile-time substitution for the telemetry gate. See the block
     // above for the full rationale.
     define: {
+      __OPKA_MAC_MANUAL_INSTALLER__: 'true',
       ORCA_BUILD_IDENTITY: ORCA_BUILD_IDENTITY_LITERAL,
       ORCA_POSTHOG_WRITE_KEY: ORCA_POSTHOG_WRITE_KEY_LITERAL,
       ORCA_DIAGNOSTICS_TOKEN_URL: ORCA_DIAGNOSTICS_TOKEN_URL_LITERAL,

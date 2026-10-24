@@ -86,7 +86,7 @@ export function desktopHandoffArguments(pending: {
 }): string[] {
   const shareId = pending.skillShareDeepLinks.consume()
   return [
-    ...(shareId ? [`orca://skills/share/${shareId}`] : []),
+    ...(shareId ? [`opka://skills/share/${shareId}`] : []),
     ...pending.osOpenedDocuments.consume()
   ]
 }

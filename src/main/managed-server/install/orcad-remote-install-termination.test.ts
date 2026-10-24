@@ -51,8 +51,8 @@ beforeEach(() => {
 })
 
 describe.each([
-  { platform: 'linux-x64' as const, remoteDir: '/home/u/.orca-remote/orcad-version' },
-  { platform: 'win32-x64' as const, remoteDir: 'C:/Users/u/.orca-remote/orcad-version' }
+  { platform: 'linux-x64' as const, remoteDir: '/home/u/.opka-remote/orcad-version' },
+  { platform: 'win32-x64' as const, remoteDir: 'C:/Users/u/.opka-remote/orcad-version' }
 ])('orcad install termination on $platform', ({ platform, remoteDir }) => {
   const host = getRemoteHostPlatform(platform)
   const completionCommandNumber = host.os === 'win32' ? 3 : 4
@@ -192,7 +192,7 @@ describe('the install lock token', () => {
         nodeRuntimeArchive: async () => '/cache/node-archive'
       },
       fullVersion,
-      '/home/u/.orca-remote/orcad-version'
+      '/home/u/.opka-remote/orcad-version'
     )
 
   function bindStore(): () => string {

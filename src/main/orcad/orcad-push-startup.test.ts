@@ -307,8 +307,7 @@ it('unsubscribes settings when daemon startup fails after hook setup', async () 
   acquireProfileStateMaintenance(state.root).release()
 })
 
-// Why: a freshly managed SSH host starts orcad on connect; without this its agents never report status.
-it('installs agent status hooks on the host when it starts', async () => {
+it('starts hook observation without overwriting shared agent configurations', async () => {
   state.root = mkdtempSync(join(tmpdir(), 'orca-headless-hooks-'))
   const { startOrcad } = await import('./orcad-entry')
   const host = await startOrcad({ noPairing: true, json: true })
@@ -316,17 +315,11 @@ it('installs agent status hooks on the host when it starts', async () => {
     expect(state.startCodexHooks).toHaveBeenCalledOnce()
     // orcad launches Codex on the real ~/.codex; it has no Orca-managed account homes.
     expect(state.startCodexHooks.mock.calls[0]![0].resolveLaunchHome()).toBeNull()
-    await vi.waitFor(() =>
-      expect(state.installManagedAgentHooks).toHaveBeenCalledWith(
-        profile.settings,
-        expect.objectContaining({ shouldHydrateShellPath: true })
-      )
-    )
+    expect(state.startCodexHooks.mock.calls[0]![0].allowRealHomeWrites).toBe(false)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(state.installManagedAgentHooks).not.toHaveBeenCalled()
     expect(state.refreshOpenCodePlugins).toHaveBeenCalledWith(profile.settings)
-    // Grok/Kiro homes set only in login profiles must be known before their installers run.
-    expect(state.adoptLoginShellAgentHomes.mock.invocationCallOrder[0]).toBeLessThan(
-      state.installManagedAgentHooks.mock.invocationCallOrder[0]!
-    )
+    expect(state.adoptLoginShellAgentHomes).not.toHaveBeenCalled()
   } finally {
     await host.stop()
   }

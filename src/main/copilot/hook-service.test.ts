@@ -93,18 +93,18 @@ describe('CopilotHookService', () => {
     expect(firstPromptHook.type).toBe('command')
     expect(firstPromptHook.timeoutSec).toBe(5)
     if (process.platform === 'win32') {
-      const scriptPath = join(tmpDir, '.orca', 'agent-hooks', 'copilot-hook.cmd')
+      const scriptPath = join(tmpDir, '.opka', 'agent-hooks', 'copilot-hook.cmd')
       expect(firstPromptHook.powershell).toBe(getManagedCommand(scriptPath, 'UserPromptSubmit'))
     } else {
       expect(firstPromptHook.bash).toContain('if [ -f ')
       expect(firstPromptHook.bash).toContain('] && [ -x ')
-      expect(firstPromptHook.bash).toContain('.orca/agent-hooks/copilot-hook.sh')
+      expect(firstPromptHook.bash).toContain('.opka/agent-hooks/copilot-hook.sh')
       expect(firstPromptHook.bash).toContain("ORCA_COPILOT_HOOK_EVENT='UserPromptSubmit'")
     }
-    expect(existsSync(join(tmpDir, '.orca', 'agent-hooks', 'copilot-hook.sh'))).toBe(
+    expect(existsSync(join(tmpDir, '.opka', 'agent-hooks', 'copilot-hook.sh'))).toBe(
       process.platform !== 'win32'
     )
-    expect(existsSync(join(tmpDir, '.orca', 'agent-hooks', 'copilot-hook.cmd'))).toBe(
+    expect(existsSync(join(tmpDir, '.opka', 'agent-hooks', 'copilot-hook.cmd'))).toBe(
       process.platform === 'win32'
     )
   })
@@ -118,16 +118,16 @@ describe('CopilotHookService', () => {
       vi.stubEnv('SystemRoot', 'C:\\Windows')
       for (const eventName of COPILOT_EVENTS) {
         expect(
-          getManagedCommand('C:\\Users\\alice\\.orca\\agent-hooks\\copilot-hook.cmd', eventName)
+          getManagedCommand('C:\\Users\\alice\\.opka\\agent-hooks\\copilot-hook.cmd', eventName)
         ).toBe(
-          `C:/Windows/System32/cmd.exe /d /c C:/Users/alice/.orca/agent-hooks/copilot-hook.cmd ${eventName}`
+          `C:/Windows/System32/cmd.exe /d /c C:/Users/alice/.opka/agent-hooks/copilot-hook.cmd ${eventName}`
         )
       }
       vi.unstubAllEnvs()
     })
 
     it('passes the event through the encoded launcher when the path is not cmd-safe', () => {
-      const scriptPath = 'C:\\Users\\Bob Smith\\.orca\\agent-hooks\\copilot-hook.cmd'
+      const scriptPath = 'C:\\Users\\Bob Smith\\.opka\\agent-hooks\\copilot-hook.cmd'
       for (const eventName of COPILOT_EVENTS) {
         expect(getManagedCommand(scriptPath, eventName)).toBe(
           wrapWindowsHookCommand(scriptPath, { ORCA_COPILOT_HOOK_EVENT: eventName })
@@ -154,7 +154,7 @@ describe('CopilotHookService', () => {
     })
 
     it('replaces the legacy .ps1 registration on install and keeps user hooks', () => {
-      const legacyPath = join(tmpDir, '.orca', 'agent-hooks', 'copilot-hook.ps1')
+      const legacyPath = join(tmpDir, '.opka', 'agent-hooks', 'copilot-hook.ps1')
       const configPath = join(copilotHome, 'hooks', 'orca.json')
       mkdirSync(join(copilotHome, 'hooks'), { recursive: true })
       const userHook = { type: 'command', powershell: 'Write-Output user-hook', timeoutSec: 3 }
@@ -179,7 +179,7 @@ describe('CopilotHookService', () => {
 
       expect(service.install().state).toBe('installed')
       const hooks = readHooksJson(configPath)?.hooks ?? {}
-      const scriptPath = join(tmpDir, '.orca', 'agent-hooks', 'copilot-hook.cmd')
+      const scriptPath = join(tmpDir, '.opka', 'agent-hooks', 'copilot-hook.cmd')
       for (const eventName of COPILOT_EVENTS) {
         const managed = {
           type: 'command',
@@ -199,9 +199,9 @@ describe('CopilotHookService', () => {
       const status = await new CopilotHookService().installRemote(remote.sftp, '/home/alice')
       expect(status.state).toBe('installed')
       const installed = remote.fs.files.get('/home/alice/.copilot/hooks/orca.json')
-      expect(installed).toContain('/home/alice/.orca/agent-hooks/copilot-hook.sh')
+      expect(installed).toContain('/home/alice/.opka/agent-hooks/copilot-hook.sh')
       expect(installed).not.toMatch(/powershell|EncodedCommand|copilot-hook\.cmd/)
-      expect(remote.fs.files.get('/home/alice/.orca/agent-hooks/copilot-hook.sh')).toContain(
+      expect(remote.fs.files.get('/home/alice/.opka/agent-hooks/copilot-hook.sh')).toContain(
         '#!/bin/sh'
       )
     })

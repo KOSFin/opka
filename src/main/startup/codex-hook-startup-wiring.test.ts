@@ -101,6 +101,7 @@ describe('Codex hook startup', () => {
     await initializeReadyRuntimeServices()
 
     expect(fixture.startCodexHooks).toHaveBeenCalledTimes(1)
+    expect(fixture.startCodexHooks.mock.calls[0]![0].allowRealHomeWrites).toBe(false)
     let ready = false
     const { pathReady } = fixture.startCodexHooks.mock.calls[0]![0]
     void pathReady.then(() => {

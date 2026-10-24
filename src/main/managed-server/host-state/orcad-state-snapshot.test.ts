@@ -19,8 +19,8 @@ import { ORCAD_SNAPSHOT_EXCLUDED, ORCAD_SNAPSHOT_MEMBERS } from './orcad-state-s
 const posix = getRemoteHostPlatform('linux-x64')
 const windows = getRemoteHostPlatform('win32-x64')
 const ROOT = '/home/u/.orca'
-const SNAP = '/home/u/.orca-remote/orcad-state-snapshots/pre-0.2.0+bb01-1000'
-const BASE = '/home/u/.orca-remote'
+const SNAP = '/home/u/.opka-remote/orcad-state-snapshots/pre-0.2.0+bb01-1000'
+const BASE = '/home/u/.opka-remote'
 
 /** Every `for m in <members>;` list a command walks. */
 function memberLists(command: string): string[] {
@@ -138,7 +138,7 @@ describe('detecting writes since activation', () => {
 })
 
 describe('Windows hosts', () => {
-  const BASE = 'C:/Users/u/.orca-remote'
+  const BASE = 'C:/Users/u/.opka-remote'
   it.each([
     [
       'capture',
@@ -169,7 +169,7 @@ describe('Windows hosts', () => {
   ])('%s runs the host script op %s with node.exe, never a POSIX command', (_label, op, build) => {
     const command = build(BASE)
     expect(command).toContain(` ${op} `)
-    expect(command).toMatch(/^C:\\Users\\u\\\.orca-remote\\runtimes\\node-[0-9a-f]+\\node\.exe /u)
+    expect(command).toMatch(/^C:\\Users\\u\\\.opka-remote\\runtimes\\node-[0-9a-f]+\\node\.exe /u)
     expect(command).not.toMatch(/tar |find |diff |EncodedCommand|powershell/u)
   })
 })

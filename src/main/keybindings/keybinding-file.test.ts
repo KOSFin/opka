@@ -26,7 +26,7 @@ describe('keybinding-file', () => {
 
   it('resolves the user-facing keybindings path under ~/.orca', () => {
     expect(getUserKeybindingsPath('/home/test')).toBe(
-      join('/home/test', '.orca', 'keybindings.json')
+      join('/home/test', '.opka', 'keybindings.json')
     )
   })
 

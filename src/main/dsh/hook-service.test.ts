@@ -55,9 +55,9 @@ afterEach(() => {
 })
 
 const configPath = (): string => join(home, '.dsh', 'cordis.patch.yml')
-const managedHooksPath = (): string => join(home, '.orca', 'agent-hooks', 'dsh-hooks.json')
+const managedHooksPath = (): string => join(home, '.opka', 'agent-hooks', 'dsh-hooks.json')
 const scriptPath = (): string =>
-  join(home, '.orca', 'agent-hooks', process.platform === 'win32' ? 'dsh-hook.cmd' : 'dsh-hook.sh')
+  join(home, '.opka', 'agent-hooks', process.platform === 'win32' ? 'dsh-hook.cmd' : 'dsh-hook.sh')
 
 function readManagedHooks(): { hooks: Record<string, unknown[]> } {
   const parsed: { hooks: Record<string, unknown[]> } = JSON.parse(

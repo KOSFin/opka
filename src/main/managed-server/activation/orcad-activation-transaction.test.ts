@@ -211,7 +211,7 @@ describe('activation fence', () => {
       /^\[ "\$\(cat '[^']*\.orca-fence-owner' 2>\/dev\/null\)" = '[^']+' \] \|\| \{ echo SUPERSEDED; exit 0; \};/u
     )
     expect(release?.indexOf('transaction.json')).toBeLessThan(
-      release?.indexOf("mv '/home/u/.orca-remote/.orcad-activation-transaction/.install-lock'") ??
+      release?.indexOf("mv '/home/u/.opka-remote/.orcad-activation-transaction/.install-lock'") ??
         -1
     )
   })

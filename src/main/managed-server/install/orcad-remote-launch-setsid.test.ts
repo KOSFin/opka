@@ -18,7 +18,7 @@ function spec(remoteInstallDir: string, nodePath = '/usr/bin/node'): OrcadLaunch
     userDataDir: '/home/u/.orca',
     bindHost: '127.0.0.1',
     port: 7777,
-    activationRoot: '/home/u/.orca-remote/.orcad-activation-transaction'
+    activationRoot: '/home/u/.opka-remote/.orcad-activation-transaction'
   }
 }
 
@@ -34,7 +34,7 @@ describe('the WSL launch (setsid)', () => {
   it('never backgrounds under nohup, and starts the runtime in a session of its own', () => {
     const command = orcadLaunchCommand(
       host,
-      spec('/home/u/.orca-remote/orcad-0.2.0+bb01'),
+      spec('/home/u/.opka-remote/orcad-0.2.0+bb01'),
       'setsid'
     )
     expect(command).not.toContain('nohup')

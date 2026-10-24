@@ -41,7 +41,7 @@ const host = getRemoteHostPlatform('linux-x64')
 const NOEXEC_PROBE_REPLY = [
   REMOTE_NODE_RUNTIME_NOEXEC,
   'ORCA_RUNTIME_EXIT=126',
-  '/bin/sh: 1: /root/.orca-remote/runtimes/.stage-node-x-1/.exec-probe: Permission denied'
+  '/bin/sh: 1: /root/.opka-remote/runtimes/.stage-node-x-1/.exec-probe: Permission denied'
 ].join('\n')
 
 const directories: string[] = []
@@ -104,23 +104,23 @@ describe('pinned-Node runtime store on a host that refuses to run programs', () 
     const failure = await ensureRemoteOrcadNodeRuntime({
       conn,
       host,
-      slotDir: '/root/.orca-remote/orcad-0.1.0+abc',
+      slotDir: '/root/.opka-remote/orcad-0.1.0+abc',
       target: 'linux-x64-glibc',
       archivePath
     }).catch((error: unknown) => error)
 
     expect(classifyOrcadHostUnavailable(failure)).toBe('runtime_noexec')
-    expect(String(failure)).toContain('/root/.orca-remote/runtimes')
+    expect(String(failure)).toContain('/root/.opka-remote/runtimes')
     expect(archivePath).not.toHaveBeenCalled()
     expect(uploadRelayDirectory).not.toHaveBeenCalled()
     const commands = vi.mocked(execCommand).mock.calls.map(([, command]) => command)
-    expect(commands.at(-1)).toMatch(/^rm -rf '\/root\/\.orca-remote\/runtimes\/\.stage-/)
+    expect(commands.at(-1)).toMatch(/^rm -rf '\/root\/\.opka-remote\/runtimes\/\.stage-/)
   })
 
   it('reads exit 126 as noexec in any locale', () => {
     const localized = `${REMOTE_NODE_RUNTIME_NOEXEC}\nORCA_RUNTIME_EXIT=126\nsh: 1: .exec-probe: Keine Berechtigung`
     expect(() =>
-      assertRemoteNodeRuntimeStoreExecutable(localized, '/root/.orca-remote/runtimes')
+      assertRemoteNodeRuntimeStoreExecutable(localized, '/root/.opka-remote/runtimes')
     ).toThrow(RemoteNodeRuntimeNoexecError)
   })
 
@@ -140,7 +140,7 @@ describe('pinned-Node runtime store on a host that refuses to run programs', () 
     await ensureRemoteOrcadNodeRuntime({
       conn,
       host,
-      slotDir: '/root/.orca-remote/orcad-0.1.0+abc',
+      slotDir: '/root/.opka-remote/orcad-0.1.0+abc',
       target: 'linux-x64-glibc',
       archivePath: async () => archive()
     })

@@ -56,7 +56,7 @@ describe('CodeBuddy managed hooks on Windows', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     const path = join(sandbox.home, '.codebuddy', 'settings.json')
     const userHook = { type: 'command', command: 'echo user-hook' }
-    const scriptPath = join(sandbox.home, '.orca', 'agent-hooks', 'codebuddy-hook.cmd')
+    const scriptPath = join(sandbox.home, '.opka', 'agent-hooks', 'codebuddy-hook.cmd')
     const legacyHook = getManagedLifecycleHook(scriptPath, {
       configDirName: '.codebuddy',
       scriptBaseName: 'codebuddy-hook',

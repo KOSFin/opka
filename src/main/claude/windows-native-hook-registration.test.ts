@@ -43,8 +43,8 @@ import {
 
 const CURRENT_CLAUDE = { claudeVersion: '2.1.261 (Claude Code)' }
 const EXE = 'orca-agent-hook.exe'
-const SCRIPT_PATH = 'C:\\Users\\alice\\.orca\\agent-hooks\\claude-hook.cmd'
-const EXE_PATH = `C:\\Users\\alice\\.orca\\agent-hooks\\${EXE}`
+const SCRIPT_PATH = 'C:\\Users\\alice\\.opka\\agent-hooks\\claude-hook.cmd'
+const EXE_PATH = `C:\\Users\\alice\\.opka\\agent-hooks\\${EXE}`
 
 function withWin32<T>(run: () => T): T {
   const original = Object.getOwnPropertyDescriptor(process, 'platform')
@@ -65,13 +65,13 @@ describe('getManagedLifecycleHook native executable gate', () => {
     )
     expect(hook).toEqual({
       type: 'command',
-      command: `C:/Users/alice/.orca/agent-hooks/${EXE} claude`,
+      command: `C:/Users/alice/.opka/agent-hooks/${EXE} claude`,
       timeout: 10
     })
   })
 
   it('owns the `<exe> claude` command, and no other agent does', () => {
-    const command = `C:/Users/alice/.orca/agent-hooks/${EXE} claude`
+    const command = `C:/Users/alice/.opka/agent-hooks/${EXE} claude`
     expect(createManagedCommandMatcher('claude-hook.cmd')(command)).toBe(true)
     for (const other of ['openclaude-hook.cmd', 'codebuddy-hook.cmd']) {
       expect(createManagedCommandMatcher(other)(command), other).toBe(false)
@@ -83,7 +83,7 @@ describe('getManagedLifecycleHook native executable gate', () => {
   })
 
   it('falls back to the .cmd form without an installed exe or with a path shells cannot carry', () => {
-    for (const exePath of [null, `C:\\Users\\Bob Smith\\.orca\\agent-hooks\\${EXE}`]) {
+    for (const exePath of [null, `C:\\Users\\Bob Smith\\.opka\\agent-hooks\\${EXE}`]) {
       const hook = withWin32(() =>
         getManagedLifecycleHook(SCRIPT_PATH, CLAUDE_HOOK_SETTINGS, exePath)
       )
@@ -111,7 +111,7 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
     const bundle = join(home, 'bundled-agent-hook.exe')
     writeFileSync(bundle, 'MZ stand-in for the signed bundle')
     return {
-      hooksDir: join(home, '.orca', 'agent-hooks'),
+      hooksDir: join(home, '.opka', 'agent-hooks'),
       settingsPath: join(home, '.claude', 'settings.json'),
       bundle
     }

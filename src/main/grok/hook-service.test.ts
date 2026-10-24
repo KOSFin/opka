@@ -288,7 +288,7 @@ describe('GrokHookService', () => {
     }
 
     const script = readFileSync(
-      join(homeDir, '.orca', 'agent-hooks', GROK_SCRIPT_FILE_NAME),
+      join(homeDir, '.opka', 'agent-hooks', GROK_SCRIPT_FILE_NAME),
       'utf8'
     )
     expect(script).toContain('/hook/grok')

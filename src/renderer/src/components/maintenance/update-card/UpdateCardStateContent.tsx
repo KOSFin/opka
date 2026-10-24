@@ -14,6 +14,7 @@ import {
   UpdateAvailableSimpleContent
 } from './UpdateAvailableCardContent'
 import { UpdateDownloadingContent, UpdateReadyToInstallContent } from './UpdateDownloadCardContent'
+import { MacBetaUpdateContent } from './MacBetaUpdateContent'
 
 export function UpdateCardStateContent({
   status,
@@ -84,6 +85,16 @@ export function UpdateCardStateContent({
   }
   if (errorCard) {
     return <UpdateErrorCardContent {...errorCard} onClose={onCollapse} />
+  }
+  if (status.manualInstaller && (status.state === 'available' || status.state === 'downloaded')) {
+    return (
+      <MacBetaUpdateContent
+        version={status.version}
+        downloaded={status.state === 'downloaded'}
+        onAction={status.state === 'downloaded' ? onInstallRetry : onUpdate}
+        onClose={onCollapse}
+      />
+    )
   }
   if (status.state === 'downloaded') {
     if (status.installing) {

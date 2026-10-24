@@ -86,7 +86,7 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
         client: [`LocalForward 127.0.0.1:${configuredForwardPort} 127.0.0.1:${orcadPort}`]
       })
       // The host's pinned Node, where the stdio bridge looks for it under the session's HOME.
-      const nodeBin = join(fixture.remoteHome, '.orca-remote', 'runtimes', 'node-fixture', 'bin')
+      const nodeBin = join(fixture.remoteHome, '.opka-remote', 'runtimes', 'node-fixture', 'bin')
       mkdirSync(nodeBin, { recursive: true })
       symlinkSync(
         execFileSync('node', ['-p', 'process.execPath'], { encoding: 'utf8' }).trim(),

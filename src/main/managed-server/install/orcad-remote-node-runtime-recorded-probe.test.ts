@@ -70,7 +70,7 @@ function ensure(recorded: boolean): ReturnType<typeof ensureRemoteOrcadNodeRunti
   return ensureRemoteOrcadNodeRuntime({
     conn,
     host,
-    slotDir: join(root, '.orca-remote', 'orcad-0.1.0+abc'),
+    slotDir: join(root, '.opka-remote', 'orcad-0.1.0+abc'),
     target,
     archivePath: () => Promise.reject(new Error('no upload expected')),
     ...(recorded ? { posixProbeCommand: recordedRemoteNodeRuntimeProbeCommand } : {})
@@ -87,7 +87,7 @@ beforeEach(() => {
     `#!/bin/sh\nprintf x >> ${JSON.stringify(join(root, 'hashes'))}\necho "${pin}  $1"\n`,
     { mode: 0o755 }
   )
-  runtimeDir = remoteNodeRuntimeDir(host, join(root, '.orca-remote', 'orcad-0.1.0+abc'), target)
+  runtimeDir = remoteNodeRuntimeDir(host, join(root, '.opka-remote', 'orcad-0.1.0+abc'), target)
   mkdirSync(join(runtimeDir, 'bin'), { recursive: true })
   writeFileSync(posixNodeRuntimeExecutable(host, runtimeDir), 'node', { mode: 0o755 })
   writeFileSync(join(runtimeDir, REMOTE_NODE_RUNTIME_VERIFIED_MARKER), '')

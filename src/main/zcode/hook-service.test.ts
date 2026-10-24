@@ -166,10 +166,10 @@ describe('ZCodeHookService', () => {
 
   it('registers a forward-slash cmd path on Windows and replaces the legacy backslash entry', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const scriptPath = 'C:\\Users\\ada\\.orca\\agent-hooks\\zcode-hook.cmd'
+    const scriptPath = 'C:\\Users\\ada\\.opka\\agent-hooks\\zcode-hook.cmd'
     const command = getZCodeManagedCommand(scriptPath)
     // Why: Git Bash strips backslashes from a bare path; forward slashes survive every host.
-    expect(command).toBe('C:/Users/ada/.orca/agent-hooks/zcode-hook.cmd')
+    expect(command).toBe('C:/Users/ada/.opka/agent-hooks/zcode-hook.cmd')
 
     const next = applyZCodeManagedHooks(
       {
@@ -195,7 +195,7 @@ describe('ZCodeHookService', () => {
     zcodeHookService.install()
     const scriptPath = join(
       hoisted.home,
-      '.orca',
+      '.opka',
       'agent-hooks',
       process.platform === 'win32' ? 'zcode-hook.cmd' : 'zcode-hook.sh'
     )

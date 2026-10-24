@@ -67,11 +67,11 @@ vi.mock('../../shared/secure-path-windows-acl', async (original) => {
       const outcome = real.writeRestrictedWindowsFile(path, contents)
       state.nativeOutcomes.push(outcome)
       if (state.fault === 'competing' && ++state.stages === 2) {
-        const competing = join(state.home, '.orca', 'competing-key')
+        const competing = join(state.home, '.opka', 'competing-key')
         expect(real.writeRestrictedWindowsFile(competing, envelope('synthetic-competing'))).toBe(
           true
         )
-        files.renameSync(competing, join(state.home, '.orca', 'zcode-plan-api-key.enc'))
+        files.renameSync(competing, join(state.home, '.opka', 'zcode-plan-api-key.enc'))
       }
       return state.reject ? false : outcome
     },
@@ -98,7 +98,7 @@ describe.skipIf(process.platform !== 'win32')('native Windows Coding Plan rollba
     state.stages = 0
     state.nativeOutcomes = []
     state.directories = []
-    keyPath = join(state.home, '.orca', 'zcode-plan-api-key.enc')
+    keyPath = join(state.home, '.opka', 'zcode-plan-api-key.enc')
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     vi.resetModules()
     store = await import('./zcode-plan-api-key-store')
@@ -138,7 +138,7 @@ describe.skipIf(process.platform !== 'win32')('native Windows Coding Plan rollba
           envelope(fault === 'competing' ? 'synthetic-competing' : 'synthetic-previous')
         )
       }
-      expect(fs.readdirSync(join(state.home, '.orca')).some((name) => name.endsWith('.tmp'))).toBe(
+      expect(fs.readdirSync(join(state.home, '.opka')).some((name) => name.endsWith('.tmp'))).toBe(
         false
       )
       expect(state.nativeOutcomes.every(Boolean)).toBe(true)

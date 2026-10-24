@@ -15,13 +15,19 @@ export const updaterApi = {
     ipcRenderer.invoke('updater:getLinuxPackageInstallInstructions'),
   showLinuxPackage: () => ipcRenderer.invoke('updater:showLinuxPackage'),
   listBuilds: (channel, options) => ipcRenderer.invoke('updater:listBuilds', channel, options),
-  quitAndInstall: (): Promise<void> =>
-    prepareAndInvokeUpdaterInstall(
+  quitAndInstall: async (): Promise<void> => {
+    const status: UpdateStatus | undefined = await ipcRenderer.invoke('updater:getStatus')
+    if (status?.manualInstaller) {
+      await ipcRenderer.invoke('updater:quitAndInstall')
+      return
+    }
+    await prepareAndInvokeUpdaterInstall(
       window,
       updaterQuitAbortRelay,
       () => ipcRenderer.invoke('updater:quitAndInstall'),
       awaitBeforeUnloadCheckpoint
-    ),
+    )
+  },
 
   onStatus: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => callback(status)

@@ -143,7 +143,7 @@ describe('activation record store', () => {
 })
 
 describe('installed build identity and readiness', () => {
-  const slot = { ...target, remoteInstallDir: '/home/u/.orca-remote/orcad-0.2.0+bb01' }
+  const slot = { ...target, remoteInstallDir: '/home/u/.opka-remote/orcad-0.2.0+bb01' }
   const expectation = { buildHash: BUILD_HASH, fullVersion: '0.2.0+bb01' }
 
   it('reads the 16-hex build hash the slot reports', async () => {
@@ -217,7 +217,7 @@ describe('installed build identity and readiness', () => {
           userDataDir: '/home/u/.orca',
           bindHost: '127.0.0.1',
           port: 7777,
-          activationRoot: '/home/u/.orca-remote/.orcad-activation-transaction'
+          activationRoot: '/home/u/.opka-remote/.orcad-activation-transaction'
         },
         expectation
       )
@@ -236,7 +236,7 @@ describe('installed build identity and readiness', () => {
           userDataDir: '/home/u/.orca',
           bindHost: '127.0.0.1',
           port: 7777,
-          activationRoot: '/home/u/.orca-remote/.orcad-activation-transaction'
+          activationRoot: '/home/u/.opka-remote/.orcad-activation-transaction'
         },
         expectation
       )

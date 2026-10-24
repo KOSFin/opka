@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { AppIdentity } from '../../shared/app-identity'
+import { PRODUCT_IDENTITY } from '../../shared/product-identity'
 
-const BASE_APP_NAME = 'Orca'
-const BASE_APP_USER_MODEL_ID = 'com.stablyai.orca'
+const BASE_APP_NAME = PRODUCT_IDENTITY.name
+const BASE_APP_USER_MODEL_ID = PRODUCT_IDENTITY.appId
 const MAX_LABEL_LENGTH = 80
 
 export type DevInstanceIdentity = AppIdentity & {

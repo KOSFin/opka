@@ -38,12 +38,12 @@ describe('legacy relay endpoints', () => {
     const command = posixLegacyRelayConnectCommand(
       '/home/me',
       '/usr/bin/node',
-      '/home/me/.orca-remote/relay-0.1.0+abc/relay-1234.sock'
+      '/home/me/.opka-remote/relay-0.1.0+abc/relay-1234.sock'
     )
     expect(command).toBe(
-      "cd '/home/me/.orca-remote/relay-0.1.0+abc' && '/usr/bin/node' relay.js --connect " +
-        "--sock-path '/home/me/.orca-remote/relay-0.1.0+abc/relay-1234.sock' " +
-        "--credential-file '/home/me/.orca-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
+      "cd '/home/me/.opka-remote/relay-0.1.0+abc' && '/usr/bin/node' relay.js --connect " +
+        "--sock-path '/home/me/.opka-remote/relay-0.1.0+abc/relay-1234.sock' " +
+        "--credential-file '/home/me/.opka-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
     )
     expect(command).not.toContain('--detached')
   })
@@ -56,9 +56,9 @@ describe('legacy relay endpoints', () => {
         '/tmp/.orca-relay-1000/relay-0.1.0+abc/relay-1234.sock'
       )
     ).toBe(
-      "cd '/home/a-very-long-name/.orca-remote/relay-0.1.0+abc' && 'node' relay.js --connect " +
+      "cd '/home/a-very-long-name/.opka-remote/relay-0.1.0+abc' && 'node' relay.js --connect " +
         "--sock-path '/tmp/.orca-relay-1000/relay-0.1.0+abc/relay-1234.sock' " +
-        "--credential-file '/home/a-very-long-name/.orca-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
+        "--credential-file '/home/a-very-long-name/.opka-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
     )
   })
 
@@ -77,7 +77,7 @@ describe('legacy relay endpoints', () => {
 describe('legacy relay endpoints on a Windows host', () => {
   const host = getRemoteHostPlatform('win32-x64')
   const version = 'relay-0.1.0+aaaaaaaaaaaa'
-  const dir = joinRemotePath(host, 'C:\\Users\\dev', '.orca-remote', version)
+  const dir = joinRemotePath(host, 'C:\\Users\\dev', '.opka-remote', version)
   const ours = relaySocketNameForInstanceId('desktop-a')
   const theirs = relaySocketNameForInstanceId('desktop-b')
   const [ourPipe] = windowsRelayPipePathsForSocketName(host, dir, ours)

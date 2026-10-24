@@ -22,6 +22,8 @@ import { AUTO_UPDATE_CHECK_INTERVAL_MS } from './updater-state'
 import { UpdaterDownloadInstall } from './updater-download-install'
 import { configureMacShipItScheduling } from './macos-shipit-scheduling'
 import type { PreQuitCleanupFailureMode, UpdateInstallMode } from './updater-state'
+import { PRODUCT_LATEST_DOWNLOAD_URL } from '../../shared/product-identity'
+import { usesManualMacInstaller } from './mac-beta-update-policy'
 
 export type UpdaterSetupOptions = {
   getLastUpdateCheckAt?: () => number | null
@@ -145,7 +147,9 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     }
 
     const autoUpdater = this.getAutoUpdater()
-    configureMacShipItScheduling()
+    if (!usesManualMacInstaller()) {
+      configureMacShipItScheduling()
+    }
     autoUpdater.autoDownload = false
     if (this.activeUpdateSource === 'release') {
       autoUpdater.allowDowngrade = false
@@ -164,7 +168,7 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     if (this.activeUpdateSource === 'release') {
       autoUpdater.setFeedURL({
         provider: 'generic',
-        url: 'https://github.com/stablyai/orca/releases/latest/download'
+        url: PRODUCT_LATEST_DOWNLOAD_URL
       })
     }
     if (this.autoUpdaterInitialized) {

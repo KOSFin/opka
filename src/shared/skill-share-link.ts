@@ -12,7 +12,7 @@ export function parseSkillShareId(value: string): string | null {
   } catch {
     return null
   }
-  if (url.protocol === 'orca:') {
+  if (url.protocol === 'orca:' || url.protocol === 'opka:') {
     const match = `${url.host}${url.pathname}`.match(/^skills\/share\/([A-Za-z0-9_-]{1,128})\/?$/)
     return match?.[1] ?? null
   }
@@ -30,7 +30,7 @@ export function parseSkillShareId(value: string): string | null {
 export function skillShareIdFromArguments(argv: readonly string[]): string | null {
   for (const value of argv) {
     const id = parseSkillShareId(value)
-    if (id && (value.includes('/skills/share/') || value.startsWith('orca:'))) {
+    if (id && (value.includes('/skills/share/') || /^(?:orca|opka):/.test(value))) {
       return id
     }
   }

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { refreshV1, refreshV2 } = vi.hoisted(() => ({
-  refreshV1: vi.fn<() => void>(),
-  refreshV2: vi.fn<() => void>()
+  refreshV1: vi.fn<(includeUserConfig?: boolean) => void>(),
+  refreshV2: vi.fn<(includeUserConfig?: boolean) => void>()
 }))
 vi.mock('./hook-service', () => ({
   openCodeHookService: { refreshInstalledPlugins: refreshV1 },
@@ -17,10 +17,12 @@ describe('refreshInstalledOpenCodeStatusPlugins', () => {
     refreshV2.mockClear()
   })
 
-  it('refreshes both variants by default', () => {
+  it('refreshes both variants without writing the user-global config', () => {
     refreshInstalledOpenCodeStatusPlugins(null)
     expect(refreshV1).toHaveBeenCalledTimes(1)
     expect(refreshV2).toHaveBeenCalledTimes(1)
+    expect(refreshV1).toHaveBeenCalledWith(false)
+    expect(refreshV2).toHaveBeenCalledWith(false)
   })
 
   it('touches nothing while agent status hooks are off', () => {

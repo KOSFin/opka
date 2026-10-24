@@ -6,7 +6,7 @@
  * entry, with a Codex trust session each time. A form changes only with a
  * bump here, and a build never rewrites an entry of a higher form.
  */
-export const CODEX_HOOK_COMMAND_FORM = 1
+export const CODEX_HOOK_COMMAND_FORM = 2
 
 const FORM_MARKER = /orca-agent-hook-form=(\d+)/
 
@@ -21,7 +21,7 @@ const WINDOWS_BARE_PATH = /^[A-Za-z0-9_.:/~-]+$/
 
 function buildPosixCommand(): string {
   const rootScript = '"${ORCA_AGENT_HOOK_ROOT-}/agent-hooks/codex-hook.sh"'
-  const sharedScript = '"${HOME-}/.orca/agent-hooks/codex-hook.sh"'
+  const sharedScript = '"${HOME-}/.opka/agent-hooks/codex-hook.sh"'
   // Why the root branch: dormant until Orca sets ORCA_AGENT_HOOK_ROOT, so the
   // bytes need not change when it does. The shared branch needs a hook port,
   // so a pane with hooks off and every shell outside Orca only drain stdin.
@@ -69,7 +69,7 @@ function buildWindowsCommand(scriptPath: string, env: WindowsDirectoryEnv): stri
 }
 
 /**
- * `scriptPath` is the shared script at `~/.orca/agent-hooks`; only Windows forms
+ * `scriptPath` is the shared script at `~/.opka/agent-hooks`; only Windows forms
  * embed it. On Windows the bytes depend only on it and on %SystemRoot% (else
  * %ComSpec%), both fixed per machine.
  */

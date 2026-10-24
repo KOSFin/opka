@@ -76,12 +76,12 @@ export function UpdateCard(): React.JSX.Element | null {
     return () => window.clearTimeout(timer)
   }, [shouldAutoDismissLatest])
   useEffect(() => {
-    if (status.state === 'downloaded' && hasStartedDownload.current) {
+    if (status.state === 'downloaded' && !status.manualInstaller && hasStartedDownload.current) {
       void window.api.updater.quitAndInstall().catch((error) => {
         setInstallError(String((error as Error)?.message ?? error))
       })
     }
-  }, [status.state])
+  }, [status.state, status.manualInstaller])
 
   const prefersReducedMotion = usePrefersReducedMotion()
   const clearAnimationTimers = useCallback(() => {
@@ -235,6 +235,7 @@ export function UpdateCard(): React.JSX.Element | null {
       ? 'animate-update-card-exit'
       : 'animate-update-card-enter'
   const showReassurance =
+    !status.manualInstaller &&
     !reassuranceSeen &&
     ((status.state === 'available' && !status.externallyManaged) || status.state === 'downloading')
   return (

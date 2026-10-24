@@ -53,7 +53,7 @@ describe.skipIf(process.platform === 'win32')('snapshot commands on a real shell
     base = mkdtempSync(join(tmpdir(), 'orcad-snapshot-shell-'))
     root = join(base, 'root')
     snapshot = join(base, 'snapshots', 'pre-1')
-    remoteBase = join(base, '.orca-remote')
+    remoteBase = join(base, '.opka-remote')
     mkdirSync(join(root, 'profiles'), { recursive: true })
     mkdirSync(join(root, 'daemon'), { recursive: true })
     writeFileSync(join(root, 'profiles', 'p.json'), 'old')

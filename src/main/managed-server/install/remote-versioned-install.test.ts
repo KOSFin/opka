@@ -463,7 +463,7 @@ describe('gcOldRemoteInstallVersions', () => {
   // Stands in for orcad's liveness probe: only DEAD frees a dir, and an unanswered probe keeps it.
   const collectOldVersions = (
     remoteHome = '/home/u',
-    currentDir = '/home/u/.orca-remote/orcad-0.1.0+bbb',
+    currentDir = '/home/u/.opka-remote/orcad-0.1.0+bbb',
     host?: RemoteHostPlatform
   ): Promise<void> =>
     gcOldRemoteInstallVersions(conn, ORCAD_INSTALL_MODEL, remoteHome, currentDir, host, {
@@ -508,7 +508,7 @@ describe('gcOldRemoteInstallVersions', () => {
     expect(lastCmd).toContain('orcad-0.1.0+aaa.gc-tombstone')
     const commands = mockExec.mock.calls.map(([, command]) => command)
     expect(
-      commands.some((command) => command === "rm -rf '/home/u/.orca-remote/orcad-0.1.0+aaa'")
+      commands.some((command) => command === "rm -rf '/home/u/.opka-remote/orcad-0.1.0+aaa'")
     ).toBe(false)
   })
 
@@ -532,7 +532,7 @@ describe('gcOldRemoteInstallVersions', () => {
       .map(([, command]) => command)
       .filter((command) => command.startsWith('rm -rf'))
     expect(removeCommands).toEqual([
-      "rm -rf '/home/u/.orca-remote/orcad-0.1.0+abc.gc-tombstone.123.456'"
+      "rm -rf '/home/u/.opka-remote/orcad-0.1.0+abc.gc-tombstone.123.456'"
     ])
   })
 
@@ -544,7 +544,7 @@ describe('gcOldRemoteInstallVersions', () => {
       )
       .mockResolvedValueOnce('')
 
-    await collectOldVersions('C:/Users/u', 'C:/Users/u/.orca-remote/orcad-0.1.0+bbb', windows)
+    await collectOldVersions('C:/Users/u', 'C:/Users/u/.opka-remote/orcad-0.1.0+bbb', windows)
 
     const removeScript = decodePowerShellCommand(mockExec.mock.calls[1]?.[1] ?? '')
     expect(removeScript).toContain('orcad-v0.1.0.gc-tombstone.123.456')
@@ -675,7 +675,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
   it('does not consider the current dir as a GC candidate', async () => {
     mockExec.mockResolvedValueOnce('orcad-0.1.0+aaa\n')
-    await collectOldVersions('/home/u', '/home/u/.orca-remote/orcad-0.1.0+aaa')
+    await collectOldVersions('/home/u', '/home/u/.opka-remote/orcad-0.1.0+aaa')
     expect(mockExec.mock.calls.length).toBe(1) // only the listing
   })
 
@@ -721,7 +721,7 @@ describe('gcOldRemoteInstallVersions', () => {
     expect(
       commands.some(
         (command) =>
-          command.startsWith("rm -rf '/home/u/.orca-remote/orcad-0.1.0+aaa'") &&
+          command.startsWith("rm -rf '/home/u/.opka-remote/orcad-0.1.0+aaa'") &&
           !command.includes('.install-lock')
       )
     ).toBe(false)

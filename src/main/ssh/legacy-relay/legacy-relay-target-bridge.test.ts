@@ -619,7 +619,7 @@ describe('one target’s legacy relay bridge', () => {
   })
 
   describe('two relays that list the same relay id', () => {
-    const OTHER: LegacyRelayEndpoint = { ...ENDPOINT, endpoint: '/home/me/.orca-remote/b.sock' }
+    const OTHER: LegacyRelayEndpoint = { ...ENDPOINT, endpoint: '/home/me/.opka-remote/b.sock' }
     let other: FakeRelay
     const clientOf = (endpoint: LegacyRelayEndpoint) =>
       (endpoint.endpoint === OTHER.endpoint ? other : relay).clients.at(-1)!

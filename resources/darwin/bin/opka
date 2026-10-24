@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OPKA_SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$OPKA_SOURCE" ]; do
+  OPKA_SOURCE_DIR="$(cd -P "$(dirname "$OPKA_SOURCE")" && pwd)"
+  OPKA_SOURCE="$(readlink "$OPKA_SOURCE")"
+  [[ "$OPKA_SOURCE" != /* ]] && OPKA_SOURCE="$OPKA_SOURCE_DIR/$OPKA_SOURCE"
+done
+OPKA_CONTENTS="$(cd -P "$(dirname "$OPKA_SOURCE")/../.." && pwd)"
+export ORCA_USER_DATA_PATH="${ORCA_USER_DATA_PATH:-${HOME:?}/Library/Application Support/Opka}"
+export ORCA_NODE_OPTIONS="${NODE_OPTIONS-}"
+export ORCA_NODE_REPL_EXTERNAL_MODULE="${NODE_REPL_EXTERNAL_MODULE-}"
+unset NODE_OPTIONS NODE_REPL_EXTERNAL_MODULE
+ELECTRON_RUN_AS_NODE=1 exec "$OPKA_CONTENTS/MacOS/Opka" \
+  "$OPKA_CONTENTS/Resources/app.asar.unpacked/out/cli/index.js" "$@"

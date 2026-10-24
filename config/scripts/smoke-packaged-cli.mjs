@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
@@ -13,7 +13,7 @@ function readAppDirArg(argv) {
     return explicit.slice('--app-dir='.length)
   }
   if (process.platform === 'darwin') {
-    return 'dist/mac-arm64/Orca.app'
+    return 'dist/mac-arm64/Opka.app'
   }
   if (process.platform === 'win32') {
     return 'dist/win-unpacked'
@@ -39,7 +39,15 @@ let smokeFailure = null
 try {
   await cp(appDir, copiedAppDir, { recursive: true, verbatimSymlinks: true })
   const cliPath = getPackagedCliPath(copiedAppDir)
-  const env = { ...process.env, NODE_PATH: '' }
+  const home = join(tempRoot, 'home')
+  await mkdir(home)
+  const env = {
+    ...process.env,
+    NODE_PATH: '',
+    HOME: home,
+    USERPROFILE: home,
+    ORCA_USER_DATA_PATH: join(tempRoot, 'profile')
+  }
   delete env.ORCA_CLI_CWD
   const run = (args) =>
     execFileAsync(cliPath, args, {

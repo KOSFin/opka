@@ -27,7 +27,7 @@ let script = ''
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'orcad-win-state-'))
   root = join(dir, '.orca')
-  snapshot = join(dir, '.orca-remote', 'orcad-snapshots', 'pre-0.2.0+bb01-1')
+  snapshot = join(dir, '.opka-remote', 'orcad-snapshots', 'pre-0.2.0+bb01-1')
   script = join(dir, 'orcad-host-script.js')
   writeFileSync(script, ORCAD_WINDOWS_HOST_SCRIPT)
   mkdirSync(join(root, 'profiles', 'p1'), { recursive: true })

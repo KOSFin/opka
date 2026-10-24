@@ -16,7 +16,7 @@ import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 const conn = {} as SshConnection
 const host = getRemoteHostPlatform('linux-x64')
 const home = '/home/u'
-const currentDir = `${home}/.orca-remote/orcad-0.1.0+bbb`
+const currentDir = `${home}/.opka-remote/orcad-0.1.0+bbb`
 const mockExec = vi.mocked(execCommand)
 
 beforeEach(() => {

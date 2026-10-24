@@ -40,7 +40,7 @@ vi.mock('./legacy-relay-endpoints', () => ({
     exhaustive: true,
     endpoints: [
       {
-        endpoint: '/home/me/.orca-remote/relay-x.sock',
+        endpoint: '/home/me/.opka-remote/relay-x.sock',
         connectCommand: 'node relay.js --connect',
         wrapCommand: true,
         host: getRemoteHostPlatform('linux-x64'),

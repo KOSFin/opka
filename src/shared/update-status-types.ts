@@ -113,7 +113,11 @@ export type UpdateStatus = (
       /** Optional so older paired clients retain the diagnostic and install retry. */
       installBlock?: UpdateInstallBlock
     }
-) & { source?: UpdateSource }
+) & {
+  source?: UpdateSource
+  /** Unsigned Mac beta: download/open a DMG, never Squirrel staging or automatic replacement. */
+  manualInstaller?: boolean
+}
 
 export type ReleaseBuildListResult =
   | { ok: true; channel: ReleaseChannel; builds: ReleaseBuild[] }

@@ -84,7 +84,7 @@ export function resolveClaudeAgentTeamsShimBin(
 }
 
 function defaultShimRoot(): string {
-  return join(homedir(), '.orca', 'claude-agent-teams-bin')
+  return join(homedir(), '.opka', 'claude-agent-teams-bin')
 }
 
 function bundledLauncherPath(): string | null {

@@ -541,10 +541,12 @@ describe('electron-builder config', () => {
     const configPath = require.resolve('../electron-builder.config.cjs')
     const originalLocalVersion = process.env.ORCA_LOCAL_BUILD_VERSION
     const originalMacRelease = process.env.ORCA_MAC_RELEASE
+    const originalTeam = process.env.OPKA_MAC_TEAM_ID
     try {
       delete require.cache[configPath]
       process.env.ORCA_LOCAL_BUILD_VERSION = '1.4.159-local.123.abc'
       process.env.ORCA_MAC_RELEASE = '1'
+      process.env.OPKA_MAC_TEAM_ID = 'OPKATEST01'
       expect(require('../electron-builder.config.cjs').extraMetadata).toBeUndefined()
     } finally {
       if (originalLocalVersion === undefined) {
@@ -556,6 +558,11 @@ describe('electron-builder config', () => {
         delete process.env.ORCA_MAC_RELEASE
       } else {
         process.env.ORCA_MAC_RELEASE = originalMacRelease
+      }
+      if (originalTeam === undefined) {
+        delete process.env.OPKA_MAC_TEAM_ID
+      } else {
+        process.env.OPKA_MAC_TEAM_ID = originalTeam
       }
       delete require.cache[configPath]
       require('../electron-builder.config.cjs')
