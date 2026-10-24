@@ -139,6 +139,7 @@ jobs:
           tests/e2e/fork-project-task-scope.spec.ts
           tests/e2e/fork-vibe-board.spec.ts
           tests/e2e/fork-five-projects.spec.ts
+          tests/e2e/fork-beta-update.spec.ts
           --config tests/playwright.config.ts --project electron-headless --workers=1
       - name: Save isolated failure evidence
         if: failure()

@@ -8,9 +8,9 @@ export function refreshInstalledOpenCodeStatusPlugins(
   settings: ManagedHookDetectionSettings
 ): void {
   if (isAgentStatusHooksEnabledForAgent(settings, 'opencode')) {
-    openCodeHookService.refreshInstalledPlugins()
+    openCodeHookService.refreshInstalledPlugins(false)
   }
   if (isAgentStatusHooksEnabledForAgent(settings, 'opencode2')) {
-    openCode2HookService.refreshInstalledPlugins()
+    openCode2HookService.refreshInstalledPlugins(false)
   }
 }

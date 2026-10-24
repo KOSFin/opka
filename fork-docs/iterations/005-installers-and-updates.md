@@ -2,7 +2,7 @@
 
 ## Статус и следующий шаг
 
-Пользователь выбрал beta: уведомление → скачать и проверить DMG → открыть установщик → вручную подтвердить замену Opka.app. Apple Developer/Developer ID отсутствует; штатный Squirrel auto-install не имитируем. В codex/installers-updates реализуются identity/profile/CLI/feed, ручной Mac installer flow и CI полной упаковки Mac arm64/Linux x64. TypeScript и первые 18 installer/CLI unit-тестов прошли; расширенная регрессия ещё выполняется. Installer/release/install/update пока не объявляются готовыми. Следующий шаг — завершить проверки кода, hidden Electron и packaging CI в PR, затем проверять реальные артефакты и изолированную установку. Не устанавливать текущий незавершённый вариант поверх пользовательской среды.
+Пользователь выбрал beta: уведомление → скачать и проверить DMG → открыть установщик → вручную подтвердить замену Opka.app. Apple Developer/Developer ID отсутствует; штатный Squirrel auto-install не имитируем. Изменения опубликованы в PR #2, codex/installers-updates. Локальная регрессия, TypeScript и hidden Electron beta flow прошли; первая packaging CI выявила два блокера, исправления готовятся к повторному прогону. Installer/release/install/update пока не объявляются готовыми. Следующий шаг — получить успешный полный pr.yml:verify для актуального head, проверить реальные пакеты и только затем выпуск/изолированную установку. Не устанавливать незавершённый вариант поверх пользовательской среды.
 
 ## План и границы апрува
 
@@ -54,3 +54,12 @@
 - В дополнительной shell-проверке найден старый путь в test fixture; исправлен. Для переноса Codex hook command в ~/.opka его frozen form поднят до 2. Captured form-1 command/hash из реального Codex сохранён без изменений как compatibility fixture, а не переписан под новый путь.
 - Проверены дополнительные ownership точки: notifications, computer-use helper, press-and-hold preferences и serve launchd labels переводятся на Opka ID; это исходники/сборочные outputs, не изменения работающей Orca.
 - Следующий этап — PR и выполнение packaging workflows на GitHub. Не публиковать beta, не устанавливать runtime и не утверждать install/update parity, пока CI, реальные payloads и изолированные проверки не пройдены.
+
+### 2026-10-24 13:48:10 +05:00 Первый CI, исправление упаковки и скрытый beta flow
+
+- PR #2 опубликован с сохранённой upstream историей. Run 40075215632 прошёл types/quality, desktop assets macOS/Linux/Windows, hidden Electron и все native server lanes; aggregate закономерно failed: неверный фильтр несуществующего теста и чтение удалённой временной директории template builder при упаковке Linux. Mac packaging ещё не запускался из-за зависимости. Это не успешная доставка.
+- Фильтры исправлены/дополнены реальными тестами. Linux package использует существующий полный build-orcad-node в отдельной временной директории; Node размещается рядом со slot по штатному packagedNodeRuntimePath, проверяется hash и smoke-load. Удаляется только созданная этим запуском временная директория.
+- Найден и исправлен preload shutdown bug: Open installer раньше мог готовить renderer к выходу до main-handler. Manual flow теперь обходит restart preparation; 11 preload/recovery tests прошли, отдельный hidden Electron сценарий download→open прошёл и подтвердил, что все окна остаются скрытыми. IPC в GUI fixture подменён; это не проверка скачивания настоящего DMG. Downloader checksum/tamper проверки выполнены отдельно unit-тестами.
+- Hidden screenshots просмотрены: downloaded card читаема; available screenshot попал в CSS entrance animation, для CI evidence capture добавлено отключение анимации. Из manual beta убрано непроверенное обещание сохранения terminal sessions во время замены unsigned app.
+- Повторный pnpm test:fork и pnpm tc прошли, changed-code quality — 0 findings по 275 файлам. Дополнительный аудит обнаружил startup refresh глобального OpenCode plugin: refresh теперь ограничивается profile overlays, не переписывая plugin другой установки. Отдельная проверка этой правки выполняется перед push.
+- Рабочая Orca, старый сервер, реальные аккаунты/секреты и сервисы не менялись. Установка на новый сервер ещё не выполнялась; следующий шаг — повторный CI на новом head, реальные release payloads и документированный install/update/rollback.

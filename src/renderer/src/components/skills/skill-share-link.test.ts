@@ -7,6 +7,7 @@ describe('parseSkillShareId', () => {
     expect(parseSkillShareId('https://app.orca.dev/skills/share/share_123')).toBe('share_123')
     expect(parseSkillShareId('https://share.onorca.dev/skills/share/share_123/')).toBe('share_123')
     expect(parseSkillShareId('orca://skills/share/share_123')).toBe('share_123')
+    expect(parseSkillShareId('opka://skills/share/share_123')).toBe('share_123')
   })
 
   it('rejects attacker origins and lookalike paths', () => {

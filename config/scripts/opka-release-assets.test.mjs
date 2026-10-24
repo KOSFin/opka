@@ -4,7 +4,13 @@ import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { completeRelease, fileDigest, validateBetaVersion } from './opka-release-assets.mjs'
+import {
+  completeRelease,
+  fileDigest,
+  serverPackagePaths,
+  validateBetaVersion
+} from './opka-release-assets.mjs'
+import { NODE_RUNTIME_ASSETS } from '../../src/shared/node-runtime-pin.ts'
 
 const roots = []
 afterEach(async () => {
@@ -37,6 +43,19 @@ async function releaseFixture() {
   return root
 }
 describe('Opka release assets', () => {
+  it('uses a full slot beside its pinned runtime rather than deleted template scratch output', () => {
+    const root = join(tmpdir(), 'opka-package-fixture')
+    expect(serverPackagePaths(root)).toEqual({
+      slot: join(root, 'orcad'),
+      node: join(
+        root,
+        'runtimes',
+        `node-${NODE_RUNTIME_ASSETS['linux-x64-glibc'].executableSha256}`,
+        'bin',
+        'node'
+      )
+    })
+  })
   it('requires an explicit beta version rather than a local or stable build', () => {
     expect(validateBetaVersion('0.1.0-rc.1')).toBe('0.1.0-rc.1')
     for (const bad of ['', '0.1.0', '0.1.0-rc.0', '0.1.0-local.1', '../a', '$(command)']) {

@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { basename, join, resolve } from 'node:path'
 import { parse, stringify } from 'yaml'
 import { NODE_RUNTIME_ASSETS } from '../../src/shared/node-runtime-pin.ts'
 import { productReleaseDownloadUrl } from '../../src/shared/product-identity.ts'
 import { isDirectInvocation } from './script-entry-detection.mjs'
+import { packagedNodeRuntimePath } from './build-orcad-node.mjs'
 
 const target = 'linux-x64-glibc'
 const packageNames = [
@@ -99,18 +100,37 @@ async function prepareMac(directory, version, commit) {
   ])
 }
 
+export function serverPackagePaths(root) {
+  const slot = join(root, 'orcad')
+  return { slot, node: packagedNodeRuntimePath(slot, target) }
+}
+
 async function prepareServer(directory, version, commit) {
   if (process.platform !== 'linux' || process.arch !== 'x64') {
     throw new Error('Server qualification requires Linux x64')
   }
-  const stage = resolve('out/.orcad-template-build', target)
+  const stage = await mkdtemp(resolve('out/.opka-server-package-'))
+  try {
+    await packageServer(stage, directory, version, commit)
+  } finally {
+    await rm(stage, { recursive: true, force: true })
+  }
+}
+
+async function packageServer(stage, directory, version, commit) {
+  const paths = serverPackagePaths(stage)
+  // Template scratch directories are removed by its builder; use the same full slot builder.
+  execFileSync(
+    process.execPath,
+    [resolve('config/scripts/build-orcad-node.mjs'), '--target', target, '--out-dir', paths.slot],
+    { stdio: 'inherit', env: { ...process.env, ORCAD_OMIT_AGENT_BROWSER: '1' } }
+  )
   const runtime = NODE_RUNTIME_ASSETS[target]
   const node = join('runtimes', `node-${runtime.executableSha256}`, 'bin', 'node')
-  if ((await fileDigest(join(stage, node))) !== runtime.executableSha256) {
+  if ((await fileDigest(paths.node)) !== runtime.executableSha256) {
     throw new Error('Server Node pin disagrees')
   }
-  // The full package was produced by build-orcad-template, not assembled from a partial manifest.
-  execFileSync(join(stage, node), [join(stage, 'orcad', 'orcad.js'), '--orcad-smoke-load-check'], {
+  execFileSync(paths.node, [join(paths.slot, 'orcad.js'), '--orcad-smoke-load-check'], {
     stdio: 'inherit'
   })
   await cp(resolve('LICENSE'), join(stage, 'LICENSE'))

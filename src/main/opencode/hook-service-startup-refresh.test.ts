@@ -77,6 +77,18 @@ describe('OpenCodeHookService.refreshInstalledPlugins (app start)', () => {
     expect(existsSync(join(userDataDir, 'opencode2-config-overlays'))).toBe(false)
   })
 
+  it('can refresh profile overlays while leaving another app’s global plugin untouched', () => {
+    const globalPlugins = join(resolveOpenCodeConfigDirectory(), 'plugins')
+    const overlayPlugins = join(userDataDir, 'opencode2-config-overlays', 'owned', 'plugins')
+    for (const dir of [globalPlugins, overlayPlugins]) {
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, PLUGIN), '// previous plugin')
+    }
+    openCode2HookService.refreshInstalledPlugins(false)
+    expect(readFileSync(join(globalPlugins, PLUGIN), 'utf8')).toBe('// previous plugin')
+    expect(readFileSync(join(overlayPlugins, PLUGIN), 'utf8')).toBe(getOpenCode2PluginSource())
+  })
+
   it('leaves a current install untouched so nothing reloads', () => {
     const pluginsDir = join(resolveOpenCodeConfigDirectory(), 'plugins')
     mkdirSync(join(pluginsDir, 'orca-opencode2-status-tui'), { recursive: true })

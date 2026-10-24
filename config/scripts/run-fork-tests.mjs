@@ -5,11 +5,12 @@ import { isDirectInvocation } from './script-entry-detection.mjs'
 const root = resolve(import.meta.dirname, '../..')
 export const FORK_TEST_FILTERS = [
   'src/main/updater',
+  'src/preload/updater-manual-installer.test.ts',
   'src/main/codex/codex-hook-command-form.test.ts',
   'src/main/codex/codex-real-home-hook-entries.test.ts',
   'src/main/codex/codex-interrupt-hook-trust.test.ts',
   'src/shared/pairing.test.ts',
-  'src/shared/skill-share-link.test.ts',
+  'src/renderer/src/components/skills/skill-share-link.test.ts',
   'src/main/worktree-history-file-path.test.ts',
   'src/main/macos-press-and-hold-default.test.ts',
   'src/renderer/src/components/maintenance/update-card/MacBetaUpdateContent.test.tsx',
@@ -24,6 +25,8 @@ export const FORK_TEST_FILTERS = [
   'src/main/agent-hooks/managed-hook-install-lock.test.ts',
   'src/main/agent-hooks/installer-utils.test.ts',
   'src/main/claude/post-compact-hook-command.test.ts',
+  'src/main/opencode/hook-service-startup-refresh.test.ts',
+  'src/main/opencode/opencode-status-plugin-startup-refresh.test.ts',
   'config/scripts/opka-release-assets.test.mjs',
   'src/main/project-groups/',
   'src/main/project-tasks/',

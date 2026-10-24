@@ -30,6 +30,14 @@ export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
     }
 
     if (usesManualMacInstaller()) {
+      if (this.updateInstallMode !== 'interactive') {
+        this.sendStatus({
+          state: 'error',
+          message: 'Open the Mac beta installer from the desktop app.',
+          retryable: false
+        })
+        return
+      }
       const version = 'version' in this.currentStatus ? this.currentStatus.version : undefined
       if (version) {
         void this.betaInstaller
