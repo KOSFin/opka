@@ -81,6 +81,12 @@ describe('Opka release assets', () => {
     expect(pr.jobs.installers.uses).toBe('./.github/workflows/opka-installers.yml')
     expect(installers.permissions).toEqual({ contents: 'read' })
     expect(installers.jobs.mac.env.CSC_IDENTITY_AUTO_DISCOVERY).toBe('false')
+    expect(installers.jobs.mac.env.CSC_FOR_PULL_REQUEST).toBe('true')
+    expect(
+      installers.jobs.mac.steps.find(
+        (step) => step.name === 'Package without publishing or claiming Developer ID signing'
+      ).run
+    ).toContain('--config.mac.identity=-')
     expect(installers.jobs.mac.env.ORCA_REQUIRE_ORCAD_TEMPLATE).toBe('1')
     expect(Object.keys(release.on)).toEqual(['workflow_dispatch'])
     expect(release.jobs.admission.if).toBe("github.ref == 'refs/heads/main'")

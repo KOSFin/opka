@@ -2,7 +2,7 @@
 
 ## Статус и следующий шаг
 
-Пользователь выбрал beta: уведомление → скачать и проверить DMG → открыть установщик → вручную подтвердить замену Opka.app. Apple Developer/Developer ID отсутствует; штатный Squirrel auto-install не имитируем. Изменения опубликованы в PR #2, codex/installers-updates. Локальная регрессия, TypeScript и hidden Electron beta flow прошли; первая packaging CI выявила два блокера, исправления готовятся к повторному прогону. Installer/release/install/update пока не объявляются готовыми. Следующий шаг — получить успешный полный pr.yml:verify для актуального head, проверить реальные пакеты и только затем выпуск/изолированную установку. Не устанавливать незавершённый вариант поверх пользовательской среды.
+Пользователь выбрал beta: уведомление → скачать и проверить DMG → открыть установщик → вручную подтвердить замену Opka.app. Apple Developer/Developer ID отсутствует; штатный Squirrel auto-install не имитируем. Изменения опубликованы в PR #2, codex/installers-updates. Локальная регрессия, TypeScript, hidden Electron и полная native server qualification прошли. Linux archive собран и проверен по provenance/hash. DMG/ZIP созданы в CI, но проверка outer bundle signature нашла пропуск ad-hoc signing в PR; добавляется явный штатный ad-hoc режим. Installer/release/install/update пока не объявляются готовыми. Следующий шаг — успешный полный pr.yml:verify на новом head, проверка Mac payload, затем выпуск/изолированная установка. Не устанавливать незавершённый вариант поверх пользовательской среды.
 
 ## План и границы апрува
 
@@ -77,3 +77,10 @@
 - На 92002a89eb локально прошли 190 suites, 2012 tests (15 skipped), плюс 3 fixture tests. Changed-code quality — 0 findings по 285 файлам. GitHub types, regression, desktop assets и hidden Electron этого head прошли.
 - Native server lanes run 40080111360 остановились на одном устаревшем ожидании orcad-push-startup.test.ts: оно требовало прежней автоматической установки user-global hooks. Тест заменён проверкой запрета этих записей, разрешённого hash observation и сохранённой подписки; suite 7/7 прошла локально. Добавлена в обычный fork gate, чтобы следующий такой drift обнаруживался раньше. Никакой required check не отключён и не обойдён; новый полный CI обязателен.
 - Реальные Mac/Linux installer artifacts, published release, установка и A→B ещё ожидают квалификации. Новая серверная директория/пользователь пока отсутствуют; проверено read-only, сервисы не создавались. Следующий шаг — закончить полный packaging gate, не расширяя UI и не меняя рабочую среду.
+
+### 2026-10-24 14:25:30 +05:00 Реальный Linux package и проверка подписи Mac bundle
+
+- Run 40080434229 на ae5a7f9c94 прошёл types, regression, desktop assets, hidden GUI и всю native server matrix, включая Windows x64/arm64 и Intel Mac. Полный template со всеми 9 targets и Linux archive успешно собраны.
+- Серверный CI artifact скачан локально: SHA-256 совпал с provenance, source commit совпал с квалифицировавшимся PR merge tree. Проверен inventory: pinned Node, orcad launcher, runtime markers, native PTY, CLI, LICENSE. Это проверка пакета, не установка. Кратковременный TLS timeout GitHub API прошёл при следующем запросе; не смешивать сетевую ошибку с build failure.
+- Mac CI создал DMG/ZIP и подтвердил packaged daemon PTY, helper и все server template targets. Финальная codesign --verify --deep --strict отклонила outer bundle: electron-builder специально пропустил signing в PR, оставив устаревшую Electron signature после изменения ресурсов. Проверка не ослаблялась.
+- Packaging теперь явно выбирает штатную identity '-' и разрешает только этот ad-hoc signing в PR. Keychain auto-discovery выключен, signing secrets не передаются, Developer ID/notarization по-прежнему отсутствуют. CLI parser локально подтвердил merge config и identity '-'; 8 release/CI contract tests прошли. Требуется повторный полный CI; публикация, установка и пользовательское подтверждение Mac ещё не выполнены.

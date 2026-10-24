@@ -31,6 +31,8 @@ jobs:
       OPKA_VERSION: ${{ inputs.version }}
       ORCA_LOCAL_BUILD_VERSION: ${{ inputs.version }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # Ad-hoc only: no certificate secrets or keychain discovery in PR jobs.
+      CSC_FOR_PULL_REQUEST: 'true'
       ORCA_REQUIRE_ORCAD_TEMPLATE: '1'
       ORCA_COMPUTER_MACOS_SIGN_IDENTITY: '-'
       ORCA_KEYBOARD_LAYOUT_MACOS_SIGN_IDENTITY: '-'
@@ -57,7 +59,7 @@ jobs:
           pnpm run build:notification-status-macos
           pnpm run ensure:electron-runtime
       - name: Package without publishing or claiming Developer ID signing
-        run: pnpm exec electron-builder --config config/electron-builder.config.cjs --mac dmg zip --arm64 --publish never
+        run: pnpm exec electron-builder --config config/electron-builder.config.cjs --config.mac.identity=- --mac dmg zip --arm64 --publish never
       - name: Qualify release files and record provenance
         run: node config/scripts/opka-release-assets.mjs mac dist
       - name: Exercise the packaged CLI from a disposable home
