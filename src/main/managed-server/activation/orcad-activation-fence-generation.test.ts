@@ -51,7 +51,7 @@ describe.skipIf(process.platform === 'win32')('a superseded activation fence hol
   it('can neither act nor release once a successor took its fence over', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orcad-fence-gen-'))
     homes.push(home)
-    const root = join(home, '.orca-remote', '.orcad-activation-transaction')
+    const root = join(home, '.opka-remote', '.orcad-activation-transaction')
     const fence = join(root, '.install-lock')
     const journal = join(root, 'transaction.json')
     const launched = join(home, 'launched-by-stale-holder')
@@ -114,7 +114,7 @@ describe.skipIf(process.platform === 'win32')('a superseded activation fence hol
   it('leaves a successor’s journal and lock when its own release resumes after a stall', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orcad-fence-release-'))
     homes.push(home)
-    const root = join(home, '.orca-remote', '.orcad-activation-transaction')
+    const root = join(home, '.opka-remote', '.orcad-activation-transaction')
     const fence = join(root, '.install-lock')
     const journal = join(root, 'transaction.json')
     const bin = join(home, 'bin')
@@ -171,7 +171,7 @@ describe.skipIf(process.platform === 'win32')('a superseded activation fence hol
   it('refuses a superseded run’s state mutation before it touches profile state', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orcad-fence-mutation-'))
     homes.push(home)
-    const base = join(home, '.orca-remote')
+    const base = join(home, '.opka-remote')
     const root = join(home, 'root')
     const lockDir = join(base, '.orcad-activation-transaction', '.install-lock')
     mkdirSync(lockDir, { recursive: true })

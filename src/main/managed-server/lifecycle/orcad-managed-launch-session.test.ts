@@ -46,7 +46,7 @@ vi.mock('./orcad-managed-runtime-context', () => ({
     remoteHome: '/Users/dev',
     userDataDir: '/Users/dev/.orca'
   }),
-  managedOrcadInstallDir: () => '/Users/dev/.orca-remote/orcad-1.0.0'
+  managedOrcadInstallDir: () => '/Users/dev/.opka-remote/orcad-1.0.0'
 }))
 vi.mock('../install/orcad-remote-context', () => ({
   resolveOrcadRemoteContext: async () => ({

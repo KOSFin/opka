@@ -3,6 +3,7 @@ import { statusesEqual } from '../updater-fallback'
 import type { UpdateCheckOptions, UpdateStatus } from '../../shared/update-status-types'
 import type { UpdateCheckVariant } from './updater-types'
 import { UpdaterState as BaseUpdaterState } from './updater-state'
+import { usesManualMacInstaller } from './mac-beta-update-policy'
 
 export abstract class UpdaterStatus extends BaseUpdaterState {
   protected getAutoUpdater(): ElectronAutoUpdater {
@@ -95,6 +96,9 @@ export abstract class UpdaterStatus extends BaseUpdaterState {
 
   /** `force` re-delivers a status the renderer must not miss even when it repeats the current one. */
   protected sendStatus(status: UpdateStatus, options?: { force?: boolean }): void {
+    if (usesManualMacInstaller()) {
+      status = { ...status, manualInstaller: true }
+    }
     const pendingUserInitiatedCheckVariant = this.pendingUserInitiatedCheckAfterInFlight
     const shouldLaunchPendingUserInitiatedCheck =
       pendingUserInitiatedCheckVariant !== null &&

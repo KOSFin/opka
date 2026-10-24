@@ -62,8 +62,8 @@ const host = getRemoteHostPlatform('linux-x64')
 let root = ''
 let dataDir = ''
 let snapshotDir = ''
-// The ~/.orca-remote stand-in that holds the state-mutation lock.
-const baseDir = (): string => join(root, '.orca-remote')
+// The ~/.opka-remote stand-in that holds the state-mutation lock.
+const baseDir = (): string => join(root, '.opka-remote')
 let versionDir = ''
 const launchedPids = new Set<number>()
 
@@ -75,7 +75,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'orcad-shell-'))
   dataDir = join(root, '.orca')
   snapshotDir = join(root, 'snapshots', 'pre-0.2.0+bb01-1000')
-  versionDir = join(root, '.orca-remote', 'orcad-0.2.0+bb01')
+  versionDir = join(root, '.opka-remote', 'orcad-0.2.0+bb01')
   mkdirSync(join(dataDir, 'profiles', 'p1'), { recursive: true })
   mkdirSync(join(dataDir, 'daemon'), { recursive: true })
   mkdirSync(versionDir, { recursive: true })

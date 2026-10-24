@@ -24,7 +24,7 @@ export async function installCopilotHooksRemote(
 ): Promise<AgentHookInstallStatus> {
   const home = remoteHome.replace(/\/$/, '')
   const remoteConfigPath = `${home}/.copilot/hooks/orca.json`
-  const remoteScriptPath = `${home}/.orca/agent-hooks/copilot-hook.sh`
+  const remoteScriptPath = `${home}/.opka/agent-hooks/copilot-hook.sh`
 
   try {
     const config = await readHooksJsonRemote(sftp, remoteConfigPath)

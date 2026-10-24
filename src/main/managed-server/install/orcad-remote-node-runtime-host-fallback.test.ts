@@ -62,7 +62,7 @@ function ensure(archivePath: () => Promise<string>, signal?: AbortSignal) {
   return ensureRemoteOrcadNodeRuntime({
     conn,
     host,
-    slotDir: '/home/me/.orca-remote/orcad-0.1.0+abc',
+    slotDir: '/home/me/.opka-remote/orcad-0.1.0+abc',
     target: TARGET,
     archivePath,
     offlineArchivePath: OFFLINE_PATH,
@@ -125,7 +125,7 @@ describe('pinned Node when this computer cannot download it', () => {
     const failure = await ensureRemoteOrcadNodeRuntime({
       conn,
       host: getRemoteHostPlatform('linux-arm64'),
-      slotDir: '/home/me/.orca-remote/orcad-0.1.0+abc',
+      slotDir: '/home/me/.opka-remote/orcad-0.1.0+abc',
       target: 'linux-arm64-musl',
       archivePath: refused
     }).catch((error: unknown) => error)

@@ -13,7 +13,7 @@ import { fingerprintCodex, type CodexHookHashes } from './codex-hook-trust-deriv
 
 let userData: string
 let codexPath: string
-const COMMAND = '/home/u/.orca/agent-hooks/codex-hook.sh'
+const COMMAND = '/home/u/.opka/agent-hooks/codex-hook.sh'
 const HASHES = { stop: 'sha256:stop', session_start: 'sha256:start' }
 
 beforeEach(() => {

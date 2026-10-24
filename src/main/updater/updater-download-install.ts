@@ -10,9 +10,14 @@ import { LINUX_PACKAGE_EXTERNALLY_MANAGED_MESSAGE } from '../linux-package-downl
 import { QUIT_AND_INSTALL_DELAY_MS } from './updater-state'
 import { UpdaterRemoteStatus } from './updater-remote-status'
 import { prepareThisProcessShipItStaging } from './shipit-leftover-recovery'
+import { app, net, shell } from 'electron'
+import { MacBetaInstaller } from './mac-beta-installer'
+import { usesManualMacInstaller } from './mac-beta-update-policy'
 
 /** Coordinates renderer-facing download/install actions and their duplicate guards. */
 export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
+  private readonly betaInstaller = new MacBetaInstaller((input, init) => net.fetch(input, init))
+
   protected quitAndInstall(): void {
     if (
       this.localBuildSelectionInProgress ||
@@ -21,6 +26,23 @@ export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
       this.quitAndInstallInProgress ||
       isMacInstallRequested()
     ) {
+      return
+    }
+
+    if (usesManualMacInstaller()) {
+      const version = 'version' in this.currentStatus ? this.currentStatus.version : undefined
+      if (version) {
+        void this.betaInstaller
+          .openInstaller(version, (path) => shell.openPath(path))
+          .catch((error) => {
+            this.sendStatus({
+              state: 'error',
+              message: String(error.message),
+              version,
+              retryAction: 'install'
+            })
+          })
+      }
       return
     }
 
@@ -65,7 +87,9 @@ export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
     // Why: allow retry from 'error' (availableVersion stays cached) so the error card's Retry Download button works.
     const canStart =
       this.currentStatus.state === 'available' ||
-      (this.currentStatus.state === 'error' && this.hasInstallableDownloadedVersion())
+      (this.currentStatus.state === 'error' &&
+        (this.hasInstallableDownloadedVersion() ||
+          (usesManualMacInstaller() && this.availableVersion !== null)))
     if (!canStart) {
       return
     }
@@ -94,6 +118,27 @@ export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
       return
     }
     if (this.deferHeadlessServeInstall('download', version)) {
+      return
+    }
+    if (usesManualMacInstaller()) {
+      if (this.activeUpdateSource === 'local') {
+        this.sendLocalBuildErrorAndRestore(
+          'Unsigned Mac beta updates use published Opka installers.'
+        )
+        return
+      }
+      this.sendStatus({ state: 'downloading', percent: 0, version })
+      this.downloadInFlight = true
+      void this.betaInstaller
+        .download(version, process.arch, app.getPath('temp'), (percent) => {
+          this.sendStatus({ state: 'downloading', percent, version })
+          this.downloadInFlight = true
+        })
+        .then(() => this.sendStatus({ state: 'downloaded', version }))
+        .catch((error) => this.sendErrorStatus(String(error.message)))
+        .finally(() => {
+          this.downloadInFlight = false
+        })
       return
     }
     this.downloadInFlight = true

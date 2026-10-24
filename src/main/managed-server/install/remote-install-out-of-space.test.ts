@@ -52,22 +52,22 @@ describe('a failed install write on a full host', () => {
     const upload = uploadRelayDirectory(
       connection(sftpFailure),
       localDir,
-      '/root/.orca-remote/orcad-0.1.0+abc',
+      '/root/.opka-remote/orcad-0.1.0+abc',
       posix
     )
     await expect(upload).rejects.toBeInstanceOf(RemoteInstallOutOfSpaceError)
     await expect(upload).rejects.toThrow(
-      /out of disk space: the filesystem holding \/root\/\.orca-remote\/orcad-0\.1\.0\+abc has 12 KB free, and Orca needs about 2\.0 MB/
+      /out of disk space: the filesystem holding \/root\/\.opka-remote\/orcad-0\.1\.0\+abc has 12 KB free, and Orca needs about 2\.0 MB/
     )
     expect(vi.mocked(execHostCommand).mock.calls[0]?.[2]).toBe(
-      remoteFreeSpaceProbeCommand('/root/.orca-remote/orcad-0.1.0+abc')
+      remoteFreeSpaceProbeCommand('/root/.opka-remote/orcad-0.1.0+abc')
     )
   })
 
   it('sizes a single file write by its contents', async () => {
     vi.mocked(execHostCommand).mockResolvedValue(dfLine(0))
     await expect(
-      writeRelayFile(connection(sftpFailure), posix, '/root/.orca-remote/x/.version', 'abc')
+      writeRelayFile(connection(sftpFailure), posix, '/root/.opka-remote/x/.version', 'abc')
     ).rejects.toThrow(/has 0 KB free, and Orca needs about 1 KB/)
   })
 

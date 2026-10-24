@@ -17,7 +17,7 @@ describe('resolveLaunchUserDataPath', () => {
 
   it("falls back to the dev app's own profile for a dev executable", () => {
     expect(resolveLaunchUserDataPath({ ORCA_APP_EXECUTABLE_NEEDS_APP_ROOT: '1' })).toBe(
-      resolve(join(getPlatformUserDataPath(), '..', 'orca-dev'))
+      resolve(join(getPlatformUserDataPath(), '..', 'opka-dev'))
     )
   })
 

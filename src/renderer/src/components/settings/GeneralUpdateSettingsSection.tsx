@@ -133,11 +133,13 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
               className="gap-2"
             >
               <Download className="size-3.5" />
-              {translate(
-                'auto.components.settings.GeneralUpdateSettingsSection.42717918f4',
-                'Download Update ('
-              )}
-              {updateStatus.version})
+              {updateStatus.manualInstaller
+                ? translate('opka.updates.beta.download', 'Download installer')
+                : translate(
+                    'auto.components.settings.GeneralUpdateSettingsSection.42717918f4',
+                    'Download Update ('
+                  )}
+              {!updateStatus.manualInstaller && `${updateStatus.version})`}
             </Button>
           ) : updateStatus.state === 'error' &&
             updateStatus.retryAction === 'install' &&
@@ -155,11 +157,13 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
               className="gap-2"
             >
               <Download className="size-3.5" />
-              {translate(
-                'auto.components.settings.GeneralUpdateSettingsSection.f44299636f',
-                'Restart to Update ('
-              )}
-              {updateStatus.version})
+              {updateStatus.manualInstaller
+                ? translate('opka.updates.beta.open', 'Open installer')
+                : translate(
+                    'auto.components.settings.GeneralUpdateSettingsSection.f44299636f',
+                    'Restart to Update ('
+                  )}
+              {!updateStatus.manualInstaller && `${updateStatus.version})`}
             </Button>
           ) : null}
         </div>
@@ -182,15 +186,20 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
                 'Version'
               )}{' '}
               {updateStatus.version}{' '}
-              {updateStatus.externallyManaged
+              {updateStatus.manualInstaller
                 ? translate(
-                    'auto.components.settings.GeneralUpdateSettingsSection.e3b9d21c07',
-                    'is available. Update Orca through your system package manager — Orca cannot install this release itself.'
+                    'opka.updates.beta.available',
+                    'This beta is not notarized by Apple. Download the installer, then confirm replacing Opka.app. macOS may ask you to allow it to open.'
                   )
-                : translate(
-                    'auto.components.settings.GeneralUpdateSettingsSection.8311da27ba',
-                    'is available. Click "Download Update" to download it.'
-                  )}{' '}
+                : updateStatus.externallyManaged
+                  ? translate(
+                      'auto.components.settings.GeneralUpdateSettingsSection.e3b9d21c07',
+                      'is available. Update Orca through your system package manager — Orca cannot install this release itself.'
+                    )
+                  : translate(
+                      'auto.components.settings.GeneralUpdateSettingsSection.8311da27ba',
+                      'is available. Click "Download Update" to download it.'
+                    )}{' '}
               {updateStatus.source !== 'local' && (
                 <a
                   href={

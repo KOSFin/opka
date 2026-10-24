@@ -69,7 +69,7 @@ async function roundTrip(
 function posixHome(withRuntime: boolean): string {
   const home = mkdtempSync(join(scratch, 'home-'))
   if (withRuntime) {
-    const bin = join(home, '.orca-remote', 'runtimes', 'node-abc', 'bin')
+    const bin = join(home, '.opka-remote', 'runtimes', 'node-abc', 'bin')
     mkdirSync(bin, { recursive: true })
     symlinkSync(process.execPath, join(bin, 'node'))
   }
@@ -117,12 +117,12 @@ describe.runIf(POSIX)('the POSIX stdio bridge command', () => {
   it('runs on a machine home’s Node, skipping a store runtime that cannot start here', async () => {
     const home = posixHome(false)
     // Another machine's runtime on the shared home, e.g. built for another architecture.
-    const foreign = join(home, '.orca-remote', 'runtimes', 'node-abc', 'bin')
+    const foreign = join(home, '.opka-remote', 'runtimes', 'node-abc', 'bin')
     mkdirSync(foreign, { recursive: true })
     writeFileSync(join(foreign, 'node'), '#!/bin/sh\nexit 126\n', {
       mode: 0o755
     })
-    const own = join(home, '.orca-remote', 'hosts', '0123456789abcdef', '.orca-remote')
+    const own = join(home, '.opka-remote', 'hosts', '0123456789abcdef', '.opka-remote')
     const bin = join(own, 'runtimes', 'node-def', 'bin')
     mkdirSync(bin, { recursive: true })
     symlinkSync(process.execPath, join(bin, 'node'))

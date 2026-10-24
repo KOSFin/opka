@@ -129,7 +129,7 @@ describe('system sftp batch', () => {
       code: 1,
       signal: null,
       stdout: '',
-      stderr: 'dest open "C:/Users/me/.orca-remote/node.zip": Permission denied',
+      stderr: 'dest open "C:/Users/me/.opka-remote/node.zip": Permission denied',
       timedOut: false
     })
     const error = await runSftpBatch(target, ['put node.zip']).catch((e: unknown) => e)

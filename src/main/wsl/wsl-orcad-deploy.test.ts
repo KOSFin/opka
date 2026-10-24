@@ -169,7 +169,7 @@ describe('deployAndLaunchWslOrcad', () => {
     })
     expect(mocks.exec).toHaveBeenLastCalledWith(
       expect.anything(),
-      "cat '/home/u/.orca-remote/orcad-1.5.0+ab/.orcad-pid' 2>/dev/null || true",
+      "cat '/home/u/.opka-remote/orcad-1.5.0+ab/.orcad-pid' 2>/dev/null || true",
       expect.anything()
     )
   })
@@ -365,7 +365,7 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
     })
     expect(mocks.exec).toHaveBeenLastCalledWith(
       expect.anything(),
-      "cat '/home/u/.orca-remote/orcad-1.4.0+aa/.orcad-pid' 2>/dev/null || true",
+      "cat '/home/u/.opka-remote/orcad-1.4.0+aa/.orcad-pid' 2>/dev/null || true",
       expect.anything()
     )
     // The installed candidate is what a later Force activates; nothing may collect it.

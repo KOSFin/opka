@@ -29,7 +29,13 @@ describe('fork CI safety and required checks', () => {
   })
 
   it('requires tests, all desktop platforms and hidden GUI checks', () => {
-    expect(workflow.jobs.verify.needs).toEqual(['static', 'regression', 'desktop', 'electron'])
+    expect(workflow.jobs.verify.needs).toEqual([
+      'static',
+      'regression',
+      'desktop',
+      'electron',
+      'installers'
+    ])
     expect(workflow.jobs.desktop.strategy.matrix.os).toEqual([
       'ubuntu-24.04',
       'macos-15',

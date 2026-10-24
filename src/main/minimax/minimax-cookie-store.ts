@@ -16,7 +16,7 @@ type MiniMaxCookieEnvelope = {
 }
 
 function getOrcaDir(): string {
-  return join(homedir(), '.orca')
+  return join(homedir(), '.opka')
 }
 
 export function getMiniMaxCookiePath(): string {

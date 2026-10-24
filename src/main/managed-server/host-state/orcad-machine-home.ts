@@ -32,7 +32,7 @@ const SECTION = '__ORCA_MACHINE_HOME_SECTION__'
 const CLAIM_ABSENT = 'ABSENT'
 const CLAIM_PRESENT = 'PRESENT'
 const RECORD_MAX_BYTES = 4096
-const ACCESS_ROOT = '.orca/.profile-state-access'
+const ACCESS_ROOT = '.opka/.profile-state-access'
 const INSTALLED = 'INSTALLED'
 // What `stat -f -c %T` (GNU and busybox) names a local disk filesystem; anything else may be shared.
 const LOCAL_FILESYSTEM_TYPES = new Set([
@@ -344,5 +344,5 @@ export function orcadMachineDataRoot(
   loginHome: string,
   machineKey: string
 ): string {
-  return joinRemotePath(host, loginHome, `.orca-${machineKey.slice(0, 8)}`)
+  return joinRemotePath(host, loginHome, `.opka-${machineKey.slice(0, 8)}`)
 }

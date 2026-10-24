@@ -244,13 +244,13 @@ describe.skipIf(process.platform === 'win32')('orcad launch SSH session', () => 
 
 describe('orcad launch command session record', () => {
   const spec = {
-    remoteInstallDir: '/home/u/.orca-remote/orcad-1',
+    remoteInstallDir: '/home/u/.opka-remote/orcad-1',
     nodePath: '/usr/bin/node',
     fullVersion: '1.0.0',
     userDataDir: '/home/u/.orca',
     bindHost: '127.0.0.1',
     port: 7777,
-    activationRoot: '/home/u/.orca-remote/activation'
+    activationRoot: '/home/u/.opka-remote/activation'
   }
 
   it('records the session only on a macOS nohup launch', () => {

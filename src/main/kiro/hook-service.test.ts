@@ -49,7 +49,7 @@ const agentPath = (name: string): string => join(agentsDir(), `${name}.json`)
 const scriptPath = (): string =>
   join(
     home,
-    '.orca',
+    '.opka',
     'agent-hooks',
     process.platform === 'win32' ? 'kiro-hook.cmd' : 'kiro-hook.sh'
   )

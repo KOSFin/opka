@@ -1,6 +1,7 @@
 const { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
+const { PRODUCT_IDENTITY } = require('../src/shared/product-identity.ts')
 const {
   MACOS_FOLDER_USAGE_DESCRIPTIONS,
   applyMacHelperFolderUsageDescriptions
@@ -100,20 +101,7 @@ const devChannelBuildVersion = isHourlyChannel
     : isAdhocChannel
       ? process.env.ORCA_ADHOC_BUILD_VERSION
       : undefined
-// Why each dev channel gets its own repo rather than tagging into the main one:
-// the releases atom feed exposes only the 10 newest entries, so 24 hourly tags a
-// day would evict every stable/RC entry and strand users on a feed with nothing
-// to install. Keeping adhoc/daily separate from hourly too means a branch build
-// or a once-a-day cut cannot be picked up by someone who only meant to ride
-// main's hourlies.
-const devChannelRepo = isHourlyChannel
-  ? 'orca-hourly'
-  : isDailyChannel
-    ? 'orca-daily'
-    : isAdhocChannel
-      ? 'orca-adhoc'
-      : null
-const appId = 'com.stablyai.orca'
+const appId = PRODUCT_IDENTITY.appId
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
   to: 'onboarding/feature-wall'
@@ -237,14 +225,16 @@ const macUsageDescriptions = {
   NSBonjourServices: ['_http._tcp', '_https._tcp'],
   ...MACOS_FOLDER_USAGE_DESCRIPTIONS
 }
-// Developer ID team that signs every release-channel mac build.
-const ORCA_MAC_TEAM_ID = '6CX3WHS9HZ'
+const ORCA_MAC_TEAM_ID = process.env.OPKA_MAC_TEAM_ID
+if (isMacRelease && !/^[A-Z0-9]{10}$/.test(ORCA_MAC_TEAM_ID ?? '')) {
+  throw new Error('Signed Opka releases require an explicit OPKA_MAC_TEAM_ID')
+}
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
   appId,
-  productName: 'Orca',
-  protocols: [{ name: 'Orca', schemes: ['orca'] }],
+  productName: PRODUCT_IDENTITY.name,
+  protocols: [{ name: PRODUCT_IDENTITY.name, schemes: [PRODUCT_IDENTITY.protocol] }],
   toolsets: { appimage: '1.0.3' },
   ...(devChannelBuildVersion
     ? { extraMetadata: { version: devChannelBuildVersion } }
@@ -628,6 +618,7 @@ module.exports = {
     include: resolve(__dirname, 'nsis', 'orca-installer-hooks.nsh')
   },
   mac: {
+    artifactName: 'opka-macos-${arch}.${ext}',
     // Why rank Alternate: Orca joins Finder's "Open With" list without claiming
     // LSHandlerRank ownership, so whichever editor the user already prefers stays the default.
     // Why one entry per extension: app-builder-lib globs `*.${ext}`, which an array would break.
@@ -674,7 +665,7 @@ module.exports = {
       ...createPackagedRuntimeNodeModuleResources('darwin'),
       macSpeechNativeResource,
       {
-        from: 'resources/darwin/bin/orca',
+        from: 'resources/darwin/bin/opka',
         to: 'bin/orca'
       },
       {
@@ -715,7 +706,7 @@ module.exports = {
   // silently downgrading to ad-hoc artifacts that look shippable in CI logs.
   forceCodeSigning: isMacRelease,
   dmg: {
-    artifactName: 'orca-macos-${arch}.${ext}'
+    artifactName: 'opka-macos-${arch}.${ext}'
   },
   linux: {
     // Why mimeTypes and not fileAssociations: shared-mime-info already maps *.md/*.markdown to
@@ -815,13 +806,13 @@ module.exports = {
   npmRebuild: false,
   publish: {
     provider: 'github',
-    owner: 'stablyai',
-    repo: devChannelRepo ?? 'orca',
+    owner: PRODUCT_IDENTITY.releaseOwner,
+    repo: PRODUCT_IDENTITY.releaseRepository,
     // Why draft on the main repo: `--publish always` otherwise creates a
     // public GitHub release as soon as the first platform uploads, and
     // /releases/latest serves a missing Windows exe. release-cut undrafts
     // only after every required asset exists.
-    releaseType: devChannelRepo ? 'prerelease' : 'draft'
+    releaseType: 'draft'
   }
 }
 

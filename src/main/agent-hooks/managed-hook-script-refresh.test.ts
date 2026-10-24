@@ -127,7 +127,7 @@ describe('managed hook script refresh', () => {
     try {
       // Why: the bug population has a script (from a past install) but no reachable
       // CLI — and possibly no config dir Orca may create. Seed only the script.
-      const hooksDir = join(home, '.orca', 'agent-hooks')
+      const hooksDir = join(home, '.opka', 'agent-hooks')
       mkdirSync(hooksDir, { recursive: true })
       writeFileSync(join(hooksDir, 'claude-hook.cmd'), STALE_WINDOWS_HOOK)
 
@@ -162,7 +162,7 @@ describe('managed hook script refresh', () => {
           await install()
         }
       })
-      const hooksDir = join(home, '.orca', 'agent-hooks')
+      const hooksDir = join(home, '.opka', 'agent-hooks')
       const files = readdirSync(hooksDir)
       expect(files.length).toBeGreaterThan(0)
       const refresherAgents = MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS.map(([agent]) => agent)
@@ -171,7 +171,7 @@ describe('managed hook script refresh', () => {
       for (const file of files) {
         expect(
           refresherAgents.some((agent) => file.startsWith(`${agent}-`)),
-          `${file} is written to ~/.orca/agent-hooks but no refresher owns it`
+          `${file} is written to ~/.opka/agent-hooks but no refresher owns it`
         ).toBe(true)
       }
       // Why: the reverse direction — a refresher naming an agent that writes nothing is a

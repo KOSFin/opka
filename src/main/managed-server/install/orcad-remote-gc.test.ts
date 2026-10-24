@@ -103,7 +103,7 @@ describe('orcad GC', () => {
       conn,
       host,
       remoteHome: '/home/u',
-      currentDirAbsPath: '/home/u/.orca-remote/orcad-0.2.0+bb',
+      currentDirAbsPath: '/home/u/.opka-remote/orcad-0.2.0+bb',
       record: emptyOrcadActivationRecord()
     })
     const listCommand = mockExec.mock.calls
@@ -124,7 +124,7 @@ describe('orcad GC', () => {
       conn,
       host,
       remoteHome: '/home/u',
-      currentDirAbsPath: '/home/u/.orca-remote/orcad-0.2.0+bb',
+      currentDirAbsPath: '/home/u/.opka-remote/orcad-0.2.0+bb',
       record: emptyOrcadActivationRecord()
     })
     expect(removed).toEqual(['orcad-0.1.0+aa'])
@@ -140,7 +140,7 @@ describe('orcad GC', () => {
       conn,
       host,
       remoteHome: '/home/u',
-      currentDirAbsPath: '/home/u/.orca-remote/orcad-0.3.0+cc0',
+      currentDirAbsPath: '/home/u/.opka-remote/orcad-0.3.0+cc0',
       record: {
         ...emptyOrcadActivationRecord(),
         active: '0.3.0+cc0',
@@ -157,7 +157,7 @@ describe('orcad GC', () => {
       conn,
       host,
       remoteHome: '/home/u',
-      currentDirAbsPath: '/home/u/.orca-remote/orcad-0.3.0+cc0',
+      currentDirAbsPath: '/home/u/.opka-remote/orcad-0.3.0+cc0',
       record: { ...emptyOrcadActivationRecord(), active: '0.3.0+cc0' },
       liveDaemonVersion: '0.1.0+01d'
     })
@@ -175,7 +175,7 @@ describe('orcad GC', () => {
       conn,
       host,
       remoteHome: '/home/u',
-      currentDirAbsPath: '/home/u/.orca-remote/orcad-0.3.0+cc0',
+      currentDirAbsPath: '/home/u/.opka-remote/orcad-0.3.0+cc0',
       record: emptyOrcadActivationRecord()
     })
     expect(removed).toEqual(['orcad-0.0.9+dead'])
@@ -197,7 +197,7 @@ describe('orcad GC', () => {
         conn,
         host,
         remoteHome: '/home/u',
-        currentDirAbsPath: '/home/u/.orca-remote/orcad-0.3.0+cc0',
+        currentDirAbsPath: '/home/u/.opka-remote/orcad-0.3.0+cc0',
         record: emptyOrcadActivationRecord()
       })
     ).rejects.toBe(error)
@@ -220,7 +220,7 @@ describe('orcad GC', () => {
       conn,
       host,
       remoteHome: '/home/u',
-      currentDirAbsPath: '/home/u/.orca-remote/orcad-0.3.0+cc0',
+      currentDirAbsPath: '/home/u/.opka-remote/orcad-0.3.0+cc0',
       record: emptyOrcadActivationRecord()
     })
 
@@ -234,7 +234,7 @@ describe('orcad GC', () => {
       conn,
       host,
       remoteHome: '/home/u',
-      currentDirAbsPath: '/home/u/.orca-remote/orcad-0.2.0+bb',
+      currentDirAbsPath: '/home/u/.opka-remote/orcad-0.2.0+bb',
       record: emptyOrcadActivationRecord()
     }
     const inventories = (): number =>
@@ -255,7 +255,7 @@ describe('orcad GC', () => {
         conn,
         host,
         remoteHome: '/home/u',
-        currentDirAbsPath: '/home/u/.orca-remote/orcad-0.3.0+cc0',
+        currentDirAbsPath: '/home/u/.opka-remote/orcad-0.3.0+cc0',
         record
       })
 

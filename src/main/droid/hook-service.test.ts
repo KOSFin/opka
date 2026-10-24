@@ -74,7 +74,7 @@ describe('DroidHookService', () => {
     expect(config.hooks.UserPromptSubmit[0].matcher).toBeUndefined()
     expect(config.hooks.PreToolUse[0].hooks[0].command).toMatch(
       process.platform === 'win32'
-        ? wrapWindowsBatchHookCommand(join(homeDir, '.orca', 'agent-hooks', 'droid-hook.cmd'))
+        ? wrapWindowsBatchHookCommand(join(homeDir, '.opka', 'agent-hooks', 'droid-hook.cmd'))
         : /droid-hook/
     )
     if (process.platform !== 'win32') {
@@ -89,7 +89,7 @@ describe('DroidHookService', () => {
     try {
       expect(new DroidHookService().install().state).toBe('installed')
       const command = wrapWindowsBatchHookCommand(
-        join(homeDir, '.orca', 'agent-hooks', 'droid-hook.cmd')
+        join(homeDir, '.opka', 'agent-hooks', 'droid-hook.cmd')
       )
       const config = JSON.parse(readFileSync(join(homeDir, '.factory', 'settings.json'), 'utf8'))
       for (const eventName of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop']) {

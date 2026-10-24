@@ -7,15 +7,15 @@ import {
 
 describe('joinRemotePath', () => {
   it('joins POSIX remote paths', () => {
-    expect(joinRemotePath(getRemoteHostPlatform('linux-x64'), '/home/me', '.orca-remote')).toBe(
-      '/home/me/.orca-remote'
+    expect(joinRemotePath(getRemoteHostPlatform('linux-x64'), '/home/me', '.opka-remote')).toBe(
+      '/home/me/.opka-remote'
     )
   })
 
   it('normalizes and joins Windows remote paths with forward slashes for SFTP and Node', () => {
     expect(
-      joinRemotePath(getRemoteHostPlatform('win32-x64'), 'C:\\Users\\me', '.orca-remote', 'relay')
-    ).toBe('C:/Users/me/.orca-remote/relay')
+      joinRemotePath(getRemoteHostPlatform('win32-x64'), 'C:\\Users\\me', '.opka-remote', 'relay')
+    ).toBe('C:/Users/me/.opka-remote/relay')
   })
 })
 

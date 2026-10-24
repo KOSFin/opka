@@ -211,7 +211,7 @@ export class JcodeHookService {
     // Why: remote-Windows is out of scope for v1 (same as Devin); assume POSIX.
     const remoteConfigPath = getJcodeRemoteConfigPath(remoteHome)
     const remoteScriptFileName = getJcodePosixManagedScriptFileName()
-    const remoteScriptPath = `${remoteHome.replace(/\/+$/, '')}/.orca/agent-hooks/${remoteScriptFileName}`
+    const remoteScriptPath = `${remoteHome.replace(/\/+$/, '')}/.opka/agent-hooks/${remoteScriptFileName}`
     try {
       const body = await readTextFileRemote(sftp, remoteConfigPath)
       const content = body === null ? '' : body

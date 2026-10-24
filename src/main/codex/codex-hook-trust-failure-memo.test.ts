@@ -27,7 +27,7 @@ import { getCodexHookTrustMemoPath } from './codex-hook-trust-memo'
 // Why this file: only an answer Codex gave about its version may be saved for that
 // version; a failed ask saved there would cost every home Orca's entry until Codex updates.
 
-const COMMAND = '/home/u/.orca/agent-hooks/codex-hook.sh'
+const COMMAND = '/home/u/.opka/agent-hooks/codex-hook.sh'
 let userData: string
 let codexPath: string
 

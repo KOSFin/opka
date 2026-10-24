@@ -22,8 +22,8 @@ vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => (
 
 const linux = getRemoteHostPlatform('linux-x64')
 const windows = getRemoteHostPlatform('win32-x64')
-const SLOT = '/home/me/.orca-remote/orcad-1.0.0'
-const WINDOWS_SLOT = 'C:\\Users\\me\\.orca-remote\\orcad-1.0.0'
+const SLOT = '/home/me/.opka-remote/orcad-1.0.0'
+const WINDOWS_SLOT = 'C:\\Users\\me\\.opka-remote\\orcad-1.0.0'
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: execCommand is mocked; the connection is never used.
 const conn = {} as never
 

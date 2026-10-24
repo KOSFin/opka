@@ -29,14 +29,14 @@ const resetVariables = [
 export function buildProfileCliLauncher(
   platform: NodeJS.Platform,
   profile: string,
-  launcher: string
+  launcher: string,
+  isolateHome = true
 ) {
   const home = join(profile, 'home')
   const values = {
     ORCA_USER_DATA_PATH: profile,
-    ORCA_FORK_PROFILE_CLI: '1',
-    HOME: home,
-    USERPROFILE: home
+    ORCA_FORK_PROFILE_CLI: isolateHome ? '1' : '0',
+    ...(isolateHome ? { HOME: home, USERPROFILE: home } : {})
   }
   if (platform === 'win32') {
     const escape = (value: string) => escapeWindowsBatchValue(value).replaceAll('%', '%%')
@@ -69,13 +69,18 @@ export class ProfileCliRegistration {
   constructor(
     private readonly profile: string,
     resources: string,
-    private readonly platform = process.platform
+    private readonly platform = process.platform,
+    private readonly commandName = 'orca-fork',
+    private readonly isolateHome = true
   ) {
+    if (!/^[a-z][a-z0-9-]*$/.test(commandName)) {
+      throw new Error('Invalid profile CLI command name')
+    }
     this.commandPath = join(
       profile,
       'cli',
       'bin',
-      platform === 'win32' ? 'orca-fork.cmd' : 'orca-fork'
+      platform === 'win32' ? `${commandName}.cmd` : commandName
     )
     this.launcherPath = getBundledLauncherPath(platform, resources)
   }
@@ -83,7 +88,7 @@ export class ProfileCliRegistration {
   async getStatus(): Promise<CliInstallStatus> {
     const status: CliInstallStatus = {
       platform: this.platform,
-      commandName: 'orca-fork',
+      commandName: this.commandName,
       commandPath: this.commandPath,
       pathDirectory: dirname(this.commandPath),
       pathConfigured: false,
@@ -126,7 +131,10 @@ export class ProfileCliRegistration {
         return { ...status, state: 'conflict' }
       }
       const content = await readFile(this.commandPath, 'utf8')
-      if (content === buildProfileCliLauncher(this.platform, this.profile, this.launcherPath)) {
+      if (
+        content ===
+        buildProfileCliLauncher(this.platform, this.profile, this.launcherPath, this.isolateHome)
+      ) {
         if (this.platform !== 'win32' && (entry.mode & 0o100) === 0) {
           return { ...status, state: 'stale', detail: 'Profile launcher is not executable.' }
         }
@@ -160,10 +168,12 @@ export class ProfileCliRegistration {
       return this.getStatus()
     }
     await mkdir(dirname(this.commandPath), { recursive: true, mode: 0o700 })
-    await mkdir(join(this.profile, 'home'), { recursive: true, mode: 0o700 })
+    if (this.isolateHome) {
+      await mkdir(join(this.profile, 'home'), { recursive: true, mode: 0o700 })
+    }
     await writeFile(
       this.commandPath,
-      buildProfileCliLauncher(this.platform, this.profile, this.launcherPath),
+      buildProfileCliLauncher(this.platform, this.profile, this.launcherPath, this.isolateHome),
       { flag: 'wx', mode: 0o700 }
     )
     return this.getStatus()

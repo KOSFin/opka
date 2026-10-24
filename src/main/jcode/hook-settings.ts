@@ -44,7 +44,7 @@ export function getJcodeManagedScriptPath(): string {
 }
 
 export function getSharedJcodeScriptPath(scriptFileName: string): string {
-  return join(homedir(), '.orca', 'agent-hooks', scriptFileName)
+  return join(homedir(), '.opka', 'agent-hooks', scriptFileName)
 }
 
 // Why quoted: jcode executes hook commands directly (no shell), but it tokenizes the

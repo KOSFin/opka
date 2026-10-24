@@ -40,7 +40,7 @@ describe.skipIf(process.platform === 'win32')('snapshot room on a real shell (#3
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), 'orcad-snapshot-space-'))
     root = join(base, 'root')
-    remoteBase = join(base, '.orca-remote')
+    remoteBase = join(base, '.opka-remote')
     snapshots = join(remoteBase, 'orcad-state-snapshots')
     mkdirSync(join(root, 'profiles', 'p1'), { recursive: true })
     writeFileSync(join(root, 'profiles', 'p1', 'profile-state.db'), 'x'.repeat(64 * 1024))
@@ -115,7 +115,7 @@ describe.skipIf(process.platform === 'win32')('snapshot room on a real shell (#3
         shortfall ?? 0,
         {
           userDataDir: '/home/work/.orca',
-          baseDir: '/home/work/.orca-remote',
+          baseDir: '/home/work/.opka-remote',
           fullVersion: '0.1.0+77dfa08c40aa',
           active: '0.1.0+aa01'
         }

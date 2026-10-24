@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_version:
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -143,10 +148,17 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  installers:
+    name: Beta installer qualification
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    uses: ./.github/workflows/opka-installers.yml
+    with:
+      version: ${{ inputs.release_version || format('0.1.0-rc.{0}', github.run_number) }}
+
   verify:
     name: PR checks passed
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    needs: [static, regression, desktop, electron]
+    needs: [static, regression, desktop, electron, installers]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

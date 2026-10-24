@@ -75,14 +75,14 @@ describe('Windows Grok managed hook launch shape', () => {
   // #6078 fallback by design. These synthetic-path cases carry the invariant on every CI leg;
   // the install-based ones below re-check it against a real generated path on Windows.
   describe('registered command, from a synthetic Windows path', () => {
-    const scriptPath = 'C:\\Users\\dev\\.orca\\agent-hooks\\grok-hook.cmd'
+    const scriptPath = 'C:\\Users\\dev\\.opka\\agent-hooks\\grok-hook.cmd'
 
     it('registers a cmd-safe script path as the command itself (#14828)', () => {
       const command = withWin32(() => getManagedCommandForTests(scriptPath))
 
       // Why (#8430): Grok spawns this as argv[0], so it must be exactly one spawnable token.
       // Forward slashes because Git Bash strips the backslashes out of a bare path.
-      expect(command).toBe('C:/Users/dev/.orca/agent-hooks/grok-hook.cmd')
+      expect(command).toBe('C:/Users/dev/.opka/agent-hooks/grok-hook.cmd')
       // Why: whitespace is the sole trigger for Grok's `pwsh -Command` wrapper, which is the
       // interpreter this fix removes. Assert the trigger, not just the absence of the name.
       expect(command, 'a space would reintroduce the pwsh wrapper').not.toMatch(/\s/)
@@ -91,7 +91,7 @@ describe('Windows Grok managed hook launch shape', () => {
     })
 
     it('still wraps a path cmd.exe would split or expand (#6078)', () => {
-      const spaced = 'C:\\Users\\Jane Doe\\.orca\\agent-hooks\\grok-hook.cmd'
+      const spaced = 'C:\\Users\\Jane Doe\\.opka\\agent-hooks\\grok-hook.cmd'
       const command = withWin32(() => getManagedCommandForTests(spaced))
 
       expect(command).toMatch(/-EncodedCommand \S+$/)
@@ -118,7 +118,7 @@ describe('Windows Grok managed hook launch shape', () => {
       )
       expect(stop).toEqual([
         'C:\\tools\\user-hook.cmd',
-        'C:/Users/dev/.orca/agent-hooks/grok-hook.cmd'
+        'C:/Users/dev/.opka/agent-hooks/grok-hook.cmd'
       ])
     })
   })
@@ -141,7 +141,7 @@ describe('Windows Grok managed hook launch shape', () => {
     it.skipIf(process.platform !== 'win32')(
       'writes the generated script path itself to every managed event',
       () => {
-        const scriptPath = join(home, '.orca', 'agent-hooks', 'grok-hook.cmd')
+        const scriptPath = join(home, '.opka', 'agent-hooks', 'grok-hook.cmd')
         const commands = withWin32(() => {
           expect(new GrokHookService().install().state).toBe('installed')
           return registeredCommands(readInstalledConfig(home))
@@ -158,7 +158,7 @@ describe('Windows Grok managed hook launch shape', () => {
     it.skipIf(process.platform !== 'win32')(
       'replaces a previously installed encoded-PowerShell entry on reinstall',
       () => {
-        const scriptPath = join(home, '.orca', 'agent-hooks', 'grok-hook.cmd')
+        const scriptPath = join(home, '.opka', 'agent-hooks', 'grok-hook.cmd')
         const staleCommand = wrapWindowsHookCommand(scriptPath)
         const configPath = join(home, '.grok', 'hooks', 'orca-status.json')
         mkdirSync(dirname(configPath), { recursive: true })

@@ -46,7 +46,7 @@ function encFilesIn(dir: string): string[] {
 
 /** Where every integration store keeps its files, whatever ORCA_USER_DATA says. */
 export function orcadCredentialRoot(): string {
-  return join(homedir(), '.orca')
+  return join(homedir(), '.opka')
 }
 
 export function listPlaintextCredentialTargets(): PlaintextCredentialTarget[] {

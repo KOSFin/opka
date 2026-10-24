@@ -104,7 +104,7 @@ describe('readWslOrcadIncumbent', () => {
     })
     expect(deps.probe).toHaveBeenCalledWith(
       expect.objectContaining({
-        remoteInstallDir: '/home/u/.orca-remote/orcad-1.4.0+aa'
+        remoteInstallDir: '/home/u/.opka-remote/orcad-1.4.0+aa'
       }),
       { buildHash: '0123456789abcdef', fullVersion: '1.4.0+aa' }
     )

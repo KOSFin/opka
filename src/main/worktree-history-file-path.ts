@@ -44,7 +44,7 @@ const ORCA_MINTED_HISTFILE = new RegExp(
     `terminal-history-wsl/[^/]+/${WORKTREE_HASH}/${HISTORY_FILE}` +
     '|' +
     // Relay: ~/.orca-remote/terminal-history/<hash>-<file>
-    `\\.orca-remote/terminal-history/${WORKTREE_HASH}-${HISTORY_FILE}` +
+    `\\.(?:orca|opka)-remote/terminal-history/${WORKTREE_HASH}-${HISTORY_FILE}` +
     ')$'
 )
 

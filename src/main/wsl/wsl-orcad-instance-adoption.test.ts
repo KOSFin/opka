@@ -63,10 +63,10 @@ vi.mock('../managed-server/lifecycle/orcad-managed-remote-stop', () => ({
   readRemoteOrcadManagedStopTarget: async () => host.stopTarget
 }))
 vi.mock('../ssh/orcad-recovery-slot', () => ({
-  orcadSlotDir: (_slot: unknown, version: string) => `/home/u/.orca-remote/orcad-${version}`,
+  orcadSlotDir: (_slot: unknown, version: string) => `/home/u/.opka-remote/orcad-${version}`,
   resolveOrcadSlotIdentity: async (_slot: unknown, version: string) => ({
     version,
-    remoteDir: `/home/u/.orca-remote/orcad-${version}`,
+    remoteDir: `/home/u/.opka-remote/orcad-${version}`,
     buildHash: host.slotBuildHash
   })
 }))
@@ -174,7 +174,7 @@ describe('adopting an orcad the activation record does not name', () => {
       record({ active: OLD, previous: OLD, activatedAt: NOW.toISOString(), snapshot: null })
     ])
     expect(host.commands).toContain(
-      `(umask 077 && printf '%s\\n' 500 > '/home/u/.orca-remote/orcad-${OLD}/.orcad-pid')`
+      `(umask 077 && printf '%s\\n' 500 > '/home/u/.opka-remote/orcad-${OLD}/.orcad-pid')`
     )
     expect(host.commands.some((command) => /\bkill\b(?! -0)/.test(command))).toBe(false)
   })
@@ -201,7 +201,7 @@ describe('adopting an orcad the activation record does not name', () => {
   it('repoints only the pid file when the recorded slot is serving under another pid', async () => {
     host.lock = lockFor(700, OLD)
     host.alive.add(700)
-    host.pidFiles.set(`/home/u/.orca-remote/orcad-${OLD}/.orcad-pid`, 699)
+    host.pidFiles.set(`/home/u/.opka-remote/orcad-${OLD}/.orcad-pid`, 699)
     host.stopTarget = stopTargetFor(700, OLD)
     const current = record({ active: OLD })
     await expect(adopt(current)).resolves.toMatchObject({ outcome: 'adopted', record: current })
@@ -212,7 +212,7 @@ describe('adopting an orcad the activation record does not name', () => {
   it('leaves the recorded instance, a dead lock holder and a desktop lock alone', async () => {
     host.lock = lockFor(800, OLD)
     host.alive.add(800)
-    host.pidFiles.set(`/home/u/.orca-remote/orcad-${OLD}/.orcad-pid`, 800)
+    host.pidFiles.set(`/home/u/.opka-remote/orcad-${OLD}/.orcad-pid`, 800)
     await expect(adopt(record({ active: OLD }))).resolves.toEqual({ outcome: 'none' })
     host.alive.clear()
     await expect(adopt(record())).resolves.toEqual({ outcome: 'none' })

@@ -57,7 +57,7 @@ import type { SshTarget } from '../../../shared/ssh-types'
 
 const SHELL_HOME = '/var/services/homes/alice'
 const SFTP_HOME = '/homes/alice'
-const RELAY_DIR = '.orca-remote/relay-0.1.0+hash'
+const RELAY_DIR = '.opka-remote/relay-0.1.0+hash'
 const MARKER = '.install-lock/.sftp-namespace-cafebabe'
 const SHELL_RELAY_DIR = `${SHELL_HOME}/${RELAY_DIR}`
 

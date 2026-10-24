@@ -31,11 +31,11 @@ function mkdtempLike(prefix: string): string {
 }
 
 function tokenPathForSite(siteId: string): string {
-  return join(tempHome, '.orca', 'jira-tokens', `${Buffer.from(siteId).toString('base64url')}.enc`)
+  return join(tempHome, '.opka', 'jira-tokens', `${Buffer.from(siteId).toString('base64url')}.enc`)
 }
 
 function writeJiraFiles(siteId: string, token: string | Buffer): void {
-  const orcaDir = join(tempHome, '.orca')
+  const orcaDir = join(tempHome, '.opka')
   mkdirSync(join(orcaDir, 'jira-tokens'), { recursive: true })
   writeFileSync(
     join(orcaDir, 'jira-sites.json'),
@@ -66,7 +66,7 @@ function writeMultiSiteFiles(
   sites: { id: string; token: string | Buffer }[],
   selectedSiteId: string
 ): void {
-  const orcaDir = join(tempHome, '.orca')
+  const orcaDir = join(tempHome, '.opka')
   mkdirSync(join(orcaDir, 'jira-tokens'), { recursive: true })
   writeFileSync(
     join(orcaDir, 'jira-sites.json'),
@@ -510,7 +510,7 @@ describe('Jira client credential storage', () => {
 
   it('uses Basic auth for stored self-hosted sites that carry a username', async () => {
     const siteId = 'site-server-basic'
-    const orcaDir = join(tempHome, '.orca')
+    const orcaDir = join(tempHome, '.opka')
     mkdirSync(join(orcaDir, 'jira-tokens'), { recursive: true })
     writeFileSync(
       join(orcaDir, 'jira-sites.json'),
@@ -607,18 +607,29 @@ describe('Jira client credential storage', () => {
 
     // Two PATs (both with empty email) to the same host must not collide onto
     // one id and silently overwrite each other — the viewer identity keys them.
-    const stored = JSON.parse(
-      readFileSync(join(tempHome, '.orca', 'jira-sites.json'), 'utf-8')
-    ) as {
-      sites: { accountId: string }[]
+    const stored: unknown = JSON.parse(
+      readFileSync(join(tempHome, '.opka', 'jira-sites.json'), 'utf-8')
+    )
+    if (
+      !stored ||
+      typeof stored !== 'object' ||
+      !('sites' in stored) ||
+      !Array.isArray(stored.sites)
+    ) {
+      throw new Error('Expected a stored site list')
     }
     expect(stored.sites).toHaveLength(2)
-    expect(stored.sites.map((site) => site.accountId).sort()).toEqual(['alice', 'bot'])
+    expect(stored.sites).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ accountId: 'alice' }),
+        expect.objectContaining({ accountId: 'bot' })
+      ])
+    )
   })
 
   it('uses Bearer auth and REST v2 for stored self-hosted sites', async () => {
     const siteId = 'site-server'
-    const orcaDir = join(tempHome, '.orca')
+    const orcaDir = join(tempHome, '.opka')
     mkdirSync(join(orcaDir, 'jira-tokens'), { recursive: true })
     writeFileSync(
       join(orcaDir, 'jira-sites.json'),
@@ -802,7 +813,7 @@ describe('Jira site file cross-process visibility', () => {
     expect(jira.getStatus()).toMatchObject({ connected: true })
 
     writeFileSync(
-      join(tempHome, '.orca', 'jira-sites.json'),
+      join(tempHome, '.opka', 'jira-sites.json'),
       JSON.stringify({ version: 1, activeSiteId: null, selectedSiteId: null, sites: [] }, null, 2),
       { encoding: 'utf-8' }
     )

@@ -47,7 +47,7 @@ export async function installRemoteGrokHook(
 ): Promise<AgentHookInstallStatus> {
   const home = remoteHome.replace(/\/$/, '')
   const configPath = `${remoteGrokHome(home, remoteGrokHomeDir)}/hooks/orca-status.json`
-  const scriptPath = `${home}/.orca/agent-hooks/grok-hook.sh`
+  const scriptPath = `${home}/.opka/agent-hooks/grok-hook.sh`
   try {
     const config = await readHooksJsonRemote(sftp, configPath)
     if (!config) {

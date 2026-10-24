@@ -17,7 +17,7 @@ import { getRemoteHostPlatform, joinRemotePath } from '../ssh-remote-platform'
 const host = getRemoteHostPlatform('win32-x64')
 const HOME = 'C:\\Users\\dev'
 const VERSION = 'relay-0.1.0+aaaaaaaaaaaa'
-const DIR = joinRemotePath(host, HOME, '.orca-remote', VERSION)
+const DIR = joinRemotePath(host, HOME, '.opka-remote', VERSION)
 
 describe('the Windows relay inventory', () => {
   let base: string | null = null

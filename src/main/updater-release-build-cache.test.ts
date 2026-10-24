@@ -8,7 +8,7 @@ const build = (tag: string): ReleaseBuild => ({
   channel: 'hourly',
   name: null,
   publishedAt: null,
-  releaseUrl: `https://github.com/stablyai/orca-hourly/releases/tag/${tag}`,
+  releaseUrl: `https://github.com/KOSFin/opka/releases/tag/${tag}`,
   installerUrl: null
 })
 

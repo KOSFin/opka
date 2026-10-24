@@ -42,14 +42,14 @@ function decodeCommand(command: string): string {
 
 describe('Windows Unicode managed hook commands', () => {
   it('keeps the existing ASCII direct path', () => {
-    const scriptPath = 'C:\\Users\\ascii\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd'
+    const scriptPath = 'C:\\Users\\ascii\\.opka\\agent-hooks\\antigravity-pre-tool-use.cmd'
     expect(wrapWindowsBatchHookCommand(scriptPath)).toBe(scriptPath.replaceAll('\\', '/'))
   })
 
   it.each(PROFILES.slice(1))(
     'preserves the guarded launcher for %s without policy setup',
     (profile) => {
-      const scriptPath = `C:\\Users\\${profile}\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd`
+      const scriptPath = `C:\\Users\\${profile}\\.opka\\agent-hooks\\antigravity-pre-tool-use.cmd`
       const decoded = decodeCommand(wrapWindowsBatchHookCommand(scriptPath))
       expect(decoded).toContain(`Test-Path -LiteralPath '${scriptPath}' -PathType Leaf`)
       expect(decoded).toContain('[Console]::In.ReadToEnd() | Out-Null; exit 0')
@@ -73,7 +73,7 @@ describe('Windows Unicode managed hook commands', () => {
     '用户`name',
     '用户\u2019name'
   ])('retains the encoded launcher for %s', (profile) => {
-    const scriptPath = `C:\\Users\\${profile}\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd`
+    const scriptPath = `C:\\Users\\${profile}\\.opka\\agent-hooks\\antigravity-pre-tool-use.cmd`
     expect(wrapWindowsBatchHookCommand(scriptPath)).toBe(wrapWindowsHookCommand(scriptPath))
     expect(wrapWindowsDirectCmdHookCommand(scriptPath)).toBeNull()
   })
@@ -109,7 +109,7 @@ describe.skipIf(
       service.setWindowsRuntimePathProvider(() => process.execPath)
       const configPath = join(home, '.gemini', 'config', 'hooks.json')
       const legacyCommand = wrapWindowsHookCommand(
-        join(home, '.orca', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
+        join(home, '.opka', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
       )
       writeHooksJson(configPath, {
         'orca-status': {
@@ -153,7 +153,7 @@ describe.skipIf(
         }
         for (const event of ANTIGRAVITY_EVENTS) {
           const command = installedCommand(configPath, event.eventName)
-          const scriptPath = join(home, '.orca', 'agent-hooks', event.windowsWrapperFileName)
+          const scriptPath = join(home, '.opka', 'agent-hooks', event.windowsWrapperFileName)
           const directCommand = wrapWindowsDirectCmdHookCommand(scriptPath)
           // Why: an ASCII profile registers the forward-slash path Git Bash can start too.
           expect(command).toBe(wrapWindowsBatchHookCommand(scriptPath))
@@ -196,7 +196,7 @@ describe.skipIf(
           }
         }
         const staleCommand = installedCommand(configPath, 'PreToolUse')
-        const scriptPath = join(home, '.orca', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
+        const scriptPath = join(home, '.opka', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
         rmSync(scriptPath)
         const beforeMissing = posts.length
         const invoke = () =>

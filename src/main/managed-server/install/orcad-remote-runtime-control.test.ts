@@ -16,13 +16,13 @@ import { createSshOperationAbortError } from '../../ssh/connection/ssh-exec-opti
 
 const host = getRemoteHostPlatform('linux-arm64')
 const spec: OrcadLaunchSpec = {
-  remoteInstallDir: '/root/.orca-remote/orcad-0.1.0+07d0995735e0',
+  remoteInstallDir: '/root/.opka-remote/orcad-0.1.0+07d0995735e0',
   nodePath: '/usr/bin/node',
   fullVersion: '0.1.0+07d0995735e0',
   userDataDir: '/root/.orca',
   bindHost: '127.0.0.1',
   port: 6768,
-  activationRoot: '/root/.orca-remote/.orcad-activation-transaction'
+  activationRoot: '/root/.opka-remote/.orcad-activation-transaction'
 }
 const READY = `${JSON.stringify({ type: 'orca_server_ready', runtimeId: 'r1' })}\n`
 const mockExec = vi.mocked(execCommand)

@@ -1,4 +1,5 @@
 import { compareAppVersions, isValidAppVersion } from './app-version'
+import { PRODUCT_IDENTITY } from './product-identity'
 
 export type ReleaseChannel = 'stable' | 'rc' | 'hourly' | 'daily' | 'adhoc'
 
@@ -21,10 +22,10 @@ export const RELEASE_CHANNEL_LABELS: Readonly<Record<ReleaseChannel, string>> = 
 /** Dev builds live in their own repos so their tags never enter the main
  *  releases atom feed, which only exposes the 10 newest entries — 24 hourly
  *  tags a day would evict every stable/RC entry and strand real users. */
-export const HOURLY_RELEASE_REPO = 'stablyai/orca-hourly'
-export const DAILY_RELEASE_REPO = 'stablyai/orca-daily'
-export const ADHOC_RELEASE_REPO = 'stablyai/orca-adhoc'
-export const MAIN_RELEASE_REPO = 'stablyai/orca'
+export const HOURLY_RELEASE_REPO = PRODUCT_IDENTITY.releaseRepo
+export const DAILY_RELEASE_REPO = PRODUCT_IDENTITY.releaseRepo
+export const ADHOC_RELEASE_REPO = PRODUCT_IDENTITY.releaseRepo
+export const MAIN_RELEASE_REPO = PRODUCT_IDENTITY.releaseRepo
 
 /** The dev channels, each published to its own repo rather than the main one. */
 const DEDICATED_REPO_CHANNELS = ['hourly', 'daily', 'adhoc'] as const

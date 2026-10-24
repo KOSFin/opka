@@ -46,7 +46,7 @@ function extractPairingCodeFromUrl(url: string): string | null {
   }
   // Why: prefix checks accepted routes like `orca://pairing?...`; only the
   // pairing deep-link host may carry runtime auth material.
-  if (parsed.protocol !== 'orca:' || parsed.hostname !== 'pair') {
+  if (!['orca:', 'opka:'].includes(parsed.protocol) || parsed.hostname !== 'pair') {
     return null
   }
   if (parsed.pathname !== '' && parsed.pathname !== '/') {
@@ -71,7 +71,7 @@ export function parsePairingCode(input: string): PairingOffer | null {
     return null
   }
   try {
-    if (trimmed.toLowerCase().startsWith('orca://')) {
+    if (/^(?:orca|opka):\/\//i.test(trimmed)) {
       return decodePairingOffer(trimmed)
     }
     return decodePairingBase64(trimmed)

@@ -49,7 +49,7 @@ describe('handOffToDesktopApp', () => {
   it('passes buffered links and documents to the new instance', () => {
     spawnProcessMock.mockReturnValue(makeChild())
 
-    handOffToDesktopApp(['orca://skills/share/abc', '/Users/me/notes.md'], {
+    handOffToDesktopApp(['opka://skills/share/abc', '/Users/me/notes.md'], {
       platform: 'darwin',
       env: {},
       executablePath: '/Users/me/Applications/Orca.app/Contents/MacOS/Orca',
@@ -60,7 +60,7 @@ describe('handOffToDesktopApp', () => {
       '-n',
       '/Users/me/Applications/Orca.app',
       '--args',
-      'orca://skills/share/abc',
+      'opka://skills/share/abc',
       '/Users/me/notes.md'
     ])
   })
@@ -167,7 +167,7 @@ describe('desktopHandoffArguments', () => {
       osOpenedDocuments: { consume: () => ['/Users/me/notes.md'] }
     })
 
-    expect(args).toEqual(['orca://skills/share/abc_123', '/Users/me/notes.md'])
+    expect(args).toEqual(['opka://skills/share/abc_123', '/Users/me/notes.md'])
     expect(skillShareIdFromArguments(args)).toBe('abc_123')
   })
 

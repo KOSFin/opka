@@ -61,7 +61,7 @@ import { NODE_RUNTIME_PIN } from '../../../shared/node-runtime-pin'
 const mockExec = vi.mocked(execCommand)
 const host = getRemoteHostPlatform('win32-x64')
 const VERSION = '0.2.0+bb0100000000'
-const SLOT_NODE = 'C:\\Users\\u\\.orca-remote\\runtimes\\node-ab\\node.exe'
+const SLOT_NODE = 'C:\\Users\\u\\.opka-remote\\runtimes\\node-ab\\node.exe'
 
 const encoded = (marker: string, value: string): string =>
   `${marker} ${Buffer.from(value).toString('base64')}\r\n`

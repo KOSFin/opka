@@ -93,12 +93,12 @@ describe.skipIf(process.platform === 'win32')(
         const root = join(base, '.orca')
         mkdirSync(join(root, 'profiles'), { recursive: true })
         writeFileSync(join(root, 'profiles', 'p.json'), 'state')
-        const snapshot = join(base, '.orca-remote', 'orcad-state-snapshots', 'pre-1')
+        const snapshot = join(base, '.opka-remote', 'orcad-state-snapshots', 'pre-1')
         const command = captureOrcadStateSnapshotCommand(
           getRemoteHostPlatform('linux-x64'),
           root,
           snapshot,
-          join(base, '.orca-remote')
+          join(base, '.opka-remote')
         )
         // Under the byte budget, so even uncompressed nothing is cut.
         const gatewayLimitBytes = 6 * 1024

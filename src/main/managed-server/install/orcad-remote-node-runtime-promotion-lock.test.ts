@@ -25,7 +25,7 @@ vi.mock('./remote-install-transfers', () => ({ uploadRelayDirectory: vi.fn(async
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every remote call goes through the mocked execCommand.
 const conn = {} as OrcadHostTransport
 const host = getRemoteHostPlatform('linux-x64')
-const store = '/home/u/.orca-remote/runtimes'
+const store = '/home/u/.opka-remote/runtimes'
 const lock = `${store}/${RUNTIME_STORE_LOCK_NAME}`
 let local: string
 let commands: string[]
@@ -61,7 +61,7 @@ async function ensure(): Promise<void> {
   await ensureRemoteOrcadNodeRuntime({
     conn,
     host,
-    slotDir: '/home/u/.orca-remote/relay-0.1.0+abc',
+    slotDir: '/home/u/.opka-remote/relay-0.1.0+abc',
     target: 'linux-x64-glibc',
     archivePath: async () => join(local, 'node.tar.gz')
   })

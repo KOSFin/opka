@@ -24,6 +24,18 @@ async function fixture() {
     registration: new ProfileCliRegistration(profile, resources, 'darwin')
   }
 }
+unix('registers Opka beside the isolated legacy test command without touching it', async () => {
+  const { profile, resources, registration } = await fixture()
+  await registration.install()
+  const legacyPath = join(profile, 'cli', 'bin', 'orca-fork')
+  const previous = await readFile(legacyPath, 'utf8')
+  const opka = new ProfileCliRegistration(profile, resources, 'darwin', 'opka')
+  expect((await opka.install()).commandName).toBe('opka')
+  expect((await opka.getStatus()).commandPath).toBe(join(profile, 'cli', 'bin', 'opka'))
+  await opka.remove()
+  expect(await readFile(legacyPath, 'utf8')).toBe(previous)
+  expect(() => new ProfileCliRegistration(profile, resources, 'darwin', '../orca')).toThrow()
+})
 unix('creates and removes only a private profile command, idempotently', async () => {
   const { registration, profile } = await fixture()
   expect((await registration.getStatus()).state).toBe('not_installed')

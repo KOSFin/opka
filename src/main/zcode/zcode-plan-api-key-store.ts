@@ -16,7 +16,7 @@ type ZcodePlanApiKeyEnvelope = {
 }
 
 export function getZcodePlanApiKeyPath(): string {
-  return join(homedir(), '.orca', ZCODE_PLAN_API_KEY_FILE)
+  return join(homedir(), '.opka', ZCODE_PLAN_API_KEY_FILE)
 }
 
 function encodeApiKeyEnvelope(kind: ZcodePlanApiKeyEnvelope['kind'], payload: Buffer): string {

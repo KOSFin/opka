@@ -177,7 +177,7 @@ export function removeStaleWslRuntimeManagedHookTrustEntries(
     managedEventLabels: CODEX_MANAGED_EVENT_LABELS,
     timeoutSec: MANAGED_HOOK_TIMEOUT_SECONDS,
     buildManagedCommand: (linuxRuntimeHome) =>
-      wrapReadablePosixHookCommand(`${linuxRuntimeHome}/.orca/agent-hooks/codex-hook.sh`),
+      wrapReadablePosixHookCommand(`${linuxRuntimeHome}/.opka/agent-hooks/codex-hook.sh`),
     priorLedgerHomes
   })
 }

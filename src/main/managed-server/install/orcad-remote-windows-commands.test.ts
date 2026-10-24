@@ -42,12 +42,12 @@ import { NODE_RUNTIME_ASSETS } from '../../../shared/node-runtime-pin'
 
 const mockExec = vi.mocked(execCommand)
 const host = getRemoteHostPlatform('win32-x64')
-const base = 'C:/Users/u/.orca-remote'
+const base = 'C:/Users/u/.opka-remote'
 const slot = `${base}/orcad-0.2.0+bb01`
 const sha = NODE_RUNTIME_ASSETS['win32-x64'].executableSha256
-const NODE = `C:\\Users\\u\\.orca-remote\\runtimes\\node-${sha}\\node.exe`
+const NODE = `C:\\Users\\u\\.opka-remote\\runtimes\\node-${sha}\\node.exe`
 const SCRIPT = `${base}/${ORCAD_WINDOWS_HOST_SCRIPT_FILENAME}`
-const SLOT_NODE = 'C:\\Users\\u\\.orca-remote\\runtimes\\node-ab\\node.exe'
+const SLOT_NODE = 'C:\\Users\\u\\.opka-remote\\runtimes\\node-ab\\node.exe'
 const spec: OrcadLaunchSpec = {
   remoteInstallDir: slot,
   nodePath: 'C:/host/node.exe',
@@ -99,7 +99,7 @@ describe('Windows orcad commands run node.exe directly', () => {
   })
 
   it.each(commands())('%s: no PowerShell hop, no encoding, no WMI or signal', (_name, command) => {
-    expect(command).toMatch(/^C:\\Users\\u\\\.orca-remote\\runtimes\\node-[0-9a-f]+\\node\.exe /u)
+    expect(command).toMatch(/^C:\\Users\\u\\\.opka-remote\\runtimes\\node-[0-9a-f]+\\node\.exe /u)
     expect(command).not.toMatch(
       /EncodedCommand|powershell|pwsh|cmd\.exe|ExecutionPolicy|Cim|Wmi|taskkill|SIGTERM|kill -/iu
     )
@@ -120,18 +120,18 @@ describe('Windows orcad commands run node.exe directly', () => {
       `${NODE} ${SCRIPT} slot-runtime ${slot} clear-stop-request`
     )
     expect(windowsOrcadLaunchCommand(host, spec, SLOT_NODE)).toMatchInlineSnapshot(
-      `"C:\\Users\\u\\.orca-remote\\runtimes\\node-ab\\node.exe C:/Users/u/.orca-remote/orcad-0.2.0+bb01/orcad.js --windows-breakaway-launch --stdout-file C:/Users/u/.orca-remote/orcad-0.2.0+bb01/.orcad-readiness --stderr-file C:/Users/u/.orca-remote/orcad-0.2.0+bb01/orcad.log --stderr-keep-previous --process-file C:/Users/u/.orca-remote/orcad-0.2.0+bb01/.orcad-process.json --env ORCA_VERSION=0.2.0+bb01 --env ORCA_USER_DATA=C:/Users/u/.orca --env ORCA_ORCAD_MANAGED_ACTIVATION_ROOT=C:/Users/u/.orca-remote/.orcad-activation-transaction --orcad-args --json --bind "127.0.0.1" --port "7777""`
+      `"C:\\Users\\u\\.opka-remote\\runtimes\\node-ab\\node.exe C:/Users/u/.opka-remote/orcad-0.2.0+bb01/orcad.js --windows-breakaway-launch --stdout-file C:/Users/u/.opka-remote/orcad-0.2.0+bb01/.orcad-readiness --stderr-file C:/Users/u/.opka-remote/orcad-0.2.0+bb01/orcad.log --stderr-keep-previous --process-file C:/Users/u/.opka-remote/orcad-0.2.0+bb01/.orcad-process.json --env ORCA_VERSION=0.2.0+bb01 --env ORCA_USER_DATA=C:/Users/u/.orca --env ORCA_ORCAD_MANAGED_ACTIVATION_ROOT=C:/Users/u/.opka-remote/.orcad-activation-transaction --orcad-args --json --bind "127.0.0.1" --port "7777""`
     )
   })
 
   it('passes the managed idle-exit fence through the breakaway environment', () => {
     const command = windowsOrcadLaunchCommand(
       host,
-      { ...spec, activationRoot: 'C:/Users/u/.orca-remote/.orcad-activation-transaction' },
+      { ...spec, activationRoot: 'C:/Users/u/.opka-remote/.orcad-activation-transaction' },
       SLOT_NODE
     )
     expect(command).toContain(
-      '--env ORCA_ORCAD_MANAGED_ACTIVATION_ROOT=C:/Users/u/.orca-remote/.orcad-activation-transaction --orcad-args'
+      '--env ORCA_ORCAD_MANAGED_ACTIVATION_ROOT=C:/Users/u/.opka-remote/.orcad-activation-transaction --orcad-args'
     )
     expect(command).not.toMatch(/[%$`']/u)
   })

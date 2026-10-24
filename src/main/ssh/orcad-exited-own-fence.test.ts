@@ -56,7 +56,7 @@ function entry(token: string, pid: number, host = hostname()) {
 function hostWithFence(owner: string, held: ReturnType<typeof entry>[]) {
   const home = mkdtempSync(join(tmpdir(), 'orcad-exited-fence-'))
   homes.push(home)
-  const fence = join(home, '.orca-remote', '.orcad-activation-transaction', '.install-lock')
+  const fence = join(home, '.opka-remote', '.orcad-activation-transaction', '.install-lock')
   mkdirSync(fence, { recursive: true })
   writeFileSync(join(fence, '.orca-fence-owner'), owner)
   const quietSince = new Date(Date.now() - 10 * 60_000)
@@ -84,7 +84,7 @@ describe.skipIf(process.platform === 'win32')('a fence this desktop’s exited p
   it('is kept while a state mutation of that run may still be running', async () => {
     const { home, fence, options } = hostWithFence('t-exited', [entry('t-exited', EXITED_PID)])
     // sshd kept the pty-less restore running after the desktop quit.
-    const mutation = join(home, '.orca-remote', 'orcad-state-mutation.lock')
+    const mutation = join(home, '.opka-remote', 'orcad-state-mutation.lock')
     mkdirSync(mutation)
     writeFileSync(join(mutation, 'pid'), String(process.pid))
     const refusal = await orcadActivationFenceRefusal(options, 'update')
@@ -124,7 +124,7 @@ describe.skipIf(process.platform === 'win32')('a fence this desktop’s exited p
 
   it('hands a fence over a journal to Recover and keeps the journal', async () => {
     const { home, fence, options } = hostWithFence('t-exited', [entry('t-exited', EXITED_PID)])
-    const journal = join(home, '.orca-remote', '.orcad-activation-transaction', 'transaction.json')
+    const journal = join(home, '.opka-remote', '.orcad-activation-transaction', 'transaction.json')
     writeFileSync(journal, '{"schemaVersion":1}')
     await expect(orcadActivationFenceRefusal(options, 'update')).resolves.toMatchObject({
       code: 'orcad_activation_recovery_required'
@@ -165,7 +165,7 @@ describe.skipIf(process.platform === 'win32')('the held fence token record', () 
 
   it('holds a token while its run works and drops it on release', async () => {
     const { home, store, options } = hostWithFence('unused', [])
-    rmSync(join(home, '.orca-remote'), { recursive: true })
+    rmSync(join(home, '.opka-remote'), { recursive: true })
     const during = await withOrcadActivationLock(
       options,
       async () => held(store),
@@ -178,7 +178,7 @@ describe.skipIf(process.platform === 'win32')('the held fence token record', () 
 
   it('drops a token a successor superseded, and keeps one a lost connection left', async () => {
     const { home, fence, store, options } = hostWithFence('unused', [])
-    rmSync(join(home, '.orca-remote'), { recursive: true })
+    rmSync(join(home, '.opka-remote'), { recursive: true })
     await withOrcadActivationLock(
       options,
       async () => writeFileSync(join(fence, '.orca-fence-owner'), 'successor'),
@@ -186,7 +186,7 @@ describe.skipIf(process.platform === 'win32')('the held fence token record', () 
       't-superseded'
     )
     expect(held(store)).not.toContain('t-superseded')
-    rmSync(join(home, '.orca-remote'), { recursive: true })
+    rmSync(join(home, '.opka-remote'), { recursive: true })
 
     const lost = Object.assign(new Error('lost'), { sshChannelCloseConfirmed: false })
     await expect(
@@ -216,7 +216,7 @@ describe.skipIf(process.platform === 'win32')('the held fence token record', () 
 
   it('never lets an unwritable record fail a fence operation', async () => {
     const { home, store, options } = hostWithFence('unused', [])
-    rmSync(join(home, '.orca-remote'), { recursive: true })
+    rmSync(join(home, '.opka-remote'), { recursive: true })
     rmSync(store)
     mkdirSync(store)
     expect(

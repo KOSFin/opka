@@ -10,6 +10,7 @@ import { readHttp1CompatibilityMarker } from './http1-compatibility-marker'
 import { checkServeUserDataPath } from './serve-user-data-path-guard'
 import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
 import { isLinuxWaylandSession } from '../../shared/linux-wayland-session'
+import { PRODUCT_IDENTITY } from '../../shared/product-identity'
 import {
   hasMissingProfileStateDatabaseWithRetainedAuthority,
   readActiveProfileId,
@@ -213,6 +214,12 @@ export function configureDevUserDataPath(isDev: boolean): void {
   }
 
   if (!isDev) {
+    const explicitPath = process.argv.find((arg) => arg.startsWith('--user-data-dir='))
+    app.setPath(
+      'userData',
+      explicitPath?.slice('--user-data-dir='.length) ||
+        join(app.getPath('appData'), PRODUCT_IDENTITY.name)
+    )
     return
   }
   const overrideUserDataPath = process.env.ORCA_DEV_USER_DATA_PATH
@@ -222,7 +229,7 @@ export function configureDevUserDataPath(isDev: boolean): void {
     return
   }
   // Why: without a dev-only path, pnpm dev overwrites the packaged app's runtime pointer under userData and breaks the orca CLI.
-  app.setPath('userData', join(app.getPath('appData'), 'orca-dev'))
+  app.setPath('userData', join(app.getPath('appData'), 'opka-dev'))
 }
 
 function areSameE2EHomePath(left: string, right: string): boolean {
@@ -251,8 +258,8 @@ export function configureOrcaUserDataPathEnv(): void {
 
 export function shouldInstallManagedHooks(isDev: boolean): boolean {
   void isDev
-  // Why: managed hooks now target Orca-owned Codex homes, not ~/.codex, so keep install on for all agents until each gets its own seam.
-  return true
+  // Opka must not rewrite another app's global CLI settings; managed account homes install their own hooks.
+  return false
 }
 
 export function installDevParentDisconnectQuit(isDev: boolean): void {

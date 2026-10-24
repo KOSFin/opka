@@ -37,7 +37,7 @@ afterEach(() => {
 describe('an SFTP transfer whose SSH connection dies', () => {
   it('fails as lost contact instead of waiting forever', async () => {
     const sftp = fakeSession()
-    const upload = uploadSshDirectory(hostWith(sftp), '/local/runtime', '/root/.orca-remote/x')
+    const upload = uploadSshDirectory(hostWith(sftp), '/local/runtime', '/root/.opka-remote/x')
     await vi.waitFor(async () => {
       const { uploadDirectory } = await import('../sftp-upload')
       expect(uploadDirectory).toHaveBeenCalled()

@@ -106,7 +106,7 @@ type HostCase = { host: RemoteHostPlatform; target: NodeRuntimeTarget; nodePath:
 
 // Realistic worst case: a long NFS home, a long account name and a held activation fence.
 const home = `/net/nfs-home-cluster-03/users/engineering/${'a'.repeat(48)}.longname`
-const baseDir = `${home}/.orca-remote`
+const baseDir = `${home}/.opka-remote`
 const slotDir = `${baseDir}/orcad-1.4.299-rc.12+${'f'.repeat(40)}`
 const userDataDir = `${baseDir}/orcad-data`
 const snapshotDir = `${baseDir}/orcad-snapshots/pre-1.4.299-rc.12-1760000000000`

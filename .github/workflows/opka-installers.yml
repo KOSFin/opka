@@ -1,0 +1,96 @@
+name: Opka beta installers
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+  ORCA_TELEMETRY_DISABLED: '1'
+  HUSKY: '0'
+
+jobs:
+  server_template:
+    uses: ./.github/workflows/opka-server-template.yml
+    with:
+      ref: ${{ github.sha }}
+      build_template: true
+      version: ${{ inputs.version }}
+
+  mac:
+    name: Unsigned Mac arm64 beta
+    needs: server_template
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      OPKA_VERSION: ${{ inputs.version }}
+      ORCA_LOCAL_BUILD_VERSION: ${{ inputs.version }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ORCA_REQUIRE_ORCAD_TEMPLATE: '1'
+      ORCA_COMPUTER_MACOS_SIGN_IDENTITY: '-'
+      ORCA_KEYBOARD_LAYOUT_MACOS_SIGN_IDENTITY: '-'
+      ORCA_NOTIFICATION_STATUS_MACOS_SIGN_IDENTITY: '-'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - uses: ./.github/actions/install-mobile-dependencies
+      - name: Install every architecture required by packaging guards
+        run: pnpm install:release
+      - name: Install Electron
+        run: node config/scripts/install-electron-package-binary.mjs
+      - uses: actions/download-artifact@v8
+        with:
+          name: orcad-template
+          path: out/orcad-template
+      - name: Build desktop and native Mac components
+        run: |
+          pnpm run build:desktop:assets
+          pnpm run build:computer-macos
+          pnpm run build:keyboard-layout-macos
+          pnpm run build:notification-status-macos
+          pnpm run ensure:electron-runtime
+      - name: Package without publishing or claiming Developer ID signing
+        run: pnpm exec electron-builder --config config/electron-builder.config.cjs --mac dmg zip --arm64 --publish never
+      - name: Qualify release files and record provenance
+        run: node config/scripts/opka-release-assets.mjs mac dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opka-macos-${{ github.sha }}
+          path: |
+            dist/opka-macos-arm64.dmg
+            dist/opka-macos-arm64.zip
+            dist/latest-mac.yml
+            dist/opka-macos-provenance.json
+          if-no-files-found: error
+          retention-days: 14
+  release_files:
+    name: Complete beta asset set
+    needs: [mac, server_template]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      OPKA_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: opka-*-${{ github.sha }}
+          path: dist
+          merge-multiple: true
+      - run: node config/scripts/opka-release-assets.mjs complete dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opka-beta-release-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

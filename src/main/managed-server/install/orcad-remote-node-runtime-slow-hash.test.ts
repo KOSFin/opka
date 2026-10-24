@@ -62,9 +62,9 @@ afterEach(() => {
 
 describe.skipIf(process.platform === 'win32')('runtime install on slow storage', () => {
   it('frees the store lock once a re-hash the client timed out on finishes', async () => {
-    const slotDir = join(root, '.orca-remote', 'relay-0.1.0+abc')
+    const slotDir = join(root, '.opka-remote', 'relay-0.1.0+abc')
     const runtimeDir = remoteNodeRuntimeDir(host, slotDir, target)
-    const store = join(root, '.orca-remote', 'runtimes')
+    const store = join(root, '.opka-remote', 'runtimes')
     const archive = join(root, 'node.tar.gz')
     writeFileSync(archive, 'archive')
     // A sibling installer publishes this pin while this client uploads.
