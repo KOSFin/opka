@@ -7,6 +7,8 @@ export const FORK_TEST_FILTERS = [
   'src/main/updater',
   'src/preload/updater-manual-installer.test.ts',
   'src/main/codex/codex-hook-command-form.test.ts',
+  'src/main/codex/codex-hook-reconcile.test.ts',
+  'src/main/startup/codex-hook-startup-wiring.test.ts',
   'src/main/codex/codex-real-home-hook-entries.test.ts',
   'src/main/codex/codex-interrupt-hook-trust.test.ts',
   'src/shared/pairing.test.ts',

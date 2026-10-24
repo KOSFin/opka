@@ -13,6 +13,7 @@ import { reconcileRealHomeCodexHookEntries } from './codex-real-home-hook-instal
 
 type ReconcileConfig = {
   isEnabled: () => boolean
+  allowRealHomeWrites?: boolean
   /** The CODEX_HOME the next native pane gets, null for ~/.codex; may throw while it is unknown. */
   resolveLaunchHome: () => string | null
 }
@@ -132,7 +133,11 @@ async function runUntilSettled(): Promise<void> {
 
 async function reconcileOnce(realHomeLaunch: boolean): Promise<void> {
   const current = config
-  if (!current?.isEnabled() || !(realHomeLaunch || resolveHome(current).kind === 'real')) {
+  if (
+    !current?.isEnabled() ||
+    current.allowRealHomeWrites === false ||
+    !(realHomeLaunch || resolveHome(current).kind === 'real')
+  ) {
     return
   }
   const lookup = resolveCodexHookAnswer()

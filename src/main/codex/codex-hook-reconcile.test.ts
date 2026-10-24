@@ -215,6 +215,21 @@ afterEach(() => {
 })
 
 describe('reconcileCodexHooks', () => {
+  it('leaves shared Codex files unchanged when the fork disallows real-home writes', async () => {
+    writeHooks({ Stop: [olderBuildStop()] })
+    const before = snapshot(codexHome())
+    startCodexHooks({
+      pathReady: Promise.resolve(),
+      isEnabled: () => true,
+      resolveLaunchHome: () => null,
+      allowRealHomeWrites: false
+    })
+    await _internals.settledForTesting()
+    await reconcileCodexHooks({ convertOlderForms: true, realHomeLaunch: true })
+    await reconcileCodexHooksForLaunch()
+    expect(mocks.realHomeRuns).toBe(0)
+    expect(snapshot(codexHome())).toEqual(before)
+  })
   it('writes the entry last in every listed event, approved, at app start', async () => {
     writeHooks({ Stop: [{ hooks: [{ type: 'command', command: 'user-stop.sh' }] }] })
 

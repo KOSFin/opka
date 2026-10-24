@@ -107,6 +107,7 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
   // Why here, after PATH hydration: the first Codex launch usually finds Codex's hook hash ready,
   // and launches find the reconcile in flight before CLI detection ends.
   startCodexHooks({
+    allowRealHomeWrites: false,
     pathReady: app.isPackaged ? hydrateAgentCliShellPath() : Promise.resolve(),
     isEnabled: () => isAgentStatusHooksEnabledForAgent(store.getSettings(), 'codex'),
     resolveLaunchHome: () => {
