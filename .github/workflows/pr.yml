@@ -167,4 +167,4 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
-          node -e 'const jobs = Object.values(JSON.parse(process.env.RESULTS)); if (jobs.length !== 4 || jobs.some(job => job.result !== "success")) process.exit(1)'
+          node -e 'const jobs = Object.values(JSON.parse(process.env.RESULTS)); if (jobs.length !== 5 || jobs.some(job => job.result !== "success")) process.exit(1)'

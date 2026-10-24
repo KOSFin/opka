@@ -1,4 +1,5 @@
 import { globSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { verifyRequiredPrContext } from '../../.github/scripts/check-required-pr-context.mjs'
@@ -8,6 +9,29 @@ import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('executes the aggregate gate against success, missing, failed, cancelled and skipped checks', () => {
+    const command = workflow.jobs.verify.steps.find((step) => step.run).run.trim()
+    const match = command.match(/^node -e '([\s\S]+)'$/)
+    expect(match).not.toBeNull()
+    const script = match[1]
+    const results = Object.fromEntries(
+      workflow.jobs.verify.needs.map((name) => [name, { result: 'success' }])
+    )
+    const run = (value) =>
+      execFileSync(process.execPath, ['-e', script], {
+        env: { ...process.env, RESULTS: JSON.stringify(value) },
+        stdio: 'pipe'
+      })
+    expect(() => run(results)).not.toThrow()
+    for (const name of workflow.jobs.verify.needs) {
+      const { [name]: omitted, ...missing } = results
+      expect(omitted.result).toBe('success')
+      expect(() => run(missing)).toThrow()
+      for (const result of ['failure', 'cancelled', 'skipped']) {
+        expect(() => run({ ...results, [name]: { result } })).toThrow()
+      }
+    }
+  })
   it('does not silently accept misspelled test filters', () => {
     const files = globSync(UNIT_INCLUDE).map((file) => file.replaceAll('\\', '/'))
     for (const filter of FORK_TEST_FILTERS) {

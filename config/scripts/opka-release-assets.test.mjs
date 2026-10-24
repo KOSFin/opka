@@ -52,7 +52,7 @@ describe('Opka release assets', () => {
       roots.push(root)
       await mkdir(join(root, 'orcad'))
       await mkdir(join(root, 'runtimes'), { recursive: true })
-      await writeFile(join(root, 'orcad', '.version'), '0.1.0+123456abcdef\n')
+      await writeFile(join(root, 'orcad', '.version'), '0.1.0+123456abcdef')
       await writeFile(
         join(root, 'runtimes', 'node'),
         '#!/bin/sh\nprintf "%s\\n" "$ORCA_VERSION"\n',
@@ -65,6 +65,13 @@ describe('Opka release assets', () => {
           env: { ...process.env, ORCA_VERSION: 'other-app' }
         }).trim()
       ).toBe('0.1.0+123456abcdef')
+      await writeFile(join(root, 'orcad', '.version'), '')
+      expect(() =>
+        execFileSync('sh', [join(root, 'opka-server')], {
+          env: { ...process.env, ORCA_VERSION: 'other-app' },
+          stdio: 'pipe'
+        })
+      ).toThrow()
     }
   )
   it('uses a full slot beside its pinned runtime rather than deleted template scratch output', () => {

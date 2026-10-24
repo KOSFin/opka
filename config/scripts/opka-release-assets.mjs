@@ -118,7 +118,8 @@ export function serverLauncher(node) {
     'set -eu',
     'OPKA_INSTALL_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
     'export ORCA_USER_DATA="${ORCA_USER_DATA:-${HOME:?}/.opka}"',
-    'IFS= read -r ORCA_VERSION < "$OPKA_INSTALL_DIR/orcad/.version"',
+    'ORCA_VERSION=',
+    'IFS= read -r ORCA_VERSION < "$OPKA_INSTALL_DIR/orcad/.version" || test -n "$ORCA_VERSION"',
     'export ORCA_VERSION',
     `exec "$OPKA_INSTALL_DIR/${node.split('\\').join('/')}" "$OPKA_INSTALL_DIR/orcad/orcad.js" "$@"`,
     ''
@@ -160,6 +161,7 @@ async function packageServer(stage, directory, version, commit) {
   await cp(resolve('LICENSE'), join(stage, 'LICENSE'))
   await writeFile(join(stage, 'opka-server'), serverLauncher(node), { mode: 0o755 })
   await chmod(join(stage, 'opka-server'), 0o755)
+  execFileSync(join(stage, 'opka-server'), ['--help'], { stdio: 'ignore' })
   await writeFile(
     join(stage, 'opka-release.json'),
     `${JSON.stringify({ version, commit, target })}\n`
