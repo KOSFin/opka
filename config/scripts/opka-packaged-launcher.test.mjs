@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { copyFile, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
@@ -14,7 +14,7 @@ afterEach(async () => {
 it.skipIf(process.platform === 'win32')(
   'launches only the Opka executable and keeps arguments intact through a symlink',
   async () => {
-    const root = await mkdtemp(join(tmpdir(), 'opka-launcher-'))
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'opka-launcher-')))
     roots.push(root)
     const contents = join(root, 'Opka beta.app', 'Contents')
     const bin = join(contents, 'Resources', 'bin')
