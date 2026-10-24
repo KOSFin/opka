@@ -21,6 +21,7 @@ export const FORK_TEST_FILTERS = [
   'src/main/startup/configure-process.test.ts',
   'src/main/startup/dev-instance-identity.test.ts',
   'src/main/orcad/orcad-app-paths.test.ts',
+  'src/main/orcad/orcad-push-startup.test.ts',
   'src/cli/runtime/launch-user-data-path.test.ts',
   'src/main/managed-server/host-state/orcad-machine-home.test.ts',
   'src/main/managed-server/install/remote-install-model.test.ts',
