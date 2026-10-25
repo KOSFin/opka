@@ -1,8 +1,10 @@
-import { mkdtempSync, realpathSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
+import { prepareForkProfileCli } from './helpers/fork-profile-cli'
+import { runProcessSync } from '@orca/process-host'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 
 const executablePath = process.env.ORCA_FORK_AUDIT_ELECTRON
@@ -46,10 +48,19 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
   })
   let app: ElectronApplication | undefined
   try {
+    if (!executablePath) {
+      throw new Error('An explicit test Electron executable is required')
+    }
+    const cli = await prepareForkProfileCli(session.userDataDir, executablePath)
     let launched = await session.launch({ executablePath })
     app = launched.app
     const page = launched.page
     await openTaskPage(page, root)
+    expect(
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().some((window) => window.isVisible())
+      )
+    ).toBe(false)
     await page.getByRole('button', { name: 'Set up task files', exact: true }).click()
     await expect(page.getByRole('button', { name: 'New task', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: 'New task', exact: true }).click()
@@ -76,6 +87,29 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
     await approval.getByRole('button', { name: 'Confirm', exact: true }).click()
     await expect(approval).toBeHidden()
     await expect(detail.getByText('Task information · ready', { exact: true })).toBeVisible()
+    const child = path.join(root, 'nested-source')
+    mkdirSync(child)
+    for (const cwd of [root, child]) {
+      const board = runProcessSync({
+        program: cli,
+        args: ['project-task', 'board', '--json'],
+        cwd,
+        timeoutMs: 10000,
+        maxOutputBytes: 16384,
+        env: {
+          ...process.env,
+          ORCA_BACKGROUND_LAUNCH: '1',
+          ORCA_ENVIRONMENT: '',
+          ORCA_PAIRING_CODE: '',
+          ORCA_REMOTE_PAIRING: ''
+        }
+      })
+      expect(
+        board.code,
+        `The actual profile launcher must read its own live task board: ${board.stderr.slice(0, 1800)} ${board.stdout.slice(0, 1800)}`
+      ).toBe(0)
+      expect(board.stdout).toContain('Audit file-backed tasks')
+    }
     await page.screenshot({ path: testInfo.outputPath('tasks-desktop.png') })
     await page.setViewportSize({ width: 390, height: 844 })
     await page.evaluate(() => {
@@ -127,6 +161,11 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
     })
     await editor.fill(`${await editor.inputValue()}\nLocal unsaved draft\n`)
     const documentPath = path.join(root, taskPath)
+    mkdirSync(path.join(path.dirname(documentPath), 'reports'))
+    writeFileSync(
+      path.join(path.dirname(documentPath), 'reports/synthetic-result.md'),
+      '# Result\n\nSynthetic result saved in the task directory.\n'
+    )
     writeFileSync(
       path.join(path.dirname(documentPath), 'notes.md'),
       '# Evidence\n\nSynthetic local report\n'
@@ -152,6 +191,22 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
     await launched.page.getByRole('button', { name: 'Plan', exact: true }).click()
     await expect(launched.page.getByText('Preserve this evidence.', { exact: true })).toBeVisible()
     await expect(launched.page.getByText(/plan changed/i).first()).toBeVisible()
+    await launched.page.getByRole('button', { name: 'Reports & notes', exact: true }).click()
+    await expect(
+      launched.page.getByRole('region', { name: 'Task reports and notes' })
+    ).toContainText('Synthetic result saved in the task directory.')
+    await launched.page.screenshot({ path: testInfo.outputPath('task-documents.png') })
+    await launched.page.getByRole('combobox', { name: 'Saved task document' }).click()
+    await launched.page.getByRole('option', { name: 'Notes', exact: true }).click()
+    await expect(
+      launched.page.getByRole('region', { name: 'Task reports and notes' })
+    ).toContainText('Synthetic local report')
+    await launched.page.getByRole('button', { name: 'Plan', exact: true }).click()
+    await launched.page.getByRole('button', { name: 'Reports & notes', exact: true }).click()
+    await expect(
+      launched.page.getByRole('combobox', { name: 'Saved task document' })
+    ).toContainText('Notes')
+    await launched.page.getByRole('button', { name: 'Plan', exact: true }).click()
     await launched.page.getByRole('link', { name: 'Outside project', exact: true }).click()
     await expect(launched.page.getByRole('alert')).toContainText(/outside the project/)
     await launched.page.getByRole('link', { name: 'Local evidence', exact: true }).click()

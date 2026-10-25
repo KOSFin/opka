@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadUpdaterModule, warmUpdaterModule } from './updater-test-module-loader'
 
-const { autoUpdaterMock, fetchNewerReleaseTagsMock, moduleFactories, resetUpdaterMocks } =
+const { appMock, autoUpdaterMock, fetchNewerReleaseTagsMock, moduleFactories, resetUpdaterMocks } =
   await vi.hoisted(async () => (await import('./updater-test-harness')).createUpdaterMocks())
 
 vi.mock('electron', () => moduleFactories.electron())
@@ -54,6 +54,27 @@ describe('updater feed preflight ownership', () => {
     resetUpdaterMocks()
     vi.useFakeTimers()
     autoUpdaterMock.checkForUpdates.mockImplementation(() => new Promise(() => {}))
+  })
+
+  it('settles a current beta without probing a stable-only latest feed', async () => {
+    appMock.getVersion.mockReturnValue('1.4.236-rc.1')
+    fetchNewerReleaseTagsMock.mockResolvedValue({ tags: [], state: 'no-newer' })
+    const updater = await setup()
+    autoUpdaterMock.setFeedURL.mockClear()
+    updater.checkForUpdatesFromMenu()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updater.getUpdateStatus()).toMatchObject({ state: 'not-available', userInitiated: true })
+    expect(autoUpdaterMock.setFeedURL).not.toHaveBeenCalled()
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled()
+  })
+
+  it('does not report a failed beta feed read as a successful no-newer check', async () => {
+    appMock.getVersion.mockReturnValue('1.4.236-rc.1')
+    fetchNewerReleaseTagsMock.mockRejectedValue(new Error('Synthetic release feed unavailable'))
+    const updater = await setup()
+    updater.checkForUpdatesFromMenu()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updater.getUpdateStatus()).toMatchObject({ state: 'error', userInitiated: true })
   })
 
   it.each(expiredResults)('does not repin after a timed-out $state result', async (result) => {

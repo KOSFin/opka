@@ -17,6 +17,13 @@ export type ProjectTaskAttempt = {
   nativeStatus: string
   workerState: string | null
   terminal: string | null
+  session?: {
+    address?: string | null
+    released?: boolean
+    checkpointPath: string | null
+    reportPath: string | null
+    blocker: string | null
+  } | null
 }
 export type ProjectTaskWorkflow = {
   taskId: string

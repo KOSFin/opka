@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS project_task_attempts (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_project_task_attempts_task ON project_task_attempts(project_id,task_id,created_at);
+CREATE TABLE IF NOT EXISTS project_task_session_attempts (
+  attempt_id TEXT PRIMARY KEY REFERENCES project_task_attempts(id),
+  owner_key TEXT NOT NULL, owner_address TEXT,
+  checkpoint_path TEXT, report_path TEXT, blocker TEXT, result_hash TEXT
+);
 CREATE TABLE IF NOT EXISTS project_task_events (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT NOT NULL UNIQUE,
   project_id TEXT NOT NULL, task_id TEXT NOT NULL, revision TEXT NOT NULL,

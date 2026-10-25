@@ -28,7 +28,10 @@ import {
   ORCHESTRATION_CONTRACT_VERSION
 } from '../../shared/protocol-version'
 import { RemoteRuntimeCompatGate } from './remote-runtime-compat-gate'
-import { createOrchestrationCompatibilityEnvelope } from './orchestration-compatibility-envelope'
+import {
+  createOrchestrationCompatibilityEnvelope,
+  orchestrationCompatibilityForMethod
+} from './orchestration-compatibility-envelope'
 import { getTimeoutMsParam, isWaitingCheck } from './runtime-request-timeout'
 import {
   isWorkerStartTimeoutWithinTimerLimit,
@@ -124,20 +127,17 @@ export class RuntimeClient {
       }
       return attachDurableMutationRecovery(error, orchestrationRequestId, originalCommand, method)
     }
-    const compatibilityEnvelope = method.startsWith('orchestration.')
-      ? {
-          ...this.orchestrationCompatibility,
-          compatibilityInvocationId:
-            orchestrationRequestId ?? this.orchestrationCompatibility.compatibilityInvocationId
-        }
-      : {}
     const envelope = {
       orchestrationCapability: options?.orchestrationCapability,
       orchestrationContractVersion: method.startsWith('orchestration.')
         ? ORCHESTRATION_CONTRACT_VERSION
         : undefined,
       orchestrationRequestId,
-      ...compatibilityEnvelope
+      ...orchestrationCompatibilityForMethod(
+        method,
+        this.orchestrationCompatibility,
+        orchestrationRequestId
+      )
     }
     if (this.remote) {
       const transport = await loadWebSocketTransport()

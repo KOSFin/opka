@@ -86,10 +86,13 @@ describe('updater', () => {
     expect(autoUpdaterMock.allowPrerelease).not.toBe(true)
   })
 
-  // Why: if the atom resolver fails or finds nothing newer, fall back to /releases/latest/download so the check completes as "not-available" instead of erroring.
-  it('falls back to /releases/latest/download when the atom resolver returns null', async () => {
+  it('retains the recovery feed when the atom feed could not be read', async () => {
     appMock.getVersion.mockReturnValue('1.3.19-rc.6')
-    fetchNewerReleaseTagsMock.mockResolvedValue([])
+    fetchNewerReleaseTagsMock.mockResolvedValue({
+      tags: [],
+      state: 'unavailable',
+      unavailableReason: 'feed'
+    })
     autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()

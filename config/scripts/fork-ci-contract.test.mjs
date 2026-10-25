@@ -48,6 +48,33 @@ describe('fork CI safety and required checks', () => {
     )
   })
 
+  it('qualifies ordinary-chat lifecycle without spending model credentials in CI', () => {
+    for (const filter of [
+      'src/main/runtime/project-task-session.test.ts',
+      'src/main/runtime/project-task-target.test.ts',
+      'src/main/runtime/project-task-terminal-caller.test.ts',
+      'src/cli/handlers/project-task.test.ts',
+      'src/cli/runtime-client.test.ts',
+      'tests/e2e/helpers/fork-task-approvals.unit.test.ts',
+      'tests/e2e/helpers/fork-codex-startup.unit.test.ts'
+    ]) {
+      expect(FORK_TEST_FILTERS).toContain(filter)
+    }
+    const journey = workflow.jobs.electron.steps.find(
+      (step) => step.name === 'Exercise project navigation and task boards'
+    ).run
+    expect(journey).toContain('tests/e2e/fork-project-tasks.spec.ts')
+    expect(journey).toContain('tests/e2e/fork-task-rpc-discovery.spec.ts')
+    expect(journey).toContain('tests/e2e/fork-packaged-tasks.spec.ts')
+    expect(journey).not.toContain('fork-task-real-codex.spec.ts')
+    const installer = parse(readFileSync('.github/workflows/opka-installers.yml', 'utf8'))
+    const packaged = installer.jobs.mac.steps.find(
+      (step) => step.name === 'Exercise the packaged task lifecycle without a model'
+    )
+    expect(packaged.env.ORCA_FORK_PACKAGED_APP).toContain('/dist/mac-arm64/Opka.app')
+    expect(packaged.run).toContain('fork-packaged-tasks.spec.ts')
+  })
+
   it('owns the existing required context without shadow workflows', () => {
     expect(() => verifyRequiredPrContext(parse)).not.toThrow()
   })

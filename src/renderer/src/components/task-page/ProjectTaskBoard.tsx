@@ -116,6 +116,9 @@ export function ProjectTaskBoard({
                     {task.workflow.phase === 'active' &&
                       projectTaskNeedsDecision(task.workflow) && <span>Needs your decision</span>}
                     {task.workflow.archived && <span>Archived</span>}
+                    {task.workflow.attempts[0]?.session?.blocker && (
+                      <span>Waiting: {task.workflow.attempts[0].session.blocker}</span>
+                    )}
                     {task.parent && <span>Subtask</span>}
                   </span>
                 </button>

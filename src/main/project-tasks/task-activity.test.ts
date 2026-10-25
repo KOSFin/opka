@@ -11,7 +11,10 @@ import { exportProjectTaskActivity, closeProjectTaskActivity } from './task-acti
 const directories: string[] = []
 const opened: OrchestrationDb[] = []
 afterEach(async () => {
-  opened.splice(0).forEach((db) => db.close())
+  const closing = opened.splice(0)
+  closing.forEach((db) => closeProjectTaskActivity(db.db))
+  await Promise.all(closing.map((db) => exportProjectTaskActivity(db.db)))
+  closing.forEach((db) => db.close())
   await Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 async function fixture() {

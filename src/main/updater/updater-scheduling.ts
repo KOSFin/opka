@@ -90,9 +90,19 @@ export abstract class UpdaterScheduling extends UpdaterCheckFailure {
       this.markUpdateCheckLaunched(attemptId)
       return autoUpdater.checkForUpdates()
     }
-    const run = this.pinDefaultReleaseFeed().then(launch)
+    const run = this.pinDefaultReleaseFeed().then((preflightResult) => {
+      if (preflightResult === 'not-available') {
+        this.settleSilentUpdateCheck(attemptId, this.getSettledCheckUserInitiated())
+        return false
+      }
+      return launch()
+    })
     void Promise.resolve(run)
-      .then(() => this.handleSettledUpdateCheckPromise(attemptId))
+      .then((launchResult) => {
+        if (launchResult !== false) {
+          this.handleSettledUpdateCheckPromise(attemptId)
+        }
+      })
       .catch((err) => {
         if (!this.isActiveUpdateCheckAttempt(attemptId)) {
           return

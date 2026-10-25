@@ -4,6 +4,8 @@ import type { ElectronApplication } from '@stablyai/playwright-test'
 export type LaunchOptions = {
   /** Exact isolated Electron bundle; never resolve a user's installed application by name. */
   executablePath?: string
+  /** Boot the executable's bundled application, without a checkout argument or exposed store. */
+  packaged?: boolean
   extraArgs?: string[]
   /**
    * Called for each chunk the relaunched main process writes to stderr. The

@@ -115,6 +115,7 @@ test('five projects keep independent real PTY workers when the task view is clos
         .getByRole('button', { name: 'Confirm', exact: true })
         .click()
       await page.getByRole('button', { name: 'Activity', exact: true }).click()
+      await page.getByText('Advanced · managed worker', { exact: true }).click()
       await page
         .getByRole('textbox', { name: 'Coordinator terminal handle' })
         .fill(entry.coordinator)

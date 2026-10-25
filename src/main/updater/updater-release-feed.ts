@@ -196,15 +196,15 @@ export abstract class UpdaterReleaseFeed extends UpdaterInstallExecution {
         'Unable to find latest version on GitHub'
       )
     }
+    if (includePrerelease && releaseTagsResult.state === 'no-newer') {
+      this.clearPrereleaseFallbackContext()
+      this.clearPublishingWindowLastGoodCheck()
+      // GitHub's moving latest endpoint excludes prereleases, even when no stable release exists.
+      return 'not-available'
+    }
     if (isPerfCheck) {
       this.clearPrereleaseFallbackContext()
       this.clearPublishingWindowLastGoodCheck()
-      if (releaseTagsResult.state === 'no-newer') {
-        console.info(
-          `[updater] perf release not found: current=${currentVersion} includePrerelease=${includePrerelease}`
-        )
-        return 'not-available'
-      }
       throw new Error('Could not resolve perf update feed')
     }
     this.clearPrereleaseFallbackContext()

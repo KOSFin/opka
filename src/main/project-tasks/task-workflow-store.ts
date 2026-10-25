@@ -112,12 +112,7 @@ export class TaskWorkflowStore {
     )
   }
 
-  prepare(
-    projectId: string,
-    task: ProjectTaskEntry,
-    runId: string,
-    dependencies: ProjectTaskEntry[]
-  ) {
+  requireReady(projectId: string, task: ProjectTaskEntry, dependencies: ProjectTaskEntry[]): void {
     const state = this.item(projectId, task.id)
     if (state.archived || state.approved_revision !== task.revision || state.phase === 'done') {
       throw new Error('Approve the current plan revision before starting')
@@ -138,6 +133,15 @@ export class TaskWorkflowStore {
         throw new Error('A business dependency has not been accepted at its current revision')
       }
     }
+  }
+
+  prepare(
+    projectId: string,
+    task: ProjectTaskEntry,
+    runId: string,
+    dependencies: ProjectTaskEntry[]
+  ) {
+    this.requireReady(projectId, task, dependencies)
     const nativeTask = this.native.createTask({
       runId,
       spec: projectTaskAttemptSpec(

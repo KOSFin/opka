@@ -110,7 +110,9 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
     writeMetadata(userDataPath, endpoint)
 
     const priorLaunchToken = process.env.ORCA_AGENT_LAUNCH_TOKEN
+    const priorSessionId = process.env.ORCA_AGENT_SESSION_ID
     process.env.ORCA_AGENT_LAUNCH_TOKEN = 'launch-secret'
+    process.env.ORCA_AGENT_SESSION_ID = 'fixture-session'
     const client = new RuntimeClient(userDataPath, 500)
     try {
       await client.call(
@@ -123,11 +125,19 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
       await client.call('orchestration.taskList', {})
       const secondClient = new RuntimeClient(userDataPath, 500)
       await secondClient.call('orchestration.taskList', {})
+      for (const method of ['projectTask.claim', 'projectTask.progress', 'projectTask.complete']) {
+        await secondClient.call(method, {})
+      }
     } finally {
       if (priorLaunchToken === undefined) {
         delete process.env.ORCA_AGENT_LAUNCH_TOKEN
       } else {
         process.env.ORCA_AGENT_LAUNCH_TOKEN = priorLaunchToken
+      }
+      if (priorSessionId === undefined) {
+        delete process.env.ORCA_AGENT_SESSION_ID
+      } else {
+        process.env.ORCA_AGENT_SESSION_ID = priorSessionId
       }
     }
 
@@ -143,6 +153,18 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
     expect(requests[2]?.compatibilityInvocationId).not.toBe(requests[1]?.compatibilityInvocationId)
     expect(requests[3]?.method).toBe('orchestration.taskList')
     expect(requests[3]?.compatibilityInvocationId).not.toBe(requests[1]?.compatibilityInvocationId)
+    expect(requests.slice(4).map((request) => request.method)).toEqual([
+      'projectTask.claim',
+      'projectTask.progress',
+      'projectTask.complete'
+    ])
+    for (const request of requests.slice(4)) {
+      expect(request.orchestrationCompatibilityEvidence).toMatchObject({
+        agentSessionId: 'fixture-session',
+        launchToken: 'launch-secret'
+      })
+      expect(request.orchestrationRequestId).toBeUndefined()
+    }
   })
 
   it('rejects an old local runtime before sending an orchestration mutation', async () => {

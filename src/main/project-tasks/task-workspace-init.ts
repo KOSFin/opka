@@ -8,6 +8,7 @@ import { PROJECT_TASK_AGENT_GUIDE } from '../../shared/project-task-agent-guide'
 import { writePluginFileAtomically } from '../plugins/plugin-atomic-file-write'
 import { parseTaskProject } from './task-document'
 import { isTaskFileMissing, taskFilePath } from './task-file-io'
+import { installProjectTaskAgentIntegration } from './task-agent-integration'
 
 export async function initializeTaskFiles(root: string, content?: string) {
   const project = parseTaskProject(
@@ -51,6 +52,7 @@ export async function initializeTaskFiles(root: string, content?: string) {
       }
     })
   }
+  await installProjectTaskAgentIntegration(root)
   await writePluginFileAtomically(config, stringify(project), { mode: 0o644 })
   const guide = await taskFilePath(root, '.orca/task-workflow.md', true)
   await writeFile(guide, PROJECT_TASK_AGENT_GUIDE, { flag: 'wx', mode: 0o644 }).catch(

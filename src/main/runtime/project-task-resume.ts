@@ -13,7 +13,7 @@ export async function resumeProjectTask(runtime: OrcaRuntimeService, worktree: s
       .slice(0, 3)
       .map(
         (attempt) =>
-          `${attempt.nativeTaskId}: ${attempt.nativeStatus}; Dispatch ${attempt.dispatchId ?? 'none'}; Run ${attempt.runId}`
+          `${attempt.id}: ${attempt.session ? `existing chat attempt (${attempt.session.released ? 'released for continuation' : attempt.nativeStatus})` : attempt.nativeStatus}; Dispatch ${attempt.dispatchId ?? 'none'}; Run ${attempt.runId}${attempt.session?.blocker ? `; blocker: ${attempt.session.blocker}` : ''}${attempt.session?.reportPath ? `; report: ${attempt.session.reportPath}` : ''}`
       )
       .join('\n') || 'None'
   }\nRecent facts / operator decisions:\n${
@@ -21,7 +21,7 @@ export async function resumeProjectTask(runtime: OrcaRuntimeService, worktree: s
       .slice(0, 5)
       .map((event) => `${event.kind}: ${event.detail.slice(0, 400)}`)
       .join('\n') || 'None'
-  }\nNext: inspect the exact previous Dispatch before starting again. Unknown or lost contact is not proof of exit. Accepted work is an operator decision, not verified CI.\n\n`
+  }\nNext: inspect the previous attempt before starting again. Use project-task claim to work in this existing chat, project-task progress to save checkpoint/blocker, and project-task complete to submit the result for review. None of these accepts its own work. Unknown or lost contact is not proof of exit. Accepted work is an operator decision, not verified CI.\n\n`
   const text = header + files.text
   const suffix = '\n[Resume packet truncated; read the task document and exact attempt on demand.]'
   return {

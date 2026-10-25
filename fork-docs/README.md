@@ -4,15 +4,18 @@
 
 ## Продолжение работы
 
-Текущий план, разрешённый объём, проверки и следующий шаг: [итерация 5 — установщики и обновления](iterations/005-installers-and-updates.md). Предыдущие подтверждённые результаты: [публикация и CI](iterations/004-publication-and-ci.md). Наличие пункта в [roadmap](ROADMAP.md) не разрешает его реализацию, установку или деплой.
+Текущий план, разрешённый объём, проверки и следующий шаг: [итерация 6 — обычный чат и полный цикл карточки](iterations/006-chat-task-lifecycle.md). Предыдущие результаты: [установщики и обновления](iterations/005-installers-and-updates.md), [публикация и CI](iterations/004-publication-and-ci.md). Наличие пункта в [roadmap](ROADMAP.md) не разрешает его реализацию, установку или деплой.
 
 Руководства:
 
 - [Работа от задачи, а не от ветки](guides/vibe-coding-workflow.md).
 - [Проект, репозитории, чаты и рабочие копии](guides/project-tree.md).
 - [Файловые задачи и восстановление контекста](guides/file-backed-tasks.md).
+- [Задача из обычного чата: цикл, документы и продолжение](guides/chat-task-lifecycle.md).
+- [Пользовательская проверка отдельной beta](testing/chat-task-beta-checklist.md).
 - [Воспроизводимые проверки и CI](testing/portable-testing.md).
 - [Карточка → проверенный результат: план, не готовая автоматика](plans/card-to-result-workflow.md).
+- [Полный цикл задач и долговременная память: исследование GitHub решений](research/task-lifecycle-and-project-memory.md).
 - [До рабочей beta и безопасной доставки](plans/working-beta-and-delivery.md).
 - [Установка, обновление и откат отдельной Opka beta](guides/install-update-beta.md).
 

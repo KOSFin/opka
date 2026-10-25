@@ -22,6 +22,7 @@ import {
 } from '../../../mobile/src/worktree/workspace-view-settings'
 import type { RpcResponse } from '../../../mobile/src/transport/types'
 import type { Section } from '../../../mobile/src/worktree/workspace-list-types'
+import { readMobileRuntimeHostPlatform } from '../../../mobile/src/transport/mobile-runtime-host-platform'
 import type { PairedMobileClient, PairedMobileSocket } from './paired-mobile-client'
 
 /** One line per row the list shows, in order: what the phone and the desktop sidebar must share. */
@@ -118,7 +119,9 @@ export async function openPhoneFeedList(phone: PairedMobileClient) {
     await port.sendRequest('host.platform'),
     hostPlatformRead.interpret
   )
-  const hostPlatform = platformRead.kind === 'answered' ? platformRead.value : null
+  const hostPlatform = readMobileRuntimeHostPlatform({
+    hostPlatform: platformRead.kind === 'answered' ? platformRead.value : null
+  })
   await syncViewSettings()
   const stop = startHostWorktreeRefresh({
     client: socketEventClient(socket),

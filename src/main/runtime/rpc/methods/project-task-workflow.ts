@@ -24,8 +24,10 @@ import { exportProjectTaskActivity } from '../../../project-tasks/task-activity'
 import { startProjectTask } from '../../project-task-launch'
 import { resumeProjectTask } from '../../project-task-resume'
 import { ORCHESTRATION_WORKER_STOP_METHODS } from './orchestration/worker/worker-stop'
+import { PROJECT_TASK_SESSION_METHODS } from './project-task-session'
 
 export const PROJECT_TASK_WORKFLOW_METHODS = [
+  ...PROJECT_TASK_SESSION_METHODS,
   defineMethod({
     name: 'projectTask.move',
     permission: 'workspace',

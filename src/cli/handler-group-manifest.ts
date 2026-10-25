@@ -86,6 +86,10 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
       'project-task workflow',
       'project-task resume',
       'project-task start',
+      'project-task claim',
+      'project-task progress',
+      'project-task complete',
+      'project-task documents',
       'project-task create',
       'project-task update'
     ],
