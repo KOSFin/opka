@@ -73,6 +73,7 @@ describe('fork CI safety and required checks', () => {
     )
     expect(packaged.env.ORCA_FORK_PACKAGED_APP).toContain('/dist/mac-arm64/Opka.app')
     expect(packaged.run).toContain('fork-packaged-tasks.spec.ts')
+    expect(packaged.run).toContain('fork-packaged-installer.spec.ts')
   })
 
   it('owns the existing required context without shadow workflows', () => {
