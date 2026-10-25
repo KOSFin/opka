@@ -2,7 +2,7 @@
 
 ## Статус и следующий шаг
 
-На 2026-10-25 21:06 +05:00: полный pr.yml run 40203218748 на head 324414a4ea прошёл, но последующая проверка реального artifact обнаружила пропуск в background updater: no-newer всё ещё запускал moving stable feed и получал 404. Выпуск удержан, готовится follow-up и новый полный CI. Новый unit воспроизвёл дефект (2 failed), после фикса targeted updater набор 44 passed. Проверенный по hash/provenance/ad-hoc signature комплект CI rc.17 не является опубликованной beta. Отдельно private rc.1→rc.17→rc.1→rc.17 passed: project/card/notes/PTY output сохранены (8.7 s); updater в этом continuity прогоне исключён и passed не объявляется. Packaged CLI passed. Следующий шаг — квалификация исправленного head, повтор реальной проверки updater, затем merge и rc.2. Новых модельных turns, изменений installed apps/profiles, серверов или глобального CLI нет; Engram не установлен.
+На 2026-10-25 22:14 +05:00: rc.2 опубликован из a1451978da после полного release gate; все released checksums/provenance, ad-hoc signature, DMG/own CLI и actual rc.1→rc.2→rc.1→rc.2 с no-newer updater passed (14.3 s). Однако отдельный реальный Download installer из rc.1 failed: Redirect was cancelled до создания DMG. Обнаружен унаследованный также rc.2 Electron net.fetch manual-redirect дефект; в release rc.2 добавлено явное предупреждение, tag/байты не заменяются. Создана codex/mac-beta-download от origin/main с сохранённым журналом. Существующий streaming transport иконок обобщён и подключён к updater; 441 tests/node types/quality/direct lint passed. Проверяется реальное скачивание через Electron, затем новый PR/полный gate и immutable rc.3; rc.1/rc.2 потребуют первого ручного скачивания из GitHub. Модели, installed apps/profiles, серверы и глобальный CLI не трогались; Engram отложен.
 
 ### Предыдущий checkpoint до апрува доставки
 
@@ -193,3 +193,38 @@
 
 - Полный updater набор: 36 files / 429 tests passed. Node typecheck: 17,219 files, no errors. Changed-code quality: все категории 0 new findings across 68 changed files; прямой oxlint и diff --check passed после исправления трёх curly findings, suppressions/лимиты не менялись.
 - Новый regression автоматически входит в существующий src/main/updater filter fork suite, отдельный параллельный CI runner не добавлялся. Следующий commit публикует только scheduling, его regression и append-only журнал. Как и раньше, commit hook с pnpm wrapper пропускается через HUSKY=0 после явных эквивалентных проверок, зависимости не переустанавливаются. Старый CI success относится только к 324414a4ea и не разрешает merge нового head.
+
+### 2026-10-25 21:11:01 +05:00 Новый exact-head gate выполняется
+
+- Follow-up f4099a044cbebdda2d8e93e5e4d7436d346ea1ca опубликован, новый run 40210200162: path .github/workflows/pr.yml, event pull_request, тот же head_sha. PR описание дополнено найденным package дефектом и разделяет failed updater/успешный continuity test. Merge не выполнялся.
+- Для финального released bundle подготовлена отдельная private проверка: rc.1 действительно находит новый выпуск, скачивает DMG в принадлежащий тесту temp, сверяет SHA256; Open installer не вызывается, чтобы не показывать native windows и не заменять приложение. Это ещё не выполненная проверка и не новый запуск модели.
+
+### 2026-10-25 21:28:32 +05:00 Follow-up прошёл полный gate
+
+- Run 40210200162 завершён success: path .github/workflows/pr.yml, event pull_request, head_sha f4099a044cbebdda2d8e93e5e4d7436d346ea1ca. Aggregate PR checks passed success. GUI, types/quality, regression, desktop, все native/server lanes, Mac package/own CLI/task lifecycle/restart и complete assets прошли.
+- Комплект opka-beta-release-4b618016266535eace8ae1a637b0e1dc5e59064a (merge-tree) скачивается в новый private каталог. Старый rc.17 не подменяет исправленный artifact. До проверки bytes/provenance и живого updater merge/publish всё ещё не выполнены; новых исходных изменений после f4099a044c нет, только этот локальный журнал.
+
+### 2026-10-25 21:33:59 +05:00 Исправленный actual package прошёл update check
+
+- Untouched комплект CI rc.18 / merge-tree 4b618016266535eace8ae1a637b0e1dc5e59064a: все checksum/provenance/manifest sha512, strict ad-hoc signature, DMG verify и собственный packaged CLI passed. Новая private проверка rc.1→rc.18→rc.1→rc.18 с реальным updater прошла, 14.2 s. Ответ rc.18: not-available, userInitiated=true, manualInstaller=true; Atom HTTP 200. Project/card/notes/PTY output сохранены, main/IPC версии совпадают. Известный fallback log относится к baseline rc.1, не исправленной rc.18.
+- Перед merge повторно подтверждены PR head f4099a044cbebdda2d8e93e5e4d7436d346ea1ca, base 52632016f8219d0987ee9395932dde12728a0b5c, OPEN/CLEAN и полный pr.yml run 40210200162 success с aggregate job 121224285849 success. PR checklist обновлён фактическим evidence. Выполняется обычный merge с --match-head-commit, без admin/auto/bypass. Опубликованного rc.2 на этой отметке ещё нет.
+
+### 2026-10-25 21:35:09 +05:00 Merge подтверждён, rc.2 квалифицируется отдельно
+
+- Remote PR #3 MERGED at 16:34:27Z. Merge commit и remote main a1451978dac24e60c3eaadea47f22662baae7462; parents 52632016f8219d0987ee9395932dde12728a0b5c и f4099a044cbebdda2d8e93e5e4d7436d346ea1ca подтверждены через GitHub API. История не переписывалась; local checkout не переключался и journal сохранён.
+- main-only opka-release.yml dispatch version 1.4.236-rc.2: run 40212344337, exact head a1451978dac24e60c3eaadea47f22662baae7462. Он повторяет полную квалификацию release commit; dispatch и queued не являются готовым выпуском. Следующий шаг — его aggregate/publish success, remote immutable tag и скачанные released bytes. CI rc.18 остаётся только квалификационным кандидатом и не предлагается пользователю как rc.2.
+
+### 2026-10-25 22:00:13 +05:00 rc.2 опубликован; released bytes проверяются отдельно
+
+- Run 40212344337 завершён success: .github/workflows/opka-release.yml, workflow_dispatch, exact head a1451978dac24e60c3eaadea47f22662baae7462. Повторный полный reusable PR gate: aggregate job 121231346278 success; publish job 121231380896 success. Release не является результатом обхода qualification.
+- Remote tag v1.4.236-rc.2 подтверждён как commit a1451978dac24e60c3eaadea47f22662baae7462. Release https://github.com/KOSFin/opka/releases/tag/v1.4.236-rc.2: isDraft=false, isPrerelease=true, все 7 assets опубликованы. GitHub API digests совпадают с опубликованным SHA256SUMS; Mac DMG SHA256 6351f50deaacef47071748086ed35c274d402409cf6d8157b65459a9865c5751. Atom feed HTTP 200 и уже содержит rc.2.
+- Released assets скачиваются в отдельный private каталог. Одновременно baseline rc.1 в disposable HOME/profile/temp проверяет actual available→downloaded, checksum и manualInstaller; установщик не открывается. Для этой проверки используется уже квалифицированная rc.18 как обратная сторона continuity; отдельная проверка именно released rc.2 будет после проверки ZIP/provenance/signature. Ни загрузка, ни начатый тест ещё не объявляются passed. Installed apps, глобальный CLI, модельные аккаунты и серверы не затрагиваются.
+
+### 2026-10-25 22:14:00 +05:00 Actual download выявил второй унаследованный дефект
+
+- Released rc.2/a1451978da read-only checksums/provenance/manifest sha512, strict ad-hoc signature, DMG verify и собственный CLI passed. Именно released rc.1→rc.2→rc.1→rc.2 continuity/update check passed, 14.3 s; project/card/notes/PTY сохранены, update status not-available. Это не доказательство скачивания DMG.
+- Первый download harness остановился до сети на защитном утверждении temp: macOS Electron игнорирует TMPDIR для app.getPath('temp'). Исправлен только private harness: app.setPath('temp') внутри принадлежащего тесту процесса до операций загрузки; система/приложения пользователя не менялись.
+- Actual rc.1 нашёл rc.2 и перешёл к скачиванию, но получили state=error, message=Redirect was cancelled; DMG не создан. Состояние прочитано через CDP только собственного hidden тестового renderer. Исходный test failed после bounded 300 s ожидания downloaded, успех не заявляется. Причина: Electron net.fetch отвергает manual redirects, хотя unit Response fixtures этого не воспроизводили. Этот же transport присутствует в rc.2, поэтому завершённым delivery цикл не объявляется.
+- Remote release notes rc.2 дополнены явным advisory о ручной загрузке через Assets; изменение подтверждено через API. Не переписывались tag/installer/checksums. В рамках уже утверждённого пункта 7 готовится следующий immutable rc.3, а не смена опубликованных байтов.
+- Существующий electron-repo-icon-fetch уже решает именно эту native-проблему. Реализация перенесена без параллельного downloader в lib/electron-manual-redirect-fetch; consumer иконок сохранён, MacBetaInstaller теперь принимает этот fetcher. Allowlist HTTPS GitHub, bounded redirects/body, abort и checksum остаются в прежних слоях.
+- Новая интеграционная регрессия native redirect→late cancellation→stream→checksum и отказ чужому HTTP/host. Вместе с существующими updater/icon tests: 38 files / 441 tests passed. Node types 17,220 files passed; changed-code quality и direct lint passed после исправления одного prefer-template finding без suppressions. Main/renderer e2e build прошёл. Настоящая модель не вызывалась. Следующий шаг — real Electron streaming download, PR/CI и отдельный rc.3; исправление старой установленной rc.1/rc.2 требует ручного перехода.

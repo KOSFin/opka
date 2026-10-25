@@ -9,6 +9,7 @@ const MAX_CHECKSUM_BYTES = 64 * 1024
 const DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000
 
 type Installer = { path: string; sha256: string; version: string }
+type ReleaseAssetFetch = (url: string, init: RequestInit) => Promise<Response>
 
 export function parseInstallerChecksum(checksums: string, filename: string): string {
   const hashes = checksums.split(/\r?\n/).flatMap((line) => {
@@ -23,7 +24,7 @@ export function parseInstallerChecksum(checksums: string, filename: string): str
 
 async function fetchReleaseAsset(
   url: string,
-  fetcher: typeof fetch,
+  fetcher: ReleaseAssetFetch,
   signal: AbortSignal
 ): Promise<Response> {
   for (let redirects = 0; redirects <= 5; redirects += 1) {
@@ -87,7 +88,7 @@ async function consumeResponse(
 /** Downloads only; replacing the app and granting macOS permissions remain user actions. */
 export class MacBetaInstaller {
   private installer: Installer | null = null
-  constructor(private readonly fetcher: typeof fetch) {}
+  constructor(private readonly fetcher: ReleaseAssetFetch) {}
 
   async download(
     version: string,

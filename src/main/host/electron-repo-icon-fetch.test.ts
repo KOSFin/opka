@@ -10,7 +10,7 @@ class FakeRequest extends EventEmitter {
 const { request } = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('electron', () => ({ net: { request } }))
 
-import { fetchRepoIconWithManualRedirects } from './electron-repo-icon-fetch'
+import { fetchElectronGetWithManualRedirects as fetchRepoIconWithManualRedirects } from '../lib/electron-manual-redirect-fetch'
 
 let native: FakeRequest
 
