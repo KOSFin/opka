@@ -68,7 +68,7 @@ jobs:
         env:
           SKIP_BUILD: '1'
           ORCA_FORK_PACKAGED_APP: ${{ github.workspace }}/dist/mac-arm64/Opka.app
-        run: pnpm exec playwright test tests/e2e/fork-packaged-tasks.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1
+        run: pnpm exec playwright test tests/e2e/fork-packaged-tasks.spec.ts tests/e2e/fork-packaged-installer.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1
       - name: Save packaged task evidence
         if: always()
         uses: actions/upload-artifact@v7

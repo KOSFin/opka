@@ -24,10 +24,9 @@ function webBody(response: Readable, request: ClientRequest): ReadableStream<Uin
 
 /**
  * A GET that answers a redirect with the 3xx itself, as undici does with `redirect: 'manual'`.
- * Why its own request: Electron's net.fetch rejects every manual redirect, and the icon fetcher
- * must count and vet each hop. Proxy login challenges are cancelled, so icons fall back there.
+ * Electron net.fetch rejects manual redirects; callers must still vet every hop themselves.
  */
-export function fetchRepoIconWithManualRedirects(
+export function fetchElectronGetWithManualRedirects(
   url: string,
   init: RequestInit
 ): Promise<Response> {

@@ -10,13 +10,14 @@ import { LINUX_PACKAGE_EXTERNALLY_MANAGED_MESSAGE } from '../linux-package-downl
 import { QUIT_AND_INSTALL_DELAY_MS } from './updater-state'
 import { UpdaterRemoteStatus } from './updater-remote-status'
 import { prepareThisProcessShipItStaging } from './shipit-leftover-recovery'
-import { app, net, shell } from 'electron'
+import { app, shell } from 'electron'
 import { MacBetaInstaller } from './mac-beta-installer'
 import { usesManualMacInstaller } from './mac-beta-update-policy'
+import { fetchElectronGetWithManualRedirects } from '../lib/electron-manual-redirect-fetch'
 
 /** Coordinates renderer-facing download/install actions and their duplicate guards. */
 export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
-  private readonly betaInstaller = new MacBetaInstaller((input, init) => net.fetch(input, init))
+  private readonly betaInstaller = new MacBetaInstaller(fetchElectronGetWithManualRedirects)
 
   protected quitAndInstall(): void {
     if (

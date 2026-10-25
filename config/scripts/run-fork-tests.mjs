@@ -5,6 +5,7 @@ import { isDirectInvocation } from './script-entry-detection.mjs'
 const root = resolve(import.meta.dirname, '../..')
 export const FORK_TEST_FILTERS = [
   'src/main/updater',
+  'src/main/host/electron-repo-icon-fetch.test.ts',
   'src/preload/updater-manual-installer.test.ts',
   'src/main/codex/codex-hook-command-form.test.ts',
   'src/main/codex/codex-hook-reconcile.test.ts',
