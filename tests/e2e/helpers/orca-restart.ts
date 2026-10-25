@@ -26,6 +26,8 @@ export { launchOwnedBrowserForE2E } from './browser-sidecar-launch'
 import { getE2ECompletedOnboardingProfile } from './e2e-completed-onboarding-profile'
 import { getElectronIsolatedKeychainArgs, getOrcaElectronLaunchArgs } from './electron-launch-args'
 import { retryTransientMainEvaluate } from './electron-main-evaluate-retry'
+import { readRestartRendererState, waitForElectronRenderer } from './electron-renderer-readiness'
+export { readRestartRendererState } from './electron-renderer-readiness'
 import { cleanupE2EDaemons, closeElectronAppForE2E } from './electron-process-shutdown'
 import {
   assertElectronResolvedIsolatedHome,
@@ -193,11 +195,7 @@ export function createRestartSession(
       await options?.beforeFirstWindow?.(app)
       const page = await app.firstWindow({ timeout: 120_000 })
       await page.waitForLoadState('domcontentloaded')
-      await page.waitForFunction(
-        (packaged) => (packaged ? Boolean(window.api) : Boolean(window.__store)),
-        options?.packaged === true,
-        { timeout: 30_000 }
-      )
+      await waitForElectronRenderer(page, options?.packaged === true)
       return { app, page }
     } catch (error) {
       await closeElectronAppForE2E(app)
@@ -342,19 +340,6 @@ export async function attachRepoAndOpenTerminal(page: Page, repoPath: string): P
   }
 
   return worktreeId
-}
-
-export async function readRestartRendererState<T>(read: () => Promise<T>): Promise<T | null> {
-  try {
-    return await read()
-  } catch (error) {
-    // Why: initial hydration can replace the renderer document; the enclosing
-    // state poll must retry that transition without hiding other failures.
-    if (error instanceof Error && error.message.includes('Execution context was destroyed')) {
-      return null
-    }
-    throw error
-  }
 }
 
 function isValidGitRepo(repoPath: string): boolean {

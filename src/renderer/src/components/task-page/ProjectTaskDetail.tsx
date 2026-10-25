@@ -24,6 +24,7 @@ import { ProjectTaskConfirm, type ProjectTaskConfirmation } from './ProjectTaskC
 import { ProjectTaskAttempts } from './ProjectTaskAttempts'
 import { ProjectTaskChat } from './ProjectTaskChat'
 import { ProjectTaskDocuments } from './ProjectTaskDocuments'
+import { ProjectTaskRecordedEvents } from './ProjectTaskRecordedEvents'
 
 export function ProjectTaskDetail({
   client,
@@ -385,21 +386,7 @@ export function ProjectTaskDetail({
                 refresh()
               }}
             />
-            <h3 className="text-sm font-medium">Recorded runtime events</h3>
-            <p className="text-xs text-muted-foreground">
-              Most recent 200 events; Markdown activity is an export, not proof of current liveness.
-            </p>
-            {workflow.events.map((event) => (
-              <div key={event.sequence} className="border-b pb-2 text-sm">
-                <p>
-                  {event.kind}{' '}
-                  <span className="text-xs text-muted-foreground">{event.createdAt}</span>
-                </p>
-                <p className="whitespace-pre-wrap break-words text-muted-foreground">
-                  {event.detail}
-                </p>
-              </div>
-            ))}
+            <ProjectTaskRecordedEvents events={workflow.events} />
           </div>
         )}
       </div>

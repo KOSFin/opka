@@ -117,6 +117,8 @@ test('own terminal CLI submits a visible report that survives a hidden restart w
     expect(receipt, JSON.stringify(receipt)).toMatchObject({ ok: true, phase: 'review' })
     await openReport(page)
     await page.screenshot({ path: testInfo.outputPath('packaged-task-report.png') })
+    await page.getByRole('button', { name: 'Activity', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Recorded runtime events' })).toBeVisible()
     await session.close(app)
     app = undefined
     launched = await session.launch(options)

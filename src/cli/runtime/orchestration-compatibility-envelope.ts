@@ -3,6 +3,23 @@ import { readInjectedAgentSessionId } from '../../shared/agent-session-caller-en
 import { readOrchestrationCompatibilityEvidence } from '../../shared/orchestration-compatibility-evidence'
 import type { RuntimeOrchestrationEnvelope } from '../../shared/runtime-rpc-envelope'
 
+export function orchestrationCompatibilityForMethod(
+  method: string,
+  envelope: RuntimeOrchestrationEnvelope,
+  requestId?: string
+): RuntimeOrchestrationEnvelope {
+  if (
+    !method.startsWith('orchestration.') &&
+    !['projectTask.claim', 'projectTask.progress', 'projectTask.complete'].includes(method)
+  ) {
+    return {}
+  }
+  return {
+    ...envelope,
+    compatibilityInvocationId: requestId ?? envelope.compatibilityInvocationId
+  }
+}
+
 export function createOrchestrationCompatibilityEnvelope(
   env: NodeJS.ProcessEnv
 ): RuntimeOrchestrationEnvelope {
