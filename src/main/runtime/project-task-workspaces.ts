@@ -3,6 +3,7 @@ import { requireLocalRuntimeFileRoute } from './files/file-target'
 import { watchFileExplorerInWatcherProcess } from './file-watcher-host'
 import { TaskWorkspace } from '../project-tasks/task-workspace'
 import { resolveRegisteredTaskRoot } from '../project-tasks/task-project-roots'
+import { resolveProjectTaskTarget } from './project-task-target'
 
 const workspaces = new WeakMap<OrcaRuntimeService, Map<string, TaskWorkspace>>()
 
@@ -17,12 +18,12 @@ export async function resolveProjectTaskWorkspace(
   selector: string,
   expectedHost?: string
 ) {
-  const target = await runtime.resolveRuntimeFileTarget(selector)
+  const { target, selectedPath } = await resolveProjectTaskTarget(runtime, selector, expectedHost)
   if (expectedHost !== undefined && expectedHost !== target.executionHostId) {
     throw new Error('Workspace host changed; refresh before writing project tasks')
   }
   requireLocalRuntimeFileRoute(target)
-  const root = await resolveRegisteredTaskRoot(runtime, target.worktree.path)
+  const root = await resolveRegisteredTaskRoot(runtime, selectedPath)
   let cache = workspaces.get(runtime)
   if (!cache) {
     cache = new Map()

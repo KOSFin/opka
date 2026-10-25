@@ -13,6 +13,7 @@ import { TaskFileIndex } from './task-file-index'
 import { validateTaskGraph } from './task-graph'
 import { buildTaskContext } from './task-context'
 import { initializeTaskFiles } from './task-workspace-init'
+import { installProjectTaskAgentIntegration } from './task-agent-integration'
 
 export type TaskRootWatch = (
   root: string,
@@ -61,6 +62,10 @@ export class TaskWorkspace {
 
   async initialize(content?: string): Promise<TaskProject> {
     return this.writeLocked(() => initializeTaskFiles(this.root, content))
+  }
+
+  async enableAgentTasks() {
+    return this.writeLocked(() => installProjectTaskAgentIntegration(this.root))
   }
 
   snapshot(): Promise<ProjectTaskSnapshot> {

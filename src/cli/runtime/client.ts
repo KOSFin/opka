@@ -124,13 +124,15 @@ export class RuntimeClient {
       }
       return attachDurableMutationRecovery(error, orchestrationRequestId, originalCommand, method)
     }
-    const compatibilityEnvelope = method.startsWith('orchestration.')
-      ? {
-          ...this.orchestrationCompatibility,
-          compatibilityInvocationId:
-            orchestrationRequestId ?? this.orchestrationCompatibility.compatibilityInvocationId
-        }
-      : {}
+    const compatibilityEnvelope =
+      method.startsWith('orchestration.') ||
+      ['projectTask.claim', 'projectTask.progress', 'projectTask.complete'].includes(method)
+        ? {
+            ...this.orchestrationCompatibility,
+            compatibilityInvocationId:
+              orchestrationRequestId ?? this.orchestrationCompatibility.compatibilityInvocationId
+          }
+        : {}
     const envelope = {
       orchestrationCapability: options?.orchestrationCapability,
       orchestrationContractVersion: method.startsWith('orchestration.')

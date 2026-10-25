@@ -64,6 +64,19 @@ jobs:
         run: node config/scripts/opka-release-assets.mjs mac dist
       - name: Exercise the packaged CLI from a disposable home
         run: node config/scripts/smoke-packaged-cli.mjs --app-dir=dist/mac-arm64/Opka.app
+      - name: Exercise the packaged task lifecycle without a model
+        env:
+          SKIP_BUILD: '1'
+          ORCA_FORK_PACKAGED_APP: ${{ github.workspace }}/dist/mac-arm64/Opka.app
+        run: pnpm exec playwright test tests/e2e/fork-packaged-tasks.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1
+      - name: Save packaged task evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: packaged-task-evidence-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: opka-macos-${{ github.sha }}

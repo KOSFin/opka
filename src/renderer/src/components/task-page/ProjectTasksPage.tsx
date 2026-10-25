@@ -86,6 +86,12 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
   }, [refreshCatalog, refreshSingle])
   useEffect(() => saveProjectTaskView({ workspace: chosen, mode }), [chosen, mode])
   const choose = (value: string) => {
+    const project = catalog.projects.find(
+      (entry) => entry.key === value || entry.selector === value
+    )
+    if (project && project.state !== 'configured') {
+      refreshCatalog()
+    }
     setChosen(value)
     setSelected('')
     setRepo('*')

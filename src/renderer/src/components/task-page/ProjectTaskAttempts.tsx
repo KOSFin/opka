@@ -30,99 +30,123 @@ export function ProjectTaskAttempts({
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium">Attempts on the owning host</h3>
-      <p className="text-xs text-muted-foreground">
-        A managed worker needs a coordinator terminal bound to an existing Run. No new coordinator
-        or account is fabricated here. Provider defaults apply to blank model and effort.
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Input
-          aria-label="Coordinator terminal handle"
-          placeholder="Coordinator terminal handle"
-          value={from}
-          onChange={(event) => setFrom(event.target.value)}
-        />
-        <Input
-          aria-label="Worker placement"
-          value={placement}
-          onChange={(event) => setPlacement(event.target.value)}
-        />
-        <Input
-          aria-label="Repository ID"
-          placeholder="Repository ID (new-child placement)"
-          value={repo}
-          onChange={(event) => setRepo(event.target.value)}
-        />
-        <Input
-          aria-label="Agent ID"
-          placeholder="Agent ID or leave provider default"
-          value={agent}
-          onChange={(event) => setAgent(event.target.value)}
-        />
-        <Input
-          aria-label="Model"
-          placeholder="Model (optional)"
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-        />
-        <Input
-          aria-label="Reasoning effort"
-          placeholder="Reasoning effort (optional)"
-          value={effort}
-          onChange={(event) => setEffort(event.target.value)}
-        />
-      </div>
-      <Button
-        variant="outline"
-        disabled={
-          !from ||
-          !placement ||
-          workflow.archived ||
-          workflow.approvedRevision !== task.revision ||
-          workflow.phase !== 'ready'
-        }
-        onClick={() =>
-          setConfirmation({
-            title: 'Start approved task',
-            description: `Start one managed attempt for ${task.title}, revision ${task.revision}, on ${client.executionHostId}. Existing runtime permissions and worker limits still apply.`,
-            run: async () => {
-              const receipt = await projectTaskCall<{ result?: { state?: string } }>(
-                client,
-                'start',
-                {
-                  id: task.id,
-                  revision: task.revision,
-                  launch: {
-                    from,
-                    worktree: placement,
-                    spec: 'approved-project-plan',
-                    ...(repo ? { repo } : {}),
-                    ...(agent ? { agent } : {}),
-                    ...(model ? { model } : {}),
-                    ...(effort ? { effort } : {})
+      <details className="space-y-3">
+        <summary className="cursor-pointer text-sm text-muted-foreground">
+          Advanced · managed worker
+        </summary>
+        <p className="text-xs text-muted-foreground">
+          A managed worker needs a coordinator terminal bound to an existing Run. No new coordinator
+          or account is fabricated here. Provider defaults apply to blank model and effort.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Input
+            aria-label="Coordinator terminal handle"
+            placeholder="Coordinator terminal handle"
+            value={from}
+            onChange={(event) => setFrom(event.target.value)}
+          />
+          <Input
+            aria-label="Worker placement"
+            value={placement}
+            onChange={(event) => setPlacement(event.target.value)}
+          />
+          <Input
+            aria-label="Repository ID"
+            placeholder="Repository ID (new-child placement)"
+            value={repo}
+            onChange={(event) => setRepo(event.target.value)}
+          />
+          <Input
+            aria-label="Agent ID"
+            placeholder="Agent ID or leave provider default"
+            value={agent}
+            onChange={(event) => setAgent(event.target.value)}
+          />
+          <Input
+            aria-label="Model"
+            placeholder="Model (optional)"
+            value={model}
+            onChange={(event) => setModel(event.target.value)}
+          />
+          <Input
+            aria-label="Reasoning effort"
+            placeholder="Reasoning effort (optional)"
+            value={effort}
+            onChange={(event) => setEffort(event.target.value)}
+          />
+        </div>
+        <Button
+          variant="outline"
+          disabled={
+            !from ||
+            !placement ||
+            workflow.archived ||
+            workflow.approvedRevision !== task.revision ||
+            workflow.phase !== 'ready'
+          }
+          onClick={() =>
+            setConfirmation({
+              title: 'Start approved task',
+              description: `Start one managed attempt for ${task.title}, revision ${task.revision}, on ${client.executionHostId}. Existing runtime permissions and worker limits still apply.`,
+              run: async () => {
+                const receipt = await projectTaskCall<{ result?: { state?: string } }>(
+                  client,
+                  'start',
+                  {
+                    id: task.id,
+                    revision: task.revision,
+                    launch: {
+                      from,
+                      worktree: placement,
+                      spec: 'approved-project-plan',
+                      ...(repo ? { repo } : {}),
+                      ...(agent ? { agent } : {}),
+                      ...(model ? { model } : {}),
+                      ...(effort ? { effort } : {})
+                    }
                   }
-                }
-              )
-              refresh()
-              if (receipt.result?.state !== 'ready') {
-                throw new Error(
-                  'The runtime did not confirm a ready start. The attempt was retained; inspect it before any retry.'
                 )
+                refresh()
+                if (receipt.result?.state !== 'ready') {
+                  throw new Error(
+                    'The runtime did not confirm a ready start. The attempt was retained; inspect it before any retry.'
+                  )
+                }
               }
-            }
-          })
-        }
-      >
-        Start managed worker
-      </Button>
+            })
+          }
+        >
+          Start managed worker
+        </Button>
+      </details>
       {workflow.attempts.map((attempt) => (
         <div key={attempt.id} className="space-y-2 rounded-md border p-3 text-sm">
           <p className="break-all">
-            {attempt.nativeTaskId} · {attempt.nativeStatus}
+            {attempt.session ? 'Existing chat attempt' : attempt.nativeTaskId} ·{' '}
+            {attempt.session?.released
+              ? 'released for continuation'
+              : attempt.nativeStatus === 'ready' && attempt.session
+                ? 'task taken'
+                : attempt.nativeStatus}
           </p>
           <p className="text-xs text-muted-foreground">
-            Durable state: {attempt.workerState ?? 'no managed receipt'}. Live status is
-            unverifiable until inspected. Run: {attempt.runId}
+            Durable state:{' '}
+            {attempt.session
+              ? 'saved chat ownership'
+              : (attempt.workerState ?? 'no managed receipt')}
+            . Live status is unverifiable until inspected. Run: {attempt.runId}
           </p>
+          {attempt.session?.blocker && <p>Waiting: {attempt.session.blocker}</p>}
+          {attempt.session?.checkpointPath && (
+            <p className="break-all text-xs text-muted-foreground">
+              Checkpoint: {attempt.session.checkpointPath}
+            </p>
+          )}
+          {attempt.session?.reportPath && (
+            <p className="break-all text-xs text-muted-foreground">
+              Report: {attempt.session.reportPath} · open Reports & notes
+            </p>
+          )}
           {attempt.dispatchId && (
             <div className="flex gap-2">
               <Button

@@ -140,7 +140,18 @@ jobs:
           tests/e2e/fork-vibe-board.spec.ts
           tests/e2e/fork-five-projects.spec.ts
           tests/e2e/fork-beta-update.spec.ts
+          tests/e2e/fork-project-tasks.spec.ts
+          tests/e2e/fork-task-rpc-discovery.spec.ts
+          tests/e2e/fork-packaged-tasks.spec.ts
           --config tests/playwright.config.ts --project electron-headless --workers=1
+      - name: Save task lifecycle visual evidence
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: task-ui-evidence-${{ github.sha }}
+          path: test-results/**/*.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Save isolated failure evidence
         if: failure()
         uses: actions/upload-artifact@v7

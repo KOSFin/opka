@@ -23,6 +23,7 @@ import { projectTaskCall, type ProjectTaskClient } from './project-task-client'
 import { ProjectTaskConfirm, type ProjectTaskConfirmation } from './ProjectTaskConfirm'
 import { ProjectTaskAttempts } from './ProjectTaskAttempts'
 import { ProjectTaskChat } from './ProjectTaskChat'
+import { ProjectTaskDocuments } from './ProjectTaskDocuments'
 
 export function ProjectTaskDetail({
   client,
@@ -44,7 +45,7 @@ export function ProjectTaskDetail({
   const [source, setSource] = useState('')
   const [title, setTitle] = useState('')
   const [renaming, setRenaming] = useState(false)
-  const [tab, setTab] = useState<'preview' | 'source' | 'activity'>('preview')
+  const [tab, setTab] = useState<'preview' | 'source' | 'documents' | 'activity'>('preview')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [reload, setReload] = useState(0)
@@ -190,7 +191,12 @@ export function ProjectTaskDetail({
           </p>
         )}
         <div className="flex flex-wrap gap-2">
-          <ProjectTaskChat client={client} id={id} disabled={dirty || busy || workflow.archived} />
+          <ProjectTaskChat
+            client={client}
+            id={id}
+            workflow={workflow}
+            disabled={dirty || busy || workflow.archived}
+          />
           {(!['ready', 'review', 'integration', 'done'].includes(workflow.phase) ||
             workflow.revisionChanged) && (
             <Button
@@ -237,6 +243,20 @@ export function ProjectTaskDetail({
               <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
+                  setConfirmation({
+                    title: 'Enable task workflow for agents',
+                    description:
+                      'Add the opka-tasks skill inside this project for new Codex and Claude chats. Existing skill edits are preserved. Global agent settings and AGENTS.md are not changed.',
+                    run: async () => {
+                      await apply('enableAgentTasks')
+                    }
+                  })
+                }
+              >
+                Enable agent task workflow
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
                   perform(async () => {
                     const packet = await projectTaskCall<{ text: string }>(client, 'resume', { id })
                     await navigator.clipboard.writeText(packet.text)
@@ -265,6 +285,11 @@ export function ProjectTaskDetail({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        {workflow.attempts[0]?.session?.blocker && (
+          <p role="status" className="text-sm">
+            Waiting: {workflow.attempts[0].session.blocker}
+          </p>
+        )}
         {workflow.exportError && (
           <p role="alert" className="text-sm text-destructive">
             {workflow.exportError}{' '}
@@ -280,13 +305,19 @@ export function ProjectTaskDetail({
         )}
       </header>
       <nav className="flex gap-2 border-b px-4 py-2" aria-label="Task document views">
-        {(['preview', 'source', 'activity'] as const).map((value) => (
+        {(['preview', 'source', 'documents', 'activity'] as const).map((value) => (
           <Button
             key={value}
             variant={tab === value ? 'secondary' : 'ghost'}
             onClick={() => setTab(value)}
           >
-            {value === 'preview' ? 'Plan' : value === 'source' ? 'Edit plan' : 'Activity'}
+            {value === 'preview'
+              ? 'Plan'
+              : value === 'source'
+                ? 'Edit plan'
+                : value === 'documents'
+                  ? 'Reports & notes'
+                  : 'Activity'}
           </Button>
         ))}
         <Button variant="ghost" disabled={dirty} onClick={() => setReload((value) => value + 1)}>
@@ -294,6 +325,14 @@ export function ProjectTaskDetail({
         </Button>
       </nav>
       <div className="scrollbar-sleek min-h-0 flex-1 overflow-auto p-4">
+        <ProjectTaskDocuments
+          key={id}
+          client={client}
+          id={id}
+          active={tab === 'documents'}
+          version={version}
+          preferredPath={workflow.attempts[0]?.session?.reportPath}
+        />
         {tab === 'preview' && (
           <ProjectTaskPreview client={client} path={task.path} body={task.body} />
         )}

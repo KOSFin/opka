@@ -47,6 +47,11 @@ type CallerParam = 'from' | 'terminal' | 'callerTerminalHandle'
  * Methods not listed carry no caller identity for any caller; a session claim on them is still
  * validated, then they run exactly as they do for a terminal caller.
  */
+export const PROJECT_TASK_SESSION_CALLER_PARAM: Readonly<Record<string, CallerParam>> = {
+  'projectTask.claim': 'from',
+  'projectTask.progress': 'from',
+  'projectTask.complete': 'from'
+}
 export const ORCHESTRATION_CALLER_PARAM: Readonly<Record<string, CallerParam>> = {
   'orchestration.runCreate': 'from',
   'orchestration.runUse': 'from',
@@ -64,6 +69,7 @@ export const ORCHESTRATION_CALLER_PARAM: Readonly<Record<string, CallerParam>> =
   'orchestration.taskUpdate': 'callerTerminalHandle',
   'orchestration.workerStart': 'from'
 }
+const SESSION_CALLER_PARAM = { ...ORCHESTRATION_CALLER_PARAM, ...PROJECT_TASK_SESSION_CALLER_PARAM }
 
 export type OrchestrationRequestRoute = {
   /** Set only by the paired WebSocket route: the request came from another host's client. */
@@ -83,7 +89,10 @@ const NO_EFFECTS = { effectsApplied: false } as const
  * caller. Synchronous, so every other request, terminal callers included, takes no extra async hop.
  */
 export function needsOrchestrationCallerResolution(request: RpcRequest): boolean {
-  if (!request.method.startsWith('orchestration.')) {
+  if (
+    !request.method.startsWith('orchestration.') &&
+    !(request.method in PROJECT_TASK_SESSION_CALLER_PARAM)
+  ) {
     return false
   }
   return (
@@ -93,7 +102,7 @@ export function needsOrchestrationCallerResolution(request: RpcRequest): boolean
 }
 
 function declaredSessionAddress(request: RpcRequest): string | undefined {
-  const name = ORCHESTRATION_CALLER_PARAM[request.method]
+  const name = SESSION_CALLER_PARAM[request.method]
   const params: unknown = request.params
   if (!name || !params || typeof params !== 'object' || Array.isArray(params)) {
     return undefined
@@ -213,7 +222,7 @@ function assertSessionCanAct(sessionId: string, record: AgentSessionRecord): voi
 
 /** A request with no session id that declares an `orca_session_id:` caller: a worker's is its handle. */
 function bindDeclaredSessionAddress(db: OrchestrationDb, request: RpcRequest): RpcRequest {
-  const name = ORCHESTRATION_CALLER_PARAM[request.method]
+  const name = SESSION_CALLER_PARAM[request.method]
   const declared = declaredSessionAddress(request)
   const params: unknown = request.params
   if (!name || declared === undefined || !params || typeof params !== 'object') {
@@ -249,7 +258,7 @@ function bindDeclaredCaller(
   caller: OrchestrationSessionCaller,
   db: OrchestrationDb
 ): unknown {
-  const name = ORCHESTRATION_CALLER_PARAM[method]
+  const name = SESSION_CALLER_PARAM[method]
   if (!name || !params || typeof params !== 'object' || Array.isArray(params)) {
     return params
   }

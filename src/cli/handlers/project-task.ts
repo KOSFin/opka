@@ -8,6 +8,7 @@ import { printResult } from '../format'
 import { projectTaskTemplate } from '../../shared/project-task-template'
 import { PROJECT_TASK_DOCUMENT_MAX_BYTES } from '../../shared/project-task-contract'
 import { readArtifactFileWithinLimit } from '../../shared/artifact-file-read'
+import { readInjectedAgentSessionId } from '../../shared/agent-session-caller-env'
 
 function worktree(ctx: HandlerContext): string {
   const selector = getOptionalStringFlag(ctx.flags, 'worktree')
@@ -23,8 +24,8 @@ function worktree(ctx: HandlerContext): string {
   return buildCurrentWorktreeSelector(ctx.cwd)
 }
 
-async function fileContent(ctx: HandlerContext): Promise<string | undefined> {
-  const path = getOptionalStringFlag(ctx.flags, 'file')
+async function fileContent(ctx: HandlerContext, flag = 'file'): Promise<string | undefined> {
+  const path = getOptionalStringFlag(ctx.flags, flag)
   if (!path) {
     return undefined
   }
@@ -76,7 +77,20 @@ function handler(operation: string): CommandHandler {
   return async (ctx) => {
     const target = worktree(ctx)
     const params: Record<string, unknown> = { worktree: target }
-    if (['show', 'context', 'resume', 'workflow', 'start', 'update'].includes(operation)) {
+    if (
+      [
+        'show',
+        'context',
+        'resume',
+        'workflow',
+        'start',
+        'update',
+        'claim',
+        'progress',
+        'complete',
+        'documents'
+      ].includes(operation)
+    ) {
       params.id = getRequiredStringFlag(ctx.flags, 'id')
     }
     if (['list', 'board'].includes(operation)) {
@@ -119,7 +133,37 @@ function handler(operation: string): CommandHandler {
       }
       params.launch = { ...launch, spec: 'approved-project-plan' }
     }
-    if (['init', 'create', 'update', 'start'].includes(operation)) {
+    if (['claim', 'progress', 'complete'].includes(operation)) {
+      params.revision = getRequiredStringFlag(ctx.flags, 'revision')
+      params.from = readInjectedAgentSessionId(process.env)
+        ? undefined
+        : process.env.ORCA_TERMINAL_HANDLE
+    }
+    if (['progress', 'complete'].includes(operation)) {
+      params.attempt = getRequiredStringFlag(ctx.flags, 'attempt')
+      params.checkpoint =
+        (await fileContent(ctx, 'checkpoint-file')) ??
+        getRequiredStringFlag(ctx.flags, 'checkpoint')
+      params.blocker = getOptionalStringFlag(ctx.flags, 'blocker')
+      if (operation === 'progress' && ctx.flags.has('release')) {
+        params.release = true
+      }
+      if (operation === 'complete') {
+        params.report = await fileContent(ctx)
+        if (!params.report) {
+          throw new RuntimeClientError(
+            'invalid_argument',
+            'Pass --file with the result and actual checks'
+          )
+        }
+      }
+    }
+    if (operation === 'documents') {
+      params.path = getOptionalStringFlag(ctx.flags, 'path')
+    }
+    if (
+      ['init', 'create', 'update', 'start', 'claim', 'progress', 'complete'].includes(operation)
+    ) {
       const targetReply = await call(ctx, 'projectTask.target', { worktree: target })
       const result = targetReply.result
       if (
@@ -162,5 +206,9 @@ export const PROJECT_TASK_HANDLERS: Record<string, CommandHandler> = {
   'project-task board': handler('board'),
   'project-task workflow': handler('workflow'),
   'project-task resume': handler('resume'),
-  'project-task start': handler('start')
+  'project-task start': handler('start'),
+  'project-task claim': handler('claim'),
+  'project-task progress': handler('progress'),
+  'project-task complete': handler('complete'),
+  'project-task documents': handler('documents')
 }

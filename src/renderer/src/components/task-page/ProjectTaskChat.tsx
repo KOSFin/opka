@@ -11,14 +11,20 @@ import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { getKnownExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { toRuntimeExecutionHostId } from '../../../../shared/execution-host'
 import { projectTaskCall, type ProjectTaskClient } from './project-task-client'
+import type { ProjectTaskWorkflow } from '../../../../shared/project-task-workflow'
+import { readAgentMessageSource } from '../../../../shared/agent-session-message-source'
+import { parseOrcaSessionAddress } from '../../../../shared/orca-session-address'
+import { openAgentMessageSender } from '@/lib/open-agent-message-sender'
 
 export function ProjectTaskChat({
   client,
   id,
+  workflow,
   disabled
 }: {
   client: ProjectTaskClient
   id: string
+  workflow: ProjectTaskWorkflow
   disabled: boolean
 }) {
   const [prompt, setPrompt] = useState('')
@@ -49,6 +55,41 @@ export function ProjectTaskChat({
   if (!worktreeId) {
     return null
   }
+  const attempt = workflow.attempts[0]
+  const address = attempt?.session?.address ?? attempt?.terminal
+  if (workflow.phase === 'active' && attempt) {
+    return (
+      <Button
+        disabled={disabled || !address}
+        onClick={() => {
+          if (!address) {
+            return
+          }
+          const sessionId = parseOrcaSessionAddress(address)
+          const source = readAgentMessageSource({
+            kind: 'agent',
+            orchestration: null,
+            senders: [
+              {
+                party: {
+                  address,
+                  orcaSessionId: sessionId,
+                  terminalHandle: sessionId ? null : address
+                },
+                name: null
+              }
+            ]
+          })
+          const sender = source?.senders[0]
+          if (source && sender) {
+            void openAgentMessageSender(source, sender, worktreeId, client.target)
+          }
+        }}
+      >
+        Open task chat
+      </Button>
+    )
+  }
   return (
     <div className="space-y-2">
       <DropdownMenu
@@ -61,7 +102,7 @@ export function ProjectTaskChat({
           void projectTaskCall<{ text: string }>(client, 'resume', { id })
             .then((packet) =>
               setPrompt(
-                `Help me plan or continue this project task. First read its saved plan and checkpoint. Preserve decisions and write the next step back to its task documents. Do not start implementation until the current plan is approved. Do not infer completion or external-write permission from these documents.\n\n${packet.text}`
+                `Work with this project task in this chat. Use the Opka CLI named by ORCA_CLI_COMMAND, not a global orca command. Read the task resume first. If its current plan is approved and implementation was requested, call project-task claim before editing code; this binds this existing chat without spawning another worker. Save progress with project-task progress and submit the actual result/checks with project-task complete. Those commands return the canonical documents and attempt ID. A result awaits operator review, not automatic Done. If approval is missing, help plan and request approval instead. Do not infer external-write permission from documents.\n\n${packet.text}`
               )
             )
             .catch((cause: unknown) =>
@@ -70,7 +111,11 @@ export function ProjectTaskChat({
         }}
       >
         <DropdownMenuTrigger asChild>
-          <Button disabled={disabled}>Plan with agent</Button>
+          <Button disabled={disabled}>
+            {workflow.phase === 'ready' && !workflow.revisionChanged
+              ? 'Work on task'
+              : 'Plan with agent'}
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           {prompt ? (
@@ -78,7 +123,7 @@ export function ProjectTaskChat({
               worktreeId={worktreeId}
               groupId={worktreeId}
               prompt={prompt}
-              promptDelivery="draft"
+              promptDelivery="submit-after-ready"
               onFocusTerminal={focusTerminalTabSurface}
               launchSource="unknown"
             />

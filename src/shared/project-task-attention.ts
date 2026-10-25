@@ -7,7 +7,8 @@ export function projectTaskNeedsDecision(workflow: ProjectTaskWorkflow): boolean
   if (
     workflow.revisionChanged ||
     ['draft', 'review', 'integration'].includes(workflow.phase) ||
-    workflow.exportError
+    workflow.exportError ||
+    workflow.attempts[0]?.session?.blocker
   ) {
     return true
   }
@@ -15,6 +16,9 @@ export function projectTaskNeedsDecision(workflow: ProjectTaskWorkflow): boolean
     return false
   }
   const attempt = workflow.attempts[0]
+  if (attempt?.session) {
+    return ['failed', 'blocked', 'unknown'].includes(attempt.nativeStatus)
+  }
   return (
     !!attempt &&
     (['failed', 'blocked', 'unknown'].includes(attempt.nativeStatus) ||

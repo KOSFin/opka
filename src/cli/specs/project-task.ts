@@ -2,6 +2,30 @@ import { GLOBAL_FLAGS, type CommandSpec } from '../args'
 
 const common = [...GLOBAL_FLAGS, 'worktree']
 export const PROJECT_TASK_COMMAND_SPECS: CommandSpec[] = [
+  ...(['claim', 'progress', 'complete'] as const).map((operation) => ({
+    path: ['project-task', operation],
+    summary:
+      operation === 'claim'
+        ? 'Take an approved task in this existing agent chat (no worker spawned)'
+        : operation === 'complete'
+          ? 'Save the result and request review, not acceptance'
+          : 'Save a checkpoint and optional blocker',
+    usage: `orca project-task ${operation} --id <id> --revision <sha256>${operation === 'claim' ? '' : ' --attempt <id> (--checkpoint <text> | --checkpoint-file <path>)'}${operation === 'complete' ? ' --file <report.md>' : operation === 'progress' ? ' [--release]' : ''} [--worktree <selector>] [--json]`,
+    allowedFlags: [
+      ...common,
+      'id',
+      'revision',
+      ...(operation === 'claim' ? [] : ['attempt', 'checkpoint', 'checkpoint-file', 'blocker']),
+      ...(operation === 'progress' ? ['release'] : []),
+      ...(operation === 'complete' ? ['file'] : [])
+    ]
+  })),
+  {
+    path: ['project-task', 'documents'],
+    summary: 'List saved task notes, checkpoints and reports, or read one by project-relative path',
+    usage: 'orca project-task documents --id <id> [--path <path>] [--worktree <selector>] [--json]',
+    allowedFlags: [...common, 'id', 'path']
+  },
   ...(['board', 'workflow', 'resume', 'start'] as const).map((operation) => ({
     path: ['project-task', operation],
     summary:
