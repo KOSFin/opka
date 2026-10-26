@@ -152,6 +152,27 @@ jobs:
           path: test-results/**/*.png
           if-no-files-found: error
           retention-days: 7
+      - name: Install pinned Codex for the account-free terminal contract
+        shell: bash
+        run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/opka-codex-contract" '@openai/codex@0.160.0'
+      - name: Exercise actual Codex command tools with local scripted responses
+        env:
+          SKIP_BUILD: '1'
+          ORCA_CODEX_TERMINAL_SCRIPTED: '1'
+          ORCA_REAL_CODEX_BINARY: ${{ runner.temp }}/opka-codex-contract/node_modules/.bin/codex
+        run: >-
+          pnpm exec playwright test tests/e2e/fork-task-real-terminal-codex.spec.ts
+          --config tests/playwright.config.ts --project electron-headless --workers=1
+      - name: Save account-free Codex contract evidence
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codex-terminal-evidence-${{ github.sha }}
+          path: |
+            test-results/**/*.png
+            test-results/**/real-terminal-task-receipt.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Save isolated failure evidence
         if: failure()
         uses: actions/upload-artifact@v7

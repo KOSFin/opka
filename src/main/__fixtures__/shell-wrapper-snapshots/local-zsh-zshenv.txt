@@ -213,6 +213,7 @@ __orca_deferred_init() {
     function codex {
       # Why local: zsh's warn_create_global warns for each global a function creates.
       local __orca_codex_arg __orca_codex_isolate="${ORCA_CODEX_ISOLATE:-1}" __orca_codex_identity="${ORCA_CODEX_ISOLATE:-1}"
+      local -a __orca_codex_identity_args=() __orca_codex_args=()
       if [[ -n "${ORCA_CODEX_LAUNCH_PREFLIGHT:-}" && -x "${ORCA_CODEX_LAUNCH_PREFLIGHT}" ]]; then
         "${ORCA_CODEX_LAUNCH_PREFLIGHT}" agent hooks prepare-codex >/dev/null 2>&1 || :
       fi
@@ -223,13 +224,25 @@ __orca_deferred_init() {
         esac
       done
       if [[ "$__orca_codex_identity" != 0 ]]; then
-        [[ -z "${ORCA_CLI_COMMAND:-}" || "${ORCA_CLI_COMMAND}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_CLI_COMMAND='${ORCA_CLI_COMMAND}'" "$@"
-        [[ -z "${ORCA_TERMINAL_HANDLE:-}" || "${ORCA_TERMINAL_HANDLE}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='${ORCA_TERMINAL_HANDLE}'" "$@"
-        [[ -z "${ORCA_PANE_KEY:-}" || "${ORCA_PANE_KEY}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_PANE_KEY='${ORCA_PANE_KEY}'" "$@"
-        [[ -z "${ORCA_WORKTREE_ID:-}" || "${ORCA_WORKTREE_ID}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_WORKTREE_ID='${ORCA_WORKTREE_ID}'" "$@"
-        [[ -z "${ORCA_WORKSPACE_ID:-}" || "${ORCA_WORKSPACE_ID}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_WORKSPACE_ID='${ORCA_WORKSPACE_ID}'" "$@"
-        [[ -z "${ORCA_USER_DATA_PATH:-}" || "${ORCA_USER_DATA_PATH}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_USER_DATA_PATH='${ORCA_USER_DATA_PATH}'" "$@"
+        [[ -z "${ORCA_CLI_COMMAND:-}" || "${ORCA_CLI_COMMAND}" == *"'"* ]] || __orca_codex_identity_args+=(-c "shell_environment_policy.set.ORCA_CLI_COMMAND='${ORCA_CLI_COMMAND}'")
+        [[ -z "${ORCA_TERMINAL_TASK_CALLER_FILE:-}" || "${ORCA_TERMINAL_TASK_CALLER_FILE}" == *"'"* ]] || __orca_codex_identity_args+=(-c "shell_environment_policy.set.ORCA_TERMINAL_TASK_CALLER_FILE='${ORCA_TERMINAL_TASK_CALLER_FILE}'")
+        [[ -z "${ORCA_TERMINAL_HANDLE:-}" || "${ORCA_TERMINAL_HANDLE}" == *"'"* ]] || __orca_codex_identity_args+=(-c "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='${ORCA_TERMINAL_HANDLE}'")
+        [[ -z "${ORCA_PANE_KEY:-}" || "${ORCA_PANE_KEY}" == *"'"* ]] || __orca_codex_identity_args+=(-c "shell_environment_policy.set.ORCA_PANE_KEY='${ORCA_PANE_KEY}'")
+        [[ -z "${ORCA_WORKTREE_ID:-}" || "${ORCA_WORKTREE_ID}" == *"'"* ]] || __orca_codex_identity_args+=(-c "shell_environment_policy.set.ORCA_WORKTREE_ID='${ORCA_WORKTREE_ID}'")
+        [[ -z "${ORCA_WORKSPACE_ID:-}" || "${ORCA_WORKSPACE_ID}" == *"'"* ]] || __orca_codex_identity_args+=(-c "shell_environment_policy.set.ORCA_WORKSPACE_ID='${ORCA_WORKSPACE_ID}'")
+        [[ -z "${ORCA_USER_DATA_PATH:-}" || "${ORCA_USER_DATA_PATH}" == *"'"* ]] || __orca_codex_identity_args+=(-c "shell_environment_policy.set.ORCA_USER_DATA_PATH='${ORCA_USER_DATA_PATH}'")
       fi
+      # A subcommand's -c replaces root overrides; keep ours beside it, before any literal --.
+      local __orca_codex_inserted=0
+      for __orca_codex_arg in "$@"; do
+        if [[ "$__orca_codex_arg" == -- && "$__orca_codex_inserted" == 0 ]]; then
+          __orca_codex_args+=("${__orca_codex_identity_args[@]}")
+          __orca_codex_inserted=1
+        fi
+        __orca_codex_args+=("$__orca_codex_arg")
+      done
+      [[ "$__orca_codex_inserted" != 0 ]] || __orca_codex_args+=("${__orca_codex_identity_args[@]}")
+      set -- "${__orca_codex_args[@]}"
       # Why probe every launch: a cached answer goes stale across an upgrade, and 0.155 and older exit 2 on the flag.
       if [[ "$__orca_codex_isolate" != 0 ]]; then
         case "$(command codex --help 2>/dev/null </dev/null)" in *--no-daemon*) set -- --no-daemon "$@" ;; esac

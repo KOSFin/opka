@@ -94,6 +94,24 @@ describe('fork CI safety and required checks', () => {
     expect(() => verifyRequiredPrContext(parse)).not.toThrow()
   })
 
+  it('requires actual Codex command-tool execution without model credentials before release', () => {
+    const steps = workflow.jobs.electron.steps
+    const install = steps.find(
+      (step) => step.name === 'Install pinned Codex for the account-free terminal contract'
+    )
+    expect(install.run).toContain('@openai/codex@0.160.0')
+    expect(install.run).toContain('$RUNNER_TEMP/opka-codex-contract')
+    const contract = steps.find(
+      (step) => step.name === 'Exercise actual Codex command tools with local scripted responses'
+    )
+    expect(contract.env.ORCA_CODEX_TERMINAL_SCRIPTED).toBe('1')
+    expect(contract.env.ORCA_REAL_CODEX_BINARY).toContain('/opka-codex-contract/')
+    expect(contract.env.ORCA_REAL_CODEX_AUTH_FILE).toBeUndefined()
+    expect(contract.run).toContain('fork-task-real-terminal-codex.spec.ts')
+    expect(contract['continue-on-error']).toBeUndefined()
+    expect(workflow.jobs.verify.needs).toContain('electron')
+  })
+
   it('requires tests, all desktop platforms and hidden GUI checks', () => {
     expect(workflow.jobs.verify.needs).toEqual([
       'static',

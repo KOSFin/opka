@@ -126,6 +126,7 @@ describe('createPtySubprocess', () => {
     const proc = mockPtyProcess()
     spawnMock.mockReturnValue(proc)
     const saved = {
+      ORCA_TERMINAL_TASK_CALLER_FILE: process.env.ORCA_TERMINAL_TASK_CALLER_FILE,
       ORCA_PANE_KEY: process.env.ORCA_PANE_KEY,
       ORCA_TAB_ID: process.env.ORCA_TAB_ID,
       ORCA_WORKTREE_ID: process.env.ORCA_WORKTREE_ID,
@@ -133,6 +134,7 @@ describe('createPtySubprocess', () => {
       ORCA_ORCAD_MANAGED_ACTIVATION_ROOT: process.env.ORCA_ORCAD_MANAGED_ACTIVATION_ROOT
     }
     process.env.ORCA_ORCAD_MANAGED_ACTIVATION_ROOT = '/home/u/.orca-remote/.activation'
+    process.env.ORCA_TERMINAL_TASK_CALLER_FILE = '/parent/terminal-task-callers/parent.json'
     process.env.ORCA_PANE_KEY = 'parent-tab:parent-leaf'
     process.env.ORCA_TAB_ID = 'parent-tab'
     process.env.ORCA_WORKTREE_ID = 'parent-worktree'
@@ -151,6 +153,7 @@ describe('createPtySubprocess', () => {
     }
 
     const env = spawnMock.mock.calls.at(-1)?.[2].env
+    expect(env.ORCA_TERMINAL_TASK_CALLER_FILE).toBeUndefined()
     expect(env.ORCA_PANE_KEY).toBeUndefined()
     expect(env.ORCA_TAB_ID).toBeUndefined()
     expect(env.ORCA_WORKTREE_ID).toBeUndefined()
@@ -163,11 +166,13 @@ describe('createPtySubprocess', () => {
     const proc = mockPtyProcess()
     spawnMock.mockReturnValue(proc)
     const saved = {
+      ORCA_TERMINAL_TASK_CALLER_FILE: process.env.ORCA_TERMINAL_TASK_CALLER_FILE,
       ORCA_PANE_KEY: process.env.ORCA_PANE_KEY,
       ORCA_TAB_ID: process.env.ORCA_TAB_ID,
       ORCA_WORKTREE_ID: process.env.ORCA_WORKTREE_ID
     }
     process.env.ORCA_PANE_KEY = 'parent-tab:parent-leaf'
+    process.env.ORCA_TERMINAL_TASK_CALLER_FILE = '/parent/terminal-task-callers/parent.json'
     process.env.ORCA_TAB_ID = 'parent-tab'
     process.env.ORCA_WORKTREE_ID = 'parent-worktree'
 
@@ -177,6 +182,7 @@ describe('createPtySubprocess', () => {
         cols: 80,
         rows: 24,
         env: {
+          ORCA_TERMINAL_TASK_CALLER_FILE: '/child/terminal-task-callers/child.json',
           ORCA_PANE_KEY: 'child-tab:child-leaf',
           ORCA_TAB_ID: 'child-tab',
           ORCA_WORKTREE_ID: 'child-worktree'
@@ -193,6 +199,7 @@ describe('createPtySubprocess', () => {
     }
 
     const env = spawnMock.mock.calls.at(-1)?.[2].env
+    expect(env.ORCA_TERMINAL_TASK_CALLER_FILE).toBe('/child/terminal-task-callers/child.json')
     expect(env.ORCA_PANE_KEY).toBe('child-tab:child-leaf')
     expect(env.ORCA_TAB_ID).toBe('child-tab')
     expect(env.ORCA_WORKTREE_ID).toBe('child-worktree')

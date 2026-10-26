@@ -254,7 +254,7 @@ it('uses one launchd label per profile and protocol', () => {
   expect(macDaemonJobLabel('/Users/a/Library/Application Support/orca')).not.toBe(
     macDaemonJobLabel('/Users/a/Library/Application Support/orca-dev')
   )
-  expect(macDaemonJobLabel('/p')).toMatch(/\.terminal\.[0-9a-f]{16}\.v51$/)
+  expect(macDaemonJobLabel('/p')).toMatch(/\.terminal\.[0-9a-f]{16}\.v52$/)
   expect(macDaemonJobLabel('/p').startsWith(`${LOCAL_BUILD_COMPATIBILITY_CONTRACT.appId}.`)).toBe(
     true
   )

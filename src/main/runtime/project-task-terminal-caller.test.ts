@@ -81,6 +81,16 @@ it('refuses another declared handle even when the supplied launch proof is valid
   expect(projectTaskResources).not.toHaveBeenCalled()
 })
 
+it('does not downgrade invalid task proof to a valid legacy launch token', async () => {
+  await expect(
+    claimProjectTaskSession(params, {
+      runtime,
+      orchestrationCompatibilityEvidence: { ...evidence, terminalTaskProof: '0'.repeat(64) }
+    })
+  ).rejects.toThrow(/could not verify/)
+  expect(projectTaskResources).not.toHaveBeenCalled()
+})
+
 it('does not turn an unattested restored terminal into a fresh launch', async () => {
   const authority = runtime.getOrchestrationDispatchAuthority(handle)
   if (!authority) {

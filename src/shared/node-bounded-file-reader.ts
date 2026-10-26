@@ -141,7 +141,7 @@ export async function readNodeFileHandleWithinLimit(
 export function readNodeFileSyncWithinLimit(
   filePath: string,
   maxBytes: number,
-  options: { regularFileOnly?: boolean } = {}
+  options: { regularFileOnly?: boolean; noFollow?: boolean } = {}
 ): BoundedNodeFileRead {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new RangeError('File read limit must be a non-negative safe integer')
@@ -152,7 +152,10 @@ export function readNodeFileSyncWithinLimit(
   }
   // Nonblocking open also fences replacement with a FIFO after the path check.
   const flags = options.regularFileOnly
-    ? constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NONBLOCK)
+    ? constants.O_RDONLY |
+      (process.platform === 'win32'
+        ? 0
+        : constants.O_NONBLOCK | (options.noFollow ? constants.O_NOFOLLOW : 0))
     : 'r'
   const descriptor = openSync(filePath, flags)
   try {

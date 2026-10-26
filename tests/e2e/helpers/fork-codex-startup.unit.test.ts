@@ -56,3 +56,21 @@ it('does not report success when process exit remains unverified', async () => {
     'did not confirm its process exit'
   )
 })
+
+it('checks task skill discovery before allowing a paid turn', async () => {
+  fixture.request.mockResolvedValue({ data: [{ skills: [{ name: 'opka-tasks' }] }] })
+  await probeForkCodexStartup('/synthetic/codex', '/synthetic/project', {}, 'opka-tasks')
+  expect(fixture.request.mock.calls.map(([method]) => method)).toEqual([
+    'thread/start',
+    'skills/list'
+  ])
+  expect(fixture.close).toHaveBeenCalledTimes(1)
+})
+
+it('refuses an undiscovered skill and still closes the process without inference', async () => {
+  await expect(
+    probeForkCodexStartup('/synthetic/codex', '/synthetic/project', {}, 'opka-tasks')
+  ).rejects.toThrow('did not discover')
+  expect(fixture.close).toHaveBeenCalledTimes(1)
+  expect(fixture.request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false)
+})

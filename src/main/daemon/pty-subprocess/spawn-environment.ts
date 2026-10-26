@@ -29,8 +29,10 @@ import { applyScrubSafeAgentEnvAliases } from '../../../shared/agent-hook-scrub-
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { PtySubprocessOptions } from '../pty-subprocess'
 import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../../shared/orcad-managed-launch-env'
+import { TERMINAL_TASK_CALLER_FILE_ENV } from '../../../shared/terminal-task-caller-env'
 
 const PANE_IDENTITY_ENV_KEYS = [
+  TERMINAL_TASK_CALLER_FILE_ENV,
   'ORCA_PANE_KEY',
   'ORCA_TAB_ID',
   'ORCA_WORKTREE_ID',

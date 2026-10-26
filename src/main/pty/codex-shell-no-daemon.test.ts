@@ -321,6 +321,26 @@ describe('codex wrapper --no-daemon rule', () => {
 
     for (const [shell, available] of shells) {
       it.skipIf(!available)(
+        `${shell} keeps identity after subcommand overrides but before --`,
+        () => {
+          const sandbox = makeSandbox(HELP_WITHOUT_FLAG)
+          const result = run(
+            shell,
+            codexCall(shell, ['exec', '-c', 'approval_policy="never"', '--', 'prompt']),
+            sandbox,
+            identity
+          )
+          const words = lines(result.stdout)[0].split('|').slice(1)
+          expect(words.slice(0, 3)).toEqual(['exec', '-c', 'approval_policy="never"'])
+          expect(words.slice(-2)).toEqual(['--', 'prompt'])
+          expect(splitOverrides(lines(result.stdout)[0]).overrides).toEqual(
+            ['approval_policy="never"', ...identityOverrides].toSorted()
+          )
+          expect(result.stderr).toBe('')
+        }
+      )
+
+      it.skipIf(!available)(
         `${shell} forwards set identity keys, except where the shared server is chosen`,
         () => {
           const sandbox = makeSandbox(HELP_WITH_FLAG)

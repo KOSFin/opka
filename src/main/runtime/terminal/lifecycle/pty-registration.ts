@@ -8,8 +8,10 @@ import { spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
 import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-terminal-contracts'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
+import { publishTerminalTaskCaller } from '../../project-task-terminal-proof'
 
 export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
+  protected abstract issuePtyHandle(pty: RuntimePtyWorktreeRecord): string
   protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
     worktreeId: string,
     tabId: string
@@ -172,6 +174,20 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
         this.registerPreAllocatedHandleForPty(ptyId, replacementHandle)
       }
       this.ensurePtyBackedMobileSurfaceForRendererTab(worktreeId, binding.tabId)
+    }
+    if (
+      paneKey &&
+      pty.incarnationId &&
+      hostScope?.kind === 'local' &&
+      !pty.isWsl &&
+      !pty.wslDistro
+    ) {
+      publishTerminalTaskCaller(ptyId, {
+        terminalHandle: this.issuePtyHandle(pty),
+        paneKey,
+        worktreeId,
+        processIncarnation: `${ptyId}:${pty.incarnationId}`
+      })
     }
   }
 
