@@ -295,10 +295,12 @@ describe('codex wrapper --no-daemon rule', () => {
 
   describe('caller identity for commands Codex runs', () => {
     const identity = {
+      ORCA_CLI_COMMAND: '/Applications/Opka beta $HOME \\x "q".app/Contents/Resources/bin/orca',
       ORCA_TERMINAL_HANDLE: 'term_abc',
       ORCA_USER_DATA_PATH: '/Users/a b/Library/Application Support/orca $HOME \\x "q"'
     }
     const identityOverrides = [
+      `shell_environment_policy.set.ORCA_CLI_COMMAND='${identity.ORCA_CLI_COMMAND}'`,
       "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='term_abc'",
       `shell_environment_policy.set.ORCA_USER_DATA_PATH='${identity.ORCA_USER_DATA_PATH}'`
     ]
@@ -327,6 +329,7 @@ describe('codex wrapper --no-daemon rule', () => {
             [
               codexCall(shell, ['x']),
               codexCall(shell, ['--no-daemon', 'x']),
+              codexCall(shell, ['resume', '--last']),
               codexCall(shell, ['agents']),
               codexCall(shell, ['--remote', 'ws://h'])
             ].join('\n'),
@@ -338,6 +341,7 @@ describe('codex wrapper --no-daemon rule', () => {
           expect(lines(result.stdout).map(splitOverrides)).toEqual([
             { overrides: identityOverrides, rest: ['--no-daemon', 'x'] },
             { overrides: identityOverrides, rest: ['--no-daemon', 'x'] },
+            { overrides: identityOverrides, rest: ['--no-daemon', 'resume', '--last'] },
             { overrides: [], rest: ['agents'] },
             { overrides: [], rest: ['--remote', 'ws://h'] }
           ])
@@ -357,11 +361,12 @@ describe('codex wrapper --no-daemon rule', () => {
         const sandbox = makeSandbox(HELP_WITHOUT_FLAG)
         const result = run(shell, codexCall(shell, ['x']), sandbox, {
           ORCA_TERMINAL_HANDLE: 'term_abc',
+          ORCA_CLI_COMMAND: "/Applications/o'brien/Opka.app/Contents/Resources/bin/orca",
           ORCA_USER_DATA_PATH: "/Users/o'brien/orca'"
         })
 
         expect(lines(result.stdout).map(splitOverrides)).toEqual([
-          { overrides: [identityOverrides[0]], rest: ['x'] }
+          { overrides: [identityOverrides[1]], rest: ['x'] }
         ])
       })
 

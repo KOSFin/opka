@@ -488,6 +488,7 @@ import {
 import {
   ProjectTaskAction,
   ProjectTaskAgentIntegration,
+  ProjectTaskAgentSettings,
   ProjectTaskArchive,
   ProjectTaskClaim,
   ProjectTaskComplete,
@@ -1259,6 +1260,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'projectHostSetup.list': null,
   'projectHostSetup.setupExistingFolder': ProjectHostSetupExistingFolder,
   'projectHostSetup.update': ProjectHostSetupUpdate,
+  'projectTask.agentSettings': ProjectTaskAgentSettings,
   'projectTask.approve': ProjectTaskAction,
   'projectTask.archive': ProjectTaskArchive,
   'projectTask.board': ProjectTaskList,

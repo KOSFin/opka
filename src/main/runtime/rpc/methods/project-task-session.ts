@@ -4,7 +4,8 @@ import {
   ProjectTaskProgress,
   ProjectTaskComplete,
   ProjectTaskDocuments,
-  ProjectTaskAgentIntegration
+  ProjectTaskAgentIntegration,
+  ProjectTaskAgentSettings
 } from '../../../../shared/rpc-contract/project-task-workflow-params'
 import { claimProjectTaskSession, progressProjectTaskSession } from '../../project-task-session'
 import {
@@ -12,8 +13,23 @@ import {
   requireInteractiveTaskOperator
 } from '../../project-task-workflow-service'
 import { taskDocuments } from '../../../project-tasks/task-documents'
+import { resolveProjectTaskWorkspace } from '../../project-task-workspaces'
 
 export const PROJECT_TASK_SESSION_METHODS = [
+  defineMethod({
+    name: 'projectTask.agentSettings',
+    permission: 'workspace',
+    params: ProjectTaskAgentSettings,
+    handler: async (params, context) => {
+      requireInteractiveTaskOperator(context)
+      const resources = await resolveProjectTaskWorkspace(
+        context.runtime,
+        params.worktree,
+        params.expectedExecutionHostId
+      )
+      return resources.workspace.agentSettings(params.action)
+    }
+  }),
   defineMethod({
     name: 'projectTask.enableAgentTasks',
     permission: 'workspace',

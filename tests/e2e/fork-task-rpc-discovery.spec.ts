@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -54,6 +54,13 @@ test('discovers a task initialized through RPC and opens its saved report withou
     await page.getByRole('combobox', { name: 'Task project' }).click()
     await page.getByRole('option', { name: 'All projects', exact: true }).click()
     await rpc(page, 'projectTask.init', { worktree, expectedExecutionHostId: 'local' })
+    for (const file of [
+      '.agents/skills/opka-tasks/SKILL.md',
+      '.claude/skills/opka-tasks/SKILL.md',
+      '.orca/task-agent-settings.json'
+    ]) {
+      unlinkSync(join(root, file))
+    }
     await rpc(page, 'projectTask.create', {
       worktree,
       source: 'project',
@@ -74,6 +81,27 @@ test('discovers a task initialized through RPC and opens its saved report withou
     await page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
     await page.getByRole('combobox', { name: 'Task project' }).click()
     await page.getByRole('option', { name: /RPC task discovery/ }).click()
+    await page.getByRole('button', { name: 'Board settings', exact: true }).click()
+    let settings = page.getByRole('dialog', { name: 'Board settings', exact: true })
+    await expect(settings.getByRole('status')).toHaveText('Enabled')
+    await expect(settings.getByRole('switch', { name: 'Agent task workflow' })).toBeChecked()
+    await page.screenshot({ path: testInfo.outputPath('board-settings-enabled.png') })
+    await settings.getByRole('switch', { name: 'Agent task workflow' }).click()
+    await expect(settings.getByRole('status')).toHaveText('Disabled')
+    await settings.getByRole('button', { name: 'Close', exact: true }).click()
+    await session.close(app)
+    const restarted = await session.launch({ executablePath })
+    app = restarted.app
+    page = restarted.page
+    await page.waitForFunction(() => window.__store?.getState().workspaceSessionReady === true)
+    await page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
+    await page.getByRole('button', { name: 'Board settings', exact: true }).click()
+    settings = page.getByRole('dialog', { name: 'Board settings', exact: true })
+    await expect(settings.getByRole('status')).toHaveText('Disabled')
+    await expect(settings.getByRole('switch', { name: 'Agent task workflow' })).not.toBeChecked()
+    await settings.getByRole('switch', { name: 'Agent task workflow' }).click()
+    await expect(settings.getByRole('status')).toHaveText('Enabled')
+    await settings.getByRole('button', { name: 'Close', exact: true }).click()
     await page.screenshot({ path: testInfo.outputPath('rpc-task-board.png') })
     await page.getByRole('button', { name: /Исправить сложение/ }).click({ timeout: 10000 })
     await page.getByRole('button', { name: 'Reports & notes', exact: true }).click()

@@ -42,3 +42,6 @@ export const ProjectTaskDocuments = ProjectTaskIdentity.extend({
   path: z.string().min(1).max(1024).optional()
 })
 export const ProjectTaskAgentIntegration = ProjectTaskAction.omit({ id: true, revision: true })
+export const ProjectTaskAgentSettings = ProjectTaskAgentIntegration.extend({
+  action: z.enum(['read', 'reconcile', 'enable', 'disable']).default('read')
+})

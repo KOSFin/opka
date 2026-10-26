@@ -12,6 +12,7 @@ if test "$__orca_codex_type" = file
       command "$ORCA_CODEX_LAUNCH_PREFLIGHT" agent hooks prepare-codex >/dev/null 2>&1; or true
     end
     if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '^(agents|queue|--remote|--remote=.*)$' $argv
+      test -n "$ORCA_CLI_COMMAND"; and not string match -q -- "*'*" "$ORCA_CLI_COMMAND"; and set argv -c "shell_environment_policy.set.ORCA_CLI_COMMAND='$ORCA_CLI_COMMAND'" $argv
       test -n "$ORCA_TERMINAL_HANDLE"; and not string match -q -- "*'*" "$ORCA_TERMINAL_HANDLE"; and set argv -c "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='$ORCA_TERMINAL_HANDLE'" $argv
       test -n "$ORCA_PANE_KEY"; and not string match -q -- "*'*" "$ORCA_PANE_KEY"; and set argv -c "shell_environment_policy.set.ORCA_PANE_KEY='$ORCA_PANE_KEY'" $argv
       test -n "$ORCA_WORKTREE_ID"; and not string match -q -- "*'*" "$ORCA_WORKTREE_ID"; and set argv -c "shell_environment_policy.set.ORCA_WORKTREE_ID='$ORCA_WORKTREE_ID'" $argv

@@ -1,0 +1,66 @@
+name: Verify released Opka updater
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Published target beta, for example 1.4.236-rc.4'
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/opka-updater-smoke.yml'
+      - 'tests/playwright.packaged.config.ts'
+      - 'tests/e2e/fork-packaged-installer.spec.ts'
+      - 'tests/e2e/helpers/fork-installer-probe*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify_released_updater:
+    name: Released rc.3 installer download and checksum
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_TELEMETRY_DISABLED: '1'
+      ORCA_DIAGNOSTICS_DISABLED: '1'
+      OPKA_TARGET_VERSION: ${{ inputs.target_version || '1.4.236-rc.2' }}
+      GH_TOKEN: ${{ github.token }}
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Validate the target version
+        run: node --input-type=module -e 'import {validateBetaVersion} from "./config/scripts/opka-release-assets.mjs"; validateBetaVersion(process.env.OPKA_TARGET_VERSION)'
+      - name: Download the immutable released rc.3 and target checksums
+        run: |
+          gh release download v1.4.236-rc.3 --repo KOSFin/opka --pattern opka-macos-arm64.zip --dir dist/baseline
+          gh release download "v$OPKA_TARGET_VERSION" --repo KOSFin/opka --pattern SHA256SUMS --dir dist/target
+      - name: Verify rc.3 bytes before extracting or executing
+        run: |
+          printf '%s\n' 'c12231d4e035abb39ac40a23cf8d2a78af38ebe0444b1625d1e1cb933a0343b6  dist/baseline/opka-macos-arm64.zip' | shasum -a 256 -c -
+          ditto -x -k dist/baseline/opka-macos-arm64.zip dist/baseline/extracted
+          codesign --verify --deep --strict dist/baseline/extracted/Opka.app
+      - name: Pin the independent target checksum
+        run: >-
+          node --input-type=module -e 'import {readFileSync,appendFileSync} from "node:fs";
+          const lines=readFileSync("dist/target/SHA256SUMS","utf8").trim().split(/\r?\n/);
+          const matches=lines.map(line=>/^([a-f0-9]{64})  opka-macos-arm64\.dmg$/.exec(line)).filter(Boolean);
+          if(matches.length!==1)throw new Error("Exact target DMG checksum missing");
+          appendFileSync(process.env.GITHUB_ENV,`ORCA_FORK_UPDATE_TARGET_VERSION=${process.env.OPKA_TARGET_VERSION}\nORCA_FORK_UPDATE_TARGET_SHA256=${matches[0][1]}\n`);'
+      - name: Exercise the released rc.3 updater without replacing an app
+        env:
+          ORCA_FORK_PACKAGED_APP: ${{ github.workspace }}/dist/baseline/extracted/Opka.app
+          GH_TOKEN: ''
+        run: pnpm exec playwright test --config tests/playwright.packaged.config.ts --project electron-headless
+      - name: Save scalar download evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: released-updater-evidence-${{ github.run_id }}
+          path: test-results/**/installer-download-receipt.json
+          if-no-files-found: ignore
+          retention-days: 7

@@ -11,12 +11,13 @@ const CODEX_SHARED_SERVER_ARG_PATTERN = argPattern(CODEX_SHARED_SERVER_ARGS)
 const CODEX_NO_DAEMON_SKIP_ARG_PATTERN = argPattern(CODEX_NO_DAEMON_SKIP_ARGS)
 
 /**
- * The caller identity `orca` reads, which a user's `shell_environment_policy` (`inherit = "core"`)
+ * The caller identity and own CLI, which a user's `shell_environment_policy` (`inherit = "core"`)
  * strips from every command Codex runs (#25775). Codex applies `set` after `inherit` and `exclude`
  * (so an `exclude = ["ORCA_*"]` is overridden) but before `include_only`, which still wins. Never a
  * token: argv is readable by every local user.
  */
 export const CODEX_COMMAND_IDENTITY_ENV_KEYS = [
+  'ORCA_CLI_COMMAND',
   'ORCA_TERMINAL_HANDLE',
   'ORCA_PANE_KEY',
   'ORCA_WORKTREE_ID',
