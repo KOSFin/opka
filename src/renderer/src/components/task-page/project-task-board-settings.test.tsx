@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ProjectTaskAgentSettings } from '../../../../shared/project-task-agent-settings'
 import { ProjectTaskBoardSettings } from './ProjectTaskBoardSettings'
@@ -115,3 +115,39 @@ it('does not configure all projects implicitly when All projects is selected', a
   expect(screen.getByText('Choose a project to configure its board.')).toBeTruthy()
   expect(projectTaskCall).not.toHaveBeenCalled()
 })
+
+it.each(['success', 'failure'])(
+  'ignores a delayed mutation %s after switching to another project',
+  async (result) => {
+    const delayed = Promise.withResolvers<ProjectTaskAgentSettings>()
+    vi.mocked(projectTaskCall)
+      .mockResolvedValueOnce(enabled)
+      .mockReturnValueOnce(delayed.promise)
+      .mockResolvedValueOnce(enabled)
+    const view = mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Board settings' }))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Enabled'))
+    fireEvent.click(screen.getByRole('switch'))
+    const other = { ...project, key: 'other', selector: 'folder:other', name: 'Other project' }
+    const otherClient = { ...client, worktree: other.selector }
+    view.rerender(
+      <ProjectTaskBoardSettings
+        client={otherClient}
+        project={other}
+        projects={[project, other]}
+        onChoose={vi.fn()}
+      />
+    )
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Enabled'))
+    await act(async () => {
+      if (result === 'success') {
+        delayed.resolve({ enabled: false, state: 'disabled', files: [] })
+      } else {
+        delayed.reject(new Error('Previous project unavailable'))
+      }
+    })
+    expect(screen.getByRole('status').textContent).toBe('Enabled')
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryByRole('alert')).toBeNull()
+  }
+)

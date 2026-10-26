@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -41,6 +41,7 @@ export function ProjectTaskBoardSettings({
   onChoose: (key: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const activeClient = useRef(client)
   const [loaded, setLoaded] = useState<{
     client: ProjectTaskClient
     settings: ProjectTaskAgentSettings
@@ -53,6 +54,7 @@ export function ProjectTaskBoardSettings({
   const settings = loaded?.client === client ? loaded.settings : null
   const error = failure?.client === client ? failure.message : ''
   useEffect(() => {
+    activeClient.current = client
     if (!client) {
       return
     }
@@ -77,6 +79,9 @@ export function ProjectTaskBoardSettings({
       })
     return () => {
       cancelled = true
+      if (activeClient.current === client) {
+        activeClient.current = null
+      }
     }
   }, [client])
   const apply = async (action: 'enable' | 'disable' | 'reconcile') => {
@@ -89,9 +94,13 @@ export function ProjectTaskBoardSettings({
       const settings = await projectTaskCall<ProjectTaskAgentSettings>(client, 'agentSettings', {
         action
       })
-      setLoaded({ client, settings })
+      if (activeClient.current === client) {
+        setLoaded({ client, settings })
+      }
     } catch (cause) {
-      setFailure({ client, message: projectTaskError(cause) })
+      if (activeClient.current === client) {
+        setFailure({ client, message: projectTaskError(cause) })
+      }
     } finally {
       setPendingClient((current) => (current === client ? null : current))
     }
