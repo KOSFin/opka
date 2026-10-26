@@ -34,6 +34,8 @@ import { AGENT_HOOK_RUNTIME_ENV_KEYS } from './spawn-env-keys'
 import { applyManagedDataAccountEnvironment } from '../../../managed-data-accounts/launch-environment'
 import { applyOpenCodeStatusPluginEnv, captureOpenCodeSourceConfig } from './opencode-config'
 import { applyCodexRemoteViewerClipboardEnv } from './codex-terminal-clipboard'
+import { prepareTerminalTaskCaller } from '../../../runtime/project-task-terminal-proof'
+import { TERMINAL_TASK_CALLER_FILE_ENV } from '../../../../shared/terminal-task-caller-env'
 
 /**
  * Mutates `baseEnv` in place with all host-local PTY env vars and returns it.
@@ -298,6 +300,13 @@ export function buildPtyHostEnv(
   if (!opts.isWsl && cliLauncher) {
     // Login shells can reorder PATH behind a different installed app.
     baseEnv.ORCA_CLI_COMMAND = cliLauncher
+  }
+  delete baseEnv[TERMINAL_TASK_CALLER_FILE_ENV]
+  if (!opts.isWsl && cliLauncher) {
+    const callerFile = prepareTerminalTaskCaller(opts.userDataPath, id)
+    if (callerFile) {
+      baseEnv[TERMINAL_TASK_CALLER_FILE_ENV] = callerFile
+    }
   }
 
   if (

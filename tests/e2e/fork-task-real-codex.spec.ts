@@ -19,6 +19,7 @@ import { prepareForkProfileNodeCli } from './helpers/fork-profile-cli'
 import { probeForkCodexStartup } from './helpers/fork-codex-startup'
 import { respondToForkTaskApprovals } from './helpers/fork-task-approvals'
 import { verifyForkTaskReview } from './helpers/fork-task-review'
+import { prepareForkCodexReadBoundary } from './helpers/fork-codex-read-boundary'
 import type { AgentSessionHistoryResult } from '../../src/shared/agent-session-wire'
 import {
   structuredAgentSessionCreateParams,
@@ -99,30 +100,7 @@ test('one real Codex chat discovers a task, saves a report and requests review',
       ORCA_REMOTE_PAIRING: ''
     }
     mkdirSync(bin)
-    const profile = join(bin, 'read-boundary.sb')
-    const readable = [
-      join(process.cwd(), 'out'),
-      join(process.cwd(), 'node_modules'),
-      realpathSync(join(process.cwd(), 'node_modules', '@orca', 'process-host')),
-      dirname(dirname(process.execPath))
-    ]
-    const ancestors = new Set<string>()
-    for (const path of readable) {
-      for (let parent = dirname(path); parent !== dirname(parent); parent = dirname(parent)) {
-        ancestors.add(parent)
-      }
-    }
-    writeFileSync(
-      profile,
-      `(version 1)\n(allow default)\n(deny file-read* file-write* (subpath ${JSON.stringify(homedir())}))\n${readable.map((path) => `(allow file-read* (subpath ${JSON.stringify(path)}))`).join('\n')}\n${[...ancestors].map((path) => `(allow file-read-metadata (literal ${JSON.stringify(path)}))`).join('\n')}\n`
-    )
-    const wrapper = join(bin, 'codex')
-    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
-    writeFileSync(
-      wrapper,
-      `#!/bin/sh\nexec /usr/bin/sandbox-exec -f ${quote(profile)} ${quote(codex)} "$@"\n`,
-      { mode: 0o755 }
-    )
+    const { profile, wrapper } = prepareForkCodexReadBoundary(bin, codex)
     const denied = runProcessSync({
       program: '/usr/bin/sandbox-exec',
       args: ['-f', profile, '/bin/ls', homedir()],

@@ -12,6 +12,7 @@ import { advertisedUrlWatcher } from '../../../ports/advertised-url-watcher'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { exitedSplitPaneFacts } from './exited-split-pane-rule'
+import { retireTerminalTaskCaller } from '../../project-task-terminal-proof'
 import type {
   RuntimePtyWorktreeRecord,
   RuntimeLeafRecord
@@ -92,6 +93,9 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     const processDeathCertified =
       exitCode >= 0 || options.hostExitConfirmed === true || options.providerExitObserved === true
     if (processDeathCertified) {
+      if (pty?.incarnationId && !pty.connectionId && !pty.isWsl && !pty.wslDistro) {
+        retireTerminalTaskCaller(ptyId, `${ptyId}:${pty.incarnationId}`)
+      }
       // An unverifiable exit keeps the facet tracked until a certified exit or prune.
       this.clearLiveProgramStatusFacet(ptyId)
     }

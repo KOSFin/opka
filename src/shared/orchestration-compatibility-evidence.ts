@@ -25,6 +25,7 @@ export type OrchestrationCompatibilityEvidence = {
   terminalHandle?: string
   paneKey?: string
   launchToken?: string
+  terminalTaskProof?: string
   host?: OrchestrationCompatibilityHostStamp
   /**
    * The Orca-minted agent session id from the caller's injected environment. When present it is
@@ -35,6 +36,7 @@ export type OrchestrationCompatibilityEvidence = {
 
 const SECRET_KEYS = new Set([
   'launchToken',
+  'terminalTaskProof',
   'connectionIncarnation',
   'attachmentId',
   'compatibilityEvidence',

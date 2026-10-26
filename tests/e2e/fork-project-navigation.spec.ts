@@ -91,7 +91,7 @@ test('opens an overall project, chooses repository Git, and restores host collap
       await state.fetchAllWorktrees()
       state.setGroupBy('repo')
       state.setProjectOrderBy('manual')
-      return { groupId: imported.group.id }
+      return { groupId: imported.group.id, activeWorktreeId: state.activeWorktreeId }
     }, root)
     const sidebar = page.locator('[data-worktree-sidebar]')
     const host = sidebar.locator('[data-host-header-drag-id="local"]')
@@ -118,6 +118,12 @@ test('opens an overall project, chooses repository Git, and restores host collap
     await sidebar.getByRole('button', { name: 'Expand apps/web', exact: true }).click()
     await page.getByRole('button', { name: 'New chat in Navigation project', exact: true }).click()
     await expect(page.getByRole('menu')).toBeVisible()
+    await expect(page.getByRole('menu').getByRole('status')).toHaveCount(0)
+    await expect(page.getByRole('menu').getByRole('menuitem')).not.toHaveCount(0)
+    await expect
+      .poll(() => page.evaluate(() => window.__store!.getState().activeWorktreeId))
+      .toBe(prepared.activeWorktreeId)
+    await expect(page.locator('[data-terminal-tab-id]')).toHaveCount(0)
     await page.keyboard.press('Escape')
     await expect(page.locator('[data-terminal-tab-id]')).toHaveCount(0)
     await page.getByRole('button', { name: 'Open project Navigation project', exact: true }).click()

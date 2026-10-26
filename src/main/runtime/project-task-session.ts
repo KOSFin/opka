@@ -21,6 +21,7 @@ import { taskRevision } from '../project-tasks/task-document'
 import { writePluginFileAtomically } from '../plugins/plugin-atomic-file-write'
 import { exportProjectTaskActivity } from '../project-tasks/task-activity'
 import { resumeProjectTask } from './project-task-resume'
+import { verifyProjectTaskTerminalProof } from './project-task-terminal-proof'
 
 function taskSessionCaller(context: RpcContext, from: string | undefined) {
   if (context.pairedDeviceId) {
@@ -36,9 +37,11 @@ function taskSessionCaller(context: RpcContext, from: string | undefined) {
   }
   const authority = context.orchestrationCaller
     ? null
-    : context.runtime.verifyOrchestrationCompatibilityCaller(evidence, {
-        currentRuntimeLaunchSufficient: true
-      })
+    : evidence?.terminalTaskProof !== undefined
+      ? verifyProjectTaskTerminalProof(context.runtime, evidence)
+      : context.runtime.verifyOrchestrationCompatibilityCaller(evidence, {
+          currentRuntimeLaunchSufficient: true
+        })
   if (!context.orchestrationCaller && !authority) {
     throw new Error('The owning host could not verify this terminal identity; no task was taken')
   }
@@ -62,7 +65,14 @@ function taskSessionCaller(context: RpcContext, from: string | undefined) {
       JSON.stringify(
         context.orchestrationCaller
           ? ['session', caller.orcaSessionId]
-          : ['terminal', caller.terminalHandle, caller.paneKey, evidence?.launchToken]
+          : evidence?.terminalTaskProof && authority
+            ? [
+                'terminal-proof',
+                authority.processIncarnation,
+                caller.paneKey,
+                evidence.terminalTaskProof
+              ]
+            : ['terminal', caller.terminalHandle, caller.paneKey, evidence?.launchToken]
       )
     )
     .digest('hex')
