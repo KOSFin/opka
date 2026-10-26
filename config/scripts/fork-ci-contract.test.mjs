@@ -9,6 +9,18 @@ import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('checks an immutable released updater without write permissions or installed app replacement', () => {
+    const verification = parse(readFileSync('.github/workflows/opka-updater-smoke.yml', 'utf8'))
+    expect(verification.permissions).toEqual({ contents: 'read' })
+    expect(verification.on.pull_request.paths).toContain('.github/workflows/opka-updater-smoke.yml')
+    const job = verification.jobs.verify_released_updater
+    expect(job.env.ORCA_BACKGROUND_LAUNCH).toBe('1')
+    const commands = job.steps.map((step) => step.run ?? '').join('\n')
+    expect(commands).toContain('c12231d4e035abb39ac40a23cf8d2a78af38ebe0444b1625d1e1cb933a0343b6')
+    expect(commands).toContain('codesign --verify --deep --strict')
+    expect(commands).toContain('tests/playwright.packaged.config.ts')
+    expect(commands).not.toMatch(/gh release (?:create|edit)|\/Applications\//)
+  })
   it('executes the aggregate gate against success, missing, failed, cancelled and skipped checks', () => {
     const command = workflow.jobs.verify.steps.find((step) => step.run).run.trim()
     const match = command.match(/^node -e '([\s\S]+)'$/)

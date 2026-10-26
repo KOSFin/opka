@@ -244,20 +244,6 @@ export function ProjectTaskDetail({
               <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
-                  setConfirmation({
-                    title: 'Enable task workflow for agents',
-                    description:
-                      'Add the opka-tasks skill inside this project for new Codex and Claude chats. Existing skill edits are preserved. Global agent settings and AGENTS.md are not changed.',
-                    run: async () => {
-                      await apply('enableAgentTasks')
-                    }
-                  })
-                }
-              >
-                Enable agent task workflow
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() =>
                   perform(async () => {
                     const packet = await projectTaskCall<{ text: string }>(client, 'resume', { id })
                     await navigator.clipboard.writeText(packet.text)

@@ -223,6 +223,7 @@ __orca_deferred_init() {
         esac
       done
       if [[ "$__orca_codex_identity" != 0 ]]; then
+        [[ -z "${ORCA_CLI_COMMAND:-}" || "${ORCA_CLI_COMMAND}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_CLI_COMMAND='${ORCA_CLI_COMMAND}'" "$@"
         [[ -z "${ORCA_TERMINAL_HANDLE:-}" || "${ORCA_TERMINAL_HANDLE}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='${ORCA_TERMINAL_HANDLE}'" "$@"
         [[ -z "${ORCA_PANE_KEY:-}" || "${ORCA_PANE_KEY}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_PANE_KEY='${ORCA_PANE_KEY}'" "$@"
         [[ -z "${ORCA_WORKTREE_ID:-}" || "${ORCA_WORKTREE_ID}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_WORKTREE_ID='${ORCA_WORKTREE_ID}'" "$@"

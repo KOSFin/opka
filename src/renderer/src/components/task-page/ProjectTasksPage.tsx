@@ -26,6 +26,8 @@ import { ProjectTaskSetup } from './ProjectTaskSetup'
 import { ProjectTaskNewButton } from './ProjectTaskNewButton'
 import { ProjectTaskConfirm, type ProjectTaskConfirmation } from './ProjectTaskConfirm'
 import { ProjectTasksBesideChatButton } from './ProjectTasksBesideChatButton'
+import { ProjectTaskBoardSettings } from './ProjectTaskBoardSettings'
+import { ProjectTaskHelp } from './ProjectTaskHelp'
 import { readProjectTaskView, saveProjectTaskView } from './project-task-view-state'
 import { projectTaskNeedsDecision } from '../../../../shared/project-task-attention'
 import { useTaskProjectCatalog } from './use-task-project-catalog'
@@ -49,6 +51,18 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
   const single = useProjectTaskBoard(
     scope?.state === 'configured' ? target : null,
     scope?.selector ?? ''
+  )
+  const settingsHost = single.board?.executionHostId
+  const settingsClient = useMemo<ProjectTaskClient | null>(
+    () =>
+      scope && settingsHost
+        ? {
+            target: scope.target,
+            worktree: scope.selector,
+            executionHostId: settingsHost
+          }
+        : null,
+    [scope, settingsHost]
   )
   const [limit, setLimit] = useState(16)
   const overview = useTaskProjectOverview(
@@ -238,6 +252,12 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
             {loading ? 'Checking…' : 'Refresh'}
           </Button>
           {!embedded && <ProjectTasksBesideChatButton />}
+          <ProjectTaskBoardSettings
+            client={settingsClient}
+            project={scope}
+            projects={catalog.projects}
+            onChoose={choose}
+          />
           <ProjectTaskNewButton
             projects={catalog.projects}
             selected={scope}
@@ -317,49 +337,7 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
           )}
         </>
       )}
-      <details className="border-t px-5 py-2 text-xs text-muted-foreground">
-        <summary className="cursor-pointer">How tasks work · file locations</summary>
-        <div className="scrollbar-sleek max-h-48 space-y-2 overflow-auto py-3">
-          <p>
-            Write a task → refine its plan → work on it → review the result. Open a card for its
-            plan, activity, and execution. Working copies are Git checkouts, not tasks.
-          </p>
-          <p>
-            Plans are ordinary task.md files in the project. Notes and checkpoints stay alongside
-            them. Copy resume context inside a task to continue in another chat or account.
-          </p>
-          <p>
-            Returning shows the last snapshot while checking its owning host. An unavailable host
-            does not mean an agent stopped. All projects is checked on opening or Refresh; a
-            selected project also receives live updates.
-          </p>
-          {views.map((view) => (
-            <p key={view.scope.key} className="break-all">
-              {view.scope.name} · {view.scope.hostLabel}: {view.scope.root} —{' '}
-              {view.board.project.sources.map((entry) => entry.path).join(', ')}
-            </p>
-          ))}
-          {catalog.projects
-            .filter((project) => project.state !== 'configured')
-            .map((project) => (
-              <Button
-                key={project.key}
-                variant="link"
-                size="sm"
-                onClick={() => choose(project.key)}
-              >
-                Set up {project.name} · {project.hostLabel}
-              </Button>
-            ))}
-          {views.flatMap((view) =>
-            view.board.diagnostics.map((item) => (
-              <p key={`${view.scope.key}:${item.path}`}>
-                {view.scope.name}: {item.path}: {item.message}
-              </p>
-            ))
-          )}
-        </div>
-      </details>
+      <ProjectTaskHelp views={views} projects={catalog.projects} choose={choose} />
       <Sheet
         open={!!current}
         onOpenChange={(open) => {

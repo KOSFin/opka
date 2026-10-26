@@ -76,6 +76,32 @@ const base = () => ({
   revision: task.revision,
   expectedExecutionHostId: 'local'
 })
+
+it('keeps board settings operator-only and fenced to the execution host', async () => {
+  const request = {
+    id: 'settings-fixture',
+    authToken: 'test',
+    method: 'projectTask.agentSettings',
+    params: { worktree: `path:${root}`, expectedExecutionHostId: 'local', action: 'disable' }
+  }
+  expect((await dispatcher.dispatch(request)).ok).toBe(false)
+  expect(h.runtime.resolveRuntimeFileTarget).not.toHaveBeenCalled()
+  expect((await workspace.agentSettings()).state).toBe('enabled')
+  const wrongHost = await dispatcher.dispatch(
+    { ...request, params: { ...request.params, expectedExecutionHostId: 'ssh:other' } },
+    { caller: { kind: 'paired-device', deviceId: 'synthetic-device' } }
+  )
+  expect(wrongHost.ok).toBe(false)
+  expect((await workspace.agentSettings()).state).toBe('enabled')
+  expect((await dispatcher.dispatch(request, { caller: { kind: 'desktop' } })).ok).toBe(true)
+  expect((await workspace.agentSettings()).state).toBe('disabled')
+  const read = await dispatcher.dispatch(
+    { ...request, params: { ...request.params, action: 'read' } },
+    { caller: { kind: 'desktop' } }
+  )
+  expect(read).toMatchObject({ ok: true, result: { enabled: false, state: 'disabled' } })
+})
+
 async function claim(sessionId = SESSION_X) {
   const response = await dispatcher.dispatch(
     orchestrationRequest('projectTask.claim', base(), { sessionId })

@@ -3,20 +3,12 @@ import { createReadStream, mkdirSync, readdirSync, statSync, writeFileSync } fro
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@stablyai/playwright-test'
 import { createRestartSession } from './helpers/orca-restart'
+import { forkInstallerProbes } from './helpers/fork-installer-probe'
 
 const packagedApp = process.env.ORCA_FORK_PACKAGED_APP
 test.skip(!packagedApp || process.platform !== 'darwin', 'Explicit isolated Mac package required')
 test.use({ trace: 'off', screenshot: 'off' })
-const probes = [
-  {
-    version: '1.4.236-rc.2',
-    sha256: '6351f50deaacef47071748086ed35c274d402409cf6d8157b65459a9865c5751'
-  },
-  {
-    version: '1.4.236-rc.1',
-    sha256: '1ccc3e4234e68056fb28ce0fc56227979bb4de2cb091d1c7e3b9bef92c6789c1'
-  }
-] as const
+const probes = forkInstallerProbes(process.env)
 
 async function waitForState(page: Page, state: 'available' | 'downloaded', timeout: number) {
   await expect
