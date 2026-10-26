@@ -34,6 +34,20 @@ describe('parseDaemonProtocolFacts', () => {
     )
   })
 
+  it('keeps the packaged helper handshake and compatibility metadata in sync with runtime', () => {
+    const parsed = parseDaemonProtocolFacts(
+      readFileSync(join(projectDir, DAEMON_PROTOCOL_SOURCE_PATH), 'utf8')
+    )
+    const contract = JSON.parse(
+      readFileSync(join(projectDir, 'src/shared/local-build-compatibility-contract.json'), 'utf8')
+    )
+    expect(contract.daemonProtocolVersion).toBe(parsed.protocolVersion)
+    expect(contract.attachableDaemonProtocolVersions).toEqual([
+      ...parsed.previousProtocolVersions,
+      parsed.protocolVersion
+    ])
+  })
+
   it('parses multi-line lists and type annotations', () => {
     const text = [
       '// PROTOCOL_VERSION = 99 in a comment is ignored',

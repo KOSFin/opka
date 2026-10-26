@@ -57,6 +57,8 @@ export const FORK_TEST_FILTERS = [
   'src/main/shell-wrapper-content-address.test.ts',
   'src/main/daemon/daemon-foreground-confirmation-protocol.test.ts',
   'src/main/daemon/macos-daemon-launchd.test.ts',
+  'config/scripts/daemon-protocol-facts.test.mjs',
+  'config/scripts/verify-packaged-daemon-entry.test.mjs',
   'src/shared/project-task-',
   'src/shared/sidebar-list/',
   'src/renderer/src/components/task-page/project-task-',
