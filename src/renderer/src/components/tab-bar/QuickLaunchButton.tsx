@@ -30,6 +30,8 @@ export type QuickLaunchAgentMenuItemsProps = {
    *  Reuses the TabBar's existing double-rAF handoff — this component does
    *  not duplicate the focus logic. */
   onFocusTerminal: (tabId: string) => void
+  /** Reveal the picked workspace only once its chat tab exists. */
+  onFocusChat?: (tabId: string) => void
   /** Optional initial prompt forwarded to `launchAgentInNewTab`. When set,
    *  the picked agent boots with this prompt — argv/flag agents auto-submit,
    *  followup-path agents land it as a draft for the user to confirm. */
@@ -70,8 +72,6 @@ export function useTabAgentMenuLaunch({
   onFocusChat
 }: QuickLaunchAgentMenuItemsProps & {
   onFocusHostTerminal?: () => void
-  /** A New Chat opened at once: its composer takes the focus the menu gives back. */
-  onFocusChat?: (tabId: string) => void
 }) {
   const runLaunch = useCallback(
     (row: NewTabAgentMenuRow) => {

@@ -74,6 +74,7 @@ export const FORK_TEST_FILTERS = [
   'src/renderer/src/components/right-sidebar/source-control/sync/use-git-history-view.test.tsx',
   'src/renderer/src/components/right-sidebar/source-control/listing/reveal-source-control-workspace.test.ts',
   'src/renderer/src/components/sidebar/worktree-list/rows/ProjectTreeTitle.test.tsx',
+  'src/renderer/src/components/sidebar/worktree-list/rows/ProjectChatButton.test.tsx',
   'src/renderer/src/components/sidebar/worktree-list/rows/open-project-folder.test.ts',
   'src/renderer/src/components/sidebar/worktree-list-groups-nested-project-groups.test.ts',
   'src/renderer/src/components/sidebar/host-section-',

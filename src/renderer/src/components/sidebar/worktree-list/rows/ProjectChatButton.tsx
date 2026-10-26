@@ -28,12 +28,32 @@ export function ProjectChatButton({
   scope: { kind: 'project'; group: ProjectGroup } | { kind: 'repository'; repo: Repo }
 }) {
   const generation = useRef(0)
-  const [worktreeId, setWorktreeId] = useState('')
+  const [workspace, setWorkspace] = useState<{ id: string; folderId: string | null } | null>(null)
+  const worktreeId = workspace?.id ?? ''
   const [error, setError] = useState('')
   const groupId = useAppStore((state) => state.activeGroupIdByWorktree?.[worktreeId] ?? '')
   const label = translate('fork.navigation.newProjectChat', 'New chat in {{name}}', {
     name: scope.kind === 'project' ? scope.group.name : scope.repo.displayName
   })
+  const revealSelectedWorkspace = () => {
+    if (!workspace) {
+      return
+    }
+    const executionHostId =
+      scope.kind === 'project'
+        ? getProjectGroupHostId(scope.group)
+        : getRepoExecutionHostId(scope.repo)
+    const options = {
+      executionHostId,
+      providesInitialSurface: true,
+      navigationIntent: 'user-open' as const
+    }
+    if (workspace.folderId) {
+      activateAndRevealFolderWorkspace(workspace.folderId, options)
+    } else {
+      activateAndRevealWorktree(workspace.id, options)
+    }
+  }
   const trigger = (
     <DropdownMenuTrigger asChild>
       <Button
@@ -59,12 +79,8 @@ export function ProjectChatButton({
           return
         }
         setError('')
-        setWorktreeId('')
-        const owner =
-          scope.kind === 'project'
-            ? getProjectGroupHostId(scope.group)
-            : getRepoExecutionHostId(scope.repo)
-        const workspace =
+        setWorkspace(null)
+        const preparedWorkspace =
           scope.kind === 'project'
             ? getOrCreateProjectFolder(scope.group).then((folder) => ({
                 id: `folder:${folder.id}`,
@@ -74,25 +90,12 @@ export function ProjectChatButton({
                 id: main.id,
                 folderId: null
               }))
-        void workspace
+        void preparedWorkspace
           .then((entry) => {
             if (request !== generation.current) {
               return
             }
-            if (entry.folderId) {
-              activateAndRevealFolderWorkspace(entry.folderId, {
-                executionHostId: owner,
-                providesInitialSurface: true,
-                navigationIntent: 'user-open'
-              })
-            } else {
-              activateAndRevealWorktree(entry.id, {
-                executionHostId: owner,
-                providesInitialSurface: true,
-                navigationIntent: 'user-open'
-              })
-            }
-            setWorktreeId(entry.id)
+            setWorkspace(entry)
           })
           .catch((cause: unknown) => {
             if (request === generation.current) {
@@ -119,7 +122,11 @@ export function ProjectChatButton({
           <QuickLaunchAgentMenuItems
             worktreeId={worktreeId}
             groupId={groupId}
-            onFocusTerminal={focusTerminalTabSurface}
+            onFocusTerminal={(tabId) => {
+              revealSelectedWorkspace()
+              focusTerminalTabSurface(tabId)
+            }}
+            onFocusChat={revealSelectedWorkspace}
           />
         ) : (
           <p role={error ? 'alert' : 'status'} className="p-3 text-xs">
