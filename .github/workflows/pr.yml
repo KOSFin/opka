@@ -159,7 +159,7 @@ jobs:
         env:
           SKIP_BUILD: '1'
           ORCA_CODEX_TERMINAL_SCRIPTED: '1'
-          ORCA_REAL_CODEX_BINARY: ${{ runner.temp }}/opka-codex-contract/node_modules/.bin/codex
+          ORCA_REAL_CODEX_BINARY: ${{ runner.temp }}/opka-codex-contract/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
         run: >-
           pnpm exec playwright test tests/e2e/fork-task-real-terminal-codex.spec.ts
           --config tests/playwright.config.ts --project electron-headless --workers=1

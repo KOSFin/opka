@@ -48,6 +48,7 @@ export const FORK_TEST_FILTERS = [
   'src/cli/runtime-client.test.ts',
   'tests/e2e/helpers/fork-task-approvals.unit.test.ts',
   'tests/e2e/helpers/fork-codex-startup.unit.test.ts',
+  'tests/e2e/helpers/fork-codex-read-boundary.unit.test.ts',
   'tests/e2e/helpers/fork-installer-probe.unit.test.ts',
   'src/main/runtime/runtime-nested-repo-import-host-twin.test.ts',
   'src/main/ssh/orcad-runtime-maintenance.test.ts',

@@ -136,7 +136,7 @@ test(`${scripted ? 'scripted local binary contract' : 'one real Codex exec'} tak
       maxOutputBytes: 16384,
       timeoutMs: 10000
     })
-    expect(help.code).toBe(0)
+    expect(help.code, help.stderr).toBe(0)
     expect(help.stdout).toContain('--skip-git-repo-check')
     writeFileSync(
       join(root, 'AGENTS.md'),

@@ -106,6 +106,9 @@ describe('fork CI safety and required checks', () => {
     )
     expect(contract.env.ORCA_CODEX_TERMINAL_SCRIPTED).toBe('1')
     expect(contract.env.ORCA_REAL_CODEX_BINARY).toContain('/opka-codex-contract/')
+    expect(contract.env.ORCA_REAL_CODEX_BINARY).toContain(
+      '/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex'
+    )
     expect(contract.env.ORCA_REAL_CODEX_AUTH_FILE).toBeUndefined()
     expect(contract.run).toContain('fork-task-real-terminal-codex.spec.ts')
     expect(contract['continue-on-error']).toBeUndefined()

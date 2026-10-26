@@ -15,16 +15,17 @@ export function forkCodexReadableRuntimePaths(): string[] {
 export function prepareForkCodexReadBoundary(bin: string, codex: string, writableRoots?: string[]) {
   const profile = join(bin, 'read-boundary.sb')
   const readable = forkCodexReadableRuntimePaths()
+  const executable = realpathSync(codex)
   const writable = writableRoots?.map((path) => realpathSync(path))
   const ancestors = new Set<string>()
-  for (const path of readable) {
+  for (const path of [...readable, executable]) {
     for (let parent = dirname(path); parent !== dirname(parent); parent = dirname(parent)) {
       ancestors.add(parent)
     }
   }
   writeFileSync(
     profile,
-    `(version 1)\n(allow default)\n${writable ? `(deny file-write*)\n(allow file-write* (literal "/dev/null") (literal "/dev/tty") ${writable.map((path) => `(subpath ${JSON.stringify(path)})`).join(' ')})\n` : ''}(deny file-read* file-write* (subpath ${JSON.stringify(homedir())}))\n${readable.map((path) => `(allow file-read* (subpath ${JSON.stringify(path)}))`).join('\n')}\n${[...ancestors].map((path) => `(allow file-read-metadata (literal ${JSON.stringify(path)}))`).join('\n')}\n`
+    `(version 1)\n(allow default)\n${writable ? `(deny file-write*)\n(allow file-write* (literal "/dev/null") (literal "/dev/tty") ${writable.map((path) => `(subpath ${JSON.stringify(path)})`).join(' ')})\n` : ''}(deny file-read* file-write* (subpath ${JSON.stringify(homedir())}))\n${readable.map((path) => `(allow file-read* (subpath ${JSON.stringify(path)}))`).join('\n')}\n(allow file-read* (literal ${JSON.stringify(executable)}))\n${[...ancestors].map((path) => `(allow file-read-metadata (literal ${JSON.stringify(path)}))`).join('\n')}\n`
   )
   const wrapper = join(bin, 'codex')
   writeFileSync(
