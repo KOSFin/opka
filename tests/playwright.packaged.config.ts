@@ -3,8 +3,14 @@ import configuration from './playwright.config'
 
 export default defineConfig({
   ...configuration,
-  testMatch: '**/fork-packaged-installer.spec.ts',
   globalSetup: undefined,
   globalTeardown: undefined,
-  workers: 1
+  workers: 1,
+  projects: [
+    {
+      name: 'electron-headless',
+      testMatch: '**/fork-packaged-installer.spec.ts',
+      metadata: { orcaHeadful: false }
+    }
+  ]
 })

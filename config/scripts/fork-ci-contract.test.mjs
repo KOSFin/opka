@@ -20,6 +20,8 @@ describe('fork CI safety and required checks', () => {
     expect(commands).toContain('codesign --verify --deep --strict')
     expect(commands).toContain('tests/playwright.packaged.config.ts')
     expect(commands).not.toMatch(/gh release (?:create|edit)|\/Applications\//)
+    const config = readFileSync('tests/playwright.packaged.config.ts', 'utf8')
+    expect(config).toMatch(/projects:[\s\S]*testMatch: '\*\*\/fork-packaged-installer\.spec\.ts'/)
   })
   it('executes the aggregate gate against success, missing, failed, cancelled and skipped checks', () => {
     const command = workflow.jobs.verify.steps.find((step) => step.run).run.trim()
