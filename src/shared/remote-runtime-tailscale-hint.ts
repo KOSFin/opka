@@ -57,6 +57,19 @@ export function isTailscaleEndpoint(endpoint: string | null | undefined): boolea
   )
 }
 
+/** CGNAT is shared by multiple overlays; an IP alone cannot identify the VPN vendor. */
+export function endpointOverlayLabel(
+  endpoint: string | null | undefined
+): 'Tailscale' | 'VPN' | null {
+  if (!endpoint || !isTailscaleEndpoint(endpoint)) {
+    return null
+  }
+  const host = extractHost(endpoint)
+  return host && (TAILSCALE_MAGIC_DNS_SUFFIX_RE.test(host) || TAILSCALE_IPV6_RE.test(host))
+    ? 'Tailscale'
+    : 'VPN'
+}
+
 /**
  * Why: a server already reached over Tailscale fails for tailnet-specific reasons, so "use
  * Tailscale" would be useless — point at the real causes. Already-paired devices keep their
@@ -64,6 +77,9 @@ export function isTailscaleEndpoint(endpoint: string | null | undefined): boolea
  */
 const TAILNET_ENDPOINT_HINT =
   "The server may be offline on your tailnet, or its Tailscale Funnel reverted to tailnet-only. Confirm it's reachable; re-pair only when adding a new device, since already-paired devices reconnect with their saved token."
+
+const PRIVATE_OVERLAY_HINT =
+  'Check that both devices are connected to the same private VPN and that the server address and port are reachable. Keep the saved pairing; a network outage does not require pairing again.'
 
 const OTHER_NETWORK_HINT = `If the server is on another network, connect both devices to Tailscale and pair using its Tailscale address (100.x or a *.ts.net name). See ${TAILSCALE_DOWNLOAD_URL}.`
 
@@ -77,8 +93,19 @@ export function withRemoteRuntimeTailscaleHint(
   // Why: keep the hint idempotent so a message routed through this helper twice (e.g. a
   // re-wrapped error response) isn't suffixed with duplicate guidance. Keyed on the hints
   // themselves, not on the word — messages now carry an endpoint whose host can contain it.
-  if (message.endsWith(TAILNET_ENDPOINT_HINT) || message.endsWith(OTHER_NETWORK_HINT)) {
+  if (
+    [TAILNET_ENDPOINT_HINT, PRIVATE_OVERLAY_HINT, OTHER_NETWORK_HINT].some((hint) =>
+      message.endsWith(hint)
+    )
+  ) {
     return message
   }
-  return `${message} ${isTailscaleEndpoint(endpoint) ? TAILNET_ENDPOINT_HINT : OTHER_NETWORK_HINT}`
+  const overlay = endpointOverlayLabel(endpoint)
+  const hint =
+    overlay === 'VPN'
+      ? PRIVATE_OVERLAY_HINT
+      : overlay === 'Tailscale'
+        ? TAILNET_ENDPOINT_HINT
+        : OTHER_NETWORK_HINT
+  return `${message} ${hint}`
 }

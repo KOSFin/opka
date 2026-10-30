@@ -1,3 +1,4 @@
+import { installHostAccountRotation } from './structured-account-resting-rotation'
 import type { AgentSessionRewindParams } from '../../../shared/agent-session-rewind'
 import { rewindStructuredAgentSession } from './structured-agent-session-rewind'
 import { StructuredConversationCommandController } from './structured-conversation-command-controller'
@@ -166,6 +167,7 @@ export class StructuredAgentSessionHost {
       closeStatus: (sessionId, options) => this.clientDelivery.closeSession(sessionId, options),
       childWorkOpen: this.clientDelivery.childWorkOpen
     })
+    installHostAccountRotation(this.lifetimeContext(), this.clientDelivery, this.tasks)
     this.runtimeState.startLeaseRenewal()
     this.lifetime.idleSweep.start()
   }
@@ -200,6 +202,7 @@ export class StructuredAgentSessionHost {
   private attachContext(): StructuredAgentSessionAttachContext {
     return {
       ...this.lifetimeContext(),
+      readAccountRotationBoundary: this.clientDelivery.readAccountRotationBoundary,
       subscribers: this.subscribers,
       tasks: this.tasks,
       reconcileLeases: (sessionId) => this.reconcileLeases(sessionId),

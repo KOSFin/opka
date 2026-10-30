@@ -277,6 +277,15 @@ export const getAccountsZcodePlanSearchEntries = createLocalizedCatalog(() => [
 ])
 
 export const getAccountsPaneSearchEntries = createLocalizedCatalog((): SettingsSearchEntry[] => [
+  {
+    title: translate('settings.accountPools.title', 'Account pools'),
+    description: translate(
+      'settings.accountPools.searchDescription',
+      'Manage host account selection, priorities and rotation.'
+    ),
+    keywords: ['pool', 'priority', 'rotation', 'sequential', 'balanced', 'drain'],
+    targetSectionId: 'account-pools'
+  },
   ...getAccountsLocationSearchEntries(),
   ...getAccountsClaudeSearchEntries(),
   ...getAccountsCodexSearchEntries(),

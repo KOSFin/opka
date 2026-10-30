@@ -1,3 +1,8 @@
+import {
+  prepareWorkerClaudeLaunchEnv,
+  PINNED_CLAUDE_AUTH_DELETIONS
+} from '../../../claude-accounts/worker-account-launch'
+import { preparePtyAccountPoolLaunch } from '../account-pool-launch'
 import { withClaudeProfileTerminalEnv } from '../../../claude-accounts/claude-profile-installed-router'
 import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
 import { LocalPtyProvider } from '../../../providers/local-pty-provider'
@@ -77,8 +82,31 @@ export async function prepareRuntimePtySpawn(
   ctx.expectedWslDistro = target.expectedWslDistro
   ctx.codexSelectionTarget = target.codexSelectionTarget
   args.env = withClaudeProfileTerminalEnv(args.env, ctx.codexSelectionTarget)
+  ctx.accountPoolLaunch = preparePtyAccountPoolLaunch({
+    runtime: ctx.deps.runtime,
+    agent: args.launchAgent,
+    env: args.env,
+    adopted: Boolean(ctx.preAdoptedStablePane),
+    resume: Boolean(args.resumeProviderSession || args.sessionId),
+    connectionId: args.connectionId,
+    wsl: ctx.codexSelectionTarget.runtime === 'wsl'
+  })
+  const fixedClaudeEnv = await prepareWorkerClaudeLaunchEnv(
+    args.env,
+    ctx.deps.runtime,
+    ctx.codexSelectionTarget.runtime === 'wsl'
+  )
+  if (fixedClaudeEnv) {
+    args.env = fixedClaudeEnv
+    args.envToDelete = [...(args.envToDelete ?? []), ...PINNED_CLAUDE_AUTH_DELETIONS]
+  }
+  const poolEnv = await ctx.accountPoolLaunch?.prepareEnv()
+  if (poolEnv) {
+    args.env = poolEnv
+    args.envToDelete = [...(args.envToDelete ?? []), ...(ctx.accountPoolLaunch?.envToDelete ?? [])]
+  }
   ctx.claudeAuth =
-    ctx.isClaudeLaunch && ctx.deps.prepareClaudeAuth
+    !fixedClaudeEnv && !ctx.accountPoolLaunch && ctx.isClaudeLaunch && ctx.deps.prepareClaudeAuth
       ? await ctx.deps.prepareClaudeAuth(ctx.codexSelectionTarget)
       : null
 

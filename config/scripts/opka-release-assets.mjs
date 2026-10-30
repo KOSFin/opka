@@ -14,7 +14,8 @@ const target = 'linux-x64-glibc'
 const packageNames = [
   'opka-macos-arm64.dmg',
   'opka-macos-arm64.zip',
-  'opka-server-linux-x64.tar.gz'
+  'opka-server-linux-x64.tar.gz',
+  'opka-android.apk'
 ]
 
 export async function fileDigest(path, algorithm = 'sha256', encoding = 'hex') {
@@ -174,7 +175,7 @@ async function packageServer(stage, directory, version, commit) {
 
 export async function completeRelease(directory, version, commit) {
   const recorded = new Map()
-  for (const kind of ['macos', 'server']) {
+  for (const kind of ['macos', 'server', 'android']) {
     const provenance = JSON.parse(
       await readFile(join(directory, `opka-${kind}-provenance.json`), 'utf8')
     )
@@ -184,6 +185,13 @@ export async function completeRelease(directory, version, commit) {
       provenance.sourceRepository !== 'KOSFin/opka'
     ) {
       throw new Error('Release artifacts do not share the requested source commit and version')
+    }
+    if (
+      kind === 'android' &&
+      process.env.OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256 &&
+      provenance.certificateSha256 !== process.env.OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256
+    ) {
+      throw new Error('Android signing identity does not match the publication pin')
     }
     for (const asset of provenance.assets) {
       if (basename(asset.name) !== asset.name || recorded.has(asset.name)) {
@@ -196,7 +204,27 @@ export async function completeRelease(directory, version, commit) {
       recorded.set(asset.name, asset.sha256)
     }
   }
-  for (const name of [...packageNames, 'latest-mac.yml']) {
+  const android = JSON.parse(
+    await readFile(join(directory, 'opka-android-provenance.json'), 'utf8')
+  )
+  const androidFeed = JSON.parse(await readFile(join(directory, 'latest-android.json'), 'utf8'))
+  if (
+    androidFeed.schemaVersion !== 1 ||
+    androidFeed.packageName !== 'com.kosfin.opka.mobile' ||
+    androidFeed.version !== version ||
+    androidFeed.versionCode !== android.versionCode ||
+    androidFeed.certificateSha256 !== android.certificateSha256 ||
+    !/^[a-f0-9]{64}$/.test(androidFeed.certificateSha256 ?? '') ||
+    androidFeed.sha256 !== recorded.get('opka-android.apk') ||
+    androidFeed.bytes !== (await stat(join(directory, 'opka-android.apk'))).size ||
+    androidFeed.url !==
+      `https://github.com/KOSFin/opka/releases/download/v${version}/opka-android.apk`
+  ) {
+    throw new Error(
+      'Android update manifest disagrees with the release artifact or signing identity'
+    )
+  }
+  for (const name of [...packageNames, 'latest-mac.yml', 'latest-android.json']) {
     if (!recorded.has(name)) {
       throw new Error(`Missing release artifact: ${name}`)
     }

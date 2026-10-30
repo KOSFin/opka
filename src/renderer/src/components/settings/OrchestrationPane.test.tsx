@@ -214,6 +214,33 @@ describe('OrchestrationPane', () => {
     expect(markup).toContain('aria-label="Nested worker depth"')
   })
 
+  it('enables a worker limit only through the explicit operator toggle', async () => {
+    const rendered = await renderPane()
+    expect(rendered.querySelector('input[aria-label="Maximum parallel workers"]')).toBeNull()
+    const toggle = rendered.querySelector<HTMLButtonElement>(
+      'button[aria-label="Limit parallel workers"]'
+    )
+    expect(toggle).not.toBeNull()
+    await act(async () => toggle?.click())
+    expect(mocks.updateSettings).toHaveBeenCalledWith({ maxConcurrentWorkers: 5 })
+  })
+
+  it('shows a saved limit and clears it explicitly instead of omitting the update', async () => {
+    const rendered = await renderPane({ ...getDefaultSettings('/tmp'), maxConcurrentWorkers: 3 })
+    const input = rendered.querySelector<HTMLInputElement>(
+      'input[aria-label="Maximum parallel workers"]'
+    )
+    expect(input?.value).toBe('3')
+    const toggle = rendered.querySelector<HTMLButtonElement>(
+      'button[aria-label="Limit parallel workers"]'
+    )
+    await act(async () => toggle?.click())
+    expect(mocks.updateSettings).toHaveBeenCalledWith({ maxConcurrentWorkers: null })
+    expect(matchesSettingsSearch('concurrency limit', getOrchestrationPaneSearchEntries())).toBe(
+      true
+    )
+  })
+
   it('commits a whole-number depth and rejects fractional values', async () => {
     const rendered = await renderPane()
     const input = rendered.querySelector<HTMLInputElement>(

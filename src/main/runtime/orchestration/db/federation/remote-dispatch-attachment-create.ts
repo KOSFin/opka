@@ -1,3 +1,4 @@
+import { assertWorkerCapacity } from '../../worker-capacity-admission'
 import type { WorkerDispatchState, RemoteDispatchAttachmentRow } from '../../types'
 import { OrchestrationError } from '../../orchestration-error'
 import { ensureMutationReceiptCapacity } from '../../mutation-receipt-capacity'
@@ -10,6 +11,7 @@ export function createRemoteDispatchAttachment(
   this: OrchestrationDb,
   params: {
     dispatchId: string
+    maxConcurrentWorkers?: number | null
     /** Absent from a v1.4.198 coordinator; replaced by a per-attachment stub Run. */
     runId?: string
     taskId: string
@@ -47,6 +49,7 @@ export function createRemoteDispatchAttachment(
         `Remote attachment request ${params.mutationReceipt.requestId} already exists.`
       )
     }
+    assertWorkerCapacity(this.db, params.maxConcurrentWorkers)
     const runId = params.runId ?? federatedStubHomeRunId(params.dispatchId)
     if (!runId.trim()) {
       throw new OrchestrationError('invalid_argument', 'Missing Run ID')

@@ -122,7 +122,7 @@ describe('MobileHostCard', () => {
 
     const navigationButton = renderer.root.findAllByType('Pressable')[0]
     expect(navigationButton.props.accessibilityLabel).toBe(
-      'Open Desk, Connected, Direct via Tailscale, 3 worktrees, 2 active'
+      'Open Desk, Connected, Direct via VPN, 3 worktrees, 2 active'
     )
   })
 

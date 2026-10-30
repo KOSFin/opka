@@ -49,6 +49,7 @@ export type WorkerAgentPlacement = {
 }
 
 type WorkerAgentPlacementArgs = {
+  accountEnv?: Record<string, string>
   runtime: OrcaRuntimeService
   db: OrchestrationDb
   dispatchId: string
@@ -148,6 +149,7 @@ async function launchWorkerAgent(
             agent,
             // The executor withholds the startup agent exactly when the worker is to be a session.
             withAgentTerminal: startupAgent !== undefined,
+            accountEnv: args.accountEnv,
             promisedAgentChat,
             onWorkspaceCreated,
             ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
@@ -218,6 +220,7 @@ function workerSurfaceFactory(
     createTerminalAgent: async ({ worktreeId }) => {
       recordSurfaceStage(worktreeId)
       const terminal = await createExistingWorktreeWorkerTerminal({
+        accountEnv: args.accountEnv,
         runtime: args.runtime,
         worktreeId,
         agent,

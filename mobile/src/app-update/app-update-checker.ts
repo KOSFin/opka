@@ -52,9 +52,10 @@ export function createAppUpdateChecker(deps: AppUpdateCheckerDeps) {
   function buildSnapshot(): AppUpdateState {
     const latest = prefs.latest
     const available =
+      deps.source &&
       latest &&
       deps.installedVersion &&
-      isNewerReleaseVersion(latest.version, deps.installedVersion)
+      (deps.source.isNewerVersion ?? isNewerReleaseVersion)(latest.version, deps.installedVersion)
         ? latest
         : null
     return {
@@ -160,6 +161,9 @@ export function createAppUpdateChecker(deps: AppUpdateCheckerDeps) {
 
   /** Cold start: reads what the last run saw, then checks only if the cadence says it is due. */
   function start(): () => void {
+    if (!deps.source) {
+      return () => {}
+    }
     let active = true
     activeStarts += 1
     const unsubscribe = deps.subscribeForeground(runIfDue)

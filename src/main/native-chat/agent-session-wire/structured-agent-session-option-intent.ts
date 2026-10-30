@@ -53,7 +53,7 @@ export async function recordStructuredAgentSessionOptionIntent(
   deps: {
     store: Pick<
       AgentSessionRecordStore,
-      'getRecord' | 'replaceSessionOptions' | 'reviseSessionOptions'
+      'getRecord' | 'replaceSessionOptions' | 'reviseSessionRecord'
     >
     agents: Pick<StructuredAgentRegistry, 'definition'>
   } & Parameters<typeof savedAgentSessionCatalogModels>[0],
@@ -83,7 +83,7 @@ export async function recordStructuredAgentSessionOptionIntent(
     const picked = { sessionId, fence, ...input, models, now: ctx.now() }
     try {
       options =
-        (await deps.store.reviseSessionOptions(pickAgentSessionOption, picked)).options ?? {}
+        (await deps.store.reviseSessionRecord(pickAgentSessionOption, picked)).options ?? {}
     } catch (error) {
       // The ordered write refused a value the chat's model doesn't offer.
       if (isAgentSessionRefusalError(error)) {

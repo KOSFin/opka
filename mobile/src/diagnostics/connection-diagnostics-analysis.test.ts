@@ -50,7 +50,7 @@ describe('diagnoseConnection', () => {
         entries: [event('WebSocket connect timeout')]
       })
     ).toEqual({
-      likelyCause: 'The saved Tailscale endpoint did not answer before the connection timeout.',
+      likelyCause: 'The saved VPN endpoint did not answer before the connection timeout.',
       nextStep: 'Relay recovery is in progress; keep Orca open while it retries.',
       reportability: 'none'
     })
@@ -136,7 +136,7 @@ describe('diagnoseConnection', () => {
           { ...event('WebSocket connect timeout'), id: 'newer', ts: 2, code: 'connect-timeout' }
         ]
       }).likelyCause
-    ).toBe('The saved Tailscale endpoint did not answer before the connection timeout.')
+    ).toBe('The saved VPN endpoint did not answer before the connection timeout.')
   })
 
   it('requires structured Relay evidence before offering submission', () => {

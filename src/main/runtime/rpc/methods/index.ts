@@ -1,3 +1,4 @@
+import { ACCOUNT_POOL_METHODS } from './account-pools'
 import { STATUS_METHODS } from './status'
 import { SIDEBAR_INPUT_METHODS } from './sidebar-inputs'
 import { ORCAD_TERMINAL_CENSUS_METHODS } from './orcad-terminal-census'
@@ -109,6 +110,7 @@ export const ALL_RPC_METHODS = [
   ...DIAGNOSTICS_METHODS,
   ...TERMINAL_DAEMON_METHODS,
   ...ACCOUNT_METHODS,
+  ...ACCOUNT_POOL_METHODS,
   ...ANTIGRAVITY_ACCOUNT_METHODS,
   ...USAGE_CREDENTIAL_METHODS,
   ...PREFLIGHT_METHODS,

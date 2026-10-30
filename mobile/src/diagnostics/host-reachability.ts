@@ -1,4 +1,4 @@
-import { isTailscaleEndpoint } from '../../../src/shared/remote-runtime-tailscale-hint'
+import { endpointOverlayLabel } from '../../../src/shared/remote-runtime-tailscale-hint'
 
 const HOST_REACHABILITY_TIMEOUT_MS = 4000
 
@@ -59,12 +59,11 @@ export function formatEndpoint(endpoint: string): string {
   }
 }
 
-// Why: an unreachable 100.x/*.ts.net host almost always means the phone's
-// Tailscale tunnel is down or wedged (known iOS failure mode, fixed by
-// toggling the VPN) — point at that instead of a bare "Cannot reach".
+// An overlay address does not identify its VPN vendor.
 export function unreachableHostDetail(endpoint: string): string {
-  if (isTailscaleEndpoint(endpoint)) {
-    return `Cannot reach ${formatEndpoint(endpoint)} — check Tailscale`
+  const overlay = endpointOverlayLabel(endpoint)
+  if (overlay) {
+    return `Cannot reach ${formatEndpoint(endpoint)} — check ${overlay}`
   }
   return `Cannot reach ${formatEndpoint(endpoint)}`
 }

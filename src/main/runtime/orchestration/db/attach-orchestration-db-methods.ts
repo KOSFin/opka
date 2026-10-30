@@ -1,3 +1,4 @@
+import { attachAccountPoolAssignments } from './account-pool-assignments'
 import { attachAttemptObservationStore } from './attempt-observation-store'
 import { attachCoordinatorRunStore } from './coordinator-runs/coordinator-run-store'
 import { attachDecisionGateStore } from './decision-gates/decision-gate-store'
@@ -67,6 +68,7 @@ import { attachWorkerTerminalResourceStore } from './worker-terminal/worker-term
 import { attachWorkerTerminalTransfer } from './worker-terminal/worker-terminal-transfer'
 
 export function attachOrchestrationDbMethods(ctor: { prototype: object }): void {
+  attachAccountPoolAssignments(ctor)
   attachAttemptObservationStore(ctor)
   attachCreateTables(ctor)
   attachSchemaMigrate(ctor)

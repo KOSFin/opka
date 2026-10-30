@@ -269,6 +269,8 @@ export type GlobalSettings = GlobalSettingsBase & {
    *  Renderer-writable only: omitted from the SettingsUpdate RPC schema so a worker
    *  cannot raise its own cap via `orca settings update`. */
   nestedWorkerMaxDepth?: number
+  /** Operator-only host limit; null or absent leaves parallel dispatch unrestricted. */
+  maxConcurrentWorkers?: number | null
   /** Only toggles the sidebar shortcut; Artifacts stay reachable from Settings. */
   showArtifactsButton?: boolean
   /** Only toggles the sidebar shortcut; Skills stay reachable from Settings. */

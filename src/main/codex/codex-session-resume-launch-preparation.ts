@@ -1,3 +1,4 @@
+import { resolveWorkerCodexLaunchHome } from '../codex-accounts/worker-account-home'
 import type { AgentProviderSessionMetadata } from '../../shared/agent-session-resume'
 import type { CodexAccountSelectionTarget } from '../codex-accounts/runtime-selection'
 import {
@@ -72,7 +73,17 @@ export function createCodexSessionResumeLaunchPreparation(deps: {
     // branch simply omits the account from `trustedHomes` and another account's
     // readable alias wins. A throw here refuses the whole resume instead
     // (#STA-4422).
-    const selectedAccountCodexHome = runtimeHome.resolveSelectedHostAccountCodexHomePathForResume()
+    const selectedAccountCodexHome =
+      resolveWorkerCodexLaunchHome({
+        env: Object.fromEntries(
+          Object.entries(args.launchEnv ?? {}).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined
+          )
+        ),
+        agent: 'codex',
+        runtime: 'host',
+        accounts: deps.getSettings()?.codexManagedAccounts
+      }) ?? runtimeHome.resolveSelectedHostAccountCodexHomePathForResume()
     // Why: a `fresh` outcome must skip migration and hook repair entirely — there is
     // no verified origin home to prepare, so the PTY layer drops the resume argv (#10793).
     const preparation = await prepareCodexSessionResume({

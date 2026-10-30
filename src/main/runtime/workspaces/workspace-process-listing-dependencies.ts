@@ -1,3 +1,4 @@
+import type { OrchestrationDb } from '../orchestration/db/orchestration-db'
 import type { RuntimeWorkspaceCatalog } from './workspace-catalog'
 import type { OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController } from '../terminal/lifecycle/pty-worktree-refresh'
 import type { RuntimeAccountController } from '../runtime-account-controller'
@@ -18,6 +19,7 @@ export abstract class OrcaRuntimeWithWorktreePsDependencies extends OrcaRuntimeW
   ): ReturnType<
     OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController['refreshPtyWorktreeRecordsFromController']
   >
+  declare getOrchestrationDb: () => OrchestrationDb
   abstract notifyFolderWorkspaceChanged(): void
   abstract notifyBranchRenamed(repoId: string): void
   abstract notifyWorktreeFolderRenamed(

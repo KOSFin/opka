@@ -6,12 +6,10 @@ import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import type { ReplacedPaneOwner } from './replaced-pane-owner'
 import { resolveStablePaneOwner } from './stable-owner'
 
-/** Caller holds the pane's spawn reservation, so no other spawn can claim the pane meanwhile. */
-export async function stopReplacedPaneOwner(
+export function assertReplacedPaneOwner(
   deps: {
     runtime?: OrcaRuntimeService
     store?: Store
-    stopReplacedPty: (id: string) => Promise<void>
   },
   args: {
     replacesPtyId: string
@@ -19,7 +17,7 @@ export async function stopReplacedPaneOwner(
     worktreeId: string | undefined
     connectionId: string | null | undefined
   }
-): Promise<ReplacedPaneOwner> {
+): void {
   const owner = resolveStablePaneOwner(
     deps.runtime,
     deps.store,
@@ -30,6 +28,16 @@ export async function stopReplacedPaneOwner(
   if (owner && owner.ptyId !== args.replacesPtyId) {
     throw new Error('terminal_pane_owner_changed')
   }
+}
+
+/** Recheck after preparation; the pane may have been rebound while an account was refreshed. */
+export async function stopReplacedPaneOwner(
+  deps: Parameters<typeof assertReplacedPaneOwner>[0] & {
+    stopReplacedPty: (id: string) => Promise<void>
+  },
+  args: Parameters<typeof assertReplacedPaneOwner>[1]
+): Promise<ReplacedPaneOwner> {
+  assertReplacedPaneOwner(deps, args)
   await deps.stopReplacedPty(args.replacesPtyId)
   const pane = args.paneKey ? parsePaneKey(args.paneKey) : null
   return {

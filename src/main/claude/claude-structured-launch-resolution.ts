@@ -1,3 +1,4 @@
+import { CLAUDE_AUTH_ENV_VARS } from '../claude-accounts/environment'
 import { activeProviderContext } from '../../shared/agent-session-provider-context'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
@@ -25,7 +26,8 @@ import { resolveClaudeLaunchFlags } from './claude-structured-launch-flags'
 import { withNativeChatVisualsEnv } from '../native-chat/native-chat-visuals-delivery'
 import {
   claudeLaunchResumesTranscript,
-  resolveClaudeStructuredLaunchHome
+  resolveClaudeStructuredLaunchHome,
+  resolvePinnedClaudeStructuredLaunchHome
 } from './claude-structured-launch-home'
 import type { StructuredAgentLaunchPartResolver } from '../runtime/structured-agent-launch-composition'
 import { claudeSessionIdForOrcaSession } from './claude-structured-session-id'
@@ -246,7 +248,14 @@ export function claudeStructuredLaunchPart(
       sources,
       { runtimeOnPath: false }
     )
-    const launchHome = await resolveClaudeStructuredLaunchHome(router, env, accountHome.path)
+    const launchHome = basis.record.accountPool
+      ? resolvePinnedClaudeStructuredLaunchHome(
+          router,
+          env,
+          accountHome.path,
+          basis.record.accountPool.accountId
+        )
+      : await resolveClaudeStructuredLaunchHome(router, env, accountHome.path)
     const resumesTranscript = resumedWithoutRouter ?? (await resumes(launchHome))
     if (fork?.throughEntryId && !resumesTranscript) {
       // The fork reads its source, so a source only another account holds is refused as a resume is.
@@ -261,7 +270,7 @@ export function claudeStructuredLaunchPart(
     return {
       launch: {
         pathToClaudeCodeExecutable: command,
-        account,
+        account: basis.record.accountPool ? 'managed' : account,
         options: {
           ...CLAUDE_STRUCTURED_BASE_OPTIONS,
           ...permission,
@@ -289,7 +298,9 @@ export function claudeStructuredLaunchPart(
       },
       env,
       // Every structured session speaks orchestration as itself; Claude strips no inherited key.
-      inheritedEnvToDelete: [],
+      inheritedEnvToDelete: basis.record.accountPool
+        ? [...CLAUDE_AUTH_ENV_VARS, 'ANTHROPIC_CUSTOM_HEADERS']
+        : [],
       // Its own runtime's directory goes ahead of this app's CLI directory on PATH.
       cliRuntimeCommand: command
     }

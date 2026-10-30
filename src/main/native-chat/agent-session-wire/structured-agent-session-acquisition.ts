@@ -1,3 +1,4 @@
+import type { StructuredAccountAcquisition } from './structured-account-acquisition'
 import { isDeepStrictEqual } from 'node:util'
 import { abortSignalReason } from '../../../shared/abort-signal-reason'
 import type {
@@ -38,9 +39,19 @@ export async function acquireOwner(
   if (!spawnToken) {
     throw new Error('agent_session_ownership_unknown')
   }
+  let account: StructuredAccountAcquisition | undefined
   try {
     try {
       await input.onAcquiring?.()
+    } catch (error) {
+      throw new AgentSessionPreSpawnError(error)
+    }
+    try {
+      account = await input.prepareAccountAcquisition?.(
+        record,
+        input.readAccountRotationBoundary?.()
+      )
+      record = account?.record ?? record
     } catch (error) {
       throw new AgentSessionPreSpawnError(error)
     }
@@ -48,6 +59,20 @@ export async function acquireOwner(
     // Right before the spawn: a close, Stop or quit that landed during any wait above launches nothing.
     if (input.acquireSignal?.aborted) {
       throw new AgentSessionPreSpawnError(abortSignalReason(input.acquireSignal))
+    }
+    if (account) {
+      const latest = input.store.getRecord(record.sessionId)
+      if (
+        !latest ||
+        latest.lease.runtimeFence !== fence ||
+        latest.lease.reservedSpawnToken !== spawnToken ||
+        latest.lease.ownerProcess !== null
+      ) {
+        throw new AgentSessionPreSpawnError(
+          new Error('Native account startup reservation changed during preparation')
+        )
+      }
+      record = latest
     }
     const attempt = mintStructuredAgentSessionStartupAttempt({
       record,
@@ -94,6 +119,7 @@ export async function acquireOwner(
     return { record: proved, acquisitionGeneration: acquired.acquisitionGeneration }
   } catch (error) {
     if (isAgentSessionPreSpawnError(error)) {
+      await account?.preSpawnFailed?.()
       throw error
     }
     return rethrowAfterAgentSessionAcquisitionCleanup(input.adapter, record.sessionId, error)

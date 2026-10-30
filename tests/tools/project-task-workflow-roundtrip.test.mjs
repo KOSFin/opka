@@ -174,7 +174,14 @@ describe('project workflow RPC admission and native launch bridge', () => {
       })
     const first = invoke('start', {
       ...action,
-      launch: { from: 'coordinator', worktree: 'new-child', repo: 'repo-1', spec: 'placeholder' }
+      launch: {
+        from: 'coordinator',
+        worktree: 'new-child',
+        repo: 'repo-1',
+        agent: 'codex',
+        model: 'test-model',
+        effort: 'high'
+      }
     })
     await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1))
     expect(
@@ -190,6 +197,17 @@ describe('project workflow RPC admission and native launch bridge', () => {
     release()
     expect(await first).toMatchObject({ ok: true })
     expect(start).toHaveBeenCalledTimes(1)
+    expect(start.mock.calls[0][0]).toMatchObject({
+      worktree: 'new-child',
+      repo: 'repo-1',
+      agent: 'codex',
+      model: 'test-model',
+      effort: 'high'
+    })
+    expect(start.mock.calls[0][0].spec).toBeUndefined()
+    expect(start.mock.calls[0][1].projectTaskAdmission.nativeTaskId).toBe(
+      start.mock.calls[0][0].task
+    )
   })
   it('fences wrong host and changed plan before any native launch', async () => {
     const { invoke, task } = await fixture()

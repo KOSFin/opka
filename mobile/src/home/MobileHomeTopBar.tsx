@@ -1,3 +1,4 @@
+import Constants from 'expo-constants'
 import { Settings } from 'lucide-react-native'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { OrcaLogo } from '../components/OrcaLogo'
@@ -10,7 +11,7 @@ export function MobileHomeTopBar({ onOpenSettings }: { onOpenSettings: () => voi
         <View style={styles.logoMark}>
           <OrcaLogo size={18} />
         </View>
-        <Text style={styles.brandName}>Orca</Text>
+        <Text style={styles.brandName}>{Constants.expoConfig?.name ?? 'Orca'}</Text>
       </View>
       <Pressable
         style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}

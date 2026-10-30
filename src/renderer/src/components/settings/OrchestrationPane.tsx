@@ -25,6 +25,7 @@ import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { resolveNestedWorkerMaxDepth } from '../../../../shared/nested-worker-depth'
 import { isPairedWebClientWindow } from '@/lib/desktop-window-chrome'
 import { NumberField } from './SettingsFormControls'
+import { WorkerConcurrencySetting } from './WorkerConcurrencySetting'
 import {
   getNestedWorkerDepthDescription,
   getNestedWorkerDepthTitle
@@ -155,6 +156,15 @@ export function OrchestrationPane({
           activeSkillRuntime.canUseLocalSkillFreshness ? ORCHESTRATION_SKILL_NAME : undefined
         }
       />
+
+      {showNestedWorkerDepth ? (
+        <WorkerConcurrencySetting
+          value={settings.maxConcurrentWorkers}
+          onChange={(maxConcurrentWorkers) => {
+            void updateSettings({ maxConcurrentWorkers })
+          }}
+        />
+      ) : null}
 
       {showNestedWorkerDepth ? (
         <NumberField

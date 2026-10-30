@@ -280,6 +280,32 @@ describe('ClaudeProfileRouter', () => {
     expect(existsSync(f.router.pointerPath)).toBe(false)
   })
 
+  it('refuses a different account selected while the original launch is being prepared', async () => {
+    const f = fixture()
+    const launch = f.router.prepareLaunch()
+    const rejected = expect(launch).rejects.toThrow('Claude account selection changed')
+    await vi.waitFor(() => expect(f.setup.calls).toBe(1))
+    mkdirSync(f.home('b'), { recursive: true })
+    f.settings.activeClaudeManagedAccountId = 'b'
+    f.setup.settle()
+    await rejected
+  })
+
+  it('refuses system default selected during a managed account refresh', async () => {
+    const f = fixture()
+    const first = f.router.prepareLaunch()
+    await vi.waitFor(() => expect(f.setup.calls).toBe(1))
+    f.setup.settle()
+    await first
+
+    const refresh = f.router.prepareLaunch()
+    const rejected = expect(refresh).rejects.toThrow('Claude account selection changed')
+    await vi.waitFor(() => expect(f.setup.calls).toBe(2))
+    f.settings.activeClaudeManagedAccountId = null
+    f.setup.settle()
+    await rejected
+  })
+
   it('makes a launch wait for a first setup that never ran or is still running, reusing it', async () => {
     const f = fixture()
     mkdirSync(f.home('a'), { recursive: true })

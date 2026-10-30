@@ -71,6 +71,7 @@ import {
 import { MiniMaxAccountsSection } from './MiniMaxAccountsSection'
 import { useUsageHostSettings } from './use-usage-host-settings'
 import { ManagedDataAccountsSection } from './ManagedDataAccountsSection'
+import { AccountPoolSection } from './AccountPoolSection'
 import { renderAccountsRemovalDialogs } from './accounts-pane-removal-dialogs'
 
 export { getAccountsPaneSearchEntries }
@@ -346,6 +347,16 @@ export function AccountsPane({
     recordOpenCodeSettingEdit
   }
   const visibleSections = [
+    !searchQuery ||
+    /pool|priority|rotation|account|sequential|balanced|drain/i.test(searchQuery) ? (
+      <AccountPoolSection
+        key={`pool:${accountOwnerKey}`}
+        target={accountOwner}
+        hostLabel={
+          remoteServerLabel ?? translate('settings.accountPools.localHost', 'Local desktop')
+        }
+      />
+    ) : null,
     !searchQuery || /opencode|devin|account/i.test(searchQuery) ? (
       <div key={accountOwnerKey} className="space-y-8">
         <ManagedDataAccountsSection provider="opencode" target={accountOwner} />

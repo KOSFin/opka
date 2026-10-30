@@ -72,6 +72,9 @@ export async function beginPtyIpcSpawn(
     ? allocatePtyLifecycleSequence()
     : undefined
   const initialPaneKey = resolveEarlyPaneKey(args)
+  const replacement =
+    ctx.replacedPaneOwner ??
+    (args.replacesPtyId !== undefined ? { ptyId: args.replacesPtyId } : null)
   const initialStablePanePtyId = (() => {
     try {
       return !args.connectionId && initialPaneKey
@@ -83,7 +86,7 @@ export async function beginPtyIpcSpawn(
               args.worktreeId,
               args.connectionId
             ),
-            ctx.replacedPaneOwner
+            replacement
           )?.ptyId
         : undefined
     } catch {
@@ -128,7 +131,7 @@ export async function beginPtyIpcSpawn(
             args.worktreeId,
             args.connectionId
           ),
-          ctx.replacedPaneOwner
+          replacement
         )
       : null
   ctx.earlyWorktreeId = args.worktreeId

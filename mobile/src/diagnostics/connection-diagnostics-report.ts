@@ -1,4 +1,4 @@
-import { isTailscaleEndpoint } from '../../../src/shared/remote-runtime-tailscale-hint'
+import { endpointOverlayLabel } from '../../../src/shared/remote-runtime-tailscale-hint'
 import { clampUtf8TextPrefix } from '../../../src/shared/utf8-byte-limits'
 import type {
   ConnectionLogEntry,
@@ -50,7 +50,7 @@ export function buildConnectionDiagnosticsReport(args: {
   lines.push(`Host Orca version: ${desktopAppVersion ?? 'unknown'}`)
   lines.push(`Host: ${redactConnectionLogText(args.hostName)}`)
   lines.push(
-    `Endpoint: ${formatEndpoint(args.endpoint)}${isTailscaleEndpoint(args.endpoint) ? ' (Tailscale)' : ''}`
+    `Endpoint: ${formatEndpoint(args.endpoint)}${endpointOverlayLabel(args.endpoint) ? ` (${endpointOverlayLabel(args.endpoint)})` : ''}`
   )
   lines.push(`State: ${args.state} (reconnect attempts: ${args.reconnectAttempts})`)
   if (args.activePath) {

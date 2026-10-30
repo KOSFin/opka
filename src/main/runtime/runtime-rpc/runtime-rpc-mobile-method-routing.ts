@@ -6,6 +6,8 @@ import { PAIRED_DESKTOP_METHODS } from './runtime-rpc-mobile-paired-desktop-meth
 export type MobileRpcMethodRoute = 'execution-host' | 'paired-desktop'
 
 export const EXECUTION_HOST_METHODS = [
+  'accountPool.list',
+  'accountPool.update',
   'ui.getJiraQuickFilters',
   'ui.setJiraQuickFilters',
   'ui.getJiraSavedFilters',
@@ -147,6 +149,13 @@ export const EXECUTION_HOST_METHODS = [
   // Why: the phone reports a takeover out of band, the same signal the desktop renderer sends.
   'orchestration.workerTerminalUserInput',
   'projectGroup.list',
+  'projectTask.catalog',
+  'projectTask.board',
+  'projectTask.show',
+  'projectTask.documents',
+  'projectTask.resume',
+  'projectTask.approve',
+  'projectTask.decide',
   'repo.baseRefDefault',
   'repo.gitAvailable',
   'repo.hooks',

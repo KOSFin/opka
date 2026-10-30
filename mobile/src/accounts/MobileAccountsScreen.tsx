@@ -28,6 +28,7 @@ import { CodexResetCreditAction } from '../components/CodexResetCreditAction'
 import { useCodexResetCreditAction } from '../components/use-codex-reset-credit-action'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { useRouteHandoff } from '../navigation/route-handoff'
+import { MobileAccountPoolSection } from './MobileAccountPoolSection'
 
 type AccountsNotice = { title: string; message: string }
 
@@ -389,6 +390,12 @@ export function MobileAccountsScreen() {
           <>
             {renderProviderSection('claude', 'Claude')}
             {renderProviderSection('codex', 'Codex')}
+            <MobileAccountPoolSection
+              key={hostId}
+              client={client}
+              connected={connState === 'connected'}
+              hostName={hostName}
+            />
             <View style={styles.footerHint}>
               <User size={14} color={colors.textMuted} />
               <Text style={styles.footerHintText}>

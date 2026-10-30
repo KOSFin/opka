@@ -223,6 +223,8 @@ async function runAttachUnderAbort(
       models: priorRecord ? undefined : options.catalogModels,
       store: context.deps.store,
       adapter: context.deps.adapter,
+      prepareAccountAcquisition: context.deps.prepareAccountAcquisition,
+      readAccountRotationBoundary: () => context.readAccountRotationBoundary?.(sessionId),
       agents: context.deps.agents,
       logger: context.deps.logger,
       eventSink: attemptSink.sink,

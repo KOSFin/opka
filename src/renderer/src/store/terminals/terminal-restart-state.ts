@@ -116,6 +116,16 @@ export function createTerminalRestartActions(
             dropQueuedCodexRestart(nextPendingPaneAccountRestarts, notice.ptyId)
             continue
           }
+          const sameTarget =
+            existing !== undefined &&
+            isSameCodexRestartNoticeAccount(
+              { id: existing.nextAccountId, label: existing.nextAccountLabel },
+              target
+            )
+          // An accepted move to B must not become a move to C while waiting in the queue.
+          if (existing?.restartRequested && !sameTarget) {
+            dropQueuedCodexRestart(nextPendingPaneAccountRestarts, notice.ptyId)
+          }
           next[notice.ptyId] = {
             previousAccountLabel: launch.previousAccountLabel,
             nextAccountLabel: notice.nextAccountLabel,
@@ -123,21 +133,15 @@ export function createTerminalRestartActions(
               ? {}
               : { previousAccountId: launch.previousAccountId }),
             ...(notice.nextAccountId === undefined ? {} : { nextAccountId: notice.nextAccountId }),
-            // Why: a queued restart relaunches under whatever account is selected
-            // when it runs, so a later switch does not reopen an answered prompt.
-            ...(existing?.restartRequested ? { restartRequested: true as const } : {}),
+            ...(existing?.restartRequested && sameTarget
+              ? { restartRequested: true as const }
+              : {}),
             // Why: a dismissal answered one question — "keep the launch account
             // instead of this one". Only a genuinely different target re-asks it,
             // so a later C reopens the prompt while adding an account or
             // reauthenticating the active one (both re-mark live panes with the
             // selection unchanged) must not resurrect it and re-mute the pane.
-            ...(existing?.dismissed &&
-            isSameCodexRestartNoticeAccount(
-              { id: existing.nextAccountId, label: existing.nextAccountLabel },
-              target
-            )
-              ? { dismissed: true as const }
-              : {})
+            ...(existing?.dismissed && sameTarget ? { dismissed: true as const } : {})
           }
           noticedPtyIds.push(notice.ptyId)
         }

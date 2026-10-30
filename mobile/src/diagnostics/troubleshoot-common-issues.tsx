@@ -24,7 +24,7 @@ export const troubleshootCommonIssues: TroubleshootSection[] = [
     icon: <WifiOff size={16} color={colors.textSecondary} />,
     title: 'Different WiFi Networks',
     steps: [
-      'Both devices must be on the same LAN (unless connected through Tailscale).',
+      'Both devices must be on the same LAN or a reachable private VPN.',
       'Ethernet and WiFi must share the same subnet.',
       'Try reconnecting WiFi on both devices.'
     ]
@@ -65,7 +65,7 @@ export const troubleshootCommonIssues: TroubleshootSection[] = [
     icon: <Globe size={16} color={colors.textSecondary} />,
     title: 'Tailscale Host Unreachable',
     steps: [
-      'Host addresses like 100.x.x.x or *.ts.net connect through Tailscale — keep it ON.',
+      'For a Tailscale host (*.ts.net), keep Tailscale on. A 100.64–100.127 address may instead belong to another VPN, such as NetBird.',
       'iOS/Android can silently wedge the tunnel: toggle Tailscale off and back on in the Tailscale app.',
       'Check the desktop is awake and shows as connected in your tailnet.',
       'Update the Tailscale app — recent releases fix reconnect bugs.'

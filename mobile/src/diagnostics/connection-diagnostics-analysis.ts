@@ -1,4 +1,4 @@
-import { isTailscaleEndpoint } from '../../../src/shared/remote-runtime-tailscale-hint'
+import { endpointOverlayLabel } from '../../../src/shared/remote-runtime-tailscale-hint'
 import {
   relayHostReachabilityForCloseCode,
   type RelayHostReachabilityFromCloseCode
@@ -113,8 +113,8 @@ function diagnoseFailure(
 
   if (/connect-timeout|websocket connect timeout/i.test(evidence)) {
     return {
-      likelyCause: isTailscaleEndpoint(args.endpoint)
-        ? 'The saved Tailscale endpoint did not answer before the connection timeout.'
+      likelyCause: endpointOverlayLabel(args.endpoint)
+        ? `The saved ${endpointOverlayLabel(args.endpoint)} endpoint did not answer before the connection timeout.`
         : 'The saved direct endpoint did not answer before the connection timeout.',
       nextStep:
         args.pendingPath === 'relay'
@@ -275,5 +275,5 @@ function formatPath(path: MobileConnectionDiagnosticPath): string {
   if (path === 'relay') {
     return 'Relay'
   }
-  return path === 'tailscale' ? 'Tailscale/direct' : 'LAN/direct'
+  return path === 'tailscale' ? 'VPN/direct' : 'LAN/direct'
 }

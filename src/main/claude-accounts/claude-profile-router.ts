@@ -179,14 +179,22 @@ export class ClaudeProfileRouter {
     })
   }
 
-  /** Refreshes the routed folder first; only a first setup that fails stops the launch. */
+  /** Refreshes the routed folder, refusing a failed first setup or a superseded account selection. */
   async prepareLaunch(): Promise<ClaudeRuntimeAuthPreparation> {
     const selected = this.selectedProfile()
+    const assertSelection = (): void => {
+      if (this.selectedProfile()?.accountId !== selected?.accountId) {
+        throw new Error(
+          'Claude account selection changed during launch preparation. Retry the launch.'
+        )
+      }
+    }
     // Why wait only without the account's own login: System default, and whether it covers the
     // account, depend on the login shell's CLAUDE_CONFIG_DIR; setup awaits it itself.
     if (!selected || !this.accountLogin(selected.accountId)) {
       await this.envReady
     }
+    assertSelection()
     // Why: a sign-in or a System default login change since the last publish moves the route.
     this.writePointer()
     const profile = this.routedProfile()
@@ -199,6 +207,7 @@ export class ClaudeProfileRouter {
       if (report?.outcome !== 'prepared') {
         throw claudeProfileSetupFailed()
       }
+      assertSelection()
       return this.preparation()
     }
     // Why capped and never thrown: a set-up folder runs on its last refresh rather than not at all.
@@ -207,6 +216,7 @@ export class ClaudeProfileRouter {
     })
     const waitMs = this.args.refreshWaitMs ?? REFRESH_WAIT_MS
     await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, waitMs).unref())])
+    assertSelection()
     return this.preparation()
   }
 

@@ -18,6 +18,13 @@ afterEach(() => {
 })
 
 describe('pairing deep links', () => {
+  it('accepts Opka links for external open and paste without dropping Orca compatibility', () => {
+    const url = `opka://pair?code=${encodeOffer()}`
+    expect(extractPairingCodeFromUrl(url)).toBe(encodeOffer())
+    expect(parsePairingCode(url)).toEqual(offer)
+    expect(decodePairingUrl(url)).toEqual(offer)
+    expect(parsePairingCode(url.replace('opka:', 'orca:'))).toEqual(offer)
+  })
   it('extracts the QR pairing code from the hash payload', () => {
     expect(extractPairingCodeFromUrl('orca://pair#abc123')).toBe('abc123')
   })

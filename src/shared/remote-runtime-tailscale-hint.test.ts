@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isTailscaleEndpoint,
+  endpointOverlayLabel,
   withRemoteRuntimeTailscaleHint
 } from './remote-runtime-tailscale-hint'
 
@@ -60,6 +61,13 @@ describe('withRemoteRuntimeTailscaleHint', () => {
     expect(result).not.toContain('https://tailscale.com/download')
   })
 
+  it('keeps CGNAT recovery vendor-neutral and idempotent', () => {
+    const result = withRemoteRuntimeTailscaleHint(UNREACHABLE, 'ws://100.64.1.2:6769')
+    expect(result).toContain('same private VPN')
+    expect(result).not.toContain('Tailscale')
+    expect(withRemoteRuntimeTailscaleHint(result, 'ws://100.64.1.2:6769')).toBe(result)
+  })
+
   it('covers the close and timeout failure variants', () => {
     expect(
       withRemoteRuntimeTailscaleHint(
@@ -84,5 +92,21 @@ describe('withRemoteRuntimeTailscaleHint', () => {
     const once = withRemoteRuntimeTailscaleHint(UNREACHABLE, 'ws://192.168.1.10:6768')
     const twice = withRemoteRuntimeTailscaleHint(once, 'ws://192.168.1.10:6768')
     expect(twice).toBe(once)
+  })
+})
+
+describe('endpointOverlayLabel', () => {
+  it.each(['100.64.0.1', '100.127.255.254'])('does not infer a VPN vendor from %s', (host) => {
+    expect(endpointOverlayLabel(`ws://${host}:6769`)).toBe('VPN')
+  })
+  it.each(['100.63.255.255', '100.128.0.1', '100.64.0.1.example.com'])(
+    'excludes non-overlay host %s',
+    (host) => {
+      expect(endpointOverlayLabel(`ws://${host}:6769`)).toBeNull()
+    }
+  )
+  it('preserves explicit Tailscale address hints', () => {
+    expect(endpointOverlayLabel('ws://host.tailnet.ts.net:6769')).toBe('Tailscale')
+    expect(endpointOverlayLabel('ws://[fd7a:115c:a1e0::1]:6769')).toBe('Tailscale')
   })
 })

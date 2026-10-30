@@ -6,10 +6,10 @@ export type ReplacedPaneOwner = {
   dropsIncarnation?: true
 }
 
-/** The stopped id is dead whatever its incarnation, so a binding naming it must not be reattached. */
+/** A replacement prepares a fresh launch rather than reattaching the owner it will stop. */
 export function excludeReplacedPaneOwner<Owner extends { ptyId: string }>(
   owner: Owner | null,
-  replaced: ReplacedPaneOwner | null
+  replaced: Pick<ReplacedPaneOwner, 'ptyId'> | null
 ): Owner | null {
   return owner && owner.ptyId === replaced?.ptyId ? null : owner
 }

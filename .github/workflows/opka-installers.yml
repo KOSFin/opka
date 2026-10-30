@@ -87,9 +87,70 @@ jobs:
             dist/opka-macos-provenance.json
           if-no-files-found: error
           retention-days: 14
+  android:
+    name: Opka Android installer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'opka-android-release' || 'opka-android-ci' }}
+    env:
+      OPKA_VERSION: ${{ inputs.version }}
+      OPKA_MOBILE_BUILD: '1'
+      OPKA_ANDROID_KEYSTORE_BASE64: ${{ secrets.OPKA_ANDROID_KEYSTORE_BASE64 }}
+      OPKA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.OPKA_ANDROID_KEYSTORE_PASSWORD }}
+      OPKA_ANDROID_CERTIFICATE_SHA256: ${{ vars.OPKA_ANDROID_CERTIFICATE_SHA256 }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - uses: ./.github/actions/install-mobile-dependencies
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Generate the separate Opka Android project
+        working-directory: mobile
+        run: pnpm exec expo prebuild --platform android --no-install
+      - name: Build Android APK
+        working-directory: mobile/android
+        run: ./gradlew :opka-app-update:testReleaseUnitTest assembleRelease --no-daemon --max-workers=3
+      - name: Sign and qualify Android APK
+        shell: bash
+        env:
+          OPKA_PUBLISHING: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          set +x
+          export OPKA_APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          export OPKA_APKANALYZER="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
+          signing_store="$RUNNER_TEMP/opka-android.jks"
+          trap 'rm -f "$signing_store"' EXIT
+          if [ "$OPKA_PUBLISHING" = 1 ]; then
+            [ -n "$OPKA_ANDROID_KEYSTORE_BASE64" ] && [ -n "$OPKA_ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$OPKA_ANDROID_CERTIFICATE_SHA256" ] || { echo 'Configure the protected Android release signing environment first.' >&2; exit 1; }
+            python3 -c 'import base64,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"opka-android.jks"; p.write_bytes(base64.b64decode(os.environ["OPKA_ANDROID_KEYSTORE_BASE64"],validate=True)); p.chmod(0o600)'
+          else
+            export OPKA_ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
+            keytool -genkeypair -keystore "$signing_store" -alias opka-beta -storetype JKS -keyalg RSA -keysize 3072 -validity 10 -dname 'CN=Opka CI Test' -storepass:env OPKA_ANDROID_KEYSTORE_PASSWORD -keypass:env OPKA_ANDROID_KEYSTORE_PASSWORD
+          fi
+          mkdir -p dist
+          "$OPKA_APKSIGNER" sign --ks "$signing_store" --ks-key-alias opka-beta --ks-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --key-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --out dist/opka-android.apk mobile/android/app/build/outputs/apk/release/app-release.apk
+          if [ "$OPKA_PUBLISHING" != 1 ]; then
+            export OPKA_ANDROID_CERTIFICATE_SHA256="$("$OPKA_APKSIGNER" verify --print-certs dist/opka-android.apk | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
+          fi
+          node config/scripts/opka-android-release.mjs dist/opka-android.apk dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opka-android-${{ github.sha }}
+          path: |
+            dist/opka-android.apk
+            dist/latest-android.json
+            dist/opka-android-provenance.json
+          if-no-files-found: error
+          retention-days: 14
   release_files:
     name: Complete beta asset set
-    needs: [mac, server_template]
+    needs: [mac, server_template, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
