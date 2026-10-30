@@ -10,7 +10,9 @@ from unittest.mock import patch
 import zipfile
 
 import opka_android_published_update as updater
-from opka_android_handoff_status import handoff_ready
+from opka_android_handoff_status import completion_action, handoff_ready, ui_snapshot
+import subprocess
+import xml.etree.ElementTree as ET
 
 
 class PublishedDownloadContract(unittest.TestCase):
@@ -67,6 +69,50 @@ class HandoffProbeContract(unittest.TestCase):
         self.assertTrue(handoff_ready(status, 'a' * 64, 42, 104236006))
         self.assertFalse(handoff_ready(status, 'b' * 64, 42, 104236006))
         self.assertFalse(handoff_ready(status.replace('targetUid=10130', 'targetUid=0'), 'a' * 64, 42, 104236006))
+
+
+class InstallerUiTransitionContract(unittest.TestCase):
+    def test_dump_missing_file_and_transient_xml_are_retried_without_stale_reads(self):
+        attempts = 0
+        removals = 0
+        clock = iter(range(20))
+
+        def shell(*parts):
+            nonlocal attempts, removals
+            if parts[0] == 'rm':
+                removals += 1
+                return ''
+            if parts[0] == 'uiautomator':
+                attempts += 1
+                return '' if attempts == 1 else 'UI hierchary dumped to: /synthetic.xml'
+            self.assertEqual(parts, ('cat', '/synthetic.xml'))
+            if attempts == 2:
+                raise subprocess.CalledProcessError(1, 'cat', 'No such file')
+            return '<broken' if attempts == 3 else '<hierarchy><node text="Install" /></hierarchy>'
+
+        tree, _ = ui_snapshot(shell, '/synthetic.xml', 10, now=lambda: next(clock), pause=lambda _: None)
+        self.assertEqual(tree.find('node').get('text'), 'Install')
+        self.assertEqual(removals, 4)
+        self.assertEqual(attempts, 4)
+
+    def test_ui_snapshot_has_an_overall_deadline(self):
+        clock = iter(range(20))
+        with self.assertRaisesRegex(TimeoutError, 'No fresh Android UI snapshot'):
+            ui_snapshot(lambda *args: '', '/synthetic.xml', 3,
+                        now=lambda: next(clock), pause=lambda _: None)
+
+    def test_old_instrumentation_exit_and_os_completion_precede_open_and_stable_resume(self):
+        installing = ET.fromstring('<hierarchy><node package="com.android.packageinstaller" text="Installing…" /></hierarchy>')
+        installed = ET.fromstring('<hierarchy><node package="com.android.packageinstaller" text="Open" enabled="true" /></hierarchy>')
+        target = ET.fromstring('<hierarchy><node package="com.kosfin.opka.mobile" text="Settings" /></hierarchy>')
+        self.assertEqual(completion_action(False, installed, False, 0), ('wait', 0))
+        self.assertEqual(completion_action(False, target, True, 0), ('wait', 0))
+        self.assertEqual(completion_action(True, installing, False, 0), ('wait', 0))
+        self.assertEqual(completion_action(True, installing, True, 1), ('wait', 0))
+        self.assertEqual(completion_action(True, installed, False, 0), ('open', 0))
+        self.assertEqual(completion_action(True, target, True, 0), ('wait', 1))
+        self.assertEqual(completion_action(True, target, True, 1), ('ready', 2))
+        self.assertEqual(completion_action(True, installing, False, 1), ('wait', 0))
 
 
 if __name__ == '__main__':

@@ -8,8 +8,8 @@ import subprocess
 import tempfile
 import time
 import urllib.request
-import xml.etree.ElementTree as ET
 import zipfile
+from opka_android_handoff_status import ui_snapshot
 
 PACKAGE = 'com.kosfin.opka.mobile'
 
@@ -22,17 +22,16 @@ def version_code(version):
 
 
 def open_published_update(version, shell, screenshot, output):
-    def tree():
-        shell('uiautomator', 'dump', '/sdcard/opka-published-ui.xml')
-        xml = shell('cat', '/sdcard/opka-published-ui.xml')
+    def tree(deadline):
+        current, xml = ui_snapshot(shell, '/sdcard/opka-published-ui.xml', deadline)
         (output / 'published-last-ui.xml').write_text(xml)
-        return ET.fromstring(xml)
+        return current
 
     def click(label, stage, timeout=45, scroll=True):
         deadline = time.monotonic() + timeout
         scrolls = 0
         while time.monotonic() < deadline:
-            current = tree()
+            current = tree(deadline)
             for node in current.iter('node'):
                 if node.get('package') != PACKAGE or node.get('enabled') != 'true':
                     continue

@@ -20,3 +20,42 @@ def handoff_ready(text, expected_hash, expected_bytes, expected_code):
         and fields.get('archivePackage') == 'com.kosfin.opka.mobile'
         and fields.get('uid') is not None and fields.get('uid') == fields.get('targetUid')
     )
+
+
+def ui_snapshot(shell, path, deadline, now=None, pause=None):
+    import subprocess
+    import time
+    import xml.etree.ElementTree as ET
+    now = now or time.monotonic
+    pause = pause or time.sleep
+    last_error = 'no snapshot'
+    while now() < deadline:
+        try:
+            shell('rm', '-f', path)
+            result = shell('uiautomator', 'dump', path)
+            if ' dumped to:' not in result:
+                raise ValueError(result[-160:] or 'dump returned no hierarchy path')
+            xml = shell('cat', path)
+            tree = ET.fromstring(xml)
+            if tree.tag != 'hierarchy' or next(tree.iter('node'), None) is None:
+                raise ValueError('empty UI hierarchy during transition')
+            return tree, xml
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ET.ParseError, ValueError) as error:
+            last_error = str(error)[-200:]
+            pause(0.25)
+    raise TimeoutError(f'No fresh Android UI snapshot before deadline: {last_error}')
+
+
+def completion_action(instrumentation_done, tree, target_resumed, stable_count):
+    if not instrumentation_done:
+        return 'wait', 0
+    installers = [node for node in tree.iter('node') if node.get('package') in (
+        'com.android.packageinstaller', 'com.google.android.packageinstaller')]
+    if target_resumed and not installers:
+        count = stable_count + 1
+        return ('ready' if count >= 2 else 'wait'), count
+    if any(node.get('text', '').lower() == 'open' and node.get('enabled') == 'true' for node in installers):
+        return 'open', 0
+    if any(node.get('text', '').lower().rstrip('.') in ('app installed', 'done') for node in installers):
+        return 'launch', 0
+    return 'wait', 0

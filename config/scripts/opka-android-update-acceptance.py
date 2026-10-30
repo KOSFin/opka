@@ -8,9 +8,8 @@ import re
 import subprocess
 import time
 from pathlib import Path
-import xml.etree.ElementTree as ET
 
-from opka_android_handoff_status import handoff_ready
+from opka_android_handoff_status import completion_action, handoff_ready, ui_snapshot
 from opka_android_published_update import open_published_update, verify_native_download, version_code
 
 PACKAGE = 'com.kosfin.opka.mobile'
@@ -65,11 +64,14 @@ def main():
             except Exception as error:
                 (output / name).write_text(str(error))
         try:
-            shell('uiautomator', 'dump', '/sdcard/opka-update-failure.xml')
-            (output / 'final-ui.xml').write_text(shell('cat', '/sdcard/opka-update-failure.xml'))
-            screenshot('final-screen')
+            _, xml = ui_snapshot(shell, '/sdcard/opka-update-failure.xml', time.monotonic() + 5)
+            (output / 'final-ui.xml').write_text(xml)
         except Exception as error:
             (output / 'ui-capture-error.txt').write_text(str(error))
+        try:
+            screenshot('final-screen')
+        except Exception as error:
+            (output / 'screenshot-error.txt').write_text(str(error))
 
     try:
         assert adb('shell', 'getprop', 'sys.boot_completed') == '1', 'Android has not booted'
@@ -144,10 +146,8 @@ def main():
         while time.monotonic() < deadline:
             if handoff_process is not None:
                 assert handoff_process.poll() is None, 'Instrumentation exited before OS confirmation; URI grant may have been revoked'
-            shell('uiautomator', 'dump', '/sdcard/opka-update-ui.xml')
-            xml = shell('cat', '/sdcard/opka-update-ui.xml')
+            tree, xml = ui_snapshot(shell, '/sdcard/opka-update-ui.xml', deadline)
             (output / 'last-installer-ui.xml').write_text(xml)
-            tree = ET.fromstring(xml)
             last_ui = list(dict.fromkeys(re.sub(r'\s+', ' ', node.get('text', ''))[:100] for node in tree.iter('node') if node.get('text')))[:10]
             if args.published_version and any(node.get('text') == 'Update could not be opened' for node in tree.iter('node')):
                 raise AssertionError('Production native update failed; inspect last-installer-ui.xml')
@@ -179,12 +179,39 @@ def main():
         else:
             raise AssertionError('Confirmed update did not reach the expected installed version')
         assert shell('cat', f'{root}/files/update-acceptance-marker') == marker, 'App state was lost'
-        shell('am', 'force-stop', PACKAGE)
-        shell('am', 'start', '-n', f'{PACKAGE}/.MainActivity')
-        time.sleep(5)
+        deadline = time.monotonic() + 90
+        stable_count = 0
+        foreground_requested = False
+        while time.monotonic() < deadline:
+            if handoff_process is not None and handoff_process.poll() is None:
+                time.sleep(0.5)
+                continue
+            tree, xml = ui_snapshot(shell, '/sdcard/opka-completion-ui.xml', deadline)
+            (output / 'last-completion-ui.xml').write_text(xml)
+            activities = shell('dumpsys', 'activity', 'activities')
+            resumed = any(PACKAGE in line and 'mResumedActivity' in line for line in activities.splitlines())
+            action, stable_count = completion_action(True, tree, resumed, stable_count)
+            if action == 'ready':
+                break
+            if action in ('open', 'launch') and not foreground_requested:
+                screenshot('os-install-completed')
+                if action == 'open':
+                    for node in tree.iter('node'):
+                        if node.get('package') not in ('com.android.packageinstaller', 'com.google.android.packageinstaller') or node.get('text', '').lower() != 'open' or node.get('enabled') != 'true':
+                            continue
+                        bounds = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.get('bounds', ''))
+                        if bounds:
+                            x1, y1, x2, y2 = map(int, bounds.groups())
+                            shell('input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+                            foreground_requested = True
+                            break
+                else:
+                    shell('am', 'start', '-W', '-n', f'{PACKAGE}/.MainActivity')
+                    foreground_requested = True
+            time.sleep(1)
+        else:
+            raise AssertionError('Updated app did not become stably resumed after instrumentation exit and OS install completion')
         assert shell('pidof', PACKAGE), 'Updated app did not restart'
-        activities = shell('dumpsys', 'activity', 'activities')
-        assert any(PACKAGE in line and 'mResumedActivity' in line for line in activities.splitlines()), 'Updated app is not the resumed activity'
         screenshot('after-update')
         (output / 'receipt.json').write_text(json.dumps({
             'package': PACKAGE, 'installedCode': args.expected_code,
