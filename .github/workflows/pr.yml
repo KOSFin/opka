@@ -191,6 +191,7 @@ jobs:
     name: Beta installer qualification
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     uses: ./.github/workflows/opka-installers.yml
+    secrets: inherit
     with:
       version: ${{ inputs.release_version || format('1.4.236-rc.{0}', github.run_number) }}
 

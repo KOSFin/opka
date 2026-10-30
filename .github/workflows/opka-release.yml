@@ -33,6 +33,7 @@ jobs:
     name: Qualify this exact source and installers
     needs: admission
     uses: ./.github/workflows/pr.yml
+    secrets: inherit
     with:
       release_version: ${{ inputs.version }}
 
@@ -40,6 +41,7 @@ jobs:
     name: Verify Android update with the release identity
     needs: admission
     uses: ./.github/workflows/opka-android-update-acceptance.yml
+    secrets: inherit
     with:
       release_signer: true
 

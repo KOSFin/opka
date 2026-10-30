@@ -111,7 +111,7 @@ jobs:
           signing_store="$RUNNER_TEMP/opka-update-acceptance.jks"
           trap 'rm -f "$signing_store"' EXIT
           if [ "$RELEASE_SIGNER" = true ]; then
-            [ -n "$OPKA_ANDROID_KEYSTORE_BASE64" ] && [ -n "$OPKA_ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$OPKA_ANDROID_CERTIFICATE_SHA256" ]
+            [ -n "$OPKA_ANDROID_KEYSTORE_BASE64" ] && [ -n "$OPKA_ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$OPKA_ANDROID_CERTIFICATE_SHA256" ] || { echo 'Protected Android signing secrets were not forwarded to this workflow.' >&2; exit 1; }
             python3 -c 'import base64,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"opka-update-acceptance.jks"; p.write_bytes(base64.b64decode(os.environ["OPKA_ANDROID_KEYSTORE_BASE64"],validate=True)); p.chmod(0o600)'
           else
             export OPKA_ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
