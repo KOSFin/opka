@@ -38,6 +38,7 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - uses: ./.github/actions/install-node-dependencies
+      - uses: ./.github/actions/install-mobile-dependencies
       - name: Reject new root-level files and folders
         run: |
           DIFF_BASE="$(node config/scripts/git-pull-request-diff-base.mjs HEAD^1)"
@@ -47,6 +48,9 @@ jobs:
       - name: Check changed code
         env:
           ORCA_CODE_QUALITY_BASE: HEAD^1
+          GOMEMLIMIT: 6GiB
+          GOMAXPROCS: '1'
+          RAYON_NUM_THREADS: '1'
         run: pnpm run check:code-quality:changed
       - name: Check required context ownership
         run: pnpm exec bun .github/scripts/check-required-pr-context.mjs
