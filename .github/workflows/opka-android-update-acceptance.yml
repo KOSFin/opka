@@ -4,6 +4,8 @@ on:
     paths:
       - 'mobile/**'
       - 'config/scripts/opka-android*'
+      - 'config/scripts/build-android-update-handoff.py'
+      - 'config/android-update-handoff/**'
       - '.github/workflows/opka-android-update-acceptance.yml'
   workflow_dispatch:
     inputs:
@@ -53,6 +55,8 @@ jobs:
             (cd mobile/android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m)
             cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/android-update-fixtures/rc$rc-unsigned.apk"
           done
+      - name: Build CI-only target-UID installer handoff
+        run: python3 config/scripts/build-android-update-handoff.py
       - name: Sign both versions with one identity and verify it
         shell: bash
         env:
@@ -81,6 +85,9 @@ jobs:
             fi
             if [ "$rc" = 5 ]; then first_certificate="$certificate"; else [ "$certificate" = "$first_certificate" ]; fi
           done
+          "$apksigner" sign --ks "$signing_store" --ks-key-alias opka-beta --ks-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --key-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --out out/android-update-handoff/handoff.apk out/android-update-handoff/handoff-aligned.apk
+          handoff_certificate="$("$apksigner" verify --print-certs out/android-update-handoff/handoff.apk | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
+          [ "$handoff_certificate" = "$first_certificate" ]
           printf '%s\n' "$RELEASE_SIGNER" > out/android-update-fixtures/release-signer.txt
       - name: Require KVM acceleration
         run: |
@@ -97,7 +104,7 @@ jobs:
           ram-size: 2048M
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on
-          script: python3 config/scripts/opka-android-update-acceptance.py --a out/android-update-fixtures/rc5.apk --b out/android-update-fixtures/rc6.apk --expected-code 104236006
+          script: python3 config/scripts/opka-android-update-acceptance.py --a out/android-update-fixtures/rc5.apk --b out/android-update-fixtures/rc6.apk --expected-code 104236006 --handoff out/android-update-handoff/handoff.apk
       - name: Save acceptance evidence
         if: always()
         uses: actions/upload-artifact@v7

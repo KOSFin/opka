@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.kosfin.opka.mobile.acceptance">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36" />
+  <application android:label="Opka update acceptance" android:hasCode="true" />
+  <instrumentation android:name="com.kosfin.opka.mobile.acceptance.UpdateHandoffInstrumentation"
+    android:targetPackage="com.kosfin.opka.mobile" android:functionalTest="false" />
+</manifest>
