@@ -9,6 +9,28 @@ import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('blocks beta publication until Android confirms a same-signer update', () => {
+    const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
+    expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
+    expect(release.jobs.android_update).toMatchObject({
+      needs: 'admission',
+      uses: './.github/workflows/opka-android-update-acceptance.yml',
+      with: { release_signer: true }
+    })
+    const acceptance = parse(
+      readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
+    )
+    expect(acceptance.on.workflow_call.inputs.release_signer.default).toBe(false)
+    expect(acceptance.permissions).toEqual({ contents: 'read' })
+    const steps = acceptance.jobs.update_confirmation.steps
+    expect(
+      steps.find((step) => step.name === 'Exercise Android confirmation and data retention').with
+        .script
+    ).toContain('--handoff')
+    expect(steps.find((step) => step.name === 'Require KVM acceleration').run).toContain(
+      'test -c /dev/kvm'
+    )
+  })
   it('checks an immutable released updater without write permissions or installed app replacement', () => {
     const verification = parse(readFileSync('.github/workflows/opka-updater-smoke.yml', 'utf8'))
     expect(verification.permissions).toEqual({ contents: 'read' })

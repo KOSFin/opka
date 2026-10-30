@@ -36,9 +36,16 @@ jobs:
     with:
       release_version: ${{ inputs.version }}
 
+  android_update:
+    name: Verify Android update with the release identity
+    needs: admission
+    uses: ./.github/workflows/opka-android-update-acceptance.yml
+    with:
+      release_signer: true
+
   publish:
     name: Publish the complete verified beta
-    needs: qualification
+    needs: [qualification, android_update]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

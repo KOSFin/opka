@@ -61,9 +61,6 @@ def main():
         adb('root')
         adb('wait-for-device')
         assert 'Success' in adb('install', '--no-streaming', str(Path(args.a).resolve()), timeout=180)
-        launch = shell('am', 'start', '-W', '-n', f'{PACKAGE}/.MainActivity')
-        (output / 'app-launch.txt').write_text(launch + '\n')
-        assert 'Error:' not in launch and 'Error type' not in launch, launch
         shell('input', 'keyevent', 'KEYCODE_WAKEUP')
         shell('wm', 'dismiss-keyguard')
         before = shell('dumpsys', 'package', PACKAGE)
@@ -81,6 +78,9 @@ def main():
         shell('chown', f'{owner}:{owner}', f'{root}/cache/opka-updates/update.apk')
         shell('chmod', '600', f'{root}/cache/opka-updates/update.apk')
         shell('restorecon', '-RF', f'{root}/files', f'{root}/cache/opka-updates')
+        launch = shell('am', 'start', '-W', '-n', f'{PACKAGE}/.MainActivity')
+        (output / 'app-launch.txt').write_text(launch + '\n')
+        assert 'Error:' not in launch and 'Error type' not in launch, launch
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             process = subprocess.run(['adb', 'shell', 'pidof', PACKAGE], capture_output=True, text=True, timeout=10)
