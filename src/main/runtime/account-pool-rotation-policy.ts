@@ -38,7 +38,7 @@ export function selectAccountPoolRotationMember(
   const healthy = isAccountPoolMemberHealthy(policy, candidates, currentAccountId)
   const currentIndex = policy.members.findIndex((entry) => entry.accountId === currentAccountId)
   const ordered =
-    policy.strategy === 'sequential' && policy.rotation === 'after-turn' && currentIndex >= 0
+    policy.strategy === 'sequential' && policy.rotation === 'after-turn' && currentIndex !== -1
       ? [...policy.members.slice(currentIndex + 1), ...policy.members.slice(0, currentIndex)]
       : policy.members
   const alternatives = ordered.filter((entry) => {
