@@ -1,3 +1,4 @@
+import Constants from 'expo-constants'
 import { useState } from 'react'
 import { View, Text, StyleSheet, Pressable } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -31,6 +32,8 @@ export default function AboutScreen({
   openExternal: (url: string) => Promise<unknown>
   versionLabel: string
 }) {
+  const appName = Constants.expoConfig?.name ?? 'Orca'
+  const opka = Constants.expoConfig?.android?.package === 'com.kosfin.opka.mobile'
   const [error, setError] = useState<string | null>(null)
   const openLink = (url: string) => {
     setError(null)
@@ -54,7 +57,7 @@ export default function AboutScreen({
 
       <View style={styles.brand}>
         <OrcaLogo size={28} />
-        <Text style={styles.brandName}>Orca</Text>
+        <Text style={styles.brandName}>{appName}</Text>
         <Text style={styles.brandSub}>Open-source agent IDE for 100x builders</Text>
       </View>
 
@@ -62,21 +65,23 @@ export default function AboutScreen({
         <Pressable
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           accessibilityRole="button"
-          accessibilityLabel="Orca website"
-          onPress={() => openLink('https://onOrca.dev')}
+          accessibilityLabel={`${appName} website`}
+          onPress={() => openLink(opka ? 'https://github.com/KOSFin/opka' : 'https://onOrca.dev')}
         >
           <Globe size={16} color={colors.textSecondary} />
-          <Text style={styles.rowValue}>onOrca.dev</Text>
+          <Text style={styles.rowValue}>{opka ? 'github.com/KOSFin/opka' : 'onOrca.dev'}</Text>
         </Pressable>
         <View style={styles.separator} />
         <Pressable
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           accessibilityRole="button"
-          accessibilityLabel="Orca source code"
-          onPress={() => openLink('https://github.com/stablyai/orca')}
+          accessibilityLabel={`${appName} source code`}
+          onPress={() =>
+            openLink(opka ? 'https://github.com/KOSFin/opka' : 'https://github.com/stablyai/orca')
+          }
         >
           <GithubIcon />
-          <Text style={styles.rowValue}>stablyai/orca</Text>
+          <Text style={styles.rowValue}>{opka ? 'KOSFin/opka' : 'stablyai/orca'}</Text>
         </Pressable>
         <View style={styles.separator} />
         <Pressable

@@ -9,6 +9,88 @@ import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('blocks beta publication until Android confirms a same-signer update', () => {
+    const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
+    expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
+    expect(release.jobs.android_update).toMatchObject({
+      needs: 'admission',
+      uses: './.github/workflows/opka-android-update-acceptance.yml',
+      with: { release_signer: true }
+    })
+    const acceptance = parse(
+      readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
+    )
+    expect(acceptance.on.workflow_call.inputs.release_signer.default).toBe(false)
+    expect(acceptance.permissions).toEqual({ contents: 'read' })
+    const steps = acceptance.jobs.update_confirmation.steps
+    expect(
+      steps.find((step) => step.name === 'Exercise Android confirmation and data retention').with
+        .script
+    ).toBe('python3 config/scripts/opka-android-update-acceptance-entry.py')
+    expect(steps.find((step) => step.name === 'Require KVM acceleration').run).toContain(
+      'test -c /dev/kvm'
+    )
+  })
+  it('caches only unsigned fixtures under an exact Android input key', () => {
+    const acceptance = parse(
+      readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
+    )
+    const steps = acceptance.jobs.update_confirmation.steps
+    const restore = steps.find((step) => step.name === 'Restore unsigned Android fixtures')
+    const save = steps.find((step) => step.name === 'Save unsigned Android fixtures')
+    expect(restore.uses).toBe('actions/cache/restore@v5')
+    expect(save.uses).toBe('actions/cache/save@v5')
+    expect(restore.with.path).toBe('out/android-update-fixtures/*-unsigned.apk')
+    expect(save.with).toEqual(restore.with)
+    expect(restore.with['restore-keys']).toBeUndefined()
+    const fingerprint = steps.find((step) => step.id === 'fixture_key').run
+    for (const input of [
+      'mobile',
+      'src/shared',
+      'src/packages',
+      'config/patches',
+      'pnpm-lock.yaml',
+      '.github/actions',
+      '.github/workflows/opka-android-update-acceptance.yml'
+    ]) {
+      expect(fingerprint).toContain(input)
+    }
+    expect(steps.indexOf(save)).toBeLessThan(
+      steps.findIndex((step) => step.name === 'Sign both versions with one identity and verify it')
+    )
+  })
+  it.runIf(process.platform === 'linux')(
+    'keeps the fixture handoff and published UI routes separate',
+    () => {
+      const entryArgv = (published) =>
+        JSON.parse(
+          execFileSync(
+            'python3',
+            [
+              '-c',
+              "import json,runpy,subprocess; subprocess.run=lambda args,**kwargs: print(json.dumps(args)); runpy.run_path('config/scripts/opka-android-update-acceptance-entry.py')"
+            ],
+            { encoding: 'utf8', env: { ...process.env, PUBLISHED_VERSION: published } }
+          )
+        ).slice(2)
+      expect(entryArgv('')).toEqual([
+        '--a',
+        'out/android-update-fixtures/rc5.apk',
+        '--b',
+        'out/android-update-fixtures/rc6.apk',
+        '--expected-code',
+        '104236006',
+        '--handoff',
+        'out/android-update-handoff/handoff.apk'
+      ])
+      expect(entryArgv('1.4.236-rc.6')).toEqual([
+        '--a',
+        'out/android-update-fixtures/rc5.apk',
+        '--published-version',
+        '1.4.236-rc.6'
+      ])
+    }
+  )
   it('checks an immutable released updater without write permissions or installed app replacement', () => {
     const verification = parse(readFileSync('.github/workflows/opka-updater-smoke.yml', 'utf8'))
     expect(verification.permissions).toEqual({ contents: 'read' })

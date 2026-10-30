@@ -76,3 +76,25 @@ export async function claudeLaunchResumesTranscript(input: {
   // Found nowhere Orca knows of (e.g. a folder since removed): the stored leaf still says it ran.
   return true
 }
+
+/** Pooled conversations retain their own account when the global picker changes. */
+export function resolvePinnedClaudeStructuredLaunchHome(
+  router: ClaudeProfileRouter | undefined,
+  env: Record<string, string>,
+  recordHome: string,
+  accountId: string
+): string {
+  if (!router || router.accountHome(accountId) !== recordHome || !router.accountLogin(accountId)) {
+    throw new AgentSessionPreSpawnError(new Error('The native chat account profile needs sign-in'))
+  }
+  applyClaudeEnvPatch(
+    env,
+    {
+      CLAUDE_CONFIG_DIR: recordHome,
+      ORCA_CLAUDE_INJECTED_CONFIG_DIR: recordHome,
+      ORCA_CLAUDE_PROFILE_POINTER: join(recordHome, '..', 'pinned-launch-home')
+    },
+    { stripAuthEnv: true }
+  )
+  return recordHome
+}

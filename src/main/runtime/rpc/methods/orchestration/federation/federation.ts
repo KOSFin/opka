@@ -67,6 +67,7 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
 
       const db = runtime.getOrchestrationDb()
       db.createRemoteDispatchAttachment({
+        maxConcurrentWorkers: runtime.getMaxConcurrentWorkers(),
         runId: params.runId,
         dispatchId: params.dispatchId,
         taskId: params.taskId,

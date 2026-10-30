@@ -91,7 +91,18 @@ export async function spawnPtyFromRuntimeController(
     if (earlyReserved) {
       return toRuntimeSpawnReply(earlyReserved)
     }
+    if (ctx.accountPoolLaunch) {
+      await ctx.accountPoolLaunch.assertReady()
+    }
+    ctx.accountPoolSpawnAttempted = true
     await executeRuntimePtySpawn(ctx)
+    ctx.accountPoolLaunch?.bind(
+      ctx.result.id,
+      false,
+      Boolean(ctx.preAdoptedStablePane) ||
+        Boolean(ctx.sessionId && ctx.result.id !== ctx.sessionId),
+      ctx.result.incarnationId
+    )
     const committed = await commitRuntimePtySpawn(ctx)
     commitRuntimeSpawnHiddenDelivery(ctx)
     return toRuntimeSpawnReply(committed)
@@ -113,6 +124,10 @@ export async function spawnPtyFromRuntimeController(
     rejectPaneSpawnReservation(ctx.paneSpawnReservationKey, ctx.paneSpawnReservation, err)
     throw err
   } finally {
+    if (!ctx.accountPoolSpawnAttempted) {
+      ctx.accountPoolLaunch?.release()
+    }
+
     ctx.releaseWorktreeSpawn?.()
     ctx.finishTerminalInstall()
   }

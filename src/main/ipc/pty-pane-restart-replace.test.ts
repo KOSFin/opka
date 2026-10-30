@@ -92,6 +92,43 @@ describe('pty:spawn replacing a pane owner', () => {
     )
   })
 
+  it('keeps the old process and binding when launch environment preparation fails', async () => {
+    const { providerSpawn, shutdown, store, runtime, leafBinding } = installRestartHarness()
+    runtime.createPreAllocatedTerminalHandle.mockImplementationOnce(() => {
+      throw new Error('replacement preparation failed')
+    })
+    registerWithFakes(mainWindow, runtime, store)
+
+    await expect(
+      handlers.get('pty:spawn')!(null, restartSpawnArgs({ replacesPtyId: 'pty-old' }))
+    ).rejects.toThrow('replacement preparation failed')
+    expect(shutdown).not.toHaveBeenCalled()
+    expect(providerSpawn).not.toHaveBeenCalled()
+    expect(leafBinding()).toBe('pty-old')
+    expect(exitPayloads('pty-old')).toEqual([])
+
+    await expect(handlers.get('pty:spawn')!(null, restartSpawnArgs())).resolves.toMatchObject({
+      id: 'pty-old',
+      isReattach: true
+    })
+  })
+
+  it('rechecks ownership after preparation without stopping the successor', async () => {
+    const { providerSpawn, shutdown, store, runtime, leafBinding } = installRestartHarness()
+    runtime.createPreAllocatedTerminalHandle.mockImplementationOnce(() => {
+      store.getWorkspaceSession().terminalLayoutsByTabId[tabId].ptyIdsByLeafId[leafId] = 'successor'
+      return 'term-restart'
+    })
+    registerWithFakes(mainWindow, runtime, store)
+
+    await expect(
+      handlers.get('pty:spawn')!(null, restartSpawnArgs({ replacesPtyId: 'pty-old' }))
+    ).rejects.toThrow('terminal_pane_owner_changed')
+    expect(shutdown).not.toHaveBeenCalled()
+    expect(providerSpawn).not.toHaveBeenCalled()
+    expect(leafBinding()).toBe('successor')
+  })
+
   it('labels the replaced owner exit so the renderer keeps the pane', async () => {
     const { store, runtime } = installRestartHarness()
     registerWithFakes(mainWindow, runtime, store)

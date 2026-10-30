@@ -1,3 +1,4 @@
+import { WORKER_CODEX_ACCOUNT_ENV } from '../../codex-accounts/worker-account-home'
 // The provider spawn options both spawn lanes build, from facts each lane resolves its own way.
 
 import { getAppEnvironment } from '../../../shared/app-environment'
@@ -45,6 +46,7 @@ export function assemblePtySpawnEnvDeletions(input: {
   let envToDelete =
     mergePtyEnvDeletions(
       input.callerEnvToDelete ?? [],
+      [WORKER_CODEX_ACCOUNT_ENV],
       // Persistent daemons and older SSH hosts must not resurrect a parent Pi's ownership.
       PI_PROCESS_OWNER_ENV_KEYS,
       input.agentTeamsEnvToDelete,

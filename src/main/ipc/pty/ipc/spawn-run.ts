@@ -5,7 +5,11 @@ import {
   resolveEarlyPaneKey,
   resolveEarlyPaneSpawnReservationKey
 } from './spawn-begin'
-import { releaseStoppedPaneBinding, stopReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import {
+  assertReplacedPaneOwner,
+  releaseStoppedPaneBinding,
+  stopReplacedPaneOwner
+} from '../pane/pane-owner-replacement'
 import { planPaneAgentLaunch } from './spawn-agent-launch'
 import { endPaneAgentLaunch } from './spawn-agent-launch-end'
 import { preparePtyIpcSpawnPreflight } from './spawn-preflight'
@@ -40,7 +44,7 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
   }
   try {
     if (args.replacesPtyId !== undefined) {
-      ctx.replacedPaneOwner = await stopReplacedPaneOwner(deps, {
+      assertReplacedPaneOwner(deps, {
         replacesPtyId: args.replacesPtyId,
         paneKey: resolveEarlyPaneKey(args),
         worktreeId: args.worktreeId,
@@ -82,7 +86,35 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       refuseClosedPaneSpawn(deps.store, args.tabId, args.leafId)
     }
+    // Preparation may fail; keep the old process until the replacement is ready to spawn.
+    if (args.replacesPtyId !== undefined) {
+      ctx.replacedPaneOwner = await stopReplacedPaneOwner(deps, {
+        replacesPtyId: args.replacesPtyId,
+        paneKey: resolveEarlyPaneKey(args),
+        worktreeId: args.worktreeId,
+        connectionId: args.connectionId
+      })
+      ctx.paneAgentLaunch?.refuseIfClosed()
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        refuseClosedPaneSpawn(deps.store, args.tabId, args.leafId)
+      }
+    }
+    if (ctx.accountPoolLaunch) {
+      await ctx.accountPoolLaunch.assertReady()
+      ctx.paneAgentLaunch?.refuseIfClosed()
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        refuseClosedPaneSpawn(deps.store, args.tabId, args.leafId)
+      }
+    }
+    ctx.accountPoolSpawnAttempted = true
     await executePtyIpcSpawn(ctx)
+    ctx.accountPoolLaunch?.bind(
+      ctx.result.id,
+      ctx.exitedBeforeRegistration,
+      Boolean(ctx.preAdoptedStablePane) ||
+        Boolean(ctx.effectiveSessionId && ctx.result.id !== ctx.effectiveSessionId),
+      ctx.result.incarnationId
+    )
     const committed = await commitPtyIpcSpawn(ctx)
     endPaneAgentLaunch(
       ctx,
@@ -114,6 +146,10 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     rejectPaneSpawnReservation(ctx.paneSpawnReservationKey, ctx.paneSpawnReservation, err)
     throw err
   } finally {
+    if (!ctx.accountPoolSpawnAttempted) {
+      ctx.accountPoolLaunch?.release()
+    }
+
     ctx.releaseWorktreeSpawn?.()
     ctx.finishTerminalInstall()
   }

@@ -3,7 +3,10 @@ import { printResult } from '../../format'
 import { getOptionalStringFlag } from '../../flags'
 import { RuntimeClientError } from '../../runtime-client'
 import type { RuntimeStatus } from '../../../shared/runtime-types'
-import { ORCHESTRATION_WORKER_LAUNCH_PREFERENCES_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import {
+  ORCHESTRATION_WORKER_ACCOUNT_RUNTIME_CAPABILITY,
+  ORCHESTRATION_WORKER_LAUNCH_PREFERENCES_RUNTIME_CAPABILITY
+} from '../../../shared/protocol-version'
 import { callOrchestrationMutation } from './mutation-request'
 import { getOptionalPositiveIntegerValueFlag } from './numeric-flags'
 import { isDevCliInvocation } from './runtime-compatibility'
@@ -13,6 +16,16 @@ import { renderResolvedOrchestrationCommand } from '../../orchestration-mutation
 
 export const ORCHESTRATION_WORKER_LAUNCH_HANDLER: Record<string, CommandHandler> = {
   'orchestration worker-start': async ({ flags, client, cwd, json }) => {
+    const accountId = getOptionalStringFlag(flags, 'account')
+    if (accountId) {
+      const status = await client.call<RuntimeStatus>('status.get')
+      if (!status.result.capabilities?.includes(ORCHESTRATION_WORKER_ACCOUNT_RUNTIME_CAPABILITY)) {
+        throw new RuntimeClientError(
+          'incompatible_runtime',
+          'This runtime cannot pin worker accounts. Update the execution host before using --account.'
+        )
+      }
+    }
     const model = getOptionalStringFlag(flags, 'model')
     const effort = getOptionalStringFlag(flags, 'effort')
     if (model || effort) {
@@ -62,6 +75,7 @@ export const ORCHESTRATION_WORKER_LAUNCH_HANDLER: Record<string, CommandHandler>
       agent: getOptionalStringFlag(flags, 'agent'),
       model,
       effort,
+      ...(accountId ? { accountId } : {}),
       terminal: getOptionalStringFlag(flags, 'terminal'),
       retryOf: getOptionalStringFlag(flags, 'retry-of'),
       timeoutMs: getOptionalPositiveIntegerValueFlag(flags, 'timeout-ms'),

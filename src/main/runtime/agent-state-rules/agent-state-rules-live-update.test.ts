@@ -1,3 +1,4 @@
+import { PRODUCT_IDENTITY } from '../../../shared/product-identity'
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -128,7 +129,7 @@ describe('agent state rules channel and URL', () => {
 
   it('fetches the fixed release-download URL for the engine and channel', () => {
     expect(agentStateRulesDownloadUrl('next')).toBe(
-      'https://github.com/stablyai/orca/releases/download/agent-state-rules-engine-1-next/agent-state-rules.json'
+      `https://github.com/${PRODUCT_IDENTITY.releaseRepo}/releases/download/agent-state-rules-engine-1-next/agent-state-rules.json`
     )
   })
 })

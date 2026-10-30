@@ -122,8 +122,14 @@ export async function readTaskProjectCatalog(
 
 export async function resolveRegisteredTaskRoot(
   host: TaskProjectRootsHost,
-  selectedRoot: string
+  selectedRoot: string,
+  repoId?: string
 ): Promise<string> {
+  // A linked checkout shares its repository's board, including copied task configuration.
+  const repo = repoId && host.listVisibleRepos().find((entry) => entry.id === repoId)
+  if (repo && !repo.connectionId && (!repo.executionHostId || repo.executionHostId === 'local')) {
+    return resolveRegisteredTaskRoot(host, repo.path)
+  }
   const selected = await realpath(selectedRoot)
   try {
     await readTaskText(selected, PROJECT_TASK_CONFIG_PATH)

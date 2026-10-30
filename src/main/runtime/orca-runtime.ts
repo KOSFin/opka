@@ -1,3 +1,4 @@
+import { installPtyAccountPoolRotation } from './pty-account-pool-rotation'
 import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'
@@ -178,6 +179,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     // through this runtime's scan cache, so a worktree change must reach both. The desktop IPC
     // module registers the generation bump at load; a headless host never loads it.
     registerDetectedWorktreeScanInvalidation()
+    installPtyAccountPoolRotation(this, (id) => this.ptysById.get(id))
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
     publishWorkspaceViewChanges(this.store, (event) => this.emitClientEvent(event))
   }

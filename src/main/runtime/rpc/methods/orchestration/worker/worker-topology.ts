@@ -56,6 +56,7 @@ export function requireWorkerAuthority(runtime: OrcaRuntimeService, terminalHand
 }
 
 export async function createExistingWorktreeWorkerTerminal(args: {
+  accountEnv?: Record<string, string>
   runtime: OrcaRuntimeService
   worktreeId: string
   agent: TuiAgent
@@ -68,6 +69,7 @@ export async function createExistingWorktreeWorkerTerminal(args: {
     // desktop app while its CLI is `cursor-agent`. Let the runtime build the
     // configured launcher instead of executing the raw id.
     startupAgent: args.agent,
+    ...(args.accountEnv ? { accountEnv: args.accountEnv } : {}),
     launchSource: 'orchestration',
     ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
     title: `worker-${args.taskId}`,

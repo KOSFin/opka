@@ -75,7 +75,12 @@ function fakes() {
 
 function place(
   f: ReturnType<typeof fakes>,
-  args: { mode: AgentLaunchModeReceipt; existing?: boolean; terminal?: string }
+  args: {
+    mode: AgentLaunchModeReceipt
+    existing?: boolean
+    terminal?: string
+    accountEnv?: Record<string, string>
+  }
 ) {
   return placeWorkerAgent({
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the placement calls only the methods faked here.
@@ -94,7 +99,8 @@ function place(
     creationWorktree: args.existing ? undefined : COORDINATOR,
     resolvedWorktree: args.existing ? EXISTING : undefined,
     mode: args.mode,
-    agent: args.terminal ? undefined : 'claude',
+    agent: args.terminal ? undefined : args.accountEnv ? 'codex' : 'claude',
+    accountEnv: args.accountEnv,
     launchPreferences: undefined,
     effects: f.effects,
     onStage: (stage) => f.failedStages.push(stage)
@@ -118,6 +124,24 @@ beforeEach(() => {
 })
 
 describe('a fresh worker through the launch executor', () => {
+  it('preserves a validated explicit account through both fresh terminal placements', async () => {
+    const accountEnv = {
+      CODEX_HOME: '/synthetic/account-b/home',
+      ORCA_WORKER_CODEX_ACCOUNT_ID: 'account_b'
+    }
+    const existing = fakes()
+    await place(existing, { mode: TERMINAL, existing: true, accountEnv })
+    expect(existing.runtime.createTerminal).toHaveBeenCalledWith(
+      'id:wt_existing',
+      expect.objectContaining({ accountEnv, startupAgent: 'codex' })
+    )
+    const child = fakes()
+    await place(child, { mode: TERMINAL, accountEnv })
+    expect(child.runtime.createManagedWorktree).toHaveBeenCalledWith(
+      expect.objectContaining({ startupAccountEnv: accountEnv, startupAgent: 'codex' })
+    )
+  })
+
   it('fails a refused structured worker in an existing worktree instead of starting a terminal', async () => {
     const f = fakes()
     sessionCreate.refusal = { code: 'structured_agent_session_unsupported' }

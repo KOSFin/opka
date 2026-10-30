@@ -297,7 +297,7 @@ describe('a chat at rest, read by the host', () => {
     const store = {
       getRecord: () => record,
       replaceSessionOptions: vi.fn(),
-      reviseSessionOptions: async <A>(
+      reviseSessionRecord: async <A>(
         revise: (held: AgentSessionRecord, args: A) => AgentSessionRecord,
         args: A
       ) => (record = revise(record, args))

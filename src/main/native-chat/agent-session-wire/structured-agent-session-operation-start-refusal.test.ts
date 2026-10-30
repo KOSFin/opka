@@ -51,7 +51,7 @@ describe('an operation whose agent start throws', () => {
 
 describe('an option picked while the chat is at rest', () => {
   it('refuses a key the provider would not accept as a rejected option', async () => {
-    const reviseSessionOptions = vi.fn()
+    const reviseSessionRecord = vi.fn()
     const refused = await recordStructuredAgentSessionOptionIntent(
       {
         store: {
@@ -59,7 +59,7 @@ describe('an option picked while the chat is at rest', () => {
             // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the intent reads only the record's provider and options.
             ({ provider: 'codex', options: {} }) as unknown as AgentSessionRecord,
           replaceSessionOptions: vi.fn(),
-          reviseSessionOptions
+          reviseSessionRecord
         },
         agents: claudeAndCodexAgents()
       },
@@ -74,6 +74,6 @@ describe('an option picked while the chat is at rest', () => {
         details: { reason: 'optionRejected' }
       }
     })
-    expect(reviseSessionOptions).not.toHaveBeenCalled()
+    expect(reviseSessionRecord).not.toHaveBeenCalled()
   })
 })

@@ -63,10 +63,19 @@ async function isClaudeInForeground(
   return isClaudeProcess(await confirmRuntimeTerminalForegroundProcess(ptyId))
 }
 
-/** Whether the pane's Claude is mid-turn; a restart during a permission prompt or question drops it. */
+/** Whether a Claude restart must wait for live completion evidence, including child work. */
 export function isClaudePaneMidTurn(state: AppState, paneKey: string): boolean {
   const entry = state.agentStatusByPaneKey[paneKey]
-  return entry?.agentType === 'claude' && entry.state !== 'done'
+  if (entry?.agentType !== 'claude' || entry.restoredUnconfirmed || entry.state !== 'done') {
+    return true
+  }
+  // A parent's Stop does not settle background children; newer hosts own the full child list.
+  if (entry.children !== undefined) {
+    return entry.children.some(
+      (child) => child.membership === 'live' && child.state !== 'idle' && child.state !== 'done'
+    )
+  }
+  return entry.subagents?.some((child) => child.state !== 'idle') ?? false
 }
 
 function normalizeFolder(path: string): string {

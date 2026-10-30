@@ -120,3 +120,23 @@ it('resolves registered root aliases without duplicating their task project', as
   folders.push({ ...folders[0], id: 'canonical', folderPath: root })
   expect((await readTaskProjectCatalog(host)).projects).toHaveLength(1)
 })
+
+it('keeps external worktrees on the canonical multi-repository project board', async () => {
+  const { root, host } = await fixture()
+  await initializeTaskFiles(root)
+  const checkout = await realpath(await mkdtemp(join(tmpdir(), 'opka-linked-checkout-')))
+  temporary.push(checkout)
+  expect(await resolveRegisteredTaskRoot(host, checkout, 'web')).toBe(root)
+  await initializeTaskFiles(checkout)
+  expect(await resolveRegisteredTaskRoot(host, checkout, 'web')).toBe(root)
+  expect(await resolveRegisteredTaskRoot(host, checkout)).toBe(checkout)
+})
+
+it('keeps independent repository boards canonical without adopting a remote registration', async () => {
+  const { root, child, folders, repos, host } = await fixture()
+  folders.length = 0
+  await initializeTaskFiles(child)
+  expect(await resolveRegisteredTaskRoot(host, root, 'web')).toBe(child)
+  repos[0].executionHostId = 'ssh:elsewhere'
+  expect(await resolveRegisteredTaskRoot(host, root, 'web')).toBe(root)
+})

@@ -1,3 +1,4 @@
+import * as poolEnrollment from './native-account-pool-enrollment'
 import { isAgentSessionRewindRecord, type AgentSessionRewindRecord } from './agent-session-rewind'
 import { isAgentSessionLaunchArgs } from './agent-session-launch-args'
 import { isAgentSessionConversationName } from './agent-session-conversation-name'
@@ -152,6 +153,7 @@ export type AgentSessionRecord = {
   providerHandleChain: AgentSessionProviderHandleLink[]
   providerContextBoundary?: AgentSessionProviderContextBoundary
   accountHome: AgentSessionAccountHome
+  accountPool?: poolEnrollment.NativeAccountPoolEnrollment
   /** The directory the provider first launched in, in the execution host's path syntax. Floating
    *  sessions resume here; worktree and folder ids still resolve by id to their durable place. */
   launchDirectory?: string
@@ -169,13 +171,7 @@ export type AgentSessionRecord = {
   updatedAt: number
 }
 
-/** Replaces the provider options or sets the permission mode, never both, so neither write
- *  touches the other. */
-export type AgentSessionOptionsReplacement = {
-  sessionId: string
-  fence: number
-  now: number
-} & ({ options: Readonly<Record<string, string>> } | { permissionMode: string })
+export type { AgentSessionOptionsReplacement } from './agent-session-option-replacement'
 
 const MAX_ID_LENGTH = 512
 /** A death evidence's `detail` past this fails a load, so whoever writes one cuts it here. */
@@ -360,6 +356,8 @@ export function isPersistedAgentSessionRecord(
     isAgentSessionExecutionLocation(record.location) &&
     isStructuredAgentId(record.provider) &&
     isAgentSessionAccountHome(record.accountHome) &&
+    (record.accountPool === undefined ||
+      poolEnrollment.NativeAccountPoolEnrollmentSchema.safeParse(record.accountPool).success) &&
     (record.launchDirectory === undefined ||
       isBoundedString(record.launchDirectory, MAX_PATH_LENGTH)) &&
     (record.options === undefined || isAgentSessionOptions(record.options)) &&

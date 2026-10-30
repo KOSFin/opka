@@ -1,3 +1,4 @@
+import type { PtyAccountPoolLaunch } from '../account-pool-launch'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
 import type {
@@ -24,6 +25,8 @@ import type {
 import { localProvider } from '../provider/registry'
 
 export type RuntimePtySpawnState = {
+  accountPoolLaunch?: PtyAccountPoolLaunch
+  accountPoolSpawnAttempted?: boolean
   deps: PtyRuntimeControllerDeps
   args: RuntimePtySpawnArgs
   codexHomeLaunchStartedAt: Date | undefined

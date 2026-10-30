@@ -25,12 +25,30 @@ async function releaseFixture() {
   roots.push(root)
   for (const { kind, names } of [
     { kind: 'macos', names: ['opka-macos-arm64.dmg', 'opka-macos-arm64.zip', 'latest-mac.yml'] },
-    { kind: 'server', names: ['opka-server-linux-x64.tar.gz'] }
+    { kind: 'server', names: ['opka-server-linux-x64.tar.gz'] },
+    { kind: 'android', names: ['opka-android.apk', 'latest-android.json'] }
   ]) {
     const assets = []
     for (const name of names) {
-      await writeFile(join(root, name), 'synthetic fixture')
-      assets.push({ name, bytes: 17, sha256: await fileDigest(join(root, name)) })
+      const content =
+        name === 'latest-android.json'
+          ? JSON.stringify({
+              schemaVersion: 1,
+              packageName: 'com.kosfin.opka.mobile',
+              version: '0.1.0-rc.1',
+              versionCode: 1,
+              certificateSha256: 'a'.repeat(64),
+              bytes: 17,
+              sha256: await fileDigest(join(root, 'opka-android.apk')),
+              url: 'https://github.com/KOSFin/opka/releases/download/v0.1.0-rc.1/opka-android.apk'
+            })
+          : 'synthetic fixture'
+      await writeFile(join(root, name), content)
+      assets.push({
+        name,
+        bytes: Buffer.byteLength(content),
+        sha256: await fileDigest(join(root, name))
+      })
     }
     await writeFile(
       join(root, `opka-${kind}-provenance.json`),
@@ -38,6 +56,7 @@ async function releaseFixture() {
         version: '0.1.0-rc.1',
         commit: 'source-a',
         sourceRepository: 'KOSFin/opka',
+        ...(kind === 'android' ? { versionCode: 1, certificateSha256: 'a'.repeat(64) } : {}),
         assets
       })
     )
@@ -100,7 +119,7 @@ describe('Opka release assets', () => {
     const root = await releaseFixture()
     await completeRelease(root, '0.1.0-rc.1', 'source-a')
     const checksums = await readFile(join(root, 'SHA256SUMS'), 'utf8')
-    expect(checksums.trim().split('\n')).toHaveLength(6)
+    expect(checksums.trim().split('\n')).toHaveLength(9)
     expect(checksums).toContain('  opka-macos-arm64.dmg')
     expect(checksums).toContain('  opka-server-linux-x64.tar.gz')
     await expect(completeRelease(root, '0.1.0-rc.1', 'source-b')).rejects.toThrow('source commit')
@@ -128,7 +147,7 @@ describe('Opka release assets', () => {
     expect(Object.keys(release.on)).toEqual(['workflow_dispatch'])
     expect(release.jobs.admission.if).toBe("github.ref == 'refs/heads/main'")
     expect(release.jobs.qualification.uses).toBe('./.github/workflows/pr.yml')
-    expect(release.jobs.publish.needs).toBe('qualification')
+    expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
     expect(release.jobs.publish.permissions).toEqual({ contents: 'write' })
   })
 })

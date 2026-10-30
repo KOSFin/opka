@@ -1,3 +1,6 @@
+import type { AccountPoolAdmission } from '../../account-pool-admission'
+import { acquireAccountPoolAssignmentInTransaction } from '../account-pool-assignments'
+import { assertWorkerCapacity } from '../../worker-capacity-admission'
 import type { DispatchContextRow, TaskRow, WorkerDispatchRow } from '../../types'
 import { OrchestrationError } from '../../orchestration-error'
 import { ensureMutationReceiptCapacity } from '../../mutation-receipt-capacity'
@@ -23,6 +26,7 @@ export function createStartingWorkerDispatch(
     taskDeps?: string[]
     taskParentId?: string
     startOptions: unknown
+    accountPoolAdmission?: AccountPoolAdmission
     launchTokenHash?: string
     retryOf?: string
     runtimeEpoch?: string
@@ -41,6 +45,7 @@ export function createStartingWorkerDispatch(
     /** Who is dispatching, for nesting depth. Required so a new caller must decide. */
     creator: DispatchCreator
     maxDepth: number
+    maxConcurrentWorkers?: number | null
   }
 ): { dispatch: DispatchContextRow; worker: WorkerDispatchRow; task: TaskRow } {
   this.db.exec('BEGIN IMMEDIATE')
@@ -68,6 +73,9 @@ export function createStartingWorkerDispatch(
            ) VALUES (?, ?, ?, ?, 'pending')`
         )
         .run(receipt.callerFingerprint, receipt.requestId, receipt.method, receipt.payloadHash)
+    }
+    if (!params.federation) {
+      assertWorkerCapacity(this.db, params.maxConcurrentWorkers)
     }
     const task = params.taskId
       ? this.getTask(params.taskId)
@@ -132,6 +140,27 @@ export function createStartingWorkerDispatch(
     }
 
     const id = generateId('ctx')
+    const assignment = params.accountPoolAdmission
+      ? acquireAccountPoolAssignmentInTransaction(this.db, {
+          ...params.accountPoolAdmission,
+          ownerKey: `worker:${id}`
+        })
+      : undefined
+    const startOptions = assignment
+      ? {
+          ...Object(params.startOptions),
+          account: {
+            provider: assignment.provider,
+            id: assignment.accountId,
+            quotaIdentity: assignment.quotaIdentity
+          },
+          accountPool: {
+            id: assignment.poolId,
+            revision: assignment.policyRevision,
+            ownerKey: assignment.ownerKey
+          }
+        }
+      : params.startOptions
     const creatorDispatchId = this.resolveCreatorDispatchId(params.creator)
     if (params.mutationReceipt) {
       this.db
@@ -164,7 +193,7 @@ export function createStartingWorkerDispatch(
            dispatch_id, runtime_epoch, state, stage, start_options
          ) VALUES (?, ?, 'starting', 'accepted', ?)`
       )
-      .run(id, params.runtimeEpoch ?? null, JSON.stringify(params.startOptions))
+      .run(id, params.runtimeEpoch ?? null, JSON.stringify(startOptions))
     if (params.federation) {
       this.db
         .prepare(

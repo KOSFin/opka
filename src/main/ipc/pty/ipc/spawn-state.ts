@@ -1,3 +1,4 @@
+import type { PtyAccountPoolLaunch } from '../account-pool-launch'
 import type {
   IPtyProvider,
   PtySpawnOptions,
@@ -18,6 +19,8 @@ import type { AdoptStablePaneResult, PtySpawnIpcArgs, PtySpawnIpcDeps } from './
 import type { PaneAgentLaunch } from './spawn-agent-launch-end'
 
 export type PtyIpcSpawnState = {
+  accountPoolLaunch?: PtyAccountPoolLaunch
+  accountPoolSpawnAttempted?: boolean
   deps: PtySpawnIpcDeps
   args: PtySpawnIpcArgs
   spawnTiming: PtySpawnTiming

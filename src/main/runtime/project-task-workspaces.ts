@@ -23,7 +23,7 @@ export async function resolveProjectTaskWorkspace(
     throw new Error('Workspace host changed; refresh before writing project tasks')
   }
   requireLocalRuntimeFileRoute(target)
-  const root = await resolveRegisteredTaskRoot(runtime, selectedPath)
+  const root = await resolveRegisteredTaskRoot(runtime, selectedPath, target.worktree.repoId)
   let cache = workspaces.get(runtime)
   if (!cache) {
     cache = new Map()

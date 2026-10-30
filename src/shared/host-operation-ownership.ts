@@ -12,6 +12,7 @@ export type HostOperationOwnership = 'host' | 'credential' | 'client' | 'stream'
 /** By runtime RPC namespace; client effects by their preload API name. */
 export const HOST_OPERATION_OWNERSHIP = {
   accounts: 'host',
+  accountPool: 'host',
   agent: 'host',
   agentHooks: 'host',
   agentSession: 'host',

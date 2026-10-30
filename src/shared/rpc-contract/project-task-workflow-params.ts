@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ProjectTaskIdentity } from './project-task-params'
-import { WorkerStartParams } from './orchestration-worker-start-params'
+import { WorkerLaunchParams } from './orchestration-worker-start-params'
 
 export const ProjectTaskAction = ProjectTaskIdentity.extend({
   revision: z.string().regex(/^[a-f0-9]{64}$/),
@@ -19,7 +19,7 @@ export const ProjectTaskStop = ProjectTaskIdentity.extend({
   expectedExecutionHostId: z.string().min(1),
   dispatch: z.string().min(1).max(100)
 })
-export const ProjectTaskStart = ProjectTaskAction.extend({ launch: WorkerStartParams })
+export const ProjectTaskStart = ProjectTaskAction.extend({ launch: WorkerLaunchParams })
 export const ProjectTaskRename = ProjectTaskAction.extend({
   title: z.string().trim().min(1).max(200)
 })

@@ -1,3 +1,4 @@
+import type { StructuredAccountAcquisitionExited } from './structured-account-acquisition'
 // The one handler that ends a provider child's record, whether its exit was expected (a close this
 // host asked for) or not (the child died on its own). The exit was seen or proven first-hand, so
 // every step after it is bookkeeping: each is attempted and reported, none keeps the child on
@@ -64,6 +65,7 @@ export type StructuredAgentSessionGenerationEnded = (
 export type StructuredAgentSessionChildExitContext<
   TSession extends StructuredAgentSessionChildExitSession = StructuredAgentSessionHostSession
 > = {
+  accountAcquisitionExited?: StructuredAccountAcquisitionExited
   store: StructuredAgentSessionLeaseStore & StructuredAgentSessionLeftoverStore
   sessions: Map<string, TSession>
   flushLifecycle: (sessionId: string) => Promise<StructuredAgentSessionSinkBarrier>
@@ -145,6 +147,24 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
   const session = context.sessions.get(sessionId)
   if (!session || session.child !== child) {
     return
+  }
+  try {
+    const record = context.store.getRecord(sessionId)
+    await context.accountAcquisitionExited?.({
+      sessionId,
+      fence: child.fence,
+      generation: child.generation,
+      spawnToken:
+        record?.lease.runtimeFence === child.fence
+          ? (record.lease.ownerProcess?.spawnToken ?? null)
+          : null
+    })
+  } catch (error) {
+    context.logger.warn('account allocation exit settlement failed', {
+      scope: 'account-pool-exit',
+      sessionId,
+      error
+    })
   }
   const { expected } = exit
   const close = child.close

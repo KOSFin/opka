@@ -10,6 +10,7 @@ export type AppUpdateCheckResult =
 
 /** One install channel. Rejects when the channel could not be asked; never retries itself. */
 export type AppUpdateSource = {
+  isNewerVersion?: (candidate: string, installed: string) => boolean
   check(installedVersion: string, signal: AbortSignal): Promise<AppUpdateCheckResult>
 }
 

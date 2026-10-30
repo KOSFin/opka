@@ -73,6 +73,24 @@ function harness(opts: {
 const checks = (h: Harness) => vi.mocked(h.source.check).mock.calls.length
 
 describe('app update checker', () => {
+  it('a disabled channel never loads cached upstream updates, subscribes or schedules', async () => {
+    const h = harness({ stored: { latest: RELEASE_051 } })
+    const subscribe = vi.fn()
+    const timer = vi.fn()
+    const checker = createAppUpdateChecker({
+      ...h.deps,
+      source: null,
+      subscribeForeground: subscribe,
+      setTimer: timer
+    })
+    const stop = checker.start()
+    await checker.checkNow()
+    expect(subscribe).not.toHaveBeenCalled()
+    expect(timer).not.toHaveBeenCalled()
+    expect(checker.getSnapshot().available).toBeNull()
+    expect(h.source.check).not.toHaveBeenCalled()
+    stop()
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(T0)

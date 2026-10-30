@@ -36,9 +36,16 @@ jobs:
     with:
       release_version: ${{ inputs.version }}
 
+  android_update:
+    name: Verify Android update with the release identity
+    needs: admission
+    uses: ./.github/workflows/opka-android-update-acceptance.yml
+    with:
+      release_signer: true
+
   publish:
     name: Publish the complete verified beta
-    needs: qualification
+    needs: [qualification, android_update]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -46,6 +53,7 @@ jobs:
     env:
       OPKA_VERSION: ${{ inputs.version }}
       GH_TOKEN: ${{ github.token }}
+      OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256: ${{ vars.OPKA_ANDROID_CERTIFICATE_SHA256 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -55,6 +63,8 @@ jobs:
         with:
           name: opka-beta-release-${{ github.sha }}
           path: dist
+      - name: Require the user-owned Android signing identity
+        run: test -n "$OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256"
       - name: Recheck provenance and content before publication
         run: node config/scripts/opka-release-assets.mjs complete dist
       - name: Refuse replacing any existing tag or release
@@ -76,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "v$OPKA_VERSION" dist/* --target "$GITHUB_SHA" --draft --prerelease --title "Opka $OPKA_VERSION — unsigned Mac beta" --notes-file fork-docs/releases/beta-notes.md
+          gh release create "v$OPKA_VERSION" dist/* --target "$GITHUB_SHA" --draft --prerelease --title "Opka $OPKA_VERSION — Mac and Android beta" --notes-file fork-docs/releases/beta-notes.md
           gh release edit "v$OPKA_VERSION" --draft=false --prerelease --latest=false
       - name: Verify the remote release and immutable tag
         shell: bash

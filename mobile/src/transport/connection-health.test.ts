@@ -47,14 +47,14 @@ describe('classifyConnection Tailscale hint', () => {
     nowMs: 1_000_000
   }
 
-  it('adds the hint to the warning verdict for a tailnet CGNAT endpoint', () => {
+  it('does not infer a VPN vendor from a CGNAT endpoint', () => {
     const verdict = classifyConnection({
       ...base,
       reconnectAttempts: 3,
       endpoint: 'ws://100.65.9.106:6768',
       pendingPath: null
     })
-    expect(verdict).toMatchObject({ kind: 'warning', hint: 'check Tailscale' })
+    expect(verdict).toMatchObject({ kind: 'warning', hint: 'check VPN' })
   })
 
   it('adds the hint to the unreachable verdict for a MagicDNS endpoint', () => {

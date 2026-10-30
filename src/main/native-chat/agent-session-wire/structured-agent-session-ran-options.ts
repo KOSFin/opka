@@ -129,7 +129,7 @@ export async function recordStructuredAgentSessionRanOptions(
   }
   const models = await savedAgentSessionCatalogModels(context.deps, record.provider, sessionId)
   await store
-    .reviseSessionOptions(recordAgentSessionRanOptions, {
+    .reviseSessionRecord(recordAgentSessionRanOptions, {
       sessionId,
       fence: child.fence,
       model,

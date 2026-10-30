@@ -1,3 +1,7 @@
+import {
+  resolveWorkerCodexLaunchHome,
+  WORKER_CODEX_ACCOUNT_ENV
+} from '../../codex-accounts/worker-account-home'
 // The env a new PTY starts with and the Codex home it runs, for both the window and the host spawn lane.
 
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
@@ -98,6 +102,14 @@ type PtySpawnHostEnvArgs = {
 
 export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise<PtySpawnHostEnv> {
   const { deps, codexSelectionTarget: target } = args
+  const workerHome = () =>
+    resolveWorkerCodexLaunchHome({
+      env: args.env,
+      agent: args.launchAgent,
+      runtime: target.runtime ?? 'host',
+      accounts: deps.getSettings?.()?.codexManagedAccounts
+    })
+  const explicitWorkerHome = workerHome()
   const codexResumePreparation = args.preAdopted
     ? null
     : deps.prepareCodexResumeHome({
@@ -120,7 +132,9 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
   const baseEnv = deps.stripSequencedStartupResumeArgv(args.env, codexResumeLaunch)
   const launchesCodex = args.launchAgent === 'codex'
   const selectLaunchCodexHome = async (): Promise<string | null> =>
-    (await deps.getSelectedCodexHomePath?.(target, baseEnv, { launchesCodex })) ?? null
+    explicitWorkerHome ??
+    (await deps.getSelectedCodexHomePath?.(target, baseEnv, { launchesCodex })) ??
+    null
   let selectedCodexHomePath = !args.preAdopted
     ? getCompatibleSelectedCodexHomePath(
         target,
@@ -135,7 +149,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
     const resolution = resolveCodexHomeAfterManagedAuthReadiness({
       selectedCodexHomePath,
       getSettings: () => deps.getSettings?.(),
-      requiredCodexHomePath: codexResumeHome?.codexHomePath,
+      requiredCodexHomePath: explicitWorkerHome ?? codexResumeHome?.codexHomePath,
       target,
       resolveCurrent: async () =>
         getCompatibleSelectedCodexHomePath(
@@ -167,7 +181,8 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
     env: baseEnv,
     selectedCodexHomePath,
     codexResumeHomeSelected: Boolean(
-      codexResumeHome && codexHomePathsEqual(selectedCodexHomePath, codexResumeHome.codexHomePath)
+      explicitWorkerHome ||
+      (codexResumeHome && codexHomePathsEqual(selectedCodexHomePath, codexResumeHome.codexHomePath))
     ),
     skipCodexHomeEnv,
     stripInheritedOrcaCodexHome:
@@ -185,6 +200,12 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
     args.preAdopted ||
     (args.emptySessionIdSkipsHostEnv && !sessionId)
   ) {
+    if (explicitWorkerHome) {
+      workerHome()
+    }
+    if (hostEnv.env) {
+      delete hostEnv.env[WORKER_CODEX_ACCOUNT_ENV]
+    }
     return hostEnv
   }
   if (sessionId === undefined) {
@@ -241,6 +262,9 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       getRuntimeSourceStamp(deps.runtime, getAppEnvironment().getPath('userData'))
     )
     promoteAgentTeamsShimPath(env, args.requestedAgentTeamsPath)
+    if (explicitWorkerHome) {
+      workerHome()
+    }
   } catch (err) {
     // Why: host-env setup has fs side-effects (hooks, Pi/OMP install); only a minted id's state is ours to clear.
     if (args.mintedSessionId) {
@@ -248,5 +272,6 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
     }
     throw err
   }
+  delete env[WORKER_CODEX_ACCOUNT_ENV]
   return { ...hostEnv, env }
 }

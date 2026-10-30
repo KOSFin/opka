@@ -10,7 +10,12 @@ export abstract class OrcaRuntimeWithStopExactTerminalsForWorktree extends OrcaR
   async stopExactTerminalsForWorktree(
     worktreeSelector: string,
     expectedPtyIds: readonly string[],
-    opts: { keepHistory?: boolean; targetOnly?: boolean } = {}
+    opts: {
+      keepHistory?: boolean
+      targetOnly?: boolean
+      expectedIncarnationId?: string
+      beforeStop?: () => void
+    } = {}
   ): Promise<{
     stopped: number
     stoppedPtyIds: string[]
@@ -60,6 +65,13 @@ export abstract class OrcaRuntimeWithStopExactTerminalsForWorktree extends OrcaR
         : null
       let stopped = false
       try {
+        if (
+          opts.expectedIncarnationId !== undefined &&
+          this.ptysById.get(ptyId)?.incarnationId !== opts.expectedIncarnationId
+        ) {
+          throw new Error('terminal_stop_incarnation_changed')
+        }
+        opts.beforeStop?.()
         stopped = await this.ptyController.stopAndWait(ptyId, { keepHistory: opts.keepHistory })
       } finally {
         settleStop?.(stopped)

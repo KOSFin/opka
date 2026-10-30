@@ -322,7 +322,7 @@ export class AgentSessionRecordStore {
 
   /** One options revision from `agent-session-record-options`, decided against the record this
    *  ordered write holds. */
-  reviseSessionOptions = <A extends { sessionId: string }>(
+  reviseSessionRecord = <A extends { sessionId: string }>(
     revise: (record: AgentSessionRecord, args: A) => AgentSessionRecord,
     args: A
   ) => this.mutate(args.sessionId, (record) => revise(record, args))

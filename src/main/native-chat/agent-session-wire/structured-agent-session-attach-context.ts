@@ -1,3 +1,4 @@
+import type { NativeAccountRotationBoundary } from './structured-account-acquisition'
 // What attaching needs from the host, named explicitly.
 //
 // Passing the host itself would let this quietly grow new dependencies; an explicit context makes
@@ -19,6 +20,7 @@ import type { StructuredAgentSessionTaskQueue } from './structured-agent-session
 import type { StructuredAgentSessionConversationOpenOptions } from './structured-agent-session-conversation-open'
 
 export type StructuredAgentSessionAttachContext = {
+  readAccountRotationBoundary?: (sessionId: string) => NativeAccountRotationBoundary
   deps: StructuredAgentSessionHostDeps
   runtimeState: StructuredAgentSessionHostRuntimeState
   sessions: Map<string, StructuredAgentSessionHostSession>

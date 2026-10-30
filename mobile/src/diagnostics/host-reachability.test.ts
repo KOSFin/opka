@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { formatEndpoint, testHostReachability, unreachableHostDetail } from './host-reachability'
 
 describe('unreachableHostDetail', () => {
-  it('points at Tailscale for tailnet CGNAT endpoints', () => {
+  it('points at a generic VPN for shared CGNAT endpoints', () => {
     expect(unreachableHostDetail('ws://100.65.9.106:6768')).toBe(
-      'Cannot reach 100.65.9.106:6768 — check Tailscale'
+      'Cannot reach 100.65.9.106:6768 — check VPN'
     )
   })
 

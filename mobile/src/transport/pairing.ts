@@ -22,7 +22,7 @@ export function decodePairingUrl(url: string): PairingOffer | null {
 // accept the same URL shapes.
 export function extractPairingCodeFromUrl(url: string): string | null {
   const trimmed = url.trim()
-  const match = /^orca:\/\/([^/?#]*)([^?#]*)?/i.exec(trimmed)
+  const match = /^(?:orca|opka):\/\/([^/?#]*)([^?#]*)?/i.exec(trimmed)
   if (!match) {
     return null
   }
@@ -58,7 +58,7 @@ export function parsePairingCode(input: string): PairingOffer | null {
     return null
   }
   try {
-    if (/^orca:\/\//i.test(trimmed)) {
+    if (/^(?:orca|opka):\/\//i.test(trimmed)) {
       return decodePairingUrl(trimmed)
     }
     return decodePairingBase64(trimmed)

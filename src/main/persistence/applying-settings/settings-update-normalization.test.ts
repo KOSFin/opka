@@ -144,3 +144,22 @@ describe('updateSettings scoped chat defaults', () => {
     ).toEqual({ codex: 'auto' })
   })
 })
+
+describe('updateSettings maxConcurrentWorkers', () => {
+  it('persists an explicit limit and a null clear without creating a default', () => {
+    const operations = settingsOperations({})
+    expect(updateSettings(operations, {}).maxConcurrentWorkers).toBeUndefined()
+    expect(updateSettings(operations, { maxConcurrentWorkers: 5 }).maxConcurrentWorkers).toBe(5)
+    expect(
+      updateSettings(operations, { maxConcurrentWorkers: null }).maxConcurrentWorkers
+    ).toBeNull()
+  })
+  it('rejects an invalid limit before changing the existing operator limit', () => {
+    const operations = settingsOperations({ maxConcurrentWorkers: 3 })
+    expect(() => updateSettings(operations, { maxConcurrentWorkers: 0 })).toThrow(
+      /positive integer/
+    )
+    expect(operations.state.settings.maxConcurrentWorkers).toBe(3)
+    expect(operations.scheduleSave).not.toHaveBeenCalled()
+  })
+})

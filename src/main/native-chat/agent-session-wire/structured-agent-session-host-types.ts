@@ -1,3 +1,8 @@
+import type {
+  PrepareStructuredAccountAcquisition,
+  NativeAccountRotationBoundary,
+  StructuredAccountAcquisitionExited
+} from './structured-account-acquisition'
 import type { StructuredAgentSessionStatusObserverOptions } from './structured-agent-session-status-observation'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
 import type { AgentSessionOwnerProbe } from '../../../shared/agent-session-lease-adjudication'
@@ -125,6 +130,12 @@ export type StructuredAgentSessionHostSession = {
 
 export type StructuredAgentSessionHostDeps = {
   store: AgentSessionRecordStore
+  shouldRestForAccountRotation?: (
+    record: AgentSessionRecord,
+    boundary: NativeAccountRotationBoundary
+  ) => boolean | Promise<boolean>
+  prepareAccountAcquisition?: PrepareStructuredAccountAcquisition
+  accountAcquisitionExited?: StructuredAccountAcquisitionExited
   adapter: StructuredAgentSessionAdapter
   /** The agents this runtime drives; what each declares is read here, never from the adapter. */
   agents: StructuredAgentRegistry

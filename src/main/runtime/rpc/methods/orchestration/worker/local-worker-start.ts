@@ -1,3 +1,6 @@
+import { prepareWorkerPoolAdmission, fixedWorkerPoolParams } from './worker-pool-preflight'
+import { workerStartOptions } from './worker-start-options'
+import { prepareWorkerAccountEnv } from './worker-account-preflight'
 import { probeWorkerOpenCodeModelLaunchSupport } from './worker-opencode-model-preflight'
 import { resolveWorkerConfiguredAgentParams } from './worker-configured-agent-preflight'
 import { waitForWorkerAgentReady } from '../../../../launched-agent-composer-readiness'
@@ -52,7 +55,7 @@ export async function startLocalWorker(args: {
   const { runtime, db, run, coordinator, callerSession, existingTask, orchestrationMutation } = args
   // `--terminal` names a party: a chat by its `/clear` root address, as its Dispatch does.
   const terminal = args.params.terminal && resolveDispatchAssigneeParty(args.params.terminal, db)
-  const params = terminal ? { ...args.params, terminal: terminal.address } : args.params
+  let params = terminal ? { ...args.params, terminal: terminal.address } : args.params
   const chat = terminal ? chatAssigneeOf(terminal) : null
   const requestedWorktree = params.worktree ?? 'current'
   const createsWorktree = requestedWorktree === 'new-child' || requestedWorktree === 'new-top-level'
@@ -126,27 +129,15 @@ export async function startLocalWorker(args: {
   const hostMode = resolveWorkerStartModeOnHost(runtime, args.mode, resolvedWorktree?.id, agent)
   let mode = chatWorkerMode(await hostMode, chat)
 
-  const startOptions = {
-    worktree: requestedWorktree,
-    mode,
-    resolvedWorktreeId: resolvedWorktree?.id ?? null,
-    name: params.name ?? null,
-    repo: params.repo ?? creationWorktree?.repoId ?? null,
-    baseBranch: params.baseBranch ?? null,
-    terminal: params.terminal ?? null,
-    agent: agent ?? null,
-    launch: launch.receipt,
-    timeoutMs: params.timeoutMs ?? 60_000,
-    setup: createsWorktree ? (params.setup ?? 'run') : 'not_applicable',
-    setupSource: createsWorktree
-      ? params.setup
-        ? 'explicit_request'
-        : 'orchestration_default'
-      : 'existing_worktree'
-  }
+  const accountTarget = resolvedWorktree ?? creationWorktree
+  const accountPoolAdmission = prepareWorkerPoolAdmission(runtime, params)
+  let accountEnv = await prepareWorkerAccountEnv(runtime, params, mode, accountTarget)
+
   const started = db.createStartingWorkerDispatch({
     creator: resolveDispatchCreator(runtime, params.from, callerSession),
     maxDepth: runtime.getNestedWorkerMaxDepth(),
+    maxConcurrentWorkers: runtime.getMaxConcurrentWorkers(),
+    accountPoolAdmission,
     taskId: existingTask?.id,
     taskSpec: params.spec,
     taskTitle: params.taskTitle,
@@ -161,7 +152,16 @@ export async function startLocalWorker(args: {
       : undefined,
     taskCreatedByRunGeneration: run.consumer_generation,
     retryOf: params.retryOf,
-    startOptions,
+    startOptions: workerStartOptions({
+      params,
+      mode,
+      requestedWorktree,
+      resolvedWorktreeId: resolvedWorktree?.id,
+      creationRepoId: creationWorktree?.repoId,
+      agent,
+      launch: launch.receipt,
+      createsWorktree
+    }),
     runtimeEpoch: runtime.getRuntimeId(),
     mutationReceipt: orchestrationMutation
   })
@@ -178,7 +178,12 @@ export async function startLocalWorker(args: {
   let placed: Awaited<ReturnType<typeof placeWorkerAgent>> | undefined
   let failedStage = 'terminal_create'
   try {
+    if (accountPoolAdmission) {
+      params = fixedWorkerPoolParams(started.worker.start_options, params)
+      accountEnv = await prepareWorkerAccountEnv(runtime, params, mode, accountTarget)
+    }
     placed = await placeWorkerAgent({
+      accountEnv,
       runtime,
       db,
       dispatchId: started.dispatch.id,

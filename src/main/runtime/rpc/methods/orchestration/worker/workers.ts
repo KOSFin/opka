@@ -32,6 +32,16 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
         projectTaskAdmission
       }
     ) => {
+      if (
+        params.accountId &&
+        (params.on || params.terminal || (params.agent !== 'codex' && params.agent !== 'claude'))
+      ) {
+        throw new OrchestrationError(
+          'worker_account_unsupported',
+          'Explicit accounts require a new Claude or Codex terminal on this execution host; federation, reused terminals and other providers are not supported yet.',
+          { effectsApplied: false }
+        )
+      }
       if (!isWorkerStartTimeoutWithinTimerLimit(params.timeoutMs)) {
         throw new OrchestrationError(
           'invalid_argument',

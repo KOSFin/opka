@@ -1,3 +1,7 @@
+import {
+  resolveWorkerCodexAccountHome,
+  WORKER_CODEX_ACCOUNT_ENV
+} from '../../codex-accounts/worker-account-home'
 import { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { splitWorktreeIdForFilesystem, worktreeIdentityKey } from '../../../shared/worktree/id'
@@ -13,6 +17,7 @@ import type {
   WorktreeLineageResolution
 } from '../runtime-worktree-lineage-resolution'
 import type { OrchestrationDb } from '../orchestration/db/orchestration-db'
+import { resolveWorkerConcurrencyLimit } from '../../../shared/worker-concurrency-limit'
 import { resolveNestedWorkerMaxDepth } from '../../../shared/nested-worker-depth'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../shared/worktree/lineage-types'
 import type { WorkspaceKey } from '../../../shared/folder-workspace-types'
@@ -136,6 +141,18 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
 
   protected getOrchestrationDbIfAvailable(): OrchestrationDb | null {
     return this._orchestrationDb
+  }
+
+  getWorkerCodexAccountEnv(accountId: string): Record<string, string> {
+    const home = resolveWorkerCodexAccountHome(
+      this.store?.getSettings?.()?.codexManagedAccounts,
+      accountId
+    )
+    return { CODEX_HOME: home, [WORKER_CODEX_ACCOUNT_ENV]: accountId }
+  }
+
+  getMaxConcurrentWorkers(): number | undefined {
+    return resolveWorkerConcurrencyLimit(this.store?.getSettings?.()?.maxConcurrentWorkers)
   }
 
   getNestedWorkerMaxDepth(): number {

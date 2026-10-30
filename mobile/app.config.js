@@ -11,8 +11,31 @@
 const APS_ENVIRONMENT =
   process.env.ORCA_IOS_APS_ENVIRONMENT === 'production' ? 'production' : 'development'
 
+const opkaVersionCode = require('./scripts/opka-version-code.cjs')
+const opkaBuild = process.env.OPKA_MOBILE_BUILD === '1'
+
 module.exports = ({ config }) => ({
   ...config,
+  ...(opkaBuild
+    ? {
+        ...(process.env.OPKA_VERSION ? { version: process.env.OPKA_VERSION } : {}),
+        name: 'Opka',
+        slug: 'opka-mobile',
+        scheme: 'opka',
+        android: {
+          ...config.android,
+          package: 'com.kosfin.opka.mobile',
+          permissions: [
+            ...(config.android?.permissions ?? []),
+            'android.permission.REQUEST_INSTALL_PACKAGES'
+          ],
+          ...(process.env.OPKA_VERSION
+            ? { versionCode: opkaVersionCode(process.env.OPKA_VERSION) }
+            : {}),
+          googleServicesFile: undefined
+        }
+      }
+    : {}),
   ios: {
     ...config.ios,
     entitlements: { ...config.ios?.entitlements, 'aps-environment': APS_ENVIRONMENT }

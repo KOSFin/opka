@@ -1,3 +1,7 @@
+import {
+  createNativeAccountPoolService,
+  type NativeAccountPoolRuntime
+} from './native-account-pool-service'
 // Where the structured agent-session wire becomes a live host on this runtime.
 //
 // Built on the first `agentSession.*` call rather than at startup: the record
@@ -84,6 +88,7 @@ export function hasPersistedStructuredAgentSessionStore(
 export type StructuredAgentSessionRuntimeDeps = StructuredAgentSessionTransportOverrides & {
   /** Host state root. The record store and the journal database both hang off it. */
   stateDirectory: string
+  accountPoolRuntime?: NativeAccountPoolRuntime
   /** Execution host this runtime *is*. A record pinned elsewhere is not ours to
    *  probe and not ours to spawn for. */
   hostId: string
@@ -299,7 +304,13 @@ async function installOnJournal(
   const adapter = new StructuredAgentSessionAdapterRouter(agents, async () => {
     await Promise.all(registrations.map((registration) => registration.adapter.closeAll()))
   })
+  const accountPools = deps.accountPoolRuntime
+    ? createNativeAccountPoolService({ runtime: deps.accountPoolRuntime, store })
+    : undefined
   host = new StructuredAgentSessionHost({
+    shouldRestForAccountRotation: accountPools?.shouldRestForAccountRotation,
+    prepareAccountAcquisition: accountPools?.prepareAccountAcquisition,
+    accountAcquisitionExited: accountPools?.accountAcquisitionExited,
     store,
     adapter,
     agents,

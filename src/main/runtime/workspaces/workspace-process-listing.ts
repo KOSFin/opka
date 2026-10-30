@@ -248,6 +248,11 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       )
     )
     await installStructuredAgentSessionHost({
+      accountPoolRuntime: {
+        requireStore: () => this.requireStore(),
+        getAccountsSnapshot: () => this.accounts.getSnapshot(),
+        getOrchestrationDb: () => this.getOrchestrationDb()
+      },
       stateDirectory: getProfileUserDataPath(),
       hostId: LOCAL_EXECUTION_HOST_ID,
       claimKeyId: this.agentSessionClaimSigner.keyId,

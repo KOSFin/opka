@@ -14,6 +14,7 @@ import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { WorkerEffect, WorkerSetupReceipt } from './worker-topology'
 
 export async function createWorkerWorktree(args: {
+  accountEnv?: Record<string, string>
   runtime: OrcaRuntimeService
   db: OrchestrationDb
   dispatchId: string
@@ -69,6 +70,7 @@ export async function createWorkerWorktree(args: {
       ? {
           startupAgent: args.agent,
           startupLaunchSource: 'orchestration',
+          ...(args.accountEnv ? { startupAccountEnv: args.accountEnv } : {}),
           ...(args.launchPreferences ? { startupLaunchPreferences: args.launchPreferences } : {})
         }
       : {}),
@@ -144,4 +146,12 @@ export async function createWorkerWorktree(args: {
     terminalHandle,
     setupReceipt
   }
+}
+
+export function workerSetupSource(createsWorktree: boolean, setup: string | undefined): string {
+  return !createsWorktree
+    ? 'existing_worktree'
+    : setup
+      ? 'explicit_request'
+      : 'orchestration_default'
 }

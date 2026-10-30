@@ -1,3 +1,7 @@
+import type {
+  PrepareStructuredAccountAcquisition,
+  NativeAccountRotationBoundary
+} from './structured-account-acquisition'
 import { refuse } from '../../../shared/agent-session-wire-refusals'
 import {
   settlePostAcquisitionAttachFailure,
@@ -63,6 +67,8 @@ export type AttachedOwner = 'acquired' | 'kept' | 'none'
 
 export type AttachFlowInput = {
   store: AgentSessionRecordStore
+  prepareAccountAcquisition?: PrepareStructuredAccountAcquisition
+  readAccountRotationBoundary?: () => NativeAccountRotationBoundary | undefined
   adapter: StructuredAgentSessionAdapter
   /** What decides whether this build may start a record's agent at all (`agentDrivesSession`). */
   agents: Pick<StructuredAgentRegistry, 'definition'>

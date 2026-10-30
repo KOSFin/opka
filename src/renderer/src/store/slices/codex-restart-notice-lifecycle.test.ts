@@ -90,6 +90,27 @@ describe('codex restart notice lifecycle', () => {
     })
   })
 
+  it('invalidates an accepted restart when its target changes before execution', () => {
+    switchAccount('pty-1', A, B)
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
+    switchAccount('pty-1', B, C)
+
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
+    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+      previousAccountLabel: A,
+      nextAccountLabel: C
+    })
+  })
+
+  it('keeps an accepted restart when the target is merely re-announced', () => {
+    switchAccount('pty-1', A, B)
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
+    switchAccount('pty-1', B, B)
+
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ 'pty-1': 'codex' })
+    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']?.restartRequested).toBe(true)
+  })
+
   it('drops a queued restart when the user dismisses the same pane', () => {
     switchAccount('pty-1', A, B)
     useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
@@ -177,6 +198,24 @@ describe('codex restart notices with colliding account labels', () => {
       }
     ])
   }
+
+  it.each(['account-c', null])(
+    'invalidates the accepted target by id when changed to %s',
+    (target) => {
+      switchAccountById('pty-1', 'account-a', 'account-b')
+      useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
+      switchAccountById('pty-1', 'account-b', target)
+
+      expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
+      expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toMatchObject({
+        previousAccountId: 'account-a',
+        nextAccountId: target
+      })
+      expect(
+        useAppStore.getState().codexRestartNoticeByPtyId['pty-1']?.restartRequested
+      ).toBeUndefined()
+    }
+  )
 
   it('raises the prompt for two different accounts that read the same', () => {
     switchAccountById('pty-1', 'account-a', 'account-b')

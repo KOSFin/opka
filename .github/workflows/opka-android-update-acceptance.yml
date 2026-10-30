@@ -1,0 +1,158 @@
+name: Opka Android OS update acceptance
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'config/scripts/opka-android*'
+      - 'config/scripts/opka_android_published_update*.py'
+      - 'config/scripts/opka_android_handoff_status.py'
+      - 'config/scripts/build-android-update-handoff.py'
+      - 'config/android-update-handoff/**'
+      - '.github/workflows/opka-android-update-acceptance.yml'
+  workflow_call:
+    inputs:
+      release_signer:
+        type: boolean
+        default: false
+      published_version:
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      release_signer:
+        description: Use the protected Opka release identity instead of a disposable CI identity
+        type: boolean
+        default: false
+      published_version:
+        description: Published beta to download through the existing app UI (requires release_signer)
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: opka-android-os-update-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+  ORCA_TELEMETRY_DISABLED: '1'
+  OPKA_MOBILE_BUILD: '1'
+  EXPO_NO_TELEMETRY: '1'
+  HUSKY: '0'
+jobs:
+  update_confirmation:
+    name: Opka Android installer confirmation and retained state
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    environment: ${{ github.event_name != 'pull_request' && inputs.release_signer && 'opka-android-release' || 'opka-android-ci' }}
+    env:
+      PUBLISHED_VERSION: ${{ inputs.published_version || '' }}
+      RELEASE_SIGNER: ${{ github.event_name != 'pull_request' && inputs.release_signer || false }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate published-channel scope
+        run: python3 -c 'import os,re; v=os.environ["PUBLISHED_VERSION"]; assert not v or (os.environ["RELEASE_SIGNER"] == "true" and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*",v)), "Published acceptance requires release_signer and a beta version"'
+      - name: Validate published download argument contract offline
+        run: python3 config/scripts/opka_android_published_update_test.py
+      - uses: ./.github/actions/install-node-dependencies
+      - uses: ./.github/actions/install-mobile-dependencies
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Fingerprint Android fixture inputs
+        id: fixture_key
+        shell: bash
+        run: |
+          set -euo pipefail
+          input_hash="$(git ls-tree HEAD -- mobile src/shared src/packages config/patches package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc .github/actions .github/workflows/opka-android-update-acceptance.yml | sha256sum | cut -d ' ' -f 1)"
+          echo "key=opka-android-fixtures-r5-r6-v1-$RUNNER_OS-$RUNNER_ARCH-$input_hash" >> "$GITHUB_OUTPUT"
+      - name: Restore unsigned Android fixtures
+        id: fixture_cache
+        uses: actions/cache/restore@v5
+        with:
+          path: out/android-update-fixtures/*-unsigned.apk
+          key: ${{ steps.fixture_key.outputs.key }}
+      - name: Build diagnostic APKs from current Android inputs
+        if: steps.fixture_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/android-update-fixtures
+          for rc in 5 6; do
+            export OPKA_VERSION="1.4.236-rc.$rc"
+            (cd mobile && pnpm exec expo prebuild --platform android --no-install)
+            (cd mobile/android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m)
+            cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/android-update-fixtures/rc$rc-unsigned.apk"
+          done
+      - name: Save unsigned Android fixtures
+        if: steps.fixture_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: out/android-update-fixtures/*-unsigned.apk
+          key: ${{ steps.fixture_key.outputs.key }}
+      - name: Build CI-only target-UID installer handoff
+        run: python3 config/scripts/build-android-update-handoff.py
+      - name: Sign both versions with one identity and verify it
+        shell: bash
+        env:
+          RELEASE_SIGNER: ${{ github.event_name != 'pull_request' && inputs.release_signer || false }}
+          OPKA_ANDROID_KEYSTORE_BASE64: ${{ secrets.OPKA_ANDROID_KEYSTORE_BASE64 }}
+          OPKA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.OPKA_ANDROID_KEYSTORE_PASSWORD }}
+          OPKA_ANDROID_CERTIFICATE_SHA256: ${{ vars.OPKA_ANDROID_CERTIFICATE_SHA256 }}
+        run: |
+          set -euo pipefail
+          set +x
+          signing_store="$RUNNER_TEMP/opka-update-acceptance.jks"
+          trap 'rm -f "$signing_store"' EXIT
+          if [ "$RELEASE_SIGNER" = true ]; then
+            [ -n "$OPKA_ANDROID_KEYSTORE_BASE64" ] && [ -n "$OPKA_ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$OPKA_ANDROID_CERTIFICATE_SHA256" ]
+            python3 -c 'import base64,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"opka-update-acceptance.jks"; p.write_bytes(base64.b64decode(os.environ["OPKA_ANDROID_KEYSTORE_BASE64"],validate=True)); p.chmod(0o600)'
+          else
+            export OPKA_ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
+            keytool -genkeypair -keystore "$signing_store" -alias opka-beta -storetype JKS -keyalg RSA -keysize 3072 -validity 10 -dname 'CN=Opka CI Test' -storepass:env OPKA_ANDROID_KEYSTORE_PASSWORD -keypass:env OPKA_ANDROID_KEYSTORE_PASSWORD
+          fi
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          for rc in 5 6; do
+            "$apksigner" sign --ks "$signing_store" --ks-key-alias opka-beta --ks-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --key-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --out "out/android-update-fixtures/rc$rc.apk" "out/android-update-fixtures/rc$rc-unsigned.apk"
+            certificate="$("$apksigner" verify --verbose --print-certs "out/android-update-fixtures/rc$rc.apk" | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
+            if [ "$RELEASE_SIGNER" = true ]; then
+              [ "$certificate" = "$OPKA_ANDROID_CERTIFICATE_SHA256" ]
+            fi
+            if [ "$rc" = 5 ]; then first_certificate="$certificate"; else [ "$certificate" = "$first_certificate" ]; fi
+          done
+          "$apksigner" sign --ks "$signing_store" --ks-key-alias opka-beta --ks-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --key-pass env:OPKA_ANDROID_KEYSTORE_PASSWORD --out out/android-update-handoff/handoff.apk out/android-update-handoff/handoff-aligned.apk
+          handoff_certificate="$("$apksigner" verify --print-certs out/android-update-handoff/handoff.apk | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
+          [ "$handoff_certificate" = "$first_certificate" ]
+          printf '%s\n' "$RELEASE_SIGNER" > out/android-update-fixtures/release-signer.txt
+      - name: Require KVM acceleration
+        run: |
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Exercise Android confirmation and data retention
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel
+          cores: 2
+          ram-size: 2048M
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on
+          script: python3 config/scripts/opka-android-update-acceptance-entry.py
+      - name: Save acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: opka-android-os-update-${{ github.sha }}
+          path: |
+            out/android-update-acceptance/
+            out/android-update-fixtures/release-signer.txt
+          if-no-files-found: warn
+          retention-days: 14

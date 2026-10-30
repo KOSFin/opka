@@ -1,4 +1,4 @@
-import { isTailscaleEndpoint } from '../../../src/shared/remote-runtime-tailscale-hint'
+import { endpointOverlayLabel } from '../../../src/shared/remote-runtime-tailscale-hint'
 import type { RelayHostReachability } from './relay-host-reachability'
 import type { MobileConnectionPath } from './stable-logical-rpc-client'
 import type { ConnectionState } from './types'
@@ -23,12 +23,6 @@ import type { ConnectionState } from './types'
 const WARNING_ATTEMPTS = 3
 const UNREACHABLE_ATTEMPTS = 12
 const STALE_SINCE_LAST_CONNECT_MS = 60_000
-
-// Why: a repeatedly-unreachable 100.x/*.ts.net endpoint almost always means
-// the phone's Tailscale tunnel is down or wedged (a known iOS failure mode
-// that only a manual toggle fixes) — not that the desktop moved. Say so
-// instead of leaving the user staring at a generic "Can't connect".
-const TAILSCALE_HINT = 'check Tailscale'
 
 // Label + second line per relay verdict, and the severity each one earns. No
 // Tailscale hint on any of these: it would be wrong advice for a desktop that is
@@ -105,7 +99,8 @@ export function classifyConnection(args: {
 }): ConnectionVerdict {
   const { state, reconnectAttempts, lastConnectedAt } = args
   const now = args.nowMs ?? Date.now()
-  const hint = isTailscaleEndpoint(args.endpoint) ? TAILSCALE_HINT : undefined
+  const overlay = endpointOverlayLabel(args.endpoint)
+  const hint = overlay ? `check ${overlay}` : undefined
   const host = args.hostName?.trim() || 'Host'
   const staleReason = lastConnectedAt == null ? 'never-connected' : 'stale'
 

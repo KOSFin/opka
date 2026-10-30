@@ -1,3 +1,4 @@
+import type { NativeAccountRotationBoundary } from './structured-account-acquisition'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import { AgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-work-evidence'
@@ -114,6 +115,58 @@ export class StructuredAgentSessionClientDelivery {
   readStopping = (sessionId: string): boolean => {
     const projection = this.statusFeed.journalProjection(sessionId)
     return projection?.stopping === true && projection.state.summary.status === 'working'
+  }
+
+  readAccountRotationBoundary = (sessionId: string): NativeAccountRotationBoundary => {
+    const projection = this.statusFeed.journalProjection(sessionId)
+    const request = projection?.state.latestRequest
+    const session = this.sessions.get(sessionId)
+    const work = session
+      ? heldStructuredAgentSessionCurrentWork(
+          this.deps().store,
+          sessionId,
+          session.journal,
+          session
+        )
+      : null
+    const childrenSettled = !this.childWorkOpen(sessionId) && !this.childWorkIncomplete(sessionId)
+    const revision = session?.operationalRevision
+    const cursor = session?.journal.cursor()
+    return {
+      assertCurrent: () => {
+        const current = this.sessions.get(sessionId)
+        const latest = current?.journal.cursor()
+        if (
+          current !== session ||
+          current?.operationalRevision !== revision ||
+          latest?.epoch !== cursor?.epoch ||
+          latest?.sequence !== cursor?.sequence
+        ) {
+          throw new Error('Native account boundary changed during preparation')
+        }
+      },
+      lastCompletedTurn:
+        request?.kind === 'turn' &&
+        request.turnState === 'completed' &&
+        (request.outcome === 'success' || request.outcome === 'failure')
+          ? { id: request.id, outcome: request.outcome }
+          : null,
+      childrenSettled,
+      canRest: Boolean(
+        work &&
+        !work.working() &&
+        !work.hasActionablePrompt() &&
+        !projection?.stopping &&
+        childrenSettled
+      ),
+      canRotate: Boolean(
+        work &&
+        !work.activeTurn() &&
+        !work.hasActionablePrompt() &&
+        !projection?.stopping &&
+        childrenSettled
+      )
+    }
   }
 
   readChildWork = (sessionId: string): AgentChildWorkView[] | undefined =>
