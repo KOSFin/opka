@@ -21,7 +21,7 @@ import type {
 
 export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnected {
   protected abstract pruneDisconnectedPtyRecords(): void
-  abstract getExistingOrchestrationDb(): OrchestrationDb | null
+  declare getExistingOrchestrationDb: () => OrchestrationDb | null
 
   protected abstract failActiveDispatchOnExit(
     handle: string,

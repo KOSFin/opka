@@ -17,7 +17,8 @@ export function accountPoolRotationBoundary(args: {
   if (policy.strategy === 'manual' || policy.rotation === 'off' || !row) {
     return null
   }
-  const completedAt = row.turnCompletedAt
+  // Plain CLI Stop hooks report idle without a verdict or a child-gated completion stamp.
+  const completedAt = row.turnCompletedAt ?? row.mainAgent?.stateStartedAt
   if (
     row.observation?.origin !== 'hook' ||
     row.observation.kind !== 'transition' ||
@@ -33,7 +34,8 @@ export function accountPoolRotationBoundary(args: {
     row.agentType !== policy.provider ||
     row.state !== 'done' ||
     row.mainAgent?.state !== 'done' ||
-    !['success', 'failure'].includes(row.mainAgent.outcome ?? '') ||
+    (row.mainAgent.outcome !== undefined &&
+      !['success', 'failure'].includes(row.mainAgent.outcome)) ||
     !row.providerSession ||
     row.claudeTaskWakeupPending ||
     completedAt === undefined ||

@@ -97,7 +97,7 @@ describe('account pool automatic rotation boundary', () => {
     expect(accountPoolRotationBoundary({ ...fixture(), executionId: 'other' })).toBeNull()
     expect(accountPoolRotationBoundary({ ...fixture(), lastRotatedTurn: 2000 })).toBeNull()
   })
-  it('rejects unknown child inventory, pending approval and absent completion clock', () => {
+  it('rejects unknown child inventory, pending approval and invalid idle clock', () => {
     const f = fixture()
     f.children = undefined
     expect(accountPoolRotationBoundary(f)).toBeNull()
@@ -106,6 +106,8 @@ describe('account pool automatic rotation boundary', () => {
     expect(accountPoolRotationBoundary(f)).toBeNull()
     f.row.state = 'done'
     f.row.turnCompletedAt = undefined
+    expect(accountPoolRotationBoundary(f)).toBe(2000)
+    f.row.mainAgent = { state: 'done', stateStartedAt: Number.NaN }
     expect(accountPoolRotationBoundary(f)).toBeNull()
   })
   it('does not infer a rotation from unknown quota or unsuccessful cancellation', () => {

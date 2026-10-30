@@ -4,6 +4,18 @@ import { isDirectInvocation } from './script-entry-detection.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 export const FORK_TEST_FILTERS = [
+  'src/shared/account-pool-',
+  'src/main/runtime/account-pool-',
+  'src/main/runtime/pty-account-pool-',
+  'src/main/runtime/native-account-pool-',
+  'src/main/runtime/agent-session-account-home-pin.test.ts',
+  'src/main/runtime/orchestration/account-pool-admission.test.ts',
+  'src/main/runtime/orchestration/db/account-pool-assignments.test.ts',
+  'src/main/runtime/rpc/methods/account-pools.test.ts',
+  'src/main/ipc/pty/account-pool-launch.test.ts',
+  'src/main/ipc/pty-pool-persisted-pane-resume.test.ts',
+  'src/main/claude-accounts/pinned-account-launch.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-account-',
   'src/main/updater',
   'src/main/host/electron-repo-icon-fetch.test.ts',
   'src/preload/updater-manual-installer.test.ts',
@@ -53,6 +65,7 @@ export const FORK_TEST_FILTERS = [
   'src/main/runtime/runtime-nested-repo-import-host-twin.test.ts',
   'src/main/ssh/orcad-runtime-maintenance.test.ts',
   'src/main/agent-hooks/server-five-projects.test.ts',
+  'src/main/agent-hooks/server-account-pool-rotation-boundary.test.ts',
   'src/main/cli/',
   'src/main/pty/codex-shell-no-daemon.test.ts',
   'src/main/pty/codex-shell-launch-preflight.test.ts',
