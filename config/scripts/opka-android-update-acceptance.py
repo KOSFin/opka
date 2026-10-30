@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise same-signer A→B through Android's confirmation UI on an isolated AVD."""
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -9,6 +10,7 @@ import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from opka_android_handoff_status import handoff_ready
 from opka_android_published_update import open_published_update, verify_native_download, version_code
 
 PACKAGE = 'com.kosfin.opka.mobile'
@@ -111,22 +113,33 @@ def main():
             open_published_update(args.published_version, shell, screenshot, output)
         else:
             assert 'Success' in adb('install', '--no-streaming', str(Path(args.handoff).resolve()), timeout=60)
+            digest = hashlib.sha256()
+            with Path(args.b).open('rb') as stream:
+                for chunk in iter(lambda: stream.read(65536), b''):
+                    digest.update(chunk)
+            expected_hash = digest.hexdigest()
+            expected_bytes = Path(args.b).stat().st_size
             handoff_log = output / 'installer-handoff.txt'
             handoff_stream = handoff_log.open('w')
             handoff_process = subprocess.Popen([
                 'adb', 'shell', 'am', 'instrument', '-w',
+                '-e', 'expected_sha256', expected_hash,
+                '-e', 'expected_bytes', str(expected_bytes),
+                '-e', 'expected_code', str(args.expected_code),
                 'com.kosfin.opka.mobile.acceptance/com.kosfin.opka.mobile.acceptance.UpdateHandoffInstrumentation'
             ], stdout=handoff_stream, stderr=subprocess.STDOUT)
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 handoff = handoff_log.read_text()
-                if 'handoff=target-app-uid' in handoff:
+                if handoff_ready(handoff, expected_hash, expected_bytes, args.expected_code):
                     break
                 assert handoff_process.poll() is None, handoff
                 time.sleep(0.25)
             else:
-                raise AssertionError('Target-app UID handoff was not acknowledged')
+                raise AssertionError('Target-app UID/readable APK probe was not acknowledged')
+            (output / 'post-handoff-uri-grants.txt').write_text(shell('dumpsys', 'activity', 'permissions'))
         confirmed = False
+        last_ui = []
         deadline = time.monotonic() + (300 if args.published_version else 120)
         while time.monotonic() < deadline:
             if handoff_process is not None:
@@ -135,6 +148,7 @@ def main():
             xml = shell('cat', '/sdcard/opka-update-ui.xml')
             (output / 'last-installer-ui.xml').write_text(xml)
             tree = ET.fromstring(xml)
+            last_ui = list(dict.fromkeys(re.sub(r'\s+', ' ', node.get('text', ''))[:100] for node in tree.iter('node') if node.get('text')))[:10]
             if args.published_version and any(node.get('text') == 'Update could not be opened' for node in tree.iter('node')):
                 raise AssertionError('Production native update failed; inspect last-installer-ui.xml')
             for node in tree.iter('node'):
@@ -155,7 +169,7 @@ def main():
             if confirmed:
                 break
             time.sleep(1)
-        assert confirmed, 'Android installer confirmation was not shown; no silent-install substitute'
+        assert confirmed, 'Android installer confirmation was not shown; no silent-install substitute; UI=' + ' | '.join(last_ui)
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             current = shell('dumpsys', 'package', PACKAGE)
@@ -180,6 +194,9 @@ def main():
         }, indent=2) + '\n')
     except Exception as error:
         (output / 'failure.txt').write_text(str(error) + '\n' + str(getattr(error, 'output', '')))
+        message = re.sub(r'https://\S+', '[URL]', str(error))[:1500]
+        message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print(f'::error title=Android update acceptance::{type(error).__name__}: {message}', flush=True)
         raise
     finally:
         save_diagnostics()

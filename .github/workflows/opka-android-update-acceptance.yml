@@ -5,6 +5,7 @@ on:
       - 'mobile/**'
       - 'config/scripts/opka-android*'
       - 'config/scripts/opka_android_published_update*.py'
+      - 'config/scripts/opka_android_handoff_status.py'
       - 'config/scripts/build-android-update-handoff.py'
       - 'config/android-update-handoff/**'
       - '.github/workflows/opka-android-update-acceptance.yml'
@@ -62,9 +63,23 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
           log-accepted-android-sdk-licenses: 'false'
-      - name: Build diagnostic APKs from this exact source commit
+      - name: Fingerprint Android fixture inputs
+        id: fixture_key
+        shell: bash
+        run: |
+          set -euo pipefail
+          input_hash="$(git ls-tree HEAD -- mobile src/shared src/packages config/patches package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc .github/actions .github/workflows/opka-android-update-acceptance.yml | sha256sum | cut -d ' ' -f 1)"
+          echo "key=opka-android-fixtures-r5-r6-v1-$RUNNER_OS-$RUNNER_ARCH-$input_hash" >> "$GITHUB_OUTPUT"
+      - name: Restore unsigned Android fixtures
+        id: fixture_cache
+        uses: actions/cache/restore@v5
+        with:
+          path: out/android-update-fixtures/*-unsigned.apk
+          key: ${{ steps.fixture_key.outputs.key }}
+      - name: Build diagnostic APKs from current Android inputs
+        if: steps.fixture_cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -75,6 +90,12 @@ jobs:
             (cd mobile/android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m)
             cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/android-update-fixtures/rc$rc-unsigned.apk"
           done
+      - name: Save unsigned Android fixtures
+        if: steps.fixture_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: out/android-update-fixtures/*-unsigned.apk
+          key: ${{ steps.fixture_key.outputs.key }}
       - name: Build CI-only target-UID installer handoff
         run: python3 config/scripts/build-android-update-handoff.py
       - name: Sign both versions with one identity and verify it

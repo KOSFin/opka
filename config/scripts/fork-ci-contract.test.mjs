@@ -31,6 +31,34 @@ describe('fork CI safety and required checks', () => {
       'test -c /dev/kvm'
     )
   })
+  it('caches only unsigned fixtures under an exact Android input key', () => {
+    const acceptance = parse(
+      readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
+    )
+    const steps = acceptance.jobs.update_confirmation.steps
+    const restore = steps.find((step) => step.name === 'Restore unsigned Android fixtures')
+    const save = steps.find((step) => step.name === 'Save unsigned Android fixtures')
+    expect(restore.uses).toBe('actions/cache/restore@v5')
+    expect(save.uses).toBe('actions/cache/save@v5')
+    expect(restore.with.path).toBe('out/android-update-fixtures/*-unsigned.apk')
+    expect(save.with).toEqual(restore.with)
+    expect(restore.with['restore-keys']).toBeUndefined()
+    const fingerprint = steps.find((step) => step.id === 'fixture_key').run
+    for (const input of [
+      'mobile',
+      'src/shared',
+      'src/packages',
+      'config/patches',
+      'pnpm-lock.yaml',
+      '.github/actions',
+      '.github/workflows/opka-android-update-acceptance.yml'
+    ]) {
+      expect(fingerprint).toContain(input)
+    }
+    expect(steps.indexOf(save)).toBeLessThan(
+      steps.findIndex((step) => step.name === 'Sign both versions with one identity and verify it')
+    )
+  })
   it.runIf(process.platform === 'linux')(
     'keeps the fixture handoff and published UI routes separate',
     () => {

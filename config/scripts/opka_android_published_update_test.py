@@ -10,6 +10,7 @@ from unittest.mock import patch
 import zipfile
 
 import opka_android_published_update as updater
+from opka_android_handoff_status import handoff_ready
 
 
 class PublishedDownloadContract(unittest.TestCase):
@@ -46,6 +47,26 @@ class PublishedDownloadContract(unittest.TestCase):
     def test_public_manifest_checksum_mismatch_is_rejected(self):
         with self.assertRaisesRegex(AssertionError, 'differs from public manifest'):
             self.exercise(bad_hash=True)
+
+
+class HandoffProbeContract(unittest.TestCase):
+    def test_probe_failure_is_actionable_without_blob_artifacts(self):
+        status = 'INSTRUMENTATION_STATUS: probe=failed\nINSTRUMENTATION_STATUS: probeStage=content-resolver-read\nINSTRUMENTATION_STATUS: probeException=FileNotFoundException\n'
+        status += 'INSTRUMENTATION_STATUS: probeMessage=Permission denied\nINSTRUMENTATION_STATUS: cacheExists=true\nINSTRUMENTATION_STATUS: cacheBytes=42\n'
+        with self.assertRaisesRegex(AssertionError, 'content-resolver-read / FileNotFoundException') as raised:
+            handoff_ready(status, 'a' * 64, 42, 104236006)
+        self.assertIn('probeMessage=Permission denied', str(raised.exception))
+        self.assertIn('cacheExists=true', str(raised.exception))
+        self.assertIn('cacheBytes=42', str(raised.exception))
+
+    def test_acknowledgement_requires_all_exact_read_and_archive_facts(self):
+        fields = dict(probe='passed', handoff='target-app-uid', uid='10130', targetUid='10130',
+                      sha256='a' * 64, bytes='42', archiveVersion='104236006',
+                      archivePackage='com.kosfin.opka.mobile')
+        status = ''.join(f'INSTRUMENTATION_STATUS: {key}={value}\n' for key, value in fields.items())
+        self.assertTrue(handoff_ready(status, 'a' * 64, 42, 104236006))
+        self.assertFalse(handoff_ready(status, 'b' * 64, 42, 104236006))
+        self.assertFalse(handoff_ready(status.replace('targetUid=10130', 'targetUid=0'), 'a' * 64, 42, 104236006))
 
 
 if __name__ == '__main__':
