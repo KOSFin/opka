@@ -143,6 +143,8 @@ jobs:
           tests/e2e/fork-project-tasks.spec.ts
           tests/e2e/fork-task-rpc-discovery.spec.ts
           tests/e2e/fork-packaged-tasks.spec.ts
+          tests/e2e/fork-account-pool-settings.spec.ts
+          tests/e2e/fork-worker-capacity-settings.spec.ts
           --config tests/playwright.config.ts --project electron-headless --workers=1
       - name: Save task lifecycle visual evidence
         if: success()

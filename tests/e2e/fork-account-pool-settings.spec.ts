@@ -134,6 +134,7 @@ test('pool operator edits real controls and reads the host-confirmed revision', 
     const section = launched.page.locator('#account-pools')
     await expect(section.getByText('pool@example.test · Selected login')).toBeVisible()
     await expect(section.getByText(/Auth: ready · Quota: unknown/)).toBeVisible()
+    await launched.page.screenshot({ path: info.outputPath('account-pool-settings-before.png') })
     await section.getByRole('combobox', { name: 'codex pool mode' }).click()
     await launched.page.getByRole('option', { name: 'Balanced', exact: true }).click()
     await section.getByRole('spinbutton', { name: 'pool@example.test priority' }).fill('2')
