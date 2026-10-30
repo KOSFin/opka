@@ -40,6 +40,7 @@ export async function acquireOwner(
     throw new Error('agent_session_ownership_unknown')
   }
   let account: StructuredAccountAcquisition | undefined
+  let adapterInvoked = false
   try {
     try {
       await input.onAcquiring?.()
@@ -86,6 +87,7 @@ export async function acquireOwner(
       ...(input.startupAttemptId ? { attemptId: input.startupAttemptId } : {})
     })
     const progress = input.onStartupAttempt?.(attempt)
+    adapterInvoked = true
     const acquired = await input.adapter.acquire({
       ...attempt,
       ...(input.recordPhase ? { recordPhase: input.recordPhase } : {}),
@@ -118,9 +120,9 @@ export async function acquireOwner(
     })
     return { record: proved, acquisitionGeneration: acquired.acquisitionGeneration }
   } catch (error) {
-    if (isAgentSessionPreSpawnError(error)) {
+    if (!adapterInvoked || isAgentSessionPreSpawnError(error)) {
       await account?.preSpawnFailed?.()
-      throw error
+      throw isAgentSessionPreSpawnError(error) ? error : new AgentSessionPreSpawnError(error)
     }
     return rethrowAfterAgentSessionAcquisitionCleanup(input.adapter, record.sessionId, error)
   }

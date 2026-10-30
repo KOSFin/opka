@@ -34,6 +34,9 @@ public final class UpdateHandoffInstrumentation extends Instrumentation {
         result.putString("handoff", "target-app-uid");
         result.putInt("uid", uid);
         result.putInt("targetUid", target.getApplicationInfo().uid);
-        finish(Activity.RESULT_OK, result);
+        sendStatus(0, result);
+        // Finishing instrumentation force-stops its target and revokes the installer's URI grant.
+        android.os.SystemClock.sleep(360_000);
+        finish(Activity.RESULT_CANCELED, result);
     }
 }

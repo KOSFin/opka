@@ -152,3 +152,36 @@ it('does not let a preferred reserve displace a primary or override balancing', 
   admission.policy.members[1].role = 'reserve'
   expect(JSON.parse(start().worker.start_options).account.id).toBe('a')
 })
+
+it('balances completed serial launches across three equal accounts', () => {
+  const { store, admission } = fixture('balanced')
+  admission.policy.members.push({ ...admission.policy.members[0], accountId: 'c' })
+  admission.candidates.push({ ...admission.candidates[0], accountId: 'c', quotaIdentity: 'c' })
+  const selected: string[] = []
+  for (let index = 0; index < 6; index++) {
+    const ownerKey = `serial-${index}`
+    selected.push(store.acquireAccountPoolAssignment({ ...admission, ownerKey }).accountId)
+    store.releaseAccountPoolAssignment(ownerKey)
+  }
+  expect(selected).toEqual(['a', 'b', 'c', 'a', 'b', 'c'])
+})
+it('keeps balanced recency isolated by provider', () => {
+  const { store, admission } = fixture('balanced')
+  store.acquireAccountPoolAssignment({
+    ...admission,
+    ownerKey: 'claude-only',
+    policy: { ...admission.policy, provider: 'claude', members: [admission.policy.members[0]] }
+  })
+  store.releaseAccountPoolAssignment('claude-only')
+  expect(
+    store.acquireAccountPoolAssignment({ ...admission, ownerKey: 'codex-first' }).accountId
+  ).toBe('a')
+})
+it('shares recency between aliases of the same quota identity', () => {
+  const { store, admission } = fixture('balanced')
+  store.acquireAccountPoolAssignment({ ...admission, ownerKey: 'original' })
+  store.releaseAccountPoolAssignment('original')
+  admission.policy.members[0].accountId = 'alias-a'
+  admission.candidates[0].accountId = 'alias-a'
+  expect(store.acquireAccountPoolAssignment({ ...admission, ownerKey: 'next' }).accountId).toBe('b')
+})

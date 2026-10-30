@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS account_pool_pty_bindings (
   incarnation_id TEXT
 );
 CREATE INDEX IF NOT EXISTS account_pool_assignments_active ON account_pool_assignments(provider, quota_identity) WHERE released_at IS NULL;
+CREATE INDEX IF NOT EXISTS account_pool_assignments_recency ON account_pool_assignments(provider, quota_identity, sequence DESC);
 CREATE TRIGGER IF NOT EXISTS release_worker_account_pool_assignment
 AFTER UPDATE OF state ON worker_dispatches
 WHEN NEW.state IN ('failed','stopped','succeeded','abandoned')

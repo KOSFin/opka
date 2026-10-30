@@ -147,7 +147,7 @@ describe('Opka release assets', () => {
     expect(Object.keys(release.on)).toEqual(['workflow_dispatch'])
     expect(release.jobs.admission.if).toBe("github.ref == 'refs/heads/main'")
     expect(release.jobs.qualification.uses).toBe('./.github/workflows/pr.yml')
-    expect(release.jobs.publish.needs).toBe('qualification')
+    expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
     expect(release.jobs.publish.permissions).toEqual({ contents: 'write' })
   })
 })

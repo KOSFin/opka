@@ -3,6 +3,7 @@ import type Database from '../../sqlite/sync-database'
 import type { AccountPoolCandidate, AccountPoolPolicy } from '../../../shared/account-pool-policy'
 import { OrchestrationError } from './orchestration-error'
 
+const AllocationSequence = z.object({ sequence: z.number() })
 const StoredAccount = z.object({
   account: z.object({
     provider: z.enum(['claude', 'codex']),
@@ -60,6 +61,12 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
       .all(),
     ...readAccountAssignments(db).filter((entry) => !entry.poolId)
   ]
+  const lastAllocation =
+    policy.strategy === 'balanced'
+      ? db.prepare(
+          'SELECT sequence FROM account_pool_assignments WHERE provider=? AND quota_identity=? ORDER BY sequence DESC LIMIT 1'
+        )
+      : null
   const eligible = policy.members.flatMap((member) => {
     const candidate = candidates.find((entry) => entry.accountId === member.accountId)
     if (
@@ -86,7 +93,9 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
     if (member.maxConcurrent !== undefined && active >= member.maxConcurrent) {
       return []
     }
-    return [{ member, candidate, active }]
+    const last = lastAllocation?.get(policy.provider, candidate.quotaIdentity)
+    const sequence = last ? AllocationSequence.parse(last).sequence : 0
+    return [{ member, candidate, active, sequence }]
   })
   eligible.sort((a, b) => {
     const reserve = Number(a.member.role === 'reserve') - Number(b.member.role === 'reserve')
@@ -106,6 +115,11 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
       const quota = (a.candidate.usedPercent ?? 100) - (b.candidate.usedPercent ?? 100)
       if (quota) {
         return quota
+      }
+      // Persisted recency prevents serial turns with equal quota from starving later members.
+      const recency = a.sequence - b.sequence
+      if (recency) {
+        return recency
       }
     }
     return policy.members.indexOf(a.member) - policy.members.indexOf(b.member)

@@ -26,11 +26,43 @@ describe('fork CI safety and required checks', () => {
     expect(
       steps.find((step) => step.name === 'Exercise Android confirmation and data retention').with
         .script
-    ).toContain('--handoff')
+    ).toBe('python3 config/scripts/opka-android-update-acceptance-entry.py')
     expect(steps.find((step) => step.name === 'Require KVM acceleration').run).toContain(
       'test -c /dev/kvm'
     )
   })
+  it.runIf(process.platform === 'linux')(
+    'keeps the fixture handoff and published UI routes separate',
+    () => {
+      const entryArgv = (published) =>
+        JSON.parse(
+          execFileSync(
+            'python3',
+            [
+              '-c',
+              "import json,runpy,subprocess; subprocess.run=lambda args,**kwargs: print(json.dumps(args)); runpy.run_path('config/scripts/opka-android-update-acceptance-entry.py')"
+            ],
+            { encoding: 'utf8', env: { ...process.env, PUBLISHED_VERSION: published } }
+          )
+        ).slice(2)
+      expect(entryArgv('')).toEqual([
+        '--a',
+        'out/android-update-fixtures/rc5.apk',
+        '--b',
+        'out/android-update-fixtures/rc6.apk',
+        '--expected-code',
+        '104236006',
+        '--handoff',
+        'out/android-update-handoff/handoff.apk'
+      ])
+      expect(entryArgv('1.4.236-rc.6')).toEqual([
+        '--a',
+        'out/android-update-fixtures/rc5.apk',
+        '--published-version',
+        '1.4.236-rc.6'
+      ])
+    }
+  )
   it('checks an immutable released updater without write permissions or installed app replacement', () => {
     const verification = parse(readFileSync('.github/workflows/opka-updater-smoke.yml', 'utf8'))
     expect(verification.permissions).toEqual({ contents: 'read' })

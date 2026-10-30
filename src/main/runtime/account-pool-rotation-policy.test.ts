@@ -74,3 +74,33 @@ it('allows another tier when the current member is draining', () => {
   f.policy.members[1].priority = 2
   expect(selectAccountPoolRotationMember(f.database, f, 'a').id).toBe('b')
 })
+
+it('cycles all three equal accounts after completed turns instead of alternating only two', () => {
+  const f = fixture()
+  f.policy.members.push({ ...f.policy.members[0], accountId: 'c' })
+  f.candidates.push({ ...f.candidates[0], accountId: 'c', quotaIdentity: 'c' })
+  let ownerKey = 'initial'
+  let current = db!.acquireAccountPoolAssignment({
+    ...f,
+    ownerKey,
+    policy: { ...f.policy, members: [f.policy.members[0]] }
+  }).accountId
+  const selected: string[] = []
+  for (let index = 0; index < 6; index++) {
+    const next = selectAccountPoolRotationMember(f.database, f, current)
+    const nextOwner = `turn-${index}`
+    db!.acquireAccountPoolAssignment({
+      ...f,
+      ownerKey: nextOwner,
+      policy: {
+        ...f.policy,
+        members: f.policy.members.filter((member) => member.accountId === next.id)
+      }
+    })
+    db!.releaseAccountPoolAssignment(ownerKey)
+    ownerKey = nextOwner
+    current = next.id
+    selected.push(current)
+  }
+  expect(selected).toEqual(['b', 'c', 'a', 'b', 'c', 'a'])
+})

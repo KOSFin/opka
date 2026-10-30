@@ -4,6 +4,7 @@ on:
     paths:
       - 'mobile/**'
       - 'config/scripts/opka-android*'
+      - 'config/scripts/opka_android_published_update*.py'
       - 'config/scripts/build-android-update-handoff.py'
       - 'config/android-update-handoff/**'
       - '.github/workflows/opka-android-update-acceptance.yml'
@@ -12,12 +13,19 @@ on:
       release_signer:
         type: boolean
         default: false
+      published_version:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       release_signer:
         description: Use the protected Opka release identity instead of a disposable CI identity
         type: boolean
         default: false
+      published_version:
+        description: Published beta to download through the existing app UI (requires release_signer)
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -34,11 +42,18 @@ jobs:
     name: Opka Android installer confirmation and retained state
     runs-on: ubuntu-24.04
     timeout-minutes: 70
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.release_signer && 'opka-android-release' || 'opka-android-ci' }}
+    environment: ${{ github.event_name != 'pull_request' && inputs.release_signer && 'opka-android-release' || 'opka-android-ci' }}
+    env:
+      PUBLISHED_VERSION: ${{ inputs.published_version || '' }}
+      RELEASE_SIGNER: ${{ github.event_name != 'pull_request' && inputs.release_signer || false }}
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Validate published-channel scope
+        run: python3 -c 'import os,re; v=os.environ["PUBLISHED_VERSION"]; assert not v or (os.environ["RELEASE_SIGNER"] == "true" and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*",v)), "Published acceptance requires release_signer and a beta version"'
+      - name: Validate published download argument contract offline
+        run: python3 config/scripts/opka_android_published_update_test.py
       - uses: ./.github/actions/install-node-dependencies
       - uses: ./.github/actions/install-mobile-dependencies
       - uses: actions/setup-java@v5
@@ -65,7 +80,7 @@ jobs:
       - name: Sign both versions with one identity and verify it
         shell: bash
         env:
-          RELEASE_SIGNER: ${{ github.event_name == 'workflow_dispatch' && inputs.release_signer || false }}
+          RELEASE_SIGNER: ${{ github.event_name != 'pull_request' && inputs.release_signer || false }}
           OPKA_ANDROID_KEYSTORE_BASE64: ${{ secrets.OPKA_ANDROID_KEYSTORE_BASE64 }}
           OPKA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.OPKA_ANDROID_KEYSTORE_PASSWORD }}
           OPKA_ANDROID_CERTIFICATE_SHA256: ${{ vars.OPKA_ANDROID_CERTIFICATE_SHA256 }}
@@ -109,7 +124,7 @@ jobs:
           ram-size: 2048M
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on
-          script: python3 config/scripts/opka-android-update-acceptance.py --a out/android-update-fixtures/rc5.apk --b out/android-update-fixtures/rc6.apk --expected-code 104236006 --handoff out/android-update-handoff/handoff.apk
+          script: python3 config/scripts/opka-android-update-acceptance-entry.py
       - name: Save acceptance evidence
         if: always()
         uses: actions/upload-artifact@v7
