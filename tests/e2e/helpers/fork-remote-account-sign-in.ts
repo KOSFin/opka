@@ -4,7 +4,21 @@ export async function installRemoteAccountSignInFixture(
   app: ElectronApplication,
   page: Page
 ): Promise<void> {
-  await app.evaluate(({ ipcMain }) => {
+  const environment = {
+    id: 'synthetic-sign-in-host',
+    name: 'Synthetic server',
+    createdAt: 1,
+    updatedAt: 1,
+    lastUsedAt: null,
+    runtimeId: null,
+    preferredEndpointId: 'endpoint',
+    endpoints: [
+      { id: 'endpoint', kind: 'websocket' as const, label: 'Test', endpoint: 'ws://127.0.0.1:1' }
+    ]
+  }
+  await app.evaluate(({ ipcMain }, environment) => {
+    ipcMain.removeHandler('runtimeEnvironments:list')
+    ipcMain.handle('runtimeEnvironments:list', () => [environment])
     const handlers: unknown = Reflect.get(ipcMain, '_invokeHandlers')
     if (!(handlers instanceof Map)) {
       throw new Error('IPC registry unavailable')
@@ -65,25 +79,10 @@ export async function installRemoteAccountSignInFixture(
       }
       return localCall(event, { method: request.method, params: request.params })
     })
-  })
-  await page.evaluate(() => {
-    window.__store!.setState({
-      runtimeEnvironments: [
-        {
-          id: 'synthetic-sign-in-host',
-          name: 'Synthetic server',
-          createdAt: 1,
-          updatedAt: 1,
-          lastUsedAt: null,
-          runtimeId: null,
-          preferredEndpointId: 'endpoint',
-          endpoints: [
-            { id: 'endpoint', kind: 'websocket', label: 'Test', endpoint: 'ws://127.0.0.1:1' }
-          ]
-        }
-      ]
-    })
-  })
+  }, environment)
+  await page.evaluate((environment) => {
+    window.__store!.getState().setRuntimeEnvironments([environment])
+  }, environment)
 }
 
 export async function remoteAccountSignInCalls(app: ElectronApplication): Promise<unknown> {
