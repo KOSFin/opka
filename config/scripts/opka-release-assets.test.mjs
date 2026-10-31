@@ -144,6 +144,15 @@ describe('Opka release assets', () => {
       ).run
     ).toContain('--config.mac.identity=-')
     expect(installers.jobs.mac.env.ORCA_REQUIRE_ORCAD_TEMPLATE).toBe('1')
+    expect(
+      installers.jobs.release_files.steps
+        .filter((step) => step.uses === 'actions/download-artifact@v8')
+        .map((step) => step.with.name)
+    ).toEqual([
+      'opka-macos-${{ github.sha }}',
+      'opka-server-${{ github.sha }}',
+      'opka-android-${{ github.sha }}'
+    ])
     expect(server.jobs.desktop_template.env.OPKA_VERSION).toBe('${{ inputs.version }}')
     expect(Object.keys(release.on)).toEqual(['workflow_dispatch'])
     expect(release.jobs.admission.if).toBe("github.ref == 'refs/heads/main'")
