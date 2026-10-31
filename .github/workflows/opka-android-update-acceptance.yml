@@ -143,8 +143,12 @@ jobs:
           profile: pixel
           cores: 2
           ram-size: 2048M
+          disk-size: 2048M
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on
+          pre-emulator-launch-script: |
+            df -h "$HOME/.android"
+            python3 -c 'import os,shutil; assert shutil.disk_usage(os.path.expanduser("~/.android")).free >= 3 * 1024**3, "Android update acceptance requires 3 GiB free before emulator boot"'
           script: python3 config/scripts/opka-android-update-acceptance-entry.py
       - name: Save acceptance evidence
         if: always()
