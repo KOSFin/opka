@@ -133,6 +133,7 @@ it('writes a pane grid still inside its write burst before the final flush', asy
   const paneGrids = Promise.withResolvers<void>()
   const { store } = await startQuit(async () => {}, {
     runtime: {
+      stopAccountDeviceSignIns: () => null,
       getOffscreenBrowserBackend: () => null,
       getAgentBrowserBridge: () => null,
       getEmulatorBridge: () => null,
@@ -190,6 +191,7 @@ it.each([
     const closeNotificationDismissals = vi.fn(() => new Promise<void>(() => {}))
     const { app } = await startQuit(async () => {}, {
       runtime: {
+        stopAccountDeviceSignIns: () => null,
         getOffscreenBrowserBackend: () => null,
         getAgentBrowserBridge: () => null,
         getEmulatorBridge: () => null,
@@ -217,3 +219,27 @@ it.each([
     expect(app.quit).toHaveBeenCalledOnce()
   }
 )
+
+it('finishes a pending account registration before freezing the final profile snapshot', async () => {
+  const signIn = Promise.withResolvers<void>()
+  const stopSignIn = vi.fn(() => signIn.promise)
+  const { store } = await startQuit(async () => {}, {
+    runtime: {
+      stopAccountDeviceSignIns: stopSignIn,
+      getOffscreenBrowserBackend: () => null,
+      getAgentBrowserBridge: () => null,
+      getEmulatorBridge: () => null,
+      disposeSkillUploadSessions: settled(),
+      getRuntimeId: () => undefined,
+      closeNotificationDismissals: settled(),
+      flushPaneGrids: () => null
+    }
+  })
+  expect(stopSignIn).toHaveBeenCalledOnce()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(store.flushFinalOrThrowAsync).not.toHaveBeenCalled()
+  signIn.resolve()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(store.flushFinalOrThrowAsync).toHaveBeenCalledOnce()
+  expect(store.freezeWritesAsync).toHaveBeenCalledOnce()
+})

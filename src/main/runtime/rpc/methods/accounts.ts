@@ -49,6 +49,17 @@ export const ACCOUNT_METHODS = [
     }
   }),
   defineMethod({
+    name: 'accounts.claudeSignInReady',
+    permission: 'accounts-admin',
+    params: FinishClaudeSignInParams,
+    handler: async (params, { runtime, clientKind }) => {
+      if (clientKind !== undefined) {
+        throw new Error('Sign in on the Orca execution host.')
+      }
+      return { ready: await runtime.isClaudeSignInReady(params) }
+    }
+  }),
+  defineMethod({
     name: 'accounts.finishClaudeSignIn',
     permission: 'accounts-admin',
     params: FinishClaudeSignInParams,

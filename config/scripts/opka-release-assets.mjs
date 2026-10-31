@@ -127,6 +127,19 @@ export function serverLauncher(node) {
   ].join('\n')
 }
 
+export function serverCliLauncher(node) {
+  return [
+    '#!/bin/sh',
+    'set -eu',
+    'OPKA_INSTALL_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+    'export ORCA_USER_DATA_PATH="${ORCA_USER_DATA_PATH:-${ORCA_USER_DATA:-${HOME:?}/.opka}}"',
+    'export ORCA_CLI_COMMAND="$OPKA_INSTALL_DIR/opka"',
+    'unset NODE_OPTIONS NODE_REPL_EXTERNAL_MODULE ELECTRON_RUN_AS_NODE',
+    `exec "$OPKA_INSTALL_DIR/${node.split('\\').join('/')}" "$OPKA_INSTALL_DIR/orcad/out/cli/index.js" "$@"`,
+    ''
+  ].join('\n')
+}
+
 async function prepareServer(directory, version, commit) {
   if (process.platform !== 'linux' || process.arch !== 'x64') {
     throw new Error('Server qualification requires Linux x64')
@@ -163,6 +176,12 @@ async function packageServer(stage, directory, version, commit) {
   await writeFile(join(stage, 'opka-server'), serverLauncher(node), { mode: 0o755 })
   await chmod(join(stage, 'opka-server'), 0o755)
   execFileSync(join(stage, 'opka-server'), ['--help'], { stdio: 'ignore' })
+  await writeFile(join(stage, 'opka'), serverCliLauncher(node), { mode: 0o755 })
+  await chmod(join(stage, 'opka'), 0o755)
+  execFileSync(join(stage, 'opka'), ['account', 'add', '--help'], { stdio: 'ignore' })
+  if (execFileSync(join(stage, 'opka'), ['--version'], { encoding: 'utf8' }).trim() !== version) {
+    throw new Error('Packaged server account CLI version disagrees')
+  }
   await writeFile(
     join(stage, 'opka-release.json'),
     `${JSON.stringify({ version, commit, target })}\n`

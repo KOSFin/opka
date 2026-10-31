@@ -163,10 +163,12 @@ describe('ClaudeAccountService', () => {
       runtime: 'host',
       configDir: join(f.root, begun.accountId, 'home')
     })
+    await expect(f.service.isSignInReady(begun)).resolves.toBe(false)
     await expect(f.service.finishSignIn(begun)).rejects.toThrow(CLAUDE_SIGN_IN_NOT_FINISHED_MESSAGE)
     expect(f.settings().claudeManagedAccounts).toHaveLength(2)
 
     f.signIn(begun.accountId, 'new@example.test')
+    await expect(f.service.isSignInReady(begun)).resolves.toBe(true)
     await f.service.finishSignIn(begun)
     expect(f.settings().claudeManagedAccounts.at(-1)).toMatchObject({
       id: begun.accountId,

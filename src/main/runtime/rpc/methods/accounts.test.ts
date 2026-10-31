@@ -43,7 +43,8 @@ describe('account RPC methods', () => {
       /only available/
     ],
     ['accounts.beginClaudeSignIn', {}, /Sign in on the Orca execution host/],
-    ['accounts.finishClaudeSignIn', { accountId: 'a' }, /Sign in on the Orca execution host/]
+    ['accounts.finishClaudeSignIn', { accountId: 'a' }, /Sign in on the Orca execution host/],
+    ['accounts.claudeSignInReady', { accountId: 'a' }, /Sign in on the Orca execution host/]
   ] as const)('rejects paired-device calls to %s', async (methodName, params, refusal) => {
     const runtime = {
       addCodexAccountFromHome: vi.fn(),

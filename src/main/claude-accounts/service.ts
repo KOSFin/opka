@@ -76,6 +76,10 @@ export class ClaudeAccountService {
     return this.serializeMutation(() => this.registration.begin(request))
   }
 
+  isSignInReady(signIn: Omit<ClaudeAccountSignIn, 'configDir'>): Promise<boolean> {
+    return this.serializeMutation(() => this.registration.ready(signIn))
+  }
+
   finishSignIn(
     signIn: Omit<ClaudeAccountSignIn, 'configDir'>
   ): Promise<ClaudeRateLimitAccountsState> {

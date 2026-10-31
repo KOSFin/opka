@@ -1,3 +1,5 @@
+import { AccountDeviceSignIns } from './account-device-sign-in'
+import type { AccountDeviceSignIn } from '../../shared/account-device-sign-in'
 import type { ClaudeAccountService } from '../claude-accounts/service'
 import { hasAppEnvironment } from '../../shared/app-environment'
 import { getManagedDataAccountService } from '../managed-data-accounts/service'
@@ -53,6 +55,22 @@ export type CodexRateLimitResetRpcResult = {
 
 export class RuntimeAccountController {
   private services: RuntimeAccountServices | null = null
+  private readonly deviceSignIns = new AccountDeviceSignIns((onPrompt, signal) =>
+    this.requireServices().codexAccounts.addDeviceAccount(onPrompt, signal)
+  )
+
+  beginDeviceSignIn(owner: string): AccountDeviceSignIn {
+    return this.deviceSignIns.begin(owner)
+  }
+  deviceSignIn(owner: string, id: string): AccountDeviceSignIn {
+    return this.deviceSignIns.get(owner, id)
+  }
+  cancelDeviceSignIn(owner: string, id: string): AccountDeviceSignIn {
+    return this.deviceSignIns.cancel(owner, id)
+  }
+  stopDeviceSignIns(): Promise<void> | null {
+    return this.deviceSignIns.stop()
+  }
   private commitMessageAgentEnvironment: CommitMessageAgentEnvironmentResolvers | null = null
   /** Pushed by the desktop that owns this host's accounts; held in memory, re-pushed on connect. */
   private hostLaunchEnv: HostAccountLaunchEnv | null = null
@@ -230,6 +248,10 @@ export class RuntimeAccountController {
 
   beginClaudeSignIn(request: ClaudeSignInRequest): Promise<ClaudeAccountSignIn> {
     return this.requireServices().claudeAccounts.beginSignIn(request)
+  }
+
+  isClaudeSignInReady(signIn: Omit<ClaudeAccountSignIn, 'configDir'>): Promise<boolean> {
+    return this.requireServices().claudeAccounts.isSignInReady(signIn)
   }
 
   finishClaudeSignIn(

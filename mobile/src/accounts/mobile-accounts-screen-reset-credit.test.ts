@@ -97,6 +97,13 @@ vi.mock('../transport/host-client-hooks', () => {
   }
 })
 
+vi.mock('./MobileAccountSignInSection', () => ({
+  MobileAccountSignInSection: () => createElement('SignInSection')
+}))
+vi.mock('./MobileAccountPoolSection', () => ({
+  MobileAccountPoolSection: () => createElement('AccountPoolSection')
+}))
+
 vi.mock('../components/AgentIcons', () => ({
   ClaudeIcon: 'ClaudeIcon',
   OpenAIIcon: 'OpenAIIcon'
@@ -499,6 +506,22 @@ describe('accounts route Codex reset credit', () => {
     act(() => back[0]?.props.onPress())
 
     expect(dependencies.back).toHaveBeenCalledOnce()
+    act(() => renderer.unmount())
+  })
+  it('switches between account management and pool policy sections without mixing their controls', async () => {
+    const renderer = await renderAccountsRoute()
+    expect(renderer.root.findAll((node) => String(node.type) === 'SignInSection')).toHaveLength(1)
+    expect(
+      renderer.root.findAll((node) => String(node.type) === 'AccountPoolSection')
+    ).toHaveLength(0)
+    await act(async () => pressables(renderer, 'Pools & switching')[0]?.props.onPress())
+    expect(renderer.root.findAll((node) => String(node.type) === 'SignInSection')).toHaveLength(0)
+    expect(
+      renderer.root.findAll((node) => String(node.type) === 'AccountPoolSection')
+    ).toHaveLength(1)
+    await act(async () => pressables(renderer, 'Accounts')[0]?.props.onPress())
+    expect(renderer.root.findAll((node) => String(node.type) === 'SignInSection')).toHaveLength(1)
+    expect(systemDefaultButtons(renderer).length).toBeGreaterThan(0)
     act(() => renderer.unmount())
   })
 })

@@ -11,9 +11,8 @@ import {
 } from '../../../../shared/account-pool-view'
 import type { AccountPoolView } from '../../../../shared/account-pool-view'
 import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { AccountPoolMemberSettings } from './AccountPoolMemberSettings'
 import { AccountPoolLaunchSettings } from './AccountPoolLaunchSettings'
 import { SettingsSwitchRow } from './SettingsFormControls'
 
@@ -185,6 +184,13 @@ export function AccountPoolSection({
                   })
                 }
               />
+              <SettingsSwitchRow
+                label="Allow reserve accounts"
+                description="Use reserve accounts only when no primary account is eligible. Manual-only accounts are never selected automatically."
+                checked={policy.allowReserve}
+                disabled={busy}
+                onChange={() => change({ ...policy, allowReserve: !policy.allowReserve })}
+              />
               {view.accounts[policy.provider].accounts.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   No managed accounts on this host. Add an account in the provider settings.
@@ -229,29 +235,20 @@ export function AccountPoolSection({
                         </SelectContent>
                       </Select>
                       {member ? (
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`${policy.id}-${account.id}-priority`}>Priority</Label>
-                          <Input
-                            id={`${policy.id}-${account.id}-priority`}
-                            aria-label={`${account.email} priority`}
-                            type="number"
-                            min={1}
-                            max={1000}
-                            value={member.priority}
-                            disabled={busy}
-                            onChange={(event) => {
-                              const priority = Number(event.target.value)
-                              if (Number.isInteger(priority) && priority >= 1 && priority <= 1000) {
-                                change({
-                                  ...policy,
-                                  members: policy.members.map((entry) =>
-                                    entry.accountId === account.id ? { ...entry, priority } : entry
-                                  )
-                                })
-                              }
-                            }}
-                          />
-                        </div>
+                        <AccountPoolMemberSettings
+                          member={member}
+                          accountLabel={account.email}
+                          balanced={policy.strategy === 'balanced'}
+                          disabled={busy}
+                          onChange={(next) =>
+                            change({
+                              ...policy,
+                              members: policy.members.map((entry) =>
+                                entry.accountId === account.id ? next : entry
+                              )
+                            })
+                          }
+                        />
                       ) : null}
                     </div>
                   </div>

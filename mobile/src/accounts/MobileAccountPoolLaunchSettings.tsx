@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import type { AccountPoolPolicy } from '../../../src/shared/account-pool-policy'
 import { PickerModal } from '../components/PickerModal'
+import { MobileSwitch } from '../components/MobileSwitch'
 import { poolStyles } from './mobile-account-pool-styles'
 import { styles } from './mobile-accounts-screen-styles'
 
@@ -22,18 +23,24 @@ export function MobileAccountPoolLaunchSettings({
   ]
   return (
     <View style={poolStyles.content}>
-      <Pressable
-        accessibilityRole="switch"
-        accessibilityLabel={`${policy.provider} apply pool to new work`}
-        accessibilityState={{ checked: policy.applyToNewWork, disabled }}
-        disabled={disabled}
-        style={poolStyles.action}
-        onPress={() => onChange({ ...policy, applyToNewWork: !policy.applyToNewWork })}
-      >
-        <Text style={poolStyles.actionText}>
-          New chats and workers: {policy.applyToNewWork ? 'pool enabled' : 'pool off'}
-        </Text>
-      </Pressable>
+      <View style={poolStyles.toggleRow}>
+        <Text style={[styles.rowTitle, styles.rowMain]}>Use pool for new chats and workers</Text>
+        <MobileSwitch
+          accessibilityLabel={`${policy.provider} apply pool to new work`}
+          disabled={disabled}
+          value={policy.applyToNewWork}
+          onValueChange={(applyToNewWork) => onChange({ ...policy, applyToNewWork })}
+        />
+      </View>
+      <View style={poolStyles.toggleRow}>
+        <Text style={[styles.rowTitle, styles.rowMain]}>Allow reserve accounts</Text>
+        <MobileSwitch
+          accessibilityLabel={`${policy.provider} allow reserve accounts`}
+          disabled={disabled}
+          value={policy.allowReserve}
+          onValueChange={(allowReserve) => onChange({ ...policy, allowReserve })}
+        />
+      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${policy.provider} account switching`}

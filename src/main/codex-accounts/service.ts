@@ -1,3 +1,4 @@
+import type { CodexDeviceAuthorization } from '../../shared/account-device-sign-in'
 import { execFileSync, spawn } from 'node:child_process'
 import type { WindowsHostInteractiveLoginSpawn } from '../../shared/windows-interactive-login-spawn'
 import type {
@@ -81,6 +82,7 @@ function killLoginProcessTree(
 export class CodexAccountService {
   // Why: serialize the read-modify-write of settings; overlapping calls (e.g. double-click Add) would lose updates.
   private mutationQueue: Promise<unknown> = Promise.resolve()
+  private stoppingSignIn = false
   private cancelPendingCodexLogin: (() => boolean) | null = null
   private pendingLoginUrl: string | null = null
   private readonly pendingLoginUrlListeners = new Set<(url: string | null) => void>()
@@ -168,6 +170,30 @@ export class CodexAccountService {
   async addAccount(target?: CodexAccountAddTarget): Promise<CodexRateLimitAccountsState> {
     this.supersedePendingLogin()
     return this.serializeMutation(() => this.registration.add(target))
+  }
+
+  addDeviceAccount(
+    onPrompt: (prompt: CodexDeviceAuthorization) => void,
+    signal: AbortSignal
+  ): Promise<CodexRateLimitAccountsState> {
+    if (signal.aborted) {
+      return Promise.reject(new Error('Codex sign-in was cancelled.'))
+    }
+    this.supersedePendingLogin()
+    return this.serializeMutation(() => {
+      if (signal.aborted) {
+        throw new Error('Codex sign-in was cancelled.')
+      }
+      return this.registration.add(undefined, (home) =>
+        this.runCodexLogin(home, { onPrompt, signal })
+      )
+    })
+  }
+
+  async stopSignIn(): Promise<void> {
+    this.stoppingSignIn = true
+    this.cancelPendingLogin()
+    await this.mutationQueue
   }
 
   /** Abandons the login waiting on a browser, if any. True when one was stopped. */
@@ -284,10 +310,17 @@ export class CodexAccountService {
     this.managedHomes.safeRemove(candidatePath, expectedAccountId)
   }
 
-  private async runCodexLogin(managedHomePath: string): Promise<void> {
+  private async runCodexLogin(
+    managedHomePath: string,
+    deviceAuth?: { onPrompt: (prompt: CodexDeviceAuthorization) => void; signal: AbortSignal }
+  ): Promise<void> {
+    if (this.stoppingSignIn) {
+      throw new Error('Codex sign-in was cancelled.')
+    }
     try {
       await runCodexLoginSession(managedHomePath, {
         wslCommand: 'wsl.exe',
+        deviceAuth,
         spawn: ({ command, args, env, stdio }) =>
           spawn(command, args, {
             stdio,

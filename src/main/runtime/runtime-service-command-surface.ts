@@ -57,7 +57,12 @@ export type RuntimeServiceCommandSurface = {
   selectCodexAccountForTarget: RuntimeAccountController['selectCodexForTarget']
   consumeCodexRateLimitResetCredit: RuntimeAccountController['consumeCodexResetCredit']
   removeClaudeAccount: RuntimeAccountController['removeClaude']
+  stopAccountDeviceSignIns: RuntimeAccountController['stopDeviceSignIns']
+  beginDeviceSignIn: RuntimeAccountController['beginDeviceSignIn']
+  deviceSignIn: RuntimeAccountController['deviceSignIn']
+  cancelDeviceSignIn: RuntimeAccountController['cancelDeviceSignIn']
   beginClaudeSignIn: RuntimeAccountController['beginClaudeSignIn']
+  isClaudeSignInReady: RuntimeAccountController['isClaudeSignInReady']
   finishClaudeSignIn: RuntimeAccountController['finishClaudeSignIn']
   cancelClaudeSignIn: RuntimeAccountController['cancelClaudeSignIn']
   removeCodexAccount: RuntimeAccountController['removeCodex']
@@ -164,7 +169,12 @@ export function installRuntimeServiceCommandSurface(
     selectCodexAccountForTarget: accounts.selectCodexForTarget.bind(accounts),
     consumeCodexRateLimitResetCredit: accounts.consumeCodexResetCredit.bind(accounts),
     removeClaudeAccount: accounts.removeClaude.bind(accounts),
+    stopAccountDeviceSignIns: accounts.stopDeviceSignIns.bind(accounts),
+    beginDeviceSignIn: accounts.beginDeviceSignIn.bind(accounts),
+    deviceSignIn: accounts.deviceSignIn.bind(accounts),
+    cancelDeviceSignIn: accounts.cancelDeviceSignIn.bind(accounts),
     beginClaudeSignIn: accounts.beginClaudeSignIn.bind(accounts),
+    isClaudeSignInReady: accounts.isClaudeSignInReady.bind(accounts),
     finishClaudeSignIn: accounts.finishClaudeSignIn.bind(accounts),
     cancelClaudeSignIn: accounts.cancelClaudeSignIn.bind(accounts),
     removeCodexAccount: accounts.removeCodex.bind(accounts),

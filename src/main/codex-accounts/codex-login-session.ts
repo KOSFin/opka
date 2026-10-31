@@ -1,11 +1,13 @@
 import { join } from 'node:path'
+import type { CodexDeviceAuthorization } from '../../shared/account-device-sign-in'
+import { createHostLoginSpawn } from './codex-login-spawn'
+import {
+  parseCodexDeviceAuthorization,
+  codexDeviceSignInFailure
+} from './codex-device-authorization'
 import type { WindowsHostInteractiveLoginSpawn } from '../../shared/windows-interactive-login-spawn'
-import { buildWindowsHostInteractiveLoginSpawn } from '../../shared/windows-interactive-login-spawn'
-import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { CODEX_LOGIN_CANCELLED_MESSAGE } from '../../shared/codex-auth-errors'
 import { parseWslUncPath } from '../../shared/wsl-paths'
-import { resolveCodexCommand } from '../codex-cli/command'
-import { getSpawnArgsForWindows } from '../win32-utils'
 import { runWslProcess } from '../wsl/wsl-runner'
 import { parseCodexLoginAuthUrl } from './codex-login-auth-url'
 import { loginAuthChanged, readLoginAuthSnapshot } from './codex-login-auth-snapshot'
@@ -49,6 +51,7 @@ export type CodexLoginSpawnRequest = {
 }
 
 type CodexLoginSessionDependencies = {
+  deviceAuth?: { onPrompt: (prompt: CodexDeviceAuthorization) => void; signal: AbortSignal }
   wslCommand: string
   spawn: (request: CodexLoginSpawnRequest) => CodexLoginChild
   killProcessTree: (
@@ -74,7 +77,7 @@ export async function runCodexLoginSession(
 ): Promise<void> {
   let cancelSpawnedLogin: (() => boolean) | null = null
   let cancelled = false
-  dependencies.setCancel(() => {
+  const cancel = (): boolean => {
     // Why: only an accepted cancel latches. A spawned login that refuses —
     // because it already authenticated — must stay cancellable, or the Cancel
     // button and the next add both go dead for the rest of the deadline.
@@ -85,13 +88,26 @@ export async function runCodexLoginSession(
     // this flag instead of opening a browser nobody is waiting for.
     cancelled = true
     return true
-  })
-  await runCodexLoginProcess(managedHomePath, dependencies, {
-    isCancelled: () => cancelled,
-    setSpawnedCancel: (cancel) => {
-      cancelSpawnedLogin = cancel
+  }
+  dependencies.setCancel(cancel)
+  const signal = dependencies.deviceAuth?.signal
+  const onAbort = (): void => {
+    cancel()
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    if (signal?.aborted) {
+      cancel()
     }
-  })
+    await runCodexLoginProcess(managedHomePath, dependencies, {
+      isCancelled: () => cancelled,
+      setSpawnedCancel: (cancel) => {
+        cancelSpawnedLogin = cancel
+      }
+    })
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
+  }
 }
 
 async function runCodexLoginProcess(
@@ -130,7 +146,7 @@ async function runCodexLoginProcess(
           codexCommand: 'codex',
           interactiveLogin: null
         }
-      : createHostLoginSpawn(managedHomePath)
+      : createHostLoginSpawn(managedHomePath, dependencies.deviceAuth !== undefined)
     const child = dependencies.spawn({
       command: spawnConfig.command,
       args: spawnConfig.args,
@@ -142,10 +158,18 @@ async function runCodexLoginProcess(
 
     let settled = false
     let output = ''
+    let publishedDevicePrompt = false
     const appendOutput = (chunk: Buffer): void => {
       output = `${output}${chunk.toString()}`
       if (output.length > MAX_LOGIN_OUTPUT_CHARS) {
         output = output.slice(-MAX_LOGIN_OUTPUT_CHARS)
+      }
+      if (dependencies.deviceAuth && !publishedDevicePrompt) {
+        const prompt = parseCodexDeviceAuthorization(output)
+        if (prompt) {
+          publishedDevicePrompt = true
+          dependencies.deviceAuth.onPrompt(prompt)
+        }
       }
     }
 
@@ -154,7 +178,7 @@ async function runCodexLoginProcess(
     let stdoutText = ''
     let publishedAuthUrl = false
     const publishAuthUrl = (chunk: Buffer): void => {
-      if (publishedAuthUrl) {
+      if (publishedAuthUrl || dependencies.deviceAuth) {
         return
       }
       stdoutText = `${stdoutText}${chunk.toString()}`.slice(-MAX_LOGIN_OUTPUT_CHARS)
@@ -219,10 +243,13 @@ async function runCodexLoginProcess(
     })
 
     const timeoutError = new Error('Codex sign-in took too long to finish. Please try again.')
-    timeout = setTimeout(() => {
-      dependencies.killProcessTree(child, spawnConfig.interactiveLogin)
-      settle(() => rejectPromise(timeoutError))
-    }, LOGIN_TIMEOUT_MS)
+    timeout = setTimeout(
+      () => {
+        dependencies.killProcessTree(child, spawnConfig.interactiveLogin)
+        settle(() => rejectPromise(timeoutError))
+      },
+      dependencies.deviceAuth ? 15 * 60_000 : LOGIN_TIMEOUT_MS
+    )
 
     // Why: on Windows the codex login CLI can linger after writing auth.json,
     // and its open handles on the managed home (log/codex-login.log) make the
@@ -274,7 +301,9 @@ async function runCodexLoginProcess(
           resolvePromise()
           return
         }
-        const trimmedOutput = output.trim()
+        const trimmedOutput = dependencies.deviceAuth
+          ? codexDeviceSignInFailure(new Error(output))
+          : output.trim()
         rejectPromise(
           new Error(
             trimmedOutput
@@ -291,32 +320,6 @@ async function runCodexLoginProcess(
     child.on('error', onError)
     child.on('close', onClose)
   })
-}
-
-function createHostLoginSpawn(managedHomePath: string): {
-  command: string
-  args: string[]
-  env: NodeJS.ProcessEnv
-  codexCommand: string
-  interactiveLogin: WindowsHostInteractiveLoginSpawn | null
-} {
-  const codexCommand = resolveCodexCommand()
-  // Why: Windows host login needs a real console; otherwise inherit/hide
-  // leaves the child unable to read a paste-code / device-auth prompt.
-  const interactiveLogin =
-    process.platform === 'win32'
-      ? buildWindowsHostInteractiveLoginSpawn(codexCommand, ['login'])
-      : null
-  const { spawnCmd, spawnArgs } = interactiveLogin
-    ? { spawnCmd: interactiveLogin.command, spawnArgs: interactiveLogin.args }
-    : getSpawnArgsForWindows(codexCommand, ['login'])
-  return {
-    command: spawnCmd,
-    args: spawnArgs,
-    env: withCliRuntimeOnPath(codexCommand, { ...process.env, CODEX_HOME: managedHomePath }),
-    codexCommand,
-    interactiveLogin
-  }
 }
 
 async function assertWslCodexCliAvailable(wslInfo: {

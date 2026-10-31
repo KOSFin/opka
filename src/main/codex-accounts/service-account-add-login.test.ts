@@ -42,7 +42,7 @@ vi.mock('node:os', async () => {
 describe('CodexAccountService config sync', () => {
   registerCodexAccountsTestHomes()
 
-  it('seeds the managed home config before codex login runs', async () => {
+  it.each(['local', 'device'] as const)('registers %s account', async (mode) => {
     vi.resetModules()
 
     const canonicalConfigPath = join(testState.fakeHomeDir, '.codex', 'config.toml')
@@ -78,7 +78,14 @@ describe('CodexAccountService config sync', () => {
           'utf-8'
         )
 
-        queueMicrotask(() => child.emit('close', 0))
+        queueMicrotask(() => {
+          if (mode === 'device') {
+            child.stdout.write(
+              'https://auth.openai.com/codex/device\n2. Enter this one-time code (expires in 15 minutes)\nAB12-CDE34\n'
+            )
+          }
+          child.emit('close', 0)
+        })
         return child
       }
     )
@@ -105,9 +112,20 @@ describe('CodexAccountService config sync', () => {
       runtimeHome as never
     )
 
-    await service.addAccount()
+    const onPrompt = vi.fn()
+    await (mode === 'device'
+      ? service.addDeviceAccount(onPrompt, new AbortController().signal)
+      : service.addAccount())
 
     expect(spawnMock).toHaveBeenCalledTimes(1)
+    expect(spawnMock.mock.calls[0]?.[1].includes('--device-auth')).toBe(mode === 'device')
+    if (mode === 'device') {
+      expect(onPrompt).toHaveBeenCalledExactlyOnceWith({
+        verificationUrl: 'https://auth.openai.com/codex/device',
+        userCode: 'AB12-CDE34'
+      })
+    }
+    expect(service.listAccounts().accounts).toHaveLength(1)
     expect(runtimeHome.syncForCurrentSelection).toHaveBeenCalledTimes(1)
     // Why: the desktop add path must pass the new account's selection target, as
     // reauthenticate and select already do. Called with no argument, a WSL add

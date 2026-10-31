@@ -1,3 +1,5 @@
+import { ACCOUNT_SIGN_IN_TERMINAL_RUNTIME_CAPABILITY } from '../../shared/account-sign-in-terminal'
+import { runInteractiveClaudeAccountLogin } from './claude-interactive-account-login'
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -141,7 +143,8 @@ async function runAgentLoginInTerminal(
 }
 
 /** Signs in to a new account folder the host created, then registers it (superset AddAccountDialog). */
-async function addClaudeAccount({ client, cwd, json }: HandlerContext): Promise<void> {
+async function addClaudeAccount(ctx: HandlerContext): Promise<void> {
+  const { client, cwd, json } = ctx
   const { result: signIn } = await client.call<ClaudeAccountSignIn>(
     'accounts.beginClaudeSignIn',
     getWslAccountTarget(cwd) ?? {},
@@ -163,6 +166,9 @@ async function addClaudeAccount({ client, cwd, json }: HandlerContext): Promise<
         .catch((error: unknown) => console.warn('[account] Could not clean up sign-in:', error))
     },
     async () => {
+      if (ctx.flags.get('interactive-login') === true) {
+        return runInteractiveClaudeAccountLogin(ctx, signIn, session, runAgentLoginInTerminal)
+      }
       if (signIn.runtime === 'wsl' && signIn.wslDistro) {
         const login = `exec env CLAUDE_CONFIG_DIR=${quotePosixShell(signIn.configDir)} claude auth login`
         await runAgentLoginInTerminal(
@@ -240,12 +246,16 @@ function rejectAccountRemoteSelectionFlags(ctx: HandlerContext, command: string)
 }
 
 async function assertAccountImportSupported(
-  { client }: HandlerContext,
+  ctx: HandlerContext,
   agent: 'claude' | 'codex'
 ): Promise<void> {
-  const status = await client.call<RuntimeStatus>('status.get')
+  const status = await ctx.client.call<RuntimeStatus>('status.get')
   const capability =
-    agent === 'claude' ? CLAUDE_SIGN_IN_RUNTIME_CAPABILITY : ACCOUNT_IMPORT_RUNTIME_CAPABILITY
+    agent === 'claude'
+      ? ctx.flags.get('interactive-login') === true
+        ? ACCOUNT_SIGN_IN_TERMINAL_RUNTIME_CAPABILITY
+        : CLAUDE_SIGN_IN_RUNTIME_CAPABILITY
+      : ACCOUNT_IMPORT_RUNTIME_CAPABILITY
   if (!status.result.capabilities?.includes(capability)) {
     throw new RuntimeClientError(
       'incompatible_runtime',
@@ -271,6 +281,15 @@ export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
       throw new RuntimeClientError(
         'invalid_argument',
         `Unsupported --agent "${agent}". Use "claude", "codex", "opencode", or "devin".`
+      )
+    }
+    if (
+      ctx.flags.has('interactive-login') &&
+      (ctx.flags.get('interactive-login') !== true || agent !== 'claude')
+    ) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        '--interactive-login is only available for Claude sign-in.'
       )
     }
     rejectAccountRemoteSelectionFlags(ctx, 'orca account add')
