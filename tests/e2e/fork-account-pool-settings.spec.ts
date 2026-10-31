@@ -212,6 +212,12 @@ test('server accounts show device sign-in, cancel safely and choose a Claude wor
     await launched.page.getByRole('option', { name: 'Synthetic server', exact: true }).click()
     const signIn = launched.page.getByRole('region', { name: 'Server account sign-in' })
     await expect(signIn.getByText(/Sign in for Synthetic server/)).toBeVisible()
+    await expect(
+      launched.page.locator('#account-pools').getByText('pool@example.test · Selected login')
+    ).toBeVisible()
+    await expect(
+      launched.page.getByText('Could not load provider accounts.', { exact: true })
+    ).toHaveCount(0)
     await signIn.getByRole('button', { name: 'Add Codex account', exact: true }).click()
     await expect(signIn.getByText('TEST-CODE1', { exact: true })).toBeVisible()
     await expect(signIn.getByRole('button', { name: 'Open sign-in page' })).toBeVisible()

@@ -1,4 +1,5 @@
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
+import type { IpcMainInvokeEvent } from 'electron'
 
 export async function installRemoteAccountSignInFixture(
   app: ElectronApplication,
@@ -30,7 +31,10 @@ export async function installRemoteAccountSignInFixture(
     const calls: string[] = []
     Reflect.set(ipcMain, 'forkRemoteSignInCalls', calls)
     ipcMain.removeHandler('runtimeEnvironments:call')
-    ipcMain.handle('runtimeEnvironments:call', async (event, request) => {
+    const call = async (
+      event: IpcMainInvokeEvent,
+      request: { selector: string; method: string; params?: unknown }
+    ) => {
       if (request.selector !== 'synthetic-sign-in-host') {
         throw new Error('Account sign-in reached an unexpected host')
       }
@@ -78,7 +82,37 @@ export async function installRemoteAccountSignInFixture(
         throw new Error('Synthetic sign-in terminal must not be opened')
       }
       return localCall(event, { method: request.method, params: request.params })
+    }
+    ipcMain.handle('runtimeEnvironments:call', call)
+    ipcMain.removeHandler('runtimeEnvironments:subscribe')
+    ipcMain.handle('runtimeEnvironments:subscribe', async (event, request) => {
+      if (request.selector !== environment.id || typeof request.subscriptionId !== 'string') {
+        throw new Error('Unexpected synthetic account subscription')
+      }
+      const response =
+        request.method === 'accounts.subscribe'
+          ? {
+              id: request.method,
+              ok: true,
+              result: {
+                type: 'ready',
+                snapshot: {
+                  claude: { accounts: [], activeAccountId: null },
+                  codex: { accounts: [], activeAccountId: null },
+                  rateLimits: null
+                }
+              }
+            }
+          : await call(event, request)
+      event.sender.send('runtimeEnvironments:subscriptionEvent', {
+        subscriptionId: request.subscriptionId,
+        type: 'response',
+        response
+      })
+      return { subscriptionId: request.subscriptionId, requestId: request.method }
     })
+    ipcMain.removeHandler('runtimeEnvironments:unsubscribe')
+    ipcMain.handle('runtimeEnvironments:unsubscribe', () => undefined)
   }, environment)
   await page.evaluate((environment) => {
     window.__store!.getState().setRuntimeEnvironments([environment])
