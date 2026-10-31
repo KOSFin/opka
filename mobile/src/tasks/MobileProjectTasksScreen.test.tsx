@@ -20,6 +20,11 @@ vi.mock('react-native', () => ({
   TextInput: 'TextInput',
   StyleSheet: { create: (v: unknown) => v }
 }))
+vi.mock('lucide-react-native', () => ({
+  ChevronLeft: 'ChevronLeft',
+  ChevronRight: 'ChevronRight',
+  RefreshCw: 'RefreshCw'
+}))
 vi.mock('expo-router', () => ({ useLocalSearchParams: () => ({ hostId: 'host-1' }) }))
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0 })
@@ -36,6 +41,8 @@ vi.mock('../components/MobileMarkdown', () => ({
   MobileMarkdown: ({ content }: { content: string }) => createElement('Markdown', {}, content)
 }))
 import { MobileProjectTasksScreen } from './MobileProjectTasksScreen'
+import { ProjectTaskBoard } from './ProjectTaskLists'
+import type { MobileProjectTask } from './project-task-rpc'
 let tree: ReactTestRenderer | undefined
 afterEach(async () => {
   await act(async () => tree?.unmount())
@@ -48,10 +55,12 @@ function text() {
 async function press(label: string) {
   const button = tree?.root
     .findAll((node) => String(node.type) === 'Pressable')
-    .find((node) =>
-      JSON.stringify(
-        node.findAll((node) => String(node.type) === 'Text').map((t) => t.props.children)
-      ).includes(label)
+    .find(
+      (node) =>
+        node.props.accessibilityLabel === label ||
+        JSON.stringify(
+          node.findAll((node) => String(node.type) === 'Text').map((t) => t.props.children)
+        ).includes(label)
     )
   if (!button) {
     throw new Error(`Missing button ${label}`)
@@ -107,11 +116,21 @@ describe('mobile project task journey', () => {
       tree = create(createElement(MobileProjectTasksScreen))
     })
     await press('Test project')
+    expect(text()).toContain('Review')
+    expect(text()).toContain('Project board')
     await press('Test task')
     expect(text()).toContain('Implement the plan')
+    expect(text()).toContain('Overview')
+    expect(text()).toContain('Reports (1)')
+    expect(text()).not.toContain('result.md')
+    await press('Reports (1)')
     await press('result.md')
     expect(text()).toContain('Checks passed')
+    await press('Refresh project tasks')
+    expect(text()).toContain('Checks passed')
     await press('Back')
+    expect(text()).toContain('result.md')
+    await press('Overview')
     await act(async () =>
       tree?.root
         .find((node) => String(node.type) === 'TextInput')
@@ -136,4 +155,32 @@ describe('mobile project task journey', () => {
     expect(text()).toContain('execution is unverifiable')
     expect(state.client.sendRequest).not.toHaveBeenCalled()
   })
+})
+
+it('separates board stages and archived tasks without changing task identity', async () => {
+  const onSelect = vi.fn()
+  const makeTask = (id: string, phase: string, archived = false): MobileProjectTask => ({
+    id,
+    title: id,
+    revision: 'a'.repeat(64),
+    path: `docs/${id}.md`,
+    workflow: { phase, archived, revisionChanged: false, attempts: [], events: [] }
+  })
+  const active = makeTask('Active task', 'active')
+  await act(async () => {
+    tree = create(
+      createElement(ProjectTaskBoard, {
+        tasks: [makeTask('Old task', 'active', true), active, makeTask('Planned task', 'ready')],
+        loading: false,
+        onSelect
+      })
+    )
+  })
+  const rendered = text()
+  expect(rendered).toContain('Planned')
+  expect(rendered).toContain('In progress')
+  expect(rendered).toContain('Archived')
+  expect(rendered.indexOf('Planned')).toBeLessThan(rendered.indexOf('In progress'))
+  await press('Active task')
+  expect(onSelect).toHaveBeenCalledWith(active)
 })

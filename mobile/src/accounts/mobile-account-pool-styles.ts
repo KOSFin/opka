@@ -2,6 +2,7 @@ import { StyleSheet } from 'react-native'
 import { colors, spacing, typography } from '../theme/mobile-theme'
 
 export const poolStyles = StyleSheet.create({
+  memberSettings: { gap: spacing.sm },
   content: { padding: spacing.md, gap: spacing.sm },
   account: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -11,6 +12,7 @@ export const poolStyles = StyleSheet.create({
   },
   action: { paddingVertical: spacing.sm, minHeight: 44, justifyContent: 'center' },
   actionText: { color: colors.accentBlue, fontSize: typography.bodySize },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 44 },
   priority: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   input: {
     color: colors.textPrimary,

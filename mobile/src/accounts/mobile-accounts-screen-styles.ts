@@ -43,7 +43,8 @@ export const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm
+    paddingTop: spacing.sm,
+    gap: spacing.lg
   },
   section: {
     marginBottom: spacing.xl

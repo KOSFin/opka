@@ -1,3 +1,5 @@
+import { CLAUDE_SIGN_IN_NOT_FINISHED_MESSAGE } from '../../shared/claude-sign-in-link'
+export { CLAUDE_SIGN_IN_NOT_FINISHED_MESSAGE } from '../../shared/claude-sign-in-link'
 import { randomUUID } from 'node:crypto'
 import type {
   ClaudeAccountSignIn,
@@ -19,8 +21,6 @@ import {
   type ClaudeAccountSelectionTarget
 } from './runtime-selection'
 
-export const CLAUDE_SIGN_IN_NOT_FINISHED_MESSAGE =
-  'Claude has not finished signing in to this account yet. Finish the sign-in in the terminal, then try again.'
 const CLAUDE_LOGIN_WITHOUT_ACCOUNT_MESSAGE =
   'Claude login completed, but Orca could not resolve the account email.'
 
@@ -83,6 +83,14 @@ export class ClaudeAccountRegistration {
     if (!this.deps.selection.findAccount(signIn.accountId)) {
       await this.deps.runtimeAuth.removeAccountFolder(signIn.accountId, signInTarget(signIn))
     }
+  }
+
+  async ready(signIn: Omit<ClaudeAccountSignIn, 'configDir'>): Promise<boolean> {
+    const folder = await this.deps.runtimeAuth.prepareAccountFolder(
+      signIn.accountId,
+      signInTarget(signIn)
+    )
+    return readClaudeFolderLogin(claudeStateFile(folder.readPath)) !== null
   }
 
   async finish(

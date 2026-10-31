@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { ChevronLeft, Check, RefreshCw, User } from 'lucide-react-native'
+import { Check } from 'lucide-react-native'
 import { loadHosts } from '../transport/host-store'
 import { useHostClient } from '../transport/host-client-hooks'
 import { colors, spacing } from '../theme/mobile-theme'
@@ -29,6 +29,9 @@ import { useCodexResetCreditAction } from '../components/use-codex-reset-credit-
 import { ConfirmModal } from '../components/ConfirmModal'
 import { useRouteHandoff } from '../navigation/route-handoff'
 import { MobileAccountPoolSection } from './MobileAccountPoolSection'
+import { MobileAccountSignInSection } from './MobileAccountSignInSection'
+import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
+import { MobileAccountsHeader } from './MobileAccountsHeader'
 
 type AccountsNotice = { title: string; message: string }
 
@@ -50,6 +53,8 @@ export function MobileAccountsScreen() {
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [clockEnabled, setClockEnabled] = useState(false)
   const [notice, setNotice] = useState<AccountsNotice | null>(null)
+  const [section, setSection] = useState<'accounts' | 'pools'>('accounts')
+  const [enrollmentRevision, setEnrollmentRevision] = useState(0)
 
   const acceptSnapshot = useCallback((nextSnapshot: AccountsSnapshot) => {
     setSnapshot(nextSnapshot)
@@ -336,38 +341,13 @@ export function MobileAccountsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.topRow}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <ChevronLeft size={22} color={colors.textPrimary} />
-        </Pressable>
-        <View style={styles.titleWrap}>
-          <Text style={styles.heading}>Accounts</Text>
-          {hostName ? (
-            <Text style={styles.subheading} numberOfLines={1}>
-              {hostName}
-            </Text>
-          ) : null}
-        </View>
-        <Pressable
-          style={styles.iconButton}
-          onPress={refresh}
-          disabled={!client || refreshing || connState !== 'connected'}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Refresh accounts"
-        >
-          {refreshing ? (
-            <ActivityIndicator size="small" color={colors.textSecondary} />
-          ) : (
-            <RefreshCw size={18} color={colors.textSecondary} />
-          )}
-        </Pressable>
-      </View>
+      <MobileAccountsHeader
+        hostName={hostName}
+        refreshing={refreshing}
+        disabled={!client || connState !== 'connected'}
+        onBack={() => router.back()}
+        onRefresh={() => void refresh()}
+      />
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xl }]}
@@ -388,20 +368,39 @@ export function MobileAccountsScreen() {
           </View>
         ) : (
           <>
-            {renderProviderSection('claude', 'Claude')}
-            {renderProviderSection('codex', 'Codex')}
-            <MobileAccountPoolSection
-              key={hostId}
-              client={client}
-              connected={connState === 'connected'}
-              hostName={hostName}
+            <MobileSegmentedControl
+              fill
+              selected={section}
+              onSelect={setSection}
+              segments={[
+                { value: 'accounts', label: 'Accounts' },
+                { value: 'pools', label: 'Pools & switching' }
+              ]}
             />
-            <View style={styles.footerHint}>
-              <User size={14} color={colors.textMuted} />
-              <Text style={styles.footerHintText}>
-                Add or re-authenticate accounts from desktop Settings → Accounts.
-              </Text>
-            </View>
+            {section === 'accounts' ? (
+              <>
+                <MobileAccountSignInSection
+                  key={`sign-in:${hostId}`}
+                  hostId={hostId}
+                  client={client}
+                  connected={connState === 'connected'}
+                  hostName={hostName}
+                  onComplete={() => {
+                    setEnrollmentRevision((revision) => revision + 1)
+                    void refresh()
+                  }}
+                />
+                {renderProviderSection('claude', 'Claude')}
+                {renderProviderSection('codex', 'Codex')}
+              </>
+            ) : (
+              <MobileAccountPoolSection
+                key={`${hostId}:${enrollmentRevision}`}
+                client={client}
+                connected={connState === 'connected'}
+                hostName={hostName}
+              />
+            )}
           </>
         )}
       </ScrollView>

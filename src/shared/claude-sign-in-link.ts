@@ -1,3 +1,5 @@
+export const CLAUDE_SIGN_IN_NOT_FINISHED_MESSAGE =
+  'Claude has not finished signing in to this account yet. Finish the sign-in in the terminal, then try again.'
 export const CLAUDE_SIGN_IN_FAILED_MESSAGE = 'Claude sign-in failed. Please try again.'
 
 /** Whether Orca can catch the sign-in link: Claude's own host runs a POSIX shell for BROWSER. */

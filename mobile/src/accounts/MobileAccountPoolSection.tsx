@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Pressable, Text, TextInput, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import type { AccountPoolPolicy } from '../../../src/shared/account-pool-policy'
 import {
-  AccountPoolViewSchema,
   accountPoolDrafts,
   accountPoolStatus,
   setPoolMembership
 } from '../../../src/shared/account-pool-view'
 import type { AccountPoolView } from '../../../src/shared/account-pool-view'
 import type { RpcClient } from '../transport/rpc-client'
+import { accountPoolsRead, accountPoolUpdate } from './mobile-account-enrollment-operations'
 import { PickerModal } from '../components/PickerModal'
+import { MobileAccountPoolMemberSettings } from './MobileAccountPoolMemberSettings'
 import { MobileAccountPoolLaunchSettings } from './MobileAccountPoolLaunchSettings'
+import { MobileSwitch } from '../components/MobileSwitch'
 import { poolStyles } from './mobile-account-pool-styles'
 import { styles } from './mobile-accounts-screen-styles'
 
@@ -38,11 +40,7 @@ export function MobileAccountPoolSection({
     setSaved(false)
     setError('')
     try {
-      const result = await client.sendRequest('accountPool.list')
-      if (!result.ok) {
-        throw new Error(result.error.message)
-      }
-      const next = AccountPoolViewSchema.parse(result.result)
+      const next = accountPoolsRead.interpret(await accountPoolsRead.request(client))
       setView(next)
       setDrafts(accountPoolDrafts(next))
     } catch (cause) {
@@ -60,16 +58,13 @@ export function MobileAccountPoolSection({
       return
     }
     setBusy(true)
-    void client
-      .sendRequest('accountPool.list')
+    void accountPoolsRead
+      .request(client)
       .then((result) => {
         if (stale) {
           return
         }
-        if (!result.ok) {
-          throw new Error(result.error.message)
-        }
-        const next = AccountPoolViewSchema.parse(result.result)
+        const next = accountPoolsRead.interpret(result)
         setView(next)
         setDrafts(accountPoolDrafts(next))
         setError('')
@@ -100,18 +95,13 @@ export function MobileAccountPoolSection({
     setSaved(false)
     setError('')
     try {
-      const result = await client.sendRequest('accountPool.update', {
-        policy,
-        expectedRevision: policy.revision
-      })
-      if (!result.ok) {
-        throw new Error(result.error.message)
-      }
-      const nextResult = await client.sendRequest('accountPool.list')
-      if (!nextResult.ok) {
-        throw new Error(nextResult.error.message)
-      }
-      const next = AccountPoolViewSchema.parse(nextResult.result)
+      accountPoolUpdate.interpret(
+        await accountPoolUpdate.request(client, {
+          policy,
+          expectedRevision: policy.revision
+        })
+      )
+      const next = accountPoolsRead.interpret(await accountPoolsRead.request(client))
       setView(next)
       setDrafts((previous) =>
         previous.map((entry) =>
@@ -181,7 +171,7 @@ export function MobileAccountPoolSection({
             <View key={policy.id} style={styles.card}>
               <View style={poolStyles.content}>
                 <Text style={styles.rowTitle}>
-                  {policy.provider === 'claude' ? 'Claude' : 'Codex'} · {policy.id}
+                  {policy.provider === 'claude' ? 'Claude' : 'Codex'}
                 </Text>
                 <MobileAccountPoolLaunchSettings
                   policy={policy}
@@ -197,26 +187,20 @@ export function MobileAccountPoolSection({
                 >
                   <Text style={poolStyles.actionText}>Mode: {policy.strategy}</Text>
                 </Pressable>
-                <Pressable
-                  accessibilityRole="switch"
-                  accessibilityLabel={`${policy.provider} allow unknown quota`}
-                  accessibilityState={{ checked: policy.unknownQuota === 'allow', disabled }}
-                  disabled={disabled}
-                  style={poolStyles.action}
-                  onPress={() =>
-                    change({
-                      ...policy,
-                      unknownQuota: policy.unknownQuota === 'allow' ? 'exclude' : 'allow'
-                    })
-                  }
-                >
-                  <Text style={poolStyles.actionText}>
-                    Unknown quota: {policy.unknownQuota === 'allow' ? 'allowed' : 'excluded'}
-                  </Text>
-                </Pressable>
+                <View style={poolStyles.toggleRow}>
+                  <Text style={[styles.rowTitle, styles.rowMain]}>Allow unknown quota</Text>
+                  <MobileSwitch
+                    accessibilityLabel={`${policy.provider} allow unknown quota`}
+                    disabled={disabled}
+                    value={policy.unknownQuota === 'allow'}
+                    onValueChange={(allow) =>
+                      change({ ...policy, unknownQuota: allow ? 'allow' : 'exclude' })
+                    }
+                  />
+                </View>
                 {view.accounts[policy.provider].accounts.length === 0 ? (
                   <Text style={styles.rowSubtitle}>
-                    No managed accounts. Add an account from desktop provider settings.
+                    No saved accounts on this host. Open Accounts to add a login, then return here.
                   </Text>
                 ) : null}
                 {view.accounts[policy.provider].accounts.map((account) => {
@@ -250,27 +234,20 @@ export function MobileAccountPoolSection({
                         </Text>
                       </Pressable>
                       {member ? (
-                        <View style={poolStyles.priority}>
-                          <Text style={styles.rowSubtitle}>Priority</Text>
-                          <TextInput
-                            accessibilityLabel={`${account.email} priority`}
-                            keyboardType="number-pad"
-                            editable={!disabled}
-                            value={String(member.priority)}
-                            style={poolStyles.input}
-                            onChangeText={(text) => {
-                              const priority = Number(text)
-                              if (Number.isInteger(priority) && priority >= 1 && priority <= 1000) {
-                                change({
-                                  ...policy,
-                                  members: policy.members.map((entry) =>
-                                    entry.accountId === account.id ? { ...entry, priority } : entry
-                                  )
-                                })
-                              }
-                            }}
-                          />
-                        </View>
+                        <MobileAccountPoolMemberSettings
+                          member={member}
+                          accountLabel={account.email}
+                          balanced={policy.strategy === 'balanced'}
+                          disabled={disabled}
+                          onChange={(next) =>
+                            change({
+                              ...policy,
+                              members: policy.members.map((entry) =>
+                                entry.accountId === account.id ? next : entry
+                              )
+                            })
+                          }
+                        />
                       ) : null}
                     </View>
                   )

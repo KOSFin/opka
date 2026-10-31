@@ -1,5 +1,9 @@
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
+import {
+  installRemoteAccountSignInFixture,
+  remoteAccountSignInCalls
+} from './helpers/fork-remote-account-sign-in'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 
 const executablePath = process.env.ORCA_FORK_AUDIT_ELECTRON
@@ -188,6 +192,43 @@ test('older hosts expose an unavailable state without mutation controls', async 
       'Account pools unavailable'
     )
     await expect(launched.page.getByRole('button', { name: 'Save codex pool' })).toHaveCount(0)
+  } finally {
+    await session.dispose(app)
+  }
+})
+
+test('server accounts show device sign-in, cancel safely and choose a Claude workspace', async ({
+  testRepoPath
+}, info) => {
+  expect(testRepoPath).toBeTruthy()
+  const session = createRestartSession(info, { ORCA_BACKGROUND_LAUNCH: '1' })
+  let app: ElectronApplication | undefined
+  try {
+    const launched = await session.launch({ executablePath })
+    app = launched.app
+    await openPools(app, launched.page)
+    await installRemoteAccountSignInFixture(app, launched.page)
+    await launched.page.getByRole('combobox', { name: 'Host', exact: true }).click()
+    await launched.page.getByRole('option', { name: 'Synthetic server', exact: true }).click()
+    const signIn = launched.page.getByRole('region', { name: 'Server account sign-in' })
+    await expect(signIn.getByText(/Sign in for Synthetic server/)).toBeVisible()
+    await signIn.getByRole('button', { name: 'Add Codex account', exact: true }).click()
+    await expect(signIn.getByText('TEST-CODE1', { exact: true })).toBeVisible()
+    await expect(signIn.getByRole('button', { name: 'Open sign-in page' })).toBeVisible()
+    await launched.page.screenshot({ path: info.outputPath('remote-codex-account-code.png') })
+    await signIn.getByRole('button', { name: 'Cancel sign-in', exact: true }).click()
+    await expect(signIn.getByText('TEST-CODE1', { exact: true })).toHaveCount(0)
+    await expect.poll(() => remoteAccountSignInCalls(app!)).toContain('accounts.cancelDeviceSignIn')
+    await signIn.getByRole('button', { name: 'Add Claude account in terminal' }).click()
+    await signIn.getByRole('combobox', { name: 'Claude sign-in workspace' }).click()
+    await launched.page.getByRole('option', { name: 'Second server project', exact: true }).click()
+    await expect(signIn.getByRole('combobox', { name: 'Claude sign-in workspace' })).toHaveText(
+      'Second server project'
+    )
+    await expect(
+      signIn.getByRole('button', { name: 'Open Claude sign-in', exact: true })
+    ).toBeEnabled()
+    await launched.page.screenshot({ path: info.outputPath('remote-claude-account-workspace.png') })
   } finally {
     await session.dispose(app)
   }

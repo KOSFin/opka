@@ -11,9 +11,10 @@ export const ACCOUNT_COMMAND_SPECS: CommandSpec[] = [
     summary: 'Add a managed agent account by signing in on this Orca host',
     usage:
       'orca account add [--agent claude|codex|opencode|devin] [--label <name>] [--integration <id>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'agent', 'label', 'integration'],
+    allowedFlags: [...GLOBAL_FLAGS, 'agent', 'label', 'integration', 'interactive-login'],
     notes: [
       'Runs the agent login (`claude login` / `codex login`) in this terminal, then registers the account with the local Orca runtime.',
+      '--interactive-login opens Claude’s /login terminal so a remote browser can return its pasted code; the host registers the account and closes only that sign-in process automatically.',
       'Codex uses device authorization so the browser can complete sign-in from a different machine.',
       'OpenCode 2 uses `opencode auth login --standalone` in private XDG directories. Devin uses `devin auth login --force-manual-token-flow`.',
       'Use --integration <id> to skip the OpenCode integration picker; --label names the saved OpenCode or Devin profile.',

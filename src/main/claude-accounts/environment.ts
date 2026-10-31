@@ -1,16 +1,11 @@
+import { CLAUDE_AUTH_ENV_VARS } from '../../shared/claude-auth-environment'
+export { CLAUDE_AUTH_ENV_VARS } from '../../shared/claude-auth-environment'
 import type { ClaudeManagedAccount } from '../../shared/managed-account-types'
 import {
   CLAUDE_INJECTED_CONFIG_DIR_ENV,
   CLAUDE_PROFILE_POINTER_ENV,
   CLAUDE_USER_CONFIG_DIR_ENV
 } from '../../shared/claude-profile-routing'
-
-export const CLAUDE_AUTH_ENV_VARS = [
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'CLAUDE_CODE_OAUTH_TOKEN',
-  'AWS_BEARER_TOKEN_BEDROCK'
-] as const
 
 export type ClaudeEnvPatch = {
   [CLAUDE_PROFILE_POINTER_ENV]?: string

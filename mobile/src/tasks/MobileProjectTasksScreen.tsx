@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Pressable, ScrollView, Text, View, StyleSheet } from 'react-native'
+import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ChevronLeft, RefreshCw } from 'lucide-react-native'
 import { useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useHostClient } from '../transport/host-client-hooks'
 import { useBackClaim } from '../navigation/use-back-claim'
 import { useRouteHandoff } from '../navigation/route-handoff'
-import { MobileMarkdown } from '../components/MobileMarkdown'
-import { colors, spacing, typography } from '../theme/mobile-theme'
-import { ProjectTaskSessionLink } from './ProjectTaskSessionLink'
-import { ProjectTaskLaunch } from './ProjectTaskLaunch'
-import { ProjectTaskDecision } from './ProjectTaskDecision'
+import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
+import { colors } from '../theme/mobile-theme'
+import { ProjectTaskCatalog, ProjectTaskBoard } from './ProjectTaskLists'
+import { ProjectTaskDetail } from './ProjectTaskDetail'
+import { projectTaskScreenStyles as styles } from './project-task-screen-styles'
 import {
   catalogRead,
   documentsRead,
@@ -85,6 +86,8 @@ export function MobileProjectTasksScreen() {
     setBody('')
     setDocuments([])
     setDocument(null)
+  }, [params.hostId, project, task?.id, task?.revision])
+  useEffect(() => {
     if (!client || !project || !task || state !== 'connected') {
       return
     }
@@ -113,7 +116,7 @@ export function MobileProjectTasksScreen() {
     return () => {
       current = false
     }
-  }, [client, state, project, task])
+  }, [client, state, project, task?.id, task?.revision, refresh])
   useEffect(() => {
     setReport('')
     if (!client || !project || !task || !document || state !== 'connected') {
@@ -136,7 +139,7 @@ export function MobileProjectTasksScreen() {
     return () => {
       current = false
     }
-  }, [client, state, project, task, document])
+  }, [client, state, project, task?.id, task?.revision, document, refresh])
   function back() {
     setError('')
     if (document) {
@@ -158,190 +161,100 @@ export function MobileProjectTasksScreen() {
         }
       : null
   )
+  const projectName = projects.find((item) => item.selector === project)?.name ?? 'Project tasks'
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" onPress={back} style={styles.button}>
-          <Text style={styles.text}>Back</Text>
-        </Pressable>
-        <Text style={styles.title} numberOfLines={1}>
-          {task?.title ?? 'Project tasks'}
-        </Text>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={back}
+          style={styles.iconButton}
+        >
+          <ChevronLeft size={22} color={colors.textPrimary} />
+        </Pressable>
+        <View style={styles.headerMain}>
+          <Text style={styles.title} numberOfLines={1}>
+            {document?.split('/').at(-1) ?? task?.title ?? (project ? projectName : 'Tasks')}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1}>
+            {task ? projectName : project ? 'Project board' : 'Projects on this host'}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh project tasks"
           disabled={loading || state !== 'connected'}
           onPress={() => setRefresh((n) => n + 1)}
-          style={styles.button}
+          style={[styles.iconButton, (loading || state !== 'connected') && styles.disabled]}
         >
-          <Text style={styles.text}>Refresh</Text>
+          <RefreshCw size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
+      {!project ? (
+        <MobileSegmentedControl
+          fill
+          style={styles.tabs}
+          selected="project"
+          segments={[
+            { value: 'project', label: 'Project tasks' },
+            { value: 'external', label: 'External trackers' }
+          ]}
+          onSelect={(value) => {
+            if (value === 'external') {
+              router.push(`/h/${encodeURIComponent(params.hostId)}/tasks?taskSource=github`)
+            }
+          }}
+        />
+      ) : null}
       <ScrollView contentContainerStyle={styles.content}>
         {state !== 'connected' ? (
           <Text style={styles.notice}>
             Host disconnected. Task execution is unverifiable until reconnected.
           </Text>
         ) : null}
-        {loading ? <Text style={styles.meta}>Refreshing…</Text> : null}
+        {loading ? (
+          <Text accessibilityRole="text" style={styles.meta}>
+            Refreshing…
+          </Text>
+        ) : null}
         {error ? (
           <Text style={styles.notice}>
             {error} Update the execution host if project tasks are unavailable, then refresh.
           </Text>
         ) : null}
         {!project ? (
-          <>
-            <Text style={styles.meta}>Choose a project on this host.</Text>
-            {projects.map((item) => (
-              <Pressable
-                accessibilityRole="button"
-                key={item.selector}
-                disabled={item.state !== 'configured'}
-                style={styles.row}
-                onPress={() => setProject(item.selector)}
-              >
-                <Text style={styles.text}>{item.name}</Text>
-                <Text style={styles.meta}>
-                  {item.state === 'configured'
-                    ? 'Tasks, reports and activity'
-                    : (item.message ?? 'Task board not configured')}
-                </Text>
-              </Pressable>
-            ))}
-            <Pressable
-              accessibilityRole="button"
-              style={styles.row}
-              onPress={() =>
-                router.push(`/h/${encodeURIComponent(params.hostId)}/tasks?taskSource=github`)
-              }
-            >
-              <Text style={styles.text}>External trackers</Text>
-            </Pressable>
-          </>
+          <ProjectTaskCatalog
+            projects={projects}
+            loading={loading}
+            onSelect={(selector) => {
+              setTask(null)
+              setProject(selector)
+            }}
+          />
         ) : !task ? (
-          <>
-            <Text style={styles.title}>{projects.find((p) => p.selector === project)?.name}</Text>
-            {!loading && tasks.length === 0 ? (
-              <Text style={styles.meta}>No tasks in this project.</Text>
-            ) : null}
-            {tasks.map((item) => (
-              <Pressable
-                accessibilityRole="button"
-                key={item.id}
-                style={styles.row}
-                onPress={() => setTask(item)}
-              >
-                <Text style={styles.text}>{item.title}</Text>
-                <Text style={styles.meta}>
-                  {item.workflow.phase}
-                  {item.workflow.archived ? ' · Archived' : ''}
-                  {item.workflow.revisionChanged ? ' · Plan changed' : ''}
-                </Text>
-              </Pressable>
-            ))}
-          </>
-        ) : document ? (
-          <>
-            <Text style={styles.meta}>{document}</Text>
-            <MobileMarkdown content={report} fallback="Loading document…" />
-          </>
+          <ProjectTaskBoard tasks={tasks} loading={loading} onSelect={setTask} />
         ) : (
-          <>
-            <Text style={styles.meta}>
-              {task.workflow.phase} · {task.path}
-            </Text>
-            <MobileMarkdown content={body} fallback="Loading task…" />
-            <ProjectTaskLaunch
-              key={`${params.hostId}:${project}:${task.id}`}
-              client={client}
-              connected={state === 'connected'}
-              hostId={params.hostId}
-              worktree={project}
-              executionHostId={executionHostId}
-              task={task}
-            />
-            <Text style={styles.title}>Reports and checkpoints</Text>
-            {documents.length === 0 ? <Text style={styles.meta}>No saved reports yet.</Text> : null}
-            {documents.map((path) => (
-              <Pressable
-                accessibilityRole="button"
-                style={styles.row}
-                key={path}
-                onPress={() => setDocument(path)}
-              >
-                <Text style={styles.text}>{path.split('/').at(-1)}</Text>
-              </Pressable>
-            ))}
-            <Text style={styles.title}>Attempts</Text>
-            {task.workflow.attempts.map((attempt) => (
-              <View style={styles.row} key={attempt.id}>
-                <Text style={styles.text}>{attempt.nativeStatus}</Text>
-                <Text selectable style={styles.meta}>
-                  {attempt.session?.address ?? attempt.terminal ?? 'No agent session recorded'}
-                </Text>
-                {attempt.session?.address || attempt.terminal ? (
-                  <ProjectTaskSessionLink
-                    client={client}
-                    connected={state === 'connected'}
-                    hostId={params.hostId}
-                    terminal={attempt.session?.address ?? attempt.terminal ?? ''}
-                  />
-                ) : null}
-                {attempt.session?.blocker ? (
-                  <Text style={styles.notice}>{attempt.session.blocker}</Text>
-                ) : null}
-              </View>
-            ))}
-            <ProjectTaskDecision
-              key={task.id}
-              client={client}
-              connected={state === 'connected'}
-              worktree={project}
-              executionHostId={executionHostId}
-              task={task}
-              onDone={() => {
-                setTask(null)
-                setRefresh((n) => n + 1)
-              }}
-            />
-            <Text style={styles.title}>Activity</Text>
-            {task.workflow.events.map((event) => (
-              <View style={styles.row} key={event.sequence}>
-                <Text style={styles.text}>
-                  {event.kind}: {event.detail}
-                </Text>
-                <Text style={styles.meta}>{event.createdAt}</Text>
-              </View>
-            ))}
-          </>
+          <ProjectTaskDetail
+            key={`${params.hostId}:${project}:${task.id}`}
+            client={client}
+            connected={state === 'connected'}
+            hostId={params.hostId}
+            worktree={project}
+            executionHostId={executionHostId}
+            task={task}
+            body={body}
+            documents={documents}
+            selectedDocument={document}
+            report={report}
+            onDocument={setDocument}
+            onDone={() => {
+              setTask(null)
+              setRefresh((n) => n + 1)
+            }}
+          />
         )}
       </ScrollView>
     </View>
   )
 }
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bgBase },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle
-  },
-  content: { padding: spacing.lg, gap: spacing.md },
-  title: {
-    color: colors.textPrimary,
-    fontSize: typography.titleSize,
-    flexShrink: 1,
-    fontWeight: '600'
-  },
-  text: { color: colors.textPrimary, fontSize: typography.bodySize },
-  meta: { color: colors.textSecondary, fontSize: typography.metaSize },
-  notice: { color: colors.statusAmber, fontSize: typography.bodySize },
-  button: { minHeight: 48, paddingHorizontal: spacing.lg, justifyContent: 'center' },
-  row: {
-    minHeight: 48,
-    paddingVertical: spacing.md,
-    gap: spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle
-  }
-})

@@ -72,6 +72,7 @@ import { MiniMaxAccountsSection } from './MiniMaxAccountsSection'
 import { useUsageHostSettings } from './use-usage-host-settings'
 import { ManagedDataAccountsSection } from './ManagedDataAccountsSection'
 import { AccountPoolSection } from './AccountPoolSection'
+import { RemoteAccountSignInSection } from './RemoteAccountSignInSection'
 import { renderAccountsRemovalDialogs } from './accounts-pane-removal-dialogs'
 
 export { getAccountsPaneSearchEntries }
@@ -88,6 +89,7 @@ export function AccountsPane({
   wslHostDistro = null
 }: AccountsPaneProps): React.JSX.Element {
   const searchQuery = useAppStore((s) => s.settingsSearchQuery)
+  const [enrollmentRevision, setEnrollmentRevision] = useState(0)
   const codexRateLimits = useAppStore((s) => s.rateLimits.codex)
   const codexRateLimitTarget = useAppStore((s) => s.rateLimits.codexTarget)
   const miniMaxRateLimits = useAppStore((s) => s.rateLimits.minimax)
@@ -347,10 +349,18 @@ export function AccountsPane({
     recordOpenCodeSettingEdit
   }
   const visibleSections = [
+    isRemoteAccountScope && (!searchQuery || /account|codex|sign|login|pool/i.test(searchQuery)) ? (
+      <RemoteAccountSignInSection
+        key={`sign-in:${accountOwnerKey}`}
+        target={accountOwner}
+        hostLabel={remoteServerLabel ?? 'Server'}
+        onComplete={() => setEnrollmentRevision((revision) => revision + 1)}
+      />
+    ) : null,
     !searchQuery ||
     /pool|priority|rotation|account|sequential|balanced|drain/i.test(searchQuery) ? (
       <AccountPoolSection
-        key={`pool:${accountOwnerKey}`}
+        key={`pool:${accountOwnerKey}:${enrollmentRevision}`}
         target={accountOwner}
         hostLabel={
           remoteServerLabel ?? translate('settings.accountPools.localHost', 'Local desktop')

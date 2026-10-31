@@ -1,3 +1,5 @@
+import { ACCOUNT_SIGN_IN_TERMINAL_METHODS } from './account-sign-in-terminal'
+import { ACCOUNT_DEVICE_SIGN_IN_METHODS } from './account-device-sign-in'
 import { ACCOUNT_POOL_METHODS } from './account-pools'
 import { STATUS_METHODS } from './status'
 import { SIDEBAR_INPUT_METHODS } from './sidebar-inputs'
@@ -110,6 +112,8 @@ export const ALL_RPC_METHODS = [
   ...DIAGNOSTICS_METHODS,
   ...TERMINAL_DAEMON_METHODS,
   ...ACCOUNT_METHODS,
+  ...ACCOUNT_DEVICE_SIGN_IN_METHODS,
+  ...ACCOUNT_SIGN_IN_TERMINAL_METHODS,
   ...ACCOUNT_POOL_METHODS,
   ...ANTIGRAVITY_ACCOUNT_METHODS,
   ...USAGE_CREDENTIAL_METHODS,

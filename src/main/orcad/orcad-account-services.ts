@@ -45,7 +45,9 @@ export type OrcadAccountServices = {
   attachToRuntime: (
     runtime: Pick<
       OrcaRuntimeService,
-      'setAccountServices' | 'setCommitMessageAgentEnvironmentResolvers'
+      | 'setAccountServices'
+      | 'setCommitMessageAgentEnvironmentResolvers'
+      | 'stopAccountDeviceSignIns'
     >
   ) => void
 }
@@ -74,7 +76,8 @@ export function createOrcadAccountServices(args: {
     setClaudeStatusLineListener: args.setClaudeStatusLineListener
   })
   // Why no start(): like headless desktop serve, usage refreshes on demand (accounts.list, subscribe).
-  args.registerCleanup(() => {
+  args.registerCleanup(async () => {
+    await services.codexAccounts.stopSignIn()
     services.rateLimits.stop()
     args.setClaudeStatusLineListener(null)
   })
@@ -118,6 +121,9 @@ export function createOrcadAccountServices(args: {
     },
     listCodexSessionHomes: () => codexRuntimeHome.getHostCodexHomePathsForSessionDiscovery(),
     attachToRuntime: (runtime) => {
+      args.registerCleanup(async () => {
+        await runtime.stopAccountDeviceSignIns()
+      })
       runtime.setAccountServices({
         claudeAccounts: services.claudeAccounts,
         codexAccounts: services.codexAccounts,

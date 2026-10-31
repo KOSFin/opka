@@ -210,6 +210,7 @@ function installWillQuitHandler(): void {
     browserManager.setBrowserGuestStateChangedListener(null)
     const emulatorShutdown =
       state.runtime?.getEmulatorBridge()?.destroyAllSessions() ?? Promise.resolve()
+    const accountSignInShutdown = state.runtime?.stopAccountDeviceSignIns() ?? null
     const finalStore = state.store
     const beginSshShutdownAndFinalSave = () => {
       // Why immediately before the final store flush with no await in between: beginSshShutdown() marks every
@@ -232,11 +233,11 @@ function installWillQuitHandler(): void {
       })()
       return { sshShutdown, watcherShutdown, storeFlush }
     }
-    // Layout-owner build: a pane grid still in its write burst lands first (bounded at 1 s); null
-    // otherwise, so a quit with none starts the SSH shutdown and final save right here as before.
-    const finalSaves = paneGridFlush
-      ? paneGridFlush.then(beginSshShutdownAndFinalSave)
-      : beginSshShutdownAndFinalSave()
+    // Finish accepted account registration and pane-grid writes before the final snapshot.
+    const finalSaves =
+      paneGridFlush || accountSignInShutdown
+        ? Promise.all([paneGridFlush, accountSignInShutdown]).then(beginSshShutdownAndFinalSave)
+        : beginSshShutdownAndFinalSave()
     const sshShutdown = Promise.resolve(finalSaves).then((saves) => saves.sshShutdown)
     const storeFlush = Promise.resolve(finalSaves).then((saves) => saves.storeFlush)
     const watcherShutdown = Promise.resolve(finalSaves).then((saves) => saves.watcherShutdown)

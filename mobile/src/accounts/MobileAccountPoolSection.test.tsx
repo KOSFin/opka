@@ -14,6 +14,7 @@ vi.mock('../components/PickerModal', () => ({
   PickerModal: (props: Record<string, unknown>) => createElement('Picker', props)
 }))
 import { MobileAccountPoolSection } from './MobileAccountPoolSection'
+vi.mock('../components/MobileSwitch', () => ({ MobileSwitch: 'MobileSwitch' }))
 const snapshot = {
   capability: 'orchestration.account-pools.v1',
   policies: [],
@@ -50,9 +51,9 @@ it('saves the selected mode with host revision and refreshes host state', async 
   )
   await act(async () =>
     tree?.root
-      .findAllByType('Pressable')
+      .findAllByType('MobileSwitch')
       .find((node) => node.props.accessibilityLabel === 'codex apply pool to new work')
-      ?.props.onPress()
+      ?.props.onValueChange(true)
   )
   await act(async () =>
     tree?.root
