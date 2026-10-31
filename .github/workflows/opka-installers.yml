@@ -165,9 +165,16 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
       - uses: actions/download-artifact@v8
         with:
-          pattern: opka-*-${{ github.sha }}
+          name: opka-macos-${{ github.sha }}
           path: dist
-          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: opka-server-${{ github.sha }}
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: opka-android-${{ github.sha }}
+          path: dist
       - run: node config/scripts/opka-release-assets.mjs complete dist
       - uses: actions/upload-artifact@v7
         with:
