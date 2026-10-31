@@ -1,6 +1,7 @@
+import { PRODUCT_IDENTITY } from './product-identity'
 import { isUsableSkillsCliAgentKey } from './skills-cli-agent-keys'
 
-export const ORCA_SKILLS_REPOSITORY_URL = 'https://github.com/stablyai/orca'
+export const ORCA_SKILLS_REPOSITORY_URL = `https://github.com/${PRODUCT_IDENTITY.releaseRepo}`
 
 // Why: one skills CLI for every install rail. 1.5.x cannot fetch a commit, and a bare
 // `npx skills` can reuse a stale cached copy or another binary (#18687).

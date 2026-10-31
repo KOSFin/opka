@@ -6,7 +6,7 @@ import {
 } from './agent-feature-install-commands'
 
 const sourceCommit = '0123456789abcdef0123456789abcdef01234567'
-const source = `https://github.com/stablyai/orca/tree/${sourceCommit}`
+const source = `https://github.com/KOSFin/opka/tree/${sourceCommit}`
 
 describe('agent feature skill commands', () => {
   it('pins the skills CLI and the source to the build commit', () => {

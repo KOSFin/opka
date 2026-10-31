@@ -82,7 +82,7 @@ if (artifact) {
   )
   process.stdout.write(`${JSON.stringify({ target, ...response })}\n`)
 
-  const source = `https://github.com/stablyai/orca/tree/${resolveBuildSourceCommit()}`
+  const source = `https://github.com/KOSFin/opka/tree/${resolveBuildSourceCommit()}`
   const cli = runProcessSync({
     program: runtimePath,
     args: [
