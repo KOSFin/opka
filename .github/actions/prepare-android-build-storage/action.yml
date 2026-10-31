@@ -1,0 +1,14 @@
+name: Prepare Android build storage
+description: Ensure runner disk capacity for native Android builds without removing Android or Java tools.
+runs:
+  using: composite
+  steps:
+    - name: Reclaim unused Linux runner tools and require build capacity
+      shell: bash
+      run: |
+        set -euo pipefail
+        [ "$RUNNER_OS" = Linux ] || { echo 'Android storage preparation requires Linux.' >&2; exit 1; }
+        df -h "$GITHUB_WORKSPACE"
+        sudo rm -rf -- /usr/share/dotnet /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL
+        df -h "$GITHUB_WORKSPACE"
+        python3 -c 'import os,shutil; free=shutil.disk_usage(os.environ["GITHUB_WORKSPACE"]).free; print(f"Android build free bytes: {free}"); assert free >= 24 * 1024**3, "Android native build requires at least 24 GiB free before dependency installation"'

@@ -55,6 +55,7 @@ jobs:
         run: python3 -c 'import os,re; v=os.environ["PUBLISHED_VERSION"]; assert not v or (os.environ["RELEASE_SIGNER"] == "true" and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*",v)), "Published acceptance requires release_signer and a beta version"'
       - name: Validate published download argument contract offline
         run: python3 config/scripts/opka_android_published_update_test.py
+      - uses: ./.github/actions/prepare-android-build-storage
       - uses: ./.github/actions/install-node-dependencies
       - uses: ./.github/actions/install-mobile-dependencies
       - uses: actions/setup-java@v5
