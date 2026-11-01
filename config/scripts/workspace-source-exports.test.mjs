@@ -157,3 +157,33 @@ it('rejects wildcard source exports and duplicate workspace identities', () => {
   })
   expect(() => createWorkspaceSourceResolver(root)).toThrow('duplicate workspace package name')
 })
+
+it('resolves an explicitly included mobile file package main without weakening root exports', () => {
+  const manifest = 'mobile/packages/audio/package.json'
+  const root = fixture({
+    extra: {
+      [manifest]: JSON.stringify({ name: '@orca/audio', main: 'src/index.ts' }),
+      'mobile/packages/audio/src/index.ts': 'export {}'
+    }
+  })
+  expect(() => createWorkspaceSourceResolver(root).resolve('@orca/audio')).toThrow(
+    'No public orca-source'
+  )
+  const resolver = createWorkspaceSourceResolver(root, { additionalManifests: [manifest] })
+  expect(resolver.resolve('@orca/audio')).toMatchObject({
+    file: 'mobile/packages/audio/src/index.ts',
+    manifest
+  })
+  expect(() => resolver.resolve('@orca/process-host')).toThrow('No public orca-source')
+  expect(() => resolver.resolve('@orca/audio/private')).toThrow('No public orca-source')
+})
+
+it('rejects unsafe mobile source main entries instead of silently scanning outside the package', () => {
+  const manifest = 'mobile/packages/audio/package.json'
+  const root = fixture({
+    extra: { [manifest]: JSON.stringify({ name: '@orca/audio', main: '../private.ts' }) }
+  })
+  expect(() => createWorkspaceSourceResolver(root, { additionalManifests: [manifest] })).toThrow(
+    'Invalid orca-source'
+  )
+})

@@ -1,12 +1,12 @@
 import { unitConsumers } from './ci-unit-dependency-graph.mjs'
 import { balanceFiles } from './ci-shard-assignment.mjs'
 
-export function selectUnitFiles(files, changed, graphInput) {
+export function selectUnitFiles(files, changed, graphInput, { sourcePrefixes = ['src/'] } = {}) {
   const full = (reason) => ({ files, reason, full: true })
   if (!changed.length) {
     return full('Missing changed-path evidence')
   }
-  if (changed.some((file) => !file.startsWith('src/'))) {
+  if (changed.some((file) => !sourcePrefixes.some((prefix) => file.startsWith(prefix)))) {
     return full('Global, deleted, renamed or unknown input')
   }
   const graph = typeof graphInput === 'function' ? graphInput() : graphInput

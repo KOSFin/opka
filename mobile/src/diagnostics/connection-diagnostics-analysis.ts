@@ -229,8 +229,18 @@ function selectDiagnosticFailure(
 // Among relay failures the newest wins, so a fresh session close or director
 // error is never hidden behind an older verdict.
 function newestFailure(entries: readonly ConnectionLogEntry[]): ConnectionLogEntry | undefined {
-  const newestFirst = entries.toReversed().filter(isDiagnosticFailure)
-  return newestFirst.find((entry) => entry.path === 'relay') ?? newestFirst[0]
+  let newest: ConnectionLogEntry | undefined
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index]
+    if (!entry || !isDiagnosticFailure(entry)) {
+      continue
+    }
+    if (entry.path === 'relay') {
+      return entry
+    }
+    newest ??= entry
+  }
+  return newest
 }
 
 function isSessionBoundary(entry: ConnectionLogEntry): boolean {

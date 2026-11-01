@@ -1,20 +1,10 @@
 name: Opka Android OS update acceptance
 on:
-  pull_request:
-    paths:
-      - 'mobile/**'
-      - 'config/scripts/opka-android*'
-      - 'config/scripts/opka_android_published_update*.py'
-      - 'config/scripts/opka_android_handoff_status.py'
-      - 'config/scripts/opka_android_baseline_artifact*.py'
-      - 'config/scripts/opka_android_fixture*.py'
-      - 'config/scripts/build-android-update-handoff.py'
-      - 'config/android-update-handoff/**'
-      - '.github/actions/prepare-opka-firebase/**'
-      - 'config/scripts/prepare*firebase*.py'
-      - '.github/workflows/opka-android-update-acceptance.yml'
   workflow_call:
     inputs:
+      candidate_artifact:
+        type: string
+        default: ''
       release_signer:
         type: boolean
         default: false
@@ -29,6 +19,10 @@ on:
         default: ''
   workflow_dispatch:
     inputs:
+      candidate_artifact:
+        description: Exact same-run installer artifact (protected release only)
+        type: string
+        default: ''
       release_signer:
         description: Use the protected Opka release identity instead of a disposable CI identity
         type: boolean
@@ -48,6 +42,7 @@ on:
         default: ''
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: opka-android-os-update-${{ github.ref }}
   cancel-in-progress: false
@@ -64,6 +59,9 @@ jobs:
     timeout-minutes: 70
     environment: ${{ github.event_name != 'pull_request' && inputs.release_signer && 'opka-android-release' || 'opka-android-ci' }}
     env:
+      CANDIDATE_ARTIFACT: ${{ inputs.candidate_artifact || '' }}
+      CANDIDATE_ARTIFACT_DIR: ${{ inputs.candidate_artifact && 'out/android-release-candidate' || '' }}
+      OPKA_ANDROID_CERTIFICATE_SHA256: ${{ vars.OPKA_ANDROID_CERTIFICATE_SHA256 }}
       PUBLISHED_VERSION: ${{ inputs.published_version || '' }}
       RELEASE_SIGNER: ${{ github.event_name != 'pull_request' && inputs.release_signer || false }}
       UPDATE_SURFACE: ${{ inputs.update_surface || 'settings' }}
@@ -74,6 +72,8 @@ jobs:
           persist-credentials: false
       - name: Validate published-channel scope
         run: python3 -c 'import os,re; v=os.environ["PUBLISHED_VERSION"]; assert not v or (os.environ["RELEASE_SIGNER"] == "true" and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*",v)), "Published acceptance requires release_signer and a beta version"'
+      - name: Validate exact installer artifact scope
+        run: python3 -c 'import os; a=os.environ["CANDIDATE_ARTIFACT"]; assert not a or (os.environ["RELEASE_SIGNER"] == "true" and a == "opka-android-" + os.environ["GITHUB_SHA"]), "Only this release run installer artifact is admitted"'
       - name: Validate candidate version as data
         run: python3 -c 'import os,re; assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*",os.environ["CANDIDATE_VERSION"]), "Invalid candidate beta version"'
       - name: Validate published download argument contract offline
@@ -85,6 +85,7 @@ jobs:
           python3 config/scripts/opka_android_fixture_proxy_test.py
           python3 config/scripts/opka_android_ci_acceptance_test.py
           python3 config/scripts/opka_android_ui_journey_test.py
+          python3 config/scripts/opka_android_task_fields_test.py
       - uses: ./.github/actions/prepare-android-build-storage
       - uses: ./.github/actions/install-node-dependencies
         with:
@@ -107,25 +108,38 @@ jobs:
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0
           log-accepted-android-sdk-licenses: 'false'
+      - name: Download the exact already qualified installer
+        if: inputs.candidate_artifact != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.candidate_artifact }}
+          path: out/android-release-candidate
+      - name: Verify installer identity and payload without modifying it
+        if: inputs.candidate_artifact != ''
+        run: python3 config/scripts/opka_android_candidate_artifact.py --directory out/android-release-candidate --output out/android-native-ui/candidate-artifact.json
       - name: Prepare own Firebase Android configuration
+        if: inputs.candidate_artifact == ''
         id: firebase
         uses: ./.github/actions/prepare-opka-firebase
         env:
           OPKA_GOOGLE_SERVICES_JSON: ${{ secrets.OPKA_GOOGLE_SERVICES_JSON }}
       - name: Validate Android JavaScript before native compilation
+        if: inputs.candidate_artifact == ''
         working-directory: mobile
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           OPKA_VERSION: ${{ env.CANDIDATE_VERSION }}
         run: pnpm exec expo export --platform android --no-bytecode --max-workers 1 --output-dir "$RUNNER_TEMP/opka-android-js-preflight"
       - name: Generate native regression project
+        if: inputs.candidate_artifact == ''
         working-directory: mobile
         env:
           OPKA_VERSION: ${{ env.CANDIDATE_VERSION }}
         run: pnpm exec expo prebuild --platform android --no-install
       - name: Test native update ownership, validation and cleanup
+        if: inputs.candidate_artifact == ''
         working-directory: mobile/android
-        run: ./gradlew :opka-app-update:testReleaseUnitTest --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m
+        run: ./gradlew :opka-app-update:testReleaseUnitTest :orca-mobile-web-shell:testReleaseUnitTest --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m
       - name: Acquire and verify the published performance baseline
         env:
           GH_TOKEN: ${{ github.token }}
@@ -137,6 +151,7 @@ jobs:
           actual="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs out/android-idle-baseline/opka-android.apk | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
           test "$actual" = "$expected"
       - name: Fingerprint Android fixture inputs
+        if: inputs.candidate_artifact == ''
         id: fixture_key
         env:
           FIREBASE_CLIENT_SHA256: ${{ steps.firebase.outputs.client_sha256 }}
@@ -147,13 +162,14 @@ jobs:
           input_hash="$(git ls-tree HEAD -- mobile src/shared src/packages config/patches package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc .github/actions .github/workflows/opka-android-update-acceptance.yml | sha256sum | cut -d ' ' -f 1)"
           echo "key=opka-android-fixtures-r6-candidate-v2-$CANDIDATE_VERSION-$RUNNER_OS-$RUNNER_ARCH-$input_hash-$FIREBASE_CLIENT_SHA256-$ANDROID_BUILD_ENV_SHA256" >> "$GITHUB_OUTPUT"
       - name: Restore unsigned Android fixtures
+        if: inputs.candidate_artifact == ''
         id: fixture_cache
         uses: actions/cache/restore@v5
         with:
           path: out/android-update-fixtures/*-unsigned.apk
           key: ${{ steps.fixture_key.outputs.key }}
       - name: Build diagnostic APKs from current Android inputs
-        if: steps.fixture_cache.outputs.cache-hit != 'true'
+        if: inputs.candidate_artifact == '' && (steps.fixture_cache.outputs.cache-hit != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -165,14 +181,16 @@ jobs:
             cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/android-update-fixtures/$artifact-unsigned.apk"
           done
       - name: Save unsigned Android fixtures
-        if: steps.fixture_cache.outputs.cache-hit != 'true'
+        if: inputs.candidate_artifact == '' && (steps.fixture_cache.outputs.cache-hit != 'true')
         uses: actions/cache/save@v5
         with:
           path: out/android-update-fixtures/*-unsigned.apk
           key: ${{ steps.fixture_key.outputs.key }}
       - name: Build CI-only target-UID installer handoff
+        if: inputs.candidate_artifact == ''
         run: python3 config/scripts/build-android-update-handoff.py
       - name: Sign both versions with one identity and verify it
+        if: inputs.candidate_artifact == ''
         shell: bash
         env:
           RELEASE_SIGNER: ${{ github.event_name != 'pull_request' && inputs.release_signer || false }}
@@ -204,6 +222,28 @@ jobs:
           handoff_certificate="$("$apksigner" verify --print-certs out/android-update-handoff/handoff.apk | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
           [ "$handoff_certificate" = "$first_certificate" ]
           printf '%s\n' "$RELEASE_SIGNER" > out/android-update-fixtures/release-signer.txt
+      - name: Cache the pinned Google APIs system image
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.ANDROID_HOME }}/system-images/android-33/google_apis/x86_64
+          key: opka-avd-api33-google-apis-x86_64-r17
+      - name: Install and require Google APIs API33 image revision 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'system-images;android-33;google_apis;x86_64'
+          python3 - <<'PYIMAGE'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['ANDROID_HOME']) / 'system-images/android-33/google_apis/x86_64/source.properties'
+          props = dict(line.split('=', 1) for line in path.read_text().splitlines() if '=' in line)
+          props = {key.strip(): value.strip() for key, value in props.items()}
+          assert props['Pkg.Revision'] == '17' and props['AndroidVersion.ApiLevel'] == '33'
+          assert props['SystemImage.TagId'] == 'google_apis' and props['SystemImage.Abi'] == 'x86_64'
+          target = Path('out/android-native-ui')
+          target.mkdir(parents=True, exist_ok=True)
+          (target / 'system-image.json').write_text(json.dumps({key: props[key] for key in ['Pkg.Revision', 'AndroidVersion.ApiLevel', 'SystemImage.TagId', 'SystemImage.Abi']}, indent=2) + '\n')
+          PYIMAGE
       - name: Require KVM acceleration
         run: |
           test -c /dev/kvm
@@ -212,7 +252,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 33
-          target: default
+          target: google_apis
           arch: x86_64
           profile: pixel
           cores: 2
@@ -237,6 +277,16 @@ jobs:
             out/android-native-ui/
             mobile/modules/opka-app-update/android/build/test-results/
           if-no-files-found: warn
+          retention-days: 14
+      - name: Save exact tested installer identity for publication
+        if: success() && inputs.candidate_artifact != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: opka-android-tested-${{ github.sha }}
+          path: |
+            out/android-native-ui/candidate-artifact.json
+            out/android-native-ui/stage-outcomes.json
+          if-no-files-found: error
           retention-days: 14
       - name: Remove temporary Firebase configuration
         if: always()

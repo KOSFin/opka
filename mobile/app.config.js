@@ -27,6 +27,12 @@ module.exports = ({ config }) => ({
         android: {
           ...config.android,
           package: 'com.kosfin.opka.mobile',
+          blockedPermissions: [
+            ...new Set([
+              ...(config.android?.blockedPermissions ?? []),
+              'android.permission.SYSTEM_ALERT_WINDOW'
+            ])
+          ],
           permissions: [
             ...(config.android?.permissions ?? []),
             'android.permission.REQUEST_INSTALL_PACKAGES'

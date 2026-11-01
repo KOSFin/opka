@@ -15,6 +15,40 @@ function consumers() {
 }
 
 describe('who in the page is holding the device Back key', () => {
+  it('handles project and drawer Back claims without copied-array builtins on older WebViews', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Array.prototype, 'toReversed')
+    const { stack, unclaimed } = consumers()
+    const steps: string[] = []
+    let project = true
+    stack.claim(() => {
+      if (!project) {
+        return false
+      }
+      project = false
+      steps.push('project cleared')
+      return true
+    })
+    const releaseDrawer = stack.claim(() => {
+      steps.push('drawer closed')
+      releaseDrawer()
+      return true
+    })
+    try {
+      Object.defineProperty(Array.prototype, 'toReversed', { configurable: true, value: undefined })
+      stack.press()
+      stack.press()
+      stack.press()
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(Array.prototype, 'toReversed', descriptor)
+      } else {
+        Reflect.deleteProperty(Array.prototype, 'toReversed')
+      }
+    }
+    expect(steps).toEqual(['drawer closed', 'project cleared'])
+    expect(unclaimed).toHaveBeenCalledTimes(1)
+  })
+
   it('tells the shell on the edges only, so one sheet over another does not flicker the key', () => {
     const { claims, stack } = consumers()
     const first = stack.claim(() => true)

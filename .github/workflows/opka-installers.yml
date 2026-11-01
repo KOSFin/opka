@@ -2,6 +2,9 @@ name: Opka beta installers
 on:
   workflow_call:
     inputs:
+      build_android:
+        type: boolean
+        default: true
       version:
         type: string
         required: true
@@ -88,6 +91,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android:
+    if: inputs.build_android
     name: Opka Android installer
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -167,6 +171,7 @@ jobs:
         shell: bash
         run: rm -f "$RUNNER_TEMP/opka-google-services.json"
   release_files:
+    if: inputs.build_android
     name: Complete beta asset set
     needs: [mac, server_template, android]
     runs-on: ubuntu-24.04
@@ -197,3 +202,22 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+  installer_gate:
+    name: Installer qualification passed
+    if: ${{ !cancelled() }}
+    needs: [mac, server_template, android, release_files]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every requested installer component
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          BUILD_ANDROID: ${{ inputs.build_android }}
+        run: |
+          node --input-type=module -e '
+            const jobs = JSON.parse(process.env.RESULTS);
+            const android = process.env.BUILD_ANDROID === "true";
+            const expected = {mac:"success",server_template:"success",android:android?"success":"skipped",release_files:android?"success":"skipped"};
+            if (Object.keys(jobs).length !== 4 || Object.entries(expected).some(([name,result]) => jobs[name]?.result !== result)) process.exit(1);
+          '

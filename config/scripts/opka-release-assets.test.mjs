@@ -156,7 +156,17 @@ describe('Opka release assets', () => {
     expect(server.jobs.desktop_template.env.OPKA_VERSION).toBe('${{ inputs.version }}')
     expect(Object.keys(release.on)).toEqual(['workflow_dispatch'])
     expect(release.jobs.admission.if).toBe("github.ref == 'refs/heads/main'")
-    expect(release.jobs.qualification.uses).toBe('./.github/workflows/pr.yml')
+    expect(release.jobs.qualification.uses).toBe('./.github/workflows/opka-installers.yml')
+    expect(release.jobs.qualification.needs).toBe('admission')
+    expect(release.jobs.qualification.with.version).toBe('${{ inputs.version }}')
+    expect(release.jobs.android_update.needs).toEqual(['admission', 'qualification'])
+    expect(release.jobs.android_update.with.candidate_artifact).toBe(
+      "${{ format('opka-android-{0}', github.sha) }}"
+    )
+    const admission = release.jobs.admission.steps.find(
+      (step) => step.run === 'node config/scripts/opka-release-qualification.mjs'
+    )
+    expect(admission.env.OPKA_QUALIFIED_COMMIT).toBe('${{ github.sha }}')
     expect(release.jobs.qualification.secrets).toBe('inherit')
     expect(release.jobs.android_update.secrets).toBe('inherit')
     expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])

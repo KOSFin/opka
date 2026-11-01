@@ -10,6 +10,48 @@ function event(message: string, detail?: string): ConnectionLogEntry {
 }
 
 describe('diagnoseConnection', () => {
+  it('keeps relay evidence and incident reporting available without copied-array builtins', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Array.prototype, 'toReversed')
+    const entries: ConnectionLogEntry[] = [
+      {
+        ...event('Relay health check failed'),
+        id: 'older-relay',
+        path: 'relay',
+        code: 'liveness-timeout'
+      },
+      {
+        ...event('Relay health check failed'),
+        id: 'current-relay',
+        path: 'relay',
+        code: 'liveness-timeout'
+      },
+      { ...event('WebSocket connect timeout'), id: 'newer-direct', path: 'lan' }
+    ]
+    const args = {
+      endpoint: 'ws://192.168.1.2:6768',
+      state: 'reconnecting' as const,
+      activePath: 'relay' as const,
+      entries
+    }
+    const before = [...entries]
+    let incident: string | null = null
+    let diagnosis: ReturnType<typeof diagnoseConnection> | undefined
+    try {
+      Object.defineProperty(Array.prototype, 'toReversed', { configurable: true, value: undefined })
+      incident = getReportableConnectionIncidentId(args)
+      diagnosis = diagnoseConnection(args)
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(Array.prototype, 'toReversed', descriptor)
+      } else {
+        Reflect.deleteProperty(Array.prototype, 'toReversed')
+      }
+    }
+    expect(incident).toBe('current-relay')
+    expect(diagnosis?.reportability).toBe('orca-relay')
+    expect(entries).toEqual(before)
+  })
+
   it('reports the current healthy path instead of a historical failure', () => {
     expect(
       diagnoseConnection({
