@@ -30,8 +30,6 @@ export const FORK_TEST_FILTERS = [
   'src/renderer/src/components/status-bar/codex-status-sign-in.test.tsx',
   'src/renderer/src/components/status-bar/claude-status-sign-in.test.tsx',
   'src/renderer/src/store/slices/ui-hydration-workspace-preferences.test.ts',
-  'config/scripts/mobile-web-app-project-tasks-render.test.mjs',
-  'config/scripts/mobile-web-app-stack-transition-render.test.mjs',
   'src/shared/account-pool-',
   'src/main/runtime/account-pool-',
   'src/main/runtime/pty-account-pool-',
@@ -156,6 +154,11 @@ export const MOBILE_FORK_TEST_FILTERS = [
   'mobile/scripts/opka-app-config.test.ts'
 ]
 
+export const MOBILE_RENDER_TEST_FILTERS = [
+  'config/scripts/mobile-web-app-project-tasks-render.test.mjs',
+  'config/scripts/mobile-web-app-stack-transition-render.test.mjs'
+]
+
 function run(program, args) {
   const result = runProcessSync({
     program,
@@ -165,25 +168,38 @@ function run(program, args) {
     stdio: 'inherit',
     timeoutMs: null
   })
-  if (result.code !== 0) {
-    process.exit(result.code ?? 1)
-  }
+  return result.code === 0
 }
 
 if (isDirectInvocation(import.meta.url, process.argv[1])) {
-  run('pnpm', ['test', ...FORK_TEST_FILTERS, '--maxWorkers=2'])
-  run('pnpm', [
-    'exec',
-    'vitest',
-    'run',
-    '--config',
-    'mobile/vitest.config.ts',
-    ...MOBILE_FORK_TEST_FILTERS,
-    '--maxWorkers=2'
-  ])
-  run(process.execPath, [
-    '--test',
-    'config/scripts/fork-acceptance-fixture.test.mjs',
-    'config/scripts/fork-acceptance-remote-config.test.mjs'
-  ])
+  const results = [run('pnpm', ['test', ...FORK_TEST_FILTERS, '--maxWorkers=2'])]
+  results.push(
+    run('pnpm', [
+      'exec',
+      'vitest',
+      'run',
+      '--config',
+      'mobile/vitest.config.ts',
+      ...MOBILE_FORK_TEST_FILTERS,
+      '--maxWorkers=2'
+    ])
+  )
+  results.push(
+    run(process.execPath, [
+      'node_modules/vitest/vitest.mjs',
+      'run',
+      '--config',
+      'config/vitest.config.ts',
+      ...MOBILE_RENDER_TEST_FILTERS,
+      '--maxWorkers=1'
+    ])
+  )
+  results.push(
+    run(process.execPath, [
+      '--test',
+      'config/scripts/fork-acceptance-fixture.test.mjs',
+      'config/scripts/fork-acceptance-remote-config.test.mjs'
+    ])
+  )
+  process.exitCode = results.every(Boolean) ? 0 : 1
 }

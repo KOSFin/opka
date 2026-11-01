@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
-import type { GitLabWorkItem } from './mobile-tasks-provider-detail-types'
 import type { ActionableTaskItem } from './mobile-tasks-project-workspace-types'
 function gitlabItem(source: Partial<GitLabWorkItem> = {}): ActionableTaskItem {
   return {
@@ -26,7 +25,7 @@ function gitlabItem(source: Partial<GitLabWorkItem> = {}): ActionableTaskItem {
     }
   }
 }
-import type { DetailPayload } from './mobile-tasks-provider-detail-types'
+import type { DetailPayload, GitLabWorkItem } from './mobile-tasks-provider-detail-types'
 import {
   gitLabMrDetailKey,
   gitLabMrCacheEpoch,

@@ -76,10 +76,11 @@ jobs:
           native-runtime: node
       - uses: ./.github/actions/install-mobile-dependencies
       - name: Install the pinned headless renderer browser
-        run: pnpm exec playwright install --with-deps chromium
+        run: node node_modules/playwright-core/cli.js install --with-deps chromium webkit
       - name: Test host accounts, mobile state and generated pages
         env:
           OPKA_MOBILE_EVIDENCE_DIR: ${{ github.workspace }}/out/mobile-web-qa
+          ORCA_MOBILE_WEB_APP_DEPS_REQUIRED: '1'
         run: pnpm run test:fork
       - name: Save synthetic mobile page evidence
         if: always()

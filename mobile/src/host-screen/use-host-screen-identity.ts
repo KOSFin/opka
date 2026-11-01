@@ -1,3 +1,4 @@
+import { admitWorktreeCatalogResponse } from '../worktree/worktree-catalog-snapshot-client'
 import { useEffect } from 'react'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import { getRetainedWorktrees } from '../cache/worktree-cache'
@@ -76,7 +77,11 @@ export function useHostScreenIdentity(args: {
     setShowPinnedInGroups(false)
     repoMetadataFetchedAtRef.current = 0
     // Why: useState initializer runs only on first mount, so re-seed the cache when Expo Router reuses this screen for a new hostId.
-    const retainedCache = hostId ? (getRetainedWorktrees(hostId) as Worktree[] | null) : null
+    const retained = admitWorktreeCatalogResponse<Worktree>(
+      { worktrees: hostId ? getRetainedWorktrees(hostId) : null },
+      null
+    )
+    const retainedCache = retained.kind === 'full' ? retained.worktrees : null
     setCatalogError(null)
     if (retainedCache) {
       setWorktrees(retainedCache)

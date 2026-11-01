@@ -19,9 +19,6 @@ export function ProjectTaskCardActions(props: {
   onDone: () => void
 }) {
   const [editing, setEditing] = useState(false)
-  const [moveTarget, setMoveTarget] = useState<
-    (ReturnType<typeof captureTaskEditContext> & { id: string; revision: string }) | null
-  >(null)
   const latest = useRef(props)
   latest.current = props
   const mounted = useRef(true)
@@ -31,14 +28,46 @@ export function ProjectTaskCardActions(props: {
       mounted.current = false
     }
   }, [])
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const generation = props.client?.getGeneration?.() ?? 0
-  useEffect(() => {
-    setMoveTarget(null)
-    setBusy(false)
-    setError('')
-  }, [props.client, props.worktree, props.executionHostId, props.task.id, generation])
+  const renderOwner = captureTaskEditContext(props)
+  type MoveTarget = ReturnType<typeof captureTaskEditContext> & { id: string; revision: string }
+  type MoveState = {
+    owner: typeof renderOwner
+    taskId: string
+    target: MoveTarget | null
+    busy: boolean
+    error: string
+  }
+  const [storedMove, setStoredMove] = useState<MoveState>(() => ({
+    owner: renderOwner,
+    taskId: props.task.id,
+    target: null,
+    busy: false,
+    error: ''
+  }))
+  const belongs = (state: MoveState) =>
+    taskEditContextMatches(state.owner, props) && state.taskId === props.task.id
+  const currentState = belongs(storedMove)
+  const moveTarget = currentState ? storedMove.target : null
+  const busy = currentState && storedMove.busy
+  const error = currentState ? storedMove.error : ''
+  function updateMove(next: Partial<Pick<MoveState, 'target' | 'busy' | 'error'>>) {
+    if (
+      !mounted.current ||
+      !taskEditContextMatches(renderOwner, latest.current) ||
+      props.task.id !== latest.current.task.id
+    ) {
+      return
+    }
+    setStoredMove((previous) => ({
+      ...(belongs(previous)
+        ? previous
+        : { owner: renderOwner, taskId: props.task.id, target: null, busy: false, error: '' }),
+      ...next
+    }))
+  }
+  const setMoveTarget = (target: MoveTarget | null) => updateMove({ target })
+  const setBusy = (busy: boolean) => updateMove({ busy })
+  const setError = (error: string) => updateMove({ error })
   const disabled = busy || !props.connected || !props.client || !props.executionHostId
   const active = props.task.workflow.phase === 'active'
   if (editing) {

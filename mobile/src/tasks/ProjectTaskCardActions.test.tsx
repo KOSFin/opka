@@ -1,3 +1,4 @@
+import { rpcSuccess } from '../transport/rpc-operation-test-families'
 import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
@@ -99,5 +100,64 @@ it('refuses Done and unknown picker values without bypassing result acceptance',
   }
   expect(client.sendRequest).not.toHaveBeenCalled()
   expect(props.onDone).not.toHaveBeenCalled()
+  await act(async () => tree.unmount())
+})
+
+it('derives a new owner view without retaining old busy state or delivering old completion', async () => {
+  const client = new FakeSession('connected')
+  let finish!: (value: ReturnType<typeof rpcSuccess>) => void
+  client.sendRequest.mockResolvedValue(rpcSuccess({})).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      })
+  )
+  const props = {
+    client,
+    connected: true,
+    worktree: 'path:/a',
+    executionHostId: 'local',
+    task,
+    body: 'Task',
+    content: 'Task',
+    onDone: vi.fn()
+  }
+  let tree!: ReturnType<typeof create>
+  const moveButton = () =>
+    tree.root
+      .findAllByType('Pressable')
+      .find((node) =>
+        node
+          .findAllByType('Text')
+          .some((text) => ['Move task', 'Saving…'].includes(text.children.join('')))
+      )!
+  await act(async () => {
+    tree = create(createElement(ProjectTaskCardActions, props))
+  })
+  await act(async () => moveButton().props.onPress())
+  await act(async () => {
+    tree.root.findByType('PickerModal').props.onSelect('review')
+  })
+  expect(client.sendRequest).toHaveBeenCalledOnce()
+  await act(async () =>
+    tree.update(createElement(ProjectTaskCardActions, { ...props, worktree: 'path:/b' }))
+  )
+  expect(moveButton().props.disabled).toBe(false)
+  expect(tree.root.findByType('PickerModal').props.visible).toBe(false)
+  await act(async () => finish(rpcSuccess({})))
+  expect(props.onDone).not.toHaveBeenCalled()
+  await act(async () => moveButton().props.onPress())
+  await act(async () => tree.root.findByType('PickerModal').props.onSelect('draft'))
+  expect(client.sendRequest).toHaveBeenLastCalledWith(
+    'projectTask.move',
+    expect.objectContaining({
+      worktree: 'path:/b',
+      id: task.id,
+      revision: task.revision,
+      expectedExecutionHostId: 'local',
+      phase: 'draft'
+    })
+  )
+  expect(props.onDone).toHaveBeenCalledOnce()
   await act(async () => tree.unmount())
 })

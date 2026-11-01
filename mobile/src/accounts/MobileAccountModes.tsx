@@ -1,7 +1,6 @@
-import { MobileSectionReveal } from '../components/MobileSectionReveal'
 import type { ReactNode } from 'react'
 import { Text, View } from 'react-native'
-import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
+import { MobileSegmentedControl, MobileSectionReveal } from '../components/MobileSegmentedControl'
 import { styles } from './mobile-accounts-screen-styles'
 
 type Mode = 'accounts' | 'pools'

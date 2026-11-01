@@ -1,5 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-const state = vi.hoisted(() => ({ configured: undefined as boolean | undefined, os: 'android' }))
+const state = vi.hoisted<{ configured: boolean | undefined; os: string }>(() => ({
+  configured: undefined,
+  os: 'android'
+}))
 vi.mock('expo-constants', () => ({
   default: {
     expoConfig: {

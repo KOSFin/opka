@@ -5,6 +5,8 @@ import NotificationsScreen from './notification-settings-screen'
 import VoiceSettingsScreen from './voice-settings-screen'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
 
+// The settings controls re-export the transition; this suite owns settings behavior, not animation.
+vi.mock('../components/MobileSectionReveal', () => ({ MobileSectionReveal: () => null }))
 vi.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',

@@ -6,9 +6,8 @@ import {
   saveGitLabMrDetail,
   invalidateGitLabMrDetail
 } from './gitlab-mr-detail-cache'
-import type { DetailPayload } from './mobile-tasks-provider-detail-types'
+import type { DetailPayload, GitLabWorkItem } from './mobile-tasks-provider-detail-types'
 import type { ProviderCheckSummary } from '../../../src/shared/github/pull-request-types'
-import type { GitLabWorkItem } from './mobile-tasks-provider-detail-types'
 import type { ItemDetailMetadataEffectsModel } from './use-mobile-tasks-item-detail-metadata-effects'
 import { fetchJiraIssueDetail } from './mobile-jira-task-source'
 import { createJiraTask } from './mobile-tasks-item-mapping'

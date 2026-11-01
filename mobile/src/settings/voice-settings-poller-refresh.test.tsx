@@ -7,6 +7,8 @@ import type { VoiceSettingsOperations } from './voice-settings-operations'
 // Why: the sibling state test stubs the poller, so it can only prove the screen's local
 // machine. This one runs the real useDictationSetupPoller, whose refreshNow is gated on
 // visible && foreground, to prove the rejected-save recovery actually reaches the wire.
+// The settings controls re-export the transition; this suite owns settings behavior, not animation.
+vi.mock('../components/MobileSectionReveal', () => ({ MobileSectionReveal: () => null }))
 vi.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',

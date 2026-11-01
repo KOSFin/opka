@@ -3,12 +3,30 @@ import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { verifyRequiredPrContext } from '../../.github/scripts/check-required-pr-context.mjs'
-import { FORK_TEST_FILTERS } from './run-fork-tests.mjs'
+import { FORK_TEST_FILTERS, MOBILE_RENDER_TEST_FILTERS } from './run-fork-tests.mjs'
 import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('runs rendered pages with Node and installs the browser their library owns', () => {
+    const steps = workflow.jobs.regression.steps
+    expect(
+      steps.find((step) => step.run?.includes('install --with-deps chromium webkit')).run
+    ).toBe('node node_modules/playwright-core/cli.js install --with-deps chromium webkit')
+    expect(
+      steps.find((step) => step.name === 'Test host accounts, mobile state and generated pages').env
+        .ORCA_MOBILE_WEB_APP_DEPS_REQUIRED
+    ).toBe('1')
+    for (const filter of MOBILE_RENDER_TEST_FILTERS) {
+      expect(FORK_TEST_FILTERS).not.toContain(filter)
+      expect(readFileSync(filter, 'utf8')).toContain('playwright-core')
+    }
+    const runner = readFileSync('config/scripts/run-fork-tests.mjs', 'utf8')
+    expect(runner).toContain('run(process.execPath, [')
+    expect(runner).toContain('...MOBILE_RENDER_TEST_FILTERS')
+    expect(runner).toContain('results.every(Boolean) ? 0 : 1')
+  })
   it('blocks beta publication until Android confirms a same-signer update', () => {
     const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
     expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])

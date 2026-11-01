@@ -6,7 +6,12 @@ type Context = {
   executionHostId: string
 }
 export function captureTaskEditContext(context: Context) {
-  return { ...context, generation: context.client?.getGeneration?.() ?? 0 }
+  return {
+    client: context.client,
+    worktree: context.worktree,
+    executionHostId: context.executionHostId,
+    generation: context.client?.getGeneration?.() ?? 0
+  }
 }
 export function taskEditContextMatches(
   original: ReturnType<typeof captureTaskEditContext>,

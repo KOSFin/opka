@@ -100,9 +100,12 @@ export function UsageAccountRows({
               ) : null}
               {row.limits?.status === 'ok' && (row.limits.session || row.limits.weekly) ? (
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-2xs tabular-nums text-muted-foreground">
-                  {[row.limits.session, row.limits.weekly].map((window, index) =>
+                  {[
+                    { key: 'session', window: row.limits.session },
+                    { key: 'weekly', window: row.limits.weekly }
+                  ].map(({ window, key }) =>
                     window ? (
-                      <span key={index}>
+                      <span key={key}>
                         {formatWindowLabel(window.windowMinutes)} ·{' '}
                         {getDisplayedUsagePercentage(window.usedPercent, display)}% ·{' '}
                         {formatRateLimitWindowChipLabel(window, now)}

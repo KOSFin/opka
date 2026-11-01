@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import type * as I18nModule from '@/i18n/i18n'
 import type * as AccountsModule from '@/runtime/runtime-provider-accounts-client'
 import type { ProviderAccountsSnapshot } from '@/runtime/runtime-provider-accounts-client'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
-import { UsageAccountsProvider } from './UsageAccountsContext'
+import { UsageAccountsProvider, useUsageAccounts } from './UsageAccountsContext'
 import { UsageAccountRows } from './UsageAccountRows'
 import { useUsageAccountSource } from './use-usage-account-source'
 
@@ -140,4 +140,54 @@ it('never adopts another owner’s supplied context snapshot', async () => {
   expect(screen.queryByText('a@example.test')).toBeNull()
   expect(mocks.fetch).toHaveBeenCalledWith(b)
   expect(onRoster).toHaveBeenCalledWith(source('b').codex)
+})
+
+function OwnerVerification() {
+  const owner = useUsageAccounts()
+  return <span data-testid="owner-verification">{owner?.verified ? 'verified' : 'unverified'}</span>
+}
+it('keeps a healthy partial snapshot verified when the failed provider reports its error', async () => {
+  mocks.watch.mockImplementation((_target, handlers) => {
+    handlers.onSnapshot({ ...source('healthy'), failedProviders: ['claude'] })
+    handlers.onError(new Error('Claude unavailable'))
+    return { close: mocks.close }
+  })
+  render(
+    <UsageAccountsProvider target={local} snapshot={null} verified>
+      <OwnerVerification />
+      <UsageAccountRows provider="codex" now={1} display="used" />
+    </UsageAccountsProvider>
+  )
+  await screen.findByText('healthy@example.test')
+  expect(screen.getByTestId('owner-verification').textContent).toBe('verified')
+})
+it('rejects late callbacks after switching away and returning to the local owner', async () => {
+  const deliveries: ((snapshot: ProviderAccountsSnapshot) => void)[] = []
+  mocks.watch.mockImplementation((_target, handlers) => {
+    deliveries.push(handlers.onSnapshot)
+    return { close: mocks.close }
+  })
+  const view = render(
+    <UsageAccountsProvider target={local} snapshot={null} verified>
+      <UsageAccountRows provider="codex" now={1} display="used" />
+    </UsageAccountsProvider>
+  )
+  act(() => deliveries[0](source('old')))
+  await screen.findByText('old@example.test')
+  view.rerender(
+    <UsageAccountsProvider target={a} snapshot={source('remote')} verified>
+      <UsageAccountRows provider="codex" now={1} display="used" />
+    </UsageAccountsProvider>
+  )
+  view.rerender(
+    <UsageAccountsProvider target={local} snapshot={null} verified>
+      <UsageAccountRows provider="codex" now={1} display="used" />
+    </UsageAccountsProvider>
+  )
+  act(() => deliveries[0](source('late')))
+  expect(screen.queryByText('late@example.test')).toBeNull()
+  expect(screen.queryByText('old@example.test')).toBeNull()
+  act(() => deliveries[1](source('fresh')))
+  await screen.findByText('fresh@example.test')
+  expect(mocks.close).toHaveBeenCalledTimes(1)
 })

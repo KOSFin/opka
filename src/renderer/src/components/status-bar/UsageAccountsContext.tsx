@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
@@ -23,6 +23,29 @@ export type UsageAccounts = {
 const UsageAccountsContext = createContext<UsageAccounts | null>(null)
 export const useUsageAccounts = () => useContext(UsageAccountsContext)
 
+type LocalAccountsSnapshot = { snapshot: ProviderAccountsSnapshot | null; verified: boolean }
+type LocalAccountsRead = { codexSync: string; claudeSync: string }
+
+function createLocalAccountsSource(owner: string) {
+  let current: LocalAccountsSnapshot = { snapshot: null, verified: false }
+  let activeRead: LocalAccountsRead | null = null
+  return {
+    owner,
+    getSnapshot: () => current,
+    beginRead: (codexSync: string, claudeSync: string): LocalAccountsRead => {
+      activeRead = { codexSync, claudeSync }
+      return activeRead
+    },
+    publish: (next: LocalAccountsSnapshot, read: LocalAccountsRead): boolean => {
+      if (activeRead !== read) {
+        return false
+      }
+      current = next
+      return true
+    }
+  }
+}
+
 export function UsageAccountsProvider({
   target,
   snapshot,
@@ -39,51 +62,57 @@ export function UsageAccountsProvider({
   const claudeSync = useAppStore((state) => getClaudeAccountSyncKey(state.settings))
   const refreshClaude = useAppStore((state) => state.fetchInactiveClaudeAccountUsage)
   const refreshCodex = useAppStore((state) => state.fetchInactiveCodexAccountUsage)
-  const [local, setLocal] = useState<{
-    owner: string
-    snapshot: ProviderAccountsSnapshot | null
-    verified: boolean
-  } | null>(null)
-  useEffect(() => {
-    if (owner !== 'local') {
-      return
-    }
-    let active = true
-    let received = false
-    void Promise.allSettled([
-      Promise.resolve().then(() => refreshClaude?.()),
-      Promise.resolve().then(() => refreshCodex?.())
-    ])
-    let watcher: ProviderAccountsWatcher | undefined
-    try {
-      watcher = watchProviderAccounts(
-        { kind: 'local' },
-        {
-          onSnapshot: (next) => {
-            if (active) {
-              received = true
-              setLocal({ owner, snapshot: next, verified: true })
-            }
-          },
-          onError: () => {
-            if (active && !received) {
-              setLocal((previous) => ({
-                owner,
-                snapshot: previous?.owner === owner ? previous.snapshot : null,
-                verified: false
-              }))
+  const localSource = useMemo(() => createLocalAccountsSource(owner), [owner])
+  const subscribeLocal = useCallback(
+    (notify: () => void) => {
+      if (owner !== 'local') {
+        return () => {}
+      }
+      let active = true
+      let received = false
+      const read = localSource.beginRead(codexSync, claudeSync)
+      const publish = (next: LocalAccountsSnapshot): void => {
+        if (active && localSource.publish(next, read)) {
+          notify()
+        }
+      }
+      void Promise.allSettled([
+        Promise.resolve().then(() => refreshClaude?.()),
+        Promise.resolve().then(() => refreshCodex?.())
+      ])
+      let watcher: ProviderAccountsWatcher | undefined
+      try {
+        watcher = watchProviderAccounts(
+          { kind: 'local' },
+          {
+            onSnapshot: (snapshot) => {
+              if (active) {
+                received = true
+                publish({ snapshot, verified: true })
+              }
+            },
+            onError: () => {
+              if (!received) {
+                publish({ snapshot: localSource.getSnapshot().snapshot, verified: false })
+              }
             }
           }
-        }
-      )
-    } catch {
-      setLocal({ owner, snapshot: null, verified: false })
-    }
-    return () => {
-      active = false
-      watcher?.close()
-    }
-  }, [owner, codexSync, claudeSync, refreshClaude, refreshCodex])
+        )
+      } catch {
+        publish({ snapshot: localSource.getSnapshot().snapshot, verified: false })
+      }
+      return () => {
+        active = false
+        watcher?.close()
+      }
+    },
+    [owner, localSource, codexSync, claudeSync, refreshClaude, refreshCodex]
+  )
+  const local = useSyncExternalStore(
+    subscribeLocal,
+    localSource.getSnapshot,
+    localSource.getSnapshot
+  )
   const value = useMemo<UsageAccounts>(
     () =>
       target.kind === 'local'
@@ -91,11 +120,11 @@ export function UsageAccountsProvider({
             target,
             rateLimits,
             ownerLabel,
-            snapshot: local?.owner === owner ? local.snapshot : null,
-            verified: local?.owner === owner && local.verified
+            snapshot: localSource.owner === owner ? local.snapshot : null,
+            verified: localSource.owner === owner && local.verified
           }
         : { target, rateLimits, ownerLabel, snapshot, verified },
-    [target, rateLimits, ownerLabel, local, owner, snapshot, verified]
+    [target, rateLimits, ownerLabel, local, localSource, owner, snapshot, verified]
   )
   return <UsageAccountsContext.Provider value={value}>{children}</UsageAccountsContext.Provider>
 }
