@@ -26,7 +26,12 @@ describe('fork CI safety and required checks', () => {
     expect(
       steps.find((step) => step.name === 'Exercise Android confirmation and data retention').with
         .script
-    ).toBe('python3 config/scripts/opka-android-update-acceptance-entry.py')
+    ).toBe('python3 config/scripts/opka-android-ci-acceptance.py')
+    expect(release.jobs.android_update.with.candidate_version).toBe('${{ inputs.version }}')
+    const native = readFileSync('config/scripts/opka-android-ci-acceptance.py', 'utf8')
+    expect(native).toContain('opka-android-native-fixture.py')
+    expect(native).toContain('--legacy-a')
+    expect(native).toContain('opka-android-ui-journey.py')
     expect(steps.find((step) => step.name === 'Require KVM acceleration').run).toContain(
       'test -c /dev/kvm'
     )
@@ -62,22 +67,25 @@ describe('fork CI safety and required checks', () => {
   it.runIf(process.platform === 'linux')(
     'keeps the fixture handoff and published UI routes separate',
     () => {
-      const entryArgv = (published) =>
+      const entryArgv = (published, candidate = '1.4.236-rc.6') =>
         JSON.parse(
           execFileSync(
             'python3',
             [
               '-c',
-              "import json,runpy,subprocess; subprocess.run=lambda args,**kwargs: print(json.dumps(args)); runpy.run_path('config/scripts/opka-android-update-acceptance-entry.py')"
+              "import json,runpy,subprocess,sys; sys.path.insert(0,'config/scripts'); original=subprocess.run; subprocess.run=lambda args,**kwargs: original(args,**kwargs) if args[0]=='node' else print(json.dumps(args)); runpy.run_path('config/scripts/opka-android-update-acceptance-entry.py')"
             ],
-            { encoding: 'utf8', env: { ...process.env, PUBLISHED_VERSION: published } }
+            {
+              encoding: 'utf8',
+              env: { ...process.env, PUBLISHED_VERSION: published, CANDIDATE_VERSION: candidate }
+            }
           )
         ).slice(2)
       expect(entryArgv('')).toEqual([
         '--a',
         'out/android-update-fixtures/rc5.apk',
         '--b',
-        'out/android-update-fixtures/rc6.apk',
+        'out/android-update-fixtures/candidate.apk',
         '--expected-code',
         '104236006',
         '--handoff',
@@ -87,8 +95,11 @@ describe('fork CI safety and required checks', () => {
         '--a',
         'out/android-update-fixtures/rc5.apk',
         '--published-version',
-        '1.4.236-rc.6'
+        '1.4.236-rc.6',
+        '--surface',
+        'settings'
       ])
+      expect(entryArgv('', '1.4.236-rc.8')).toContain('104236008')
     }
   )
   it('checks an immutable released updater without write permissions or installed app replacement', () => {

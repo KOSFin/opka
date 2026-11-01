@@ -45,6 +45,11 @@ jobs:
           node .github/scripts/check-root-directory-entries.mjs "$DIFF_BASE" HEAD
       - name: Check types
         run: pnpm tc
+      - name: Check mobile application types
+        working-directory: mobile
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: pnpm typecheck
       - name: Check changed code
         env:
           ORCA_CODE_QUALITY_BASE: HEAD^1
@@ -69,7 +74,33 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: node
-      - run: pnpm run test:fork
+      - uses: ./.github/actions/install-mobile-dependencies
+      - name: Install the pinned headless renderer browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test host accounts, mobile state and generated pages
+        env:
+          OPKA_MOBILE_EVIDENCE_DIR: ${{ github.workspace }}/out/mobile-web-qa
+        run: pnpm run test:fork
+      - name: Save synthetic mobile page evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-web-ui-${{ github.sha }}
+          path: out/mobile-web-qa/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Install the push gateway workspace without lifecycle scripts
+        working-directory: cloud
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter '@orca-cloud/push...'
+      - name: Compile the push gateway and its contracts
+        working-directory: cloud
+        run: |
+          pnpm --filter @orca-cloud/postgres-schema build
+          pnpm --filter @orca-cloud/push-contract build
+          pnpm --filter @orca-cloud/push build
+      - name: Check push configuration and FCM transport with synthetic credentials
+        working-directory: cloud
+        run: pnpm --filter @orca-cloud/push exec vitest run src/config.test.ts src/fcm-client.test.ts --maxWorkers=1
 
   desktop:
     name: Desktop assets (${{ matrix.os }})

@@ -44,6 +44,7 @@ jobs:
     secrets: inherit
     with:
       release_signer: true
+      candidate_version: ${{ inputs.version }}
 
   publish:
     name: Publish the complete verified beta

@@ -1,3 +1,4 @@
+import { gitLabQaReplies } from './mobile-web-app-gitlab-qa-fixtures.mjs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -54,7 +55,7 @@ afterAll(async () => {
   }
 })
 
-async function openScreen(size, section) {
+async function openScreen(size, section, routeParams) {
   const page = await browser.newPage({ viewport: { width: size.width, height: size.height } })
   const faults = []
   page.on('pageerror', (error) => faults.push(error.message))
@@ -67,7 +68,10 @@ async function openScreen(size, section) {
     version,
     sessionId: 'project-work-render',
     buildId: 'synthetic-render',
-    route: { pathname: `/h/${host.id}/${section}` },
+    route: {
+      pathname: `/h/${host.id}/${section}`,
+      ...(routeParams ? { params: routeParams } : {})
+    },
     host,
     storage: {},
     faultGrant,
@@ -80,7 +84,7 @@ async function openScreen(size, section) {
       'native.clipboard.write'
     ],
     pageRoutes: ['/h/[hostId]', '/h/[hostId]/tasks', '/h/[hostId]/accounts'],
-    replies: projectWorkRenderReplies,
+    replies: { ...structuredClone(projectWorkRenderReplies), ...structuredClone(gitLabQaReplies) },
     streams: ['accounts.subscribe']
   })
   await page.goto(`${origin}/`, { waitUntil: 'load' })
@@ -182,7 +186,8 @@ render.each(sizes)('project work on $name', (size) => {
           2
         )
       )
-      await page.getByText('test@example.invalid · Selected login', { exact: true }).waitFor()
+      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
+      await page.getByText('Default for new manual launches', { exact: true }).waitFor()
       await capture(page, size, 'pools')
       await page.getByRole('radio', { name: 'Accounts', exact: true }).click()
       await page.getByText('Add Codex account', { exact: true }).click()
@@ -219,6 +224,87 @@ render.each(sizes)('project work on $name', (size) => {
           clientMutationId: expect.any(String)
         }
       })
+      await clean(opened)
+    } finally {
+      await page.close()
+    }
+  }, 90_000)
+  it('preserves an unsaved pool priority across tabs and collapse without writing policy', async () => {
+    const opened = await openScreen(size, 'accounts')
+    const { page } = opened
+    try {
+      await page.getByRole('radio', { name: 'Pools & switching', exact: true }).click()
+      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
+      await page.getByLabel('test@example.invalid priority', { exact: true }).fill('2')
+      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
+      await page.getByRole('radio', { name: 'Accounts', exact: true }).click()
+      expect(
+        await page.getByLabel('test@example.invalid priority', { exact: true }).isVisible()
+      ).toBe(false)
+      await page.getByRole('radio', { name: 'Pools & switching', exact: true }).click()
+      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
+      expect(
+        await page.getByLabel('test@example.invalid priority', { exact: true }).inputValue()
+      ).toBe('2')
+      expect(
+        await page.evaluate(() =>
+          globalThis.__orcaRenderCheckRequests.some(
+            (entry) => entry.method === 'accountPool.update'
+          )
+        )
+      ).toBe(false)
+      await capture(page, size, 'pool-draft-retained')
+      await clean(opened)
+    } finally {
+      await page.close()
+    }
+  }, 90_000)
+  it('renders complete read-only MR metadata, reuses detail cache and explicitly refreshes', async () => {
+    const opened = await openScreen(size, 'tasks', { taskSource: 'gitlab' })
+    const { page } = opened
+    const detailCalls = () =>
+      page.evaluate(
+        () =>
+          globalThis.__orcaRenderCheckRequests.filter(
+            (entry) => entry.method === 'gitlab.workItemDetails'
+          ).length
+      )
+    try {
+      await page.getByText('Synthetic GitLab MR', { exact: true }).click()
+      await page
+        .getByText('Retained MR body from the recorded RPC envelope.', { exact: true })
+        .waitFor()
+      await page.getByText('Synthetic reviewer (@reviewer)', { exact: false }).waitFor()
+      await page.getByRole('button', { name: 'Changed files', exact: true }).click()
+      await page.getByText('new.ts', { exact: true }).waitFor()
+      await page.getByText('From old.ts', { exact: true }).waitFor()
+      await capture(page, size, 'mr-reviewers-files')
+      const before = await detailCalls()
+      await page.getByLabel('Dismiss drawer', { exact: true }).click()
+      await page.getByLabel('Refresh details', { exact: true }).waitFor({ state: 'hidden' })
+      await page.getByText('Synthetic GitLab MR', { exact: true }).click()
+      await page
+        .getByText('Retained MR body from the recorded RPC envelope.', { exact: true })
+        .waitFor()
+      expect(await detailCalls()).toBe(before)
+      await page.evaluate(
+        (detail) =>
+          globalThis.__orcaRenderCheckSetReply('gitlab.workItemDetails', {
+            ...detail,
+            body: '# Refreshed MR body'
+          }),
+        gitLabQaReplies['gitlab.workItemDetails']
+      )
+      await page.getByLabel('Refresh details', { exact: true }).click()
+      await page.getByText('Refreshed MR body', { exact: true }).waitFor()
+      expect(await detailCalls()).toBe(before + 1)
+      const writes = await page.evaluate(() =>
+        globalThis.__orcaRenderCheckRequests.filter((entry) =>
+          /gitlab\.(approve|merge|update|add)/i.test(entry.method)
+        )
+      )
+      expect(writes).toEqual([])
+      await capture(page, size, 'mr-explicit-refresh')
       await clean(opened)
     } finally {
       await page.close()

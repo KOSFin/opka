@@ -1,0 +1,14 @@
+name: Prepare own Opka Firebase build input
+description: Validate an optional own Android configuration without exposing its contents.
+outputs:
+  configured:
+    description: Whether an explicit own configuration was prepared
+    value: ${{ steps.prepare.outputs.configured }}
+runs:
+  using: composite
+  steps:
+    - id: prepare
+      shell: bash
+      run: |
+        python3 config/scripts/prepare_opka_firebase_test.py
+        python3 config/scripts/prepare-opka-firebase.py

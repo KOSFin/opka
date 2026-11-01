@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Drive a candidate APK against the real synthetic host, through normal pairing and accessibility."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import time
+from urllib.parse import urlsplit, urlunsplit
+import xml.etree.ElementTree as ET
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--serial', required=True)
+    parser.add_argument('--ready-file', required=True)
+    parser.add_argument('--output', required=True)
+    parser.add_argument('--package', default='com.kosfin.opka.mobile')
+    args = parser.parse_args()
+    if os.environ.get('CI') != 'true' or not args.serial.startswith('emulator-'):
+        parser.error('Only an isolated CI emulator is allowed')
+    if args.package != 'com.kosfin.opka.mobile':
+        parser.error('This journey targets only the separate Opka candidate application')
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=True)
+    adb = ['adb', '-s', args.serial]
+
+    def command(*values, timeout=20, binary=False):
+        try:
+            reply = subprocess.run([*adb, *values], capture_output=True, timeout=timeout, check=True)
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(f'ADB operation failed with exit code {error.returncode}') from None
+        except subprocess.TimeoutExpired:
+            raise RuntimeError('ADB operation timed out') from None
+        return reply.stdout if binary else reply.stdout.decode(errors='replace')
+
+    if command('shell', 'getprop', 'ro.kernel.qemu').strip() != '1':
+        raise AssertionError('Refusing to operate a physical device')
+    fixture = json.loads(Path(args.ready_file).read_text())
+    offer = urlsplit(fixture['pairingUrl'])
+    if offer.scheme not in ('orca', 'opka') or not offer.query:
+        raise AssertionError('Expected the real fixture mobile pairing link')
+    # The released Opka manifest owns opka:, while the shared pairing encoder also supports orca:.
+    pairing_link = urlunsplit(('opka', offer.netloc, offer.path, offer.query, offer.fragment))
+    steps = []
+    paired = False
+
+    def tree():
+        command('shell', 'uiautomator', 'dump', '/sdcard/opka-ui-journey.xml')
+        return ET.fromstring(command('shell', 'cat', '/sdcard/opka-ui-journey.xml'))
+
+    def find(label, timeout=25, contains=False):
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            root = tree()
+            for node in root.iter('node'):
+                labels = (node.get('text', ''), node.get('content-desc', ''))
+                if any(label.casefold() in value.casefold() if contains else label == value for value in labels):
+                    if node.get('bounds') and node.get('enabled', 'true') == 'true':
+                        return node
+            time.sleep(0.35)
+        raise AssertionError(f'UI did not expose {label!r}')
+
+    def tap(label, contains=False):
+        node = find(label, contains=contains)
+        numbers = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
+        if len(numbers) != 4:
+            raise AssertionError(f'No touch bounds for {label!r}')
+        command('shell', 'input', 'tap', str((numbers[0] + numbers[2]) // 2),
+                str((numbers[1] + numbers[3]) // 2))
+        time.sleep(0.25)
+
+    def fill(label, value, replace=False):
+        node = find(label)
+        previous = node.get('text', '')
+        tap(label)
+        if replace:
+            if len(previous) > 256:
+                raise AssertionError('Refusing an unbounded key sequence')
+            command('shell', 'input', 'keyevent', 'KEYCODE_MOVE_END')
+            if previous:
+                command('shell', 'input', 'keyevent', *(['KEYCODE_DEL'] * len(previous)))
+        command('shell', 'input', 'text', value.replace(' ', '%s'))
+        command('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+
+    def capture(name):
+        (output / f'{name}.png').write_bytes(command('exec-out', 'screencap', '-p', binary=True))
+        # Only the known synthetic app is in the foreground; snapshots contain no real projects.
+        root = tree()
+        ET.ElementTree(root).write(output / f'{name}.xml', encoding='utf-8')
+        steps.append(name)
+
+    def host_list():
+        for _ in range(6):
+            root = tree()
+            if any(node.get('content-desc') == 'Accounts' for node in root.iter('node')):
+                return
+            command('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+            time.sleep(0.4)
+        raise AssertionError('Could not return to synthetic host list')
+
+    collector = subprocess.Popen([
+        'python3', str(Path(__file__).resolve().parents[2] / 'mobile/scripts/capture-android-performance.py'),
+        '--serial', args.serial, '--package', args.package, '--label', 'candidate-ui',
+        '--scenario', 'navigation', '--duration-seconds', '180', '--output', str(output / 'performance')
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        # Do not log the URL: its short-lived token remains in the private fixture file only.
+        command('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW',
+                '-d', pairing_link, '-p', args.package)
+        tap('Pair')
+        find('Accounts', timeout=90)
+        paired = True
+        find('Synthetic integration', contains=True)
+        find('client', contains=True)
+        find('service', contains=True)
+        capture('01-project-hierarchy')
+        tap('Synthetic integration', contains=True)
+        collapsed = tree()
+        if any(node.get('text', '').casefold() in ('client', 'service') for node in collapsed.iter('node')):
+            raise AssertionError('Collapsed project still exposes repository children')
+        tap('Synthetic integration', contains=True)
+        find('client', contains=True)
+        find('service', contains=True)
+        capture('02-project-expand-toggle')
+        tap('Accounts')
+        find('Add Codex account')
+        capture('03-accounts')
+        tap('Pools & switching')
+        tap('Codex pool settings')
+        find('Selection:', contains=True)
+        capture('04-pools-expanded')
+        tap('Accounts')
+        find('Add Codex account')
+        host_list()
+        capture('05-project-return')
+        tap('Tasks')
+        tap(fixture['projectName'])
+        find('Native QA starter')
+        capture('06-board')
+        tap('Add project task')
+        fill('Task title', 'Native QA new card')
+        fill('Task goal', 'Verify candidate card workflow')
+        fill('Task acceptance criteria', 'Card is saved and movable')
+        capture('07-create-card')
+        tap('Save task')
+        tap('Native QA new card')
+        tap('Edit task')
+        fill('Task title', 'Native QA edited card', replace=True)
+        tap('Save task')
+        tap('Native QA edited card')
+        tap('Move task')
+        root = tree()
+        if any(node.get('text') == 'Done' for node in root.iter('node')):
+            raise AssertionError('Move exposed Done instead of requiring result acceptance')
+        capture('08-move-card')
+        tap('Review')
+        find('Native QA edited card')
+        capture('09-review-board')
+        # Normal Back intentionally returns through the catalog; reopen the saved backend card.
+        host_list()
+        tap('Tasks')
+        tap(fixture['projectName'])
+        find('Native QA edited card')
+        capture('10-board-reopened')
+        report = {'schema': 1, 'steps': steps, 'realCandidateApk': True, 'realSyntheticHost': True,
+                  'normalMobilePairing': True, 'credentialsInjected': False,
+                  'limits': ['No paid model/provider login was used.',
+                             'This native run does not prove populated account quotas or GitLab MR provider integration.',
+                             'Emulator CPU/PSS/gfxinfo do not measure physical battery life.']}
+        (output / 'journey.json').write_text(json.dumps(report, indent=2))
+    except Exception as error:
+        (output / 'failure.json').write_text(json.dumps({'steps': steps, 'error': str(error)}, indent=2))
+        try:
+            if paired:
+                capture('failure')
+        except Exception:
+            pass
+        raise
+    finally:
+        command('shell', 'rm', '-f', '/sdcard/opka-ui-journey.xml')
+        try:
+            collector.wait(timeout=190)
+        except subprocess.TimeoutExpired:
+            collector.terminate()
+            collector.wait(timeout=10)
+        if collector.returncode != 0:
+            raise AssertionError('Android performance collector did not finish successfully')
+
+
+if __name__ == '__main__':
+    main()
