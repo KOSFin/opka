@@ -6,6 +6,9 @@ import { requireInteractiveTaskOperator } from '../project-task-workflow-service
 
 const PHONE_TASK_METHODS = [
   'projectTask.catalog',
+  'projectTask.create',
+  'projectTask.update',
+  'projectTask.move',
   'projectTask.board',
   'projectTask.show',
   'projectTask.documents',
@@ -23,14 +26,22 @@ describe('phone task workflow authorization', () => {
     ).toBeNull()
   })
 
-  it.each(['claim', 'progress', 'complete', 'start', 'stop', 'delete', 'agentSettings'])(
-    'does not grant the phone agent or administrative action %s',
-    (action) => {
-      expect(
-        denyRpcMethodForCaller({ kind: 'mobile' }, `projectTask.${action}`, 'workspace')
-      ).not.toBeNull()
-    }
-  )
+  it.each([
+    'claim',
+    'progress',
+    'complete',
+    'start',
+    'stop',
+    'delete',
+    'archive',
+    'rename',
+    'init',
+    'agentSettings'
+  ])('does not grant the phone agent or administrative action %s', (action) => {
+    expect(
+      denyRpcMethodForCaller({ kind: 'mobile' }, `projectTask.${action}`, 'workspace')
+    ).not.toBeNull()
+  })
 
   it.each(['approve', 'decide'])('requires owner and revision fences for %s', (action) => {
     const method = PROJECT_TASK_WORKFLOW_METHODS.find(
