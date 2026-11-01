@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useActiveSkillDiscoveryRuntimeTarget } from '@/hooks/use-active-skill-discovery-runtime-target'
+import { readSkillOwnerComputerPermissions } from './skill-owner-computer-permissions'
 import type {
   OnboardingFeatureSetupId,
   OnboardingFeatureSetupSelection
@@ -257,6 +259,7 @@ function useComputerUsePermissionStatus(enabled: boolean): {
   checking: boolean
   unavailableReason: string | null
 } {
+  const ownerTarget = useActiveSkillDiscoveryRuntimeTarget()
   const [status, setStatus] = useState<{
     ready: boolean
     checking: boolean
@@ -273,11 +276,14 @@ function useComputerUsePermissionStatus(enabled: boolean): {
       return
     }
 
+    if (!ownerTarget) {
+      setStatus({ ready: false, checking: true, unavailableReason: null })
+      return
+    }
     let stale = false
     const refresh = (): void => {
       setStatus((current) => ({ ...current, checking: true }))
-      window.api.computerUsePermissions
-        .getStatus()
+      readSkillOwnerComputerPermissions(ownerTarget)
         .then((next) => {
           if (stale) {
             return
@@ -304,7 +310,7 @@ function useComputerUsePermissionStatus(enabled: boolean): {
       stale = true
       window.removeEventListener('focus', refresh)
     }
-  }, [enabled])
+  }, [enabled, ownerTarget])
 
   return status
 }
