@@ -1,3 +1,7 @@
+import {
+  usageMatchesAccount,
+  inactiveUsageMatchesAccount
+} from '../../shared/usage-account-provenance'
 import type { AccountPoolCandidate } from '../../shared/account-pool-policy'
 import type { ProviderRateLimits } from '../../shared/rate-limit-types'
 import type { AccountsSnapshot } from './runtime-account-controller'
@@ -17,6 +21,22 @@ function quotaState(
   const usedPercent = Math.max(...windows.map((window) => window.usedPercent))
   return { quota: usedPercent >= 100 ? 'exhausted' : 'available', usedPercent }
 }
+function accountQuota(snapshot: AccountsSnapshot, provider: 'claude' | 'codex', accountId: string) {
+  const active = snapshot.rateLimits[provider]
+  if (
+    accountId === snapshot[provider].activeAccountId &&
+    usageMatchesAccount(active, 'host', accountId)
+  ) {
+    return quotaState(active)
+  }
+  const samples =
+    provider === 'codex'
+      ? snapshot.rateLimits.inactiveCodexAccounts
+      : snapshot.rateLimits.inactiveClaudeAccounts
+  const inactive = samples.find((entry) => entry.accountId === accountId)?.rateLimits
+  return quotaState(inactiveUsageMatchesAccount(inactive, 'host', accountId) ? inactive : null)
+}
+
 export function accountPoolCandidates(snapshot: AccountsSnapshot) {
   return [
     ...snapshot.claude.accounts.map((account) => ({
@@ -32,13 +52,7 @@ export function accountPoolCandidates(snapshot: AccountsSnapshot) {
         account.managedAuthRuntime === 'wsl'
           ? ('unavailable' as const)
           : ('ready' as const),
-      ...quotaState(
-        account.id === snapshot.claude.activeAccountId
-          ? snapshot.rateLimits.claude
-          : snapshot.rateLimits.inactiveClaudeAccounts.find(
-              (entry) => entry.accountId === account.id
-            )?.rateLimits
-      )
+      ...accountQuota(snapshot, 'claude', account.id)
     })),
     ...snapshot.codex.accounts.map((account) => ({
       provider: 'codex' as const,
@@ -48,13 +62,7 @@ export function accountPoolCandidates(snapshot: AccountsSnapshot) {
         account.managedHomeRuntime === 'wsl' || !account.lastAuthenticatedAt
           ? ('unavailable' as const)
           : ('ready' as const),
-      ...quotaState(
-        account.id === snapshot.codex.activeAccountId
-          ? snapshot.rateLimits.codex
-          : snapshot.rateLimits.inactiveCodexAccounts.find(
-              (entry) => entry.accountId === account.id
-            )?.rateLimits
-      )
+      ...accountQuota(snapshot, 'codex', account.id)
     }))
   ]
 }

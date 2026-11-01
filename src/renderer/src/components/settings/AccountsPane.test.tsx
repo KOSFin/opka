@@ -269,9 +269,9 @@ function render(
 }
 
 function selectButtons(markup: string): string[] {
-  return [
-    ...markup.matchAll(/<button type="button"[^>]*class="flex min-w-0 flex-1[^"]*"[^>]*>/g)
-  ].map(([button]) => button)
+  return [...markup.matchAll(/<button[^>]*>Use for new chats<\/button>/g)]
+    .slice(1)
+    .map(([button]) => button)
 }
 
 describe('Claude accounts section', () => {
@@ -301,7 +301,7 @@ describe('Claude accounts section', () => {
       systemDefaultEmail: 'a@example.test'
     }
     const copied = render({ ...saved, systemDefaultMayBeCopied: true })
-    expect(copied).toContain('System default: a@example.test')
+    expect(copied).toContain('CLI login on this host: a@example.test')
     expect(copied).toContain('An earlier Orca version may have copied that login there.')
     expect(copied).toContain('>Dismiss</button>')
     // Saving your own login as an account too is normal: no copy evidence, no warning.
@@ -317,7 +317,7 @@ describe('Claude accounts section', () => {
       systemDefaultEmail: 'me@example.test',
       systemDefaultMayBeCopied: true
     })
-    expect(own).toContain('System default: me@example.test')
+    expect(own).toContain('CLI login on this host: me@example.test')
     expect(own).not.toContain('An earlier Orca version')
   })
 })

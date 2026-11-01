@@ -1,3 +1,5 @@
+import { normalizeStatusBarAccountPins } from '../../../../shared/status-bar-account-pins'
+import { getProviderAccountsOwnerKey } from '@/runtime/runtime-provider-accounts-client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { useAppStore } from '../../store'
@@ -21,8 +23,10 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
   const floatingTerminalShortcut = useShortcutLabel('floatingTerminal.toggle')
   const localRateLimits = useAppStore((s) => s.rateLimits)
   // Why: with a remote account owner the agents run there, so its usage is the one to show.
-  const { rateLimits, remoteOwner, refreshRemote } = useOwnerUsageRateLimits(localRateLimits)
+  const { rateLimits, remoteOwner, refreshRemote, accountSnapshot, accountsVerified } =
+    useOwnerUsageRateLimits(localRateLimits)
   const remoteOwned = remoteOwner !== null
+  const accountPins = useAppStore((s) => s.statusBarAccountPins)
   const settings = useAppStore((s) => s.settings)
   const refreshRateLimits = useAppStore((s) => s.refreshRateLimits)
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
@@ -232,6 +236,9 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
 
   // Why: the shown accounts are the owning host's; without a scope Settings opens on the default host.
   const hostScope = getUsageOwnerHostScope(remoteOwner)
+  const hasPinnedUsage = normalizeStatusBarAccountPins(accountPins).some(
+    (pin) => pin.owner === getProviderAccountsOwnerKey(hostScope)
+  )
   const handleManageAccounts = (): void => {
     setUsageMenuOpen(false)
     openSettingsTarget({ pane: 'accounts', repoId: null, hostScope })
@@ -268,6 +275,10 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
   }
 
   return {
+    accountSnapshot,
+    hasPinnedUsage,
+    accountsVerified,
+    ownerRateLimits: rateLimits,
     anyFetching,
     anyVisible,
     barRef,

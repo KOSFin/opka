@@ -1,3 +1,5 @@
+import { UsagePinnedAccounts } from './UsagePinnedAccounts'
+import { UsagePinnedAccountSettings } from './UsagePinnedAccountSettings'
 import { PanelsTopLeft, RefreshCw } from 'lucide-react'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +11,8 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { translate } from '@/i18n/i18n'
+import { UsageAccountsProvider } from './UsageAccountsContext'
+import { getUsageOwnerHostScope } from './use-owner-usage-rate-limits'
 import { UsageRosterPanel } from './UsageRosterPanel'
 import {
   STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS,
@@ -67,6 +71,9 @@ export function StatusBarSurface({
     return null
   }
   const {
+    accountSnapshot,
+    accountsVerified,
+    ownerRateLimits,
     anyFetching,
     anyVisible,
     barRef,
@@ -82,6 +89,7 @@ export function StatusBarSurface({
     handleUsageDetails,
     handleUsageMenuOpenChange,
     hasVisibleUsageMeters,
+    hasPinnedUsage,
     isEmptyUsageState,
     isRefreshing,
     overflowing,
@@ -132,11 +140,11 @@ export function StatusBarSurface({
         data-overflowing={overflowing}
       >
         <div ref={usageRef} className="flex shrink-0 items-center gap-3">
-          {isEmptyUsageState ? (
+          {isEmptyUsageState && !hasPinnedUsage ? (
             showEmptyUsageCta ? (
               <StatusBarUsageEmptyCta remoteOwner={remoteOwner} />
             ) : null
-          ) : hasVisibleUsageMeters ? (
+          ) : hasVisibleUsageMeters || hasPinnedUsage ? (
             // Consolidated roster pill → opens the all-agents Usage popover (mock parity).
             <StatusBarUsageChangeNotices hasVisibleUsageMeters={hasVisibleUsageMeters}>
               <DropdownMenu
@@ -153,40 +161,51 @@ export function StatusBarSurface({
                       'Usage'
                     )}
                   >
-                    {unitLabelState !== 'absent' ? (
-                      <UsageUnitLabel
-                        collapsed={unitLabelState === 'collapsed'}
-                        display={usagePercentageDisplay}
-                      />
-                    ) : null}
-                    {rosterProviders.map((p) => (
-                      // Why: collapsed chips leave the row but stay measurable, so the density hook can bring them back.
-                      <span
-                        key={p.provider}
-                        data-usage-chip={p.provider}
-                        data-usage-urgent={getUsageTone(p) === 'urgent'}
-                        data-usage-percentage={usageChipShowsPercentage(p, usageMode)}
-                        data-usage-collapsed={collapsedUsageProviders.includes(p.provider)}
-                        aria-hidden={collapsedUsageProviders.includes(p.provider)}
-                        className="inline-flex data-[usage-collapsed=true]:invisible data-[usage-collapsed=true]:absolute"
-                      >
-                        <ProviderSegment
-                          p={p}
-                          compact={compact}
-                          display={usagePercentageDisplay}
-                          mode={usageMode}
-                        />
-                      </span>
-                    ))}
-                    {collapseUsage ? (
-                      <UsageOverflowChip
-                        providerCount={rosterProviders.length}
-                        hidden={rosterProviders.filter((p) =>
-                          collapsedUsageProviders.includes(p.provider)
-                        )}
-                        display={usagePercentageDisplay}
-                      />
-                    ) : null}
+                    <UsagePinnedAccounts
+                      target={getUsageOwnerHostScope(remoteOwner)}
+                      snapshot={accountSnapshot ?? null}
+                      limits={ownerRateLimits}
+                      verified={accountsVerified ?? false}
+                      display={usagePercentageDisplay}
+                      fallback={
+                        <>
+                          {unitLabelState !== 'absent' ? (
+                            <UsageUnitLabel
+                              collapsed={unitLabelState === 'collapsed'}
+                              display={usagePercentageDisplay}
+                            />
+                          ) : null}
+                          {rosterProviders.map((p) => (
+                            // Why: collapsed chips leave the row but stay measurable, so the density hook can bring them back.
+                            <span
+                              key={p.provider}
+                              data-usage-chip={p.provider}
+                              data-usage-urgent={getUsageTone(p) === 'urgent'}
+                              data-usage-percentage={usageChipShowsPercentage(p, usageMode)}
+                              data-usage-collapsed={collapsedUsageProviders.includes(p.provider)}
+                              aria-hidden={collapsedUsageProviders.includes(p.provider)}
+                              className="inline-flex data-[usage-collapsed=true]:invisible data-[usage-collapsed=true]:absolute"
+                            >
+                              <ProviderSegment
+                                p={p}
+                                compact={compact}
+                                display={usagePercentageDisplay}
+                                mode={usageMode}
+                              />
+                            </span>
+                          ))}
+                          {collapseUsage ? (
+                            <UsageOverflowChip
+                              providerCount={rosterProviders.length}
+                              hidden={rosterProviders.filter((p) =>
+                                collapsedUsageProviders.includes(p.provider)
+                              )}
+                              display={usagePercentageDisplay}
+                            />
+                          ) : null}
+                        </>
+                      }
+                    />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -201,63 +220,74 @@ export function StatusBarSurface({
                   onPointerDownOutside={usageMenuFocusHandoff.onPointerDownOutside}
                   onCloseAutoFocus={usageMenuFocusHandoff.onCloseAutoFocus}
                 >
-                  <UsageRosterPanel
-                    providers={rosterProviders}
-                    display={usagePercentageDisplay}
-                    statusBarUsageMode={statusBarUsageMode}
-                    onStatusBarUsageModeChange={setStatusBarUsageMode}
-                    isRefreshing={isRefreshing || anyFetching}
-                    onRefresh={handleRefresh}
-                    onOpenProvider={handleOpenProviderAccounts}
-                    onSignIn={handleOpenProviderAccounts}
-                    canSignIn={canSignInFromUsageRow}
-                    onManageAccounts={handleManageAccounts}
-                    onUsageDetails={handleUsageDetails}
-                    renderRow={(p, rowNode) => {
-                      // Why: a placeholder has nothing to drill into; its row opens the host's accounts.
-                      if (isOwnerNotSetUpPlaceholder(p)) {
-                        return null
-                      }
-                      // Every provider drills into its detail panel (parity with the
-                      // per-provider dropdowns on main); Claude/Codex additionally get
-                      // the account switcher + runtime toggle + Codex reset credits.
-                      if (p.provider === 'claude') {
+                  <UsageAccountsProvider
+                    target={getUsageOwnerHostScope(remoteOwner)}
+                    snapshot={accountSnapshot ?? null}
+                    verified={accountsVerified ?? false}
+                    rateLimits={ownerRateLimits}
+                    ownerLabel={
+                      remoteOwner?.label ?? translate('usage.accounts.localHost', 'This computer')
+                    }
+                  >
+                    <UsageRosterPanel
+                      providers={rosterProviders}
+                      display={usagePercentageDisplay}
+                      statusBarUsageMode={statusBarUsageMode}
+                      onStatusBarUsageModeChange={setStatusBarUsageMode}
+                      isRefreshing={isRefreshing || anyFetching}
+                      onRefresh={handleRefresh}
+                      onOpenProvider={handleOpenProviderAccounts}
+                      onSignIn={handleOpenProviderAccounts}
+                      canSignIn={canSignInFromUsageRow}
+                      onManageAccounts={handleManageAccounts}
+                      onUsageDetails={handleUsageDetails}
+                      renderRow={(p, rowNode) => {
+                        // Why: a placeholder has nothing to drill into; its row opens the host's accounts.
+                        if (isOwnerNotSetUpPlaceholder(p)) {
+                          return null
+                        }
+                        // Every provider drills into its detail panel (parity with the
+                        // per-provider dropdowns on main); Claude/Codex additionally get
+                        // the account switcher + runtime toggle + Codex reset credits.
+                        if (p.provider === 'claude') {
+                          return (
+                            <ClaudeSwitcherMenu
+                              claude={p}
+                              compact={compact}
+                              iconOnly={false}
+                              asSubmenu
+                              triggerContent={rowNode}
+                            />
+                          )
+                        }
+                        if (p.provider === 'codex') {
+                          return (
+                            <CodexSwitcherMenu
+                              codex={p}
+                              compact={compact}
+                              iconOnly={false}
+                              asSubmenu
+                              triggerContent={rowNode}
+                            />
+                          )
+                        }
                         return (
-                          <ClaudeSwitcherMenu
-                            claude={p}
+                          <ProviderDetailsMenu
+                            provider={p}
                             compact={compact}
                             iconOnly={false}
                             asSubmenu
                             triggerContent={rowNode}
+                            ariaLabel={translate(
+                              'auto.components.status.bar.UsageRosterPanel.openDetails',
+                              'Open usage details'
+                            )}
                           />
                         )
-                      }
-                      if (p.provider === 'codex') {
-                        return (
-                          <CodexSwitcherMenu
-                            codex={p}
-                            compact={compact}
-                            iconOnly={false}
-                            asSubmenu
-                            triggerContent={rowNode}
-                          />
-                        )
-                      }
-                      return (
-                        <ProviderDetailsMenu
-                          provider={p}
-                          compact={compact}
-                          iconOnly={false}
-                          asSubmenu
-                          triggerContent={rowNode}
-                          ariaLabel={translate(
-                            'auto.components.status.bar.UsageRosterPanel.openDetails',
-                            'Open usage details'
-                          )}
-                        />
-                      )
-                    }}
-                  />
+                      }}
+                    />
+                    <UsagePinnedAccountSettings />
+                  </UsageAccountsProvider>
                 </DropdownMenuContent>
               </DropdownMenu>
             </StatusBarUsageChangeNotices>

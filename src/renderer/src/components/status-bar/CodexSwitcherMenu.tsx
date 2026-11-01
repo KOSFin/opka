@@ -193,7 +193,9 @@ export function CodexSwitcherMenu({
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="min-w-0 flex-1 truncate text-foreground">
               {activeTarget?.label ??
-                translate('auto.components.status.bar.StatusBar.c676918adc', 'System default')}
+                (selectedRuntimeKey === ''
+                  ? translate('usage.accounts.unavailable', 'Account list unavailable')
+                  : translate('accounts.cliLoginOnHost', 'CLI login on this host'))}
             </span>
           </div>
         </div>

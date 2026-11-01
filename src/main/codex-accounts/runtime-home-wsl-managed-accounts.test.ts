@@ -89,6 +89,9 @@ describe('CodexRuntimeHomeService', () => {
         'home'
       )
 
+      expect(
+        service.prepareForRateLimitFetchWithIdentity({ runtime: 'wsl', wslDistro: 'Ubuntu' })
+      ).toMatchObject({ authProvenance: 'profile:account-1:wsl:Ubuntu' })
       expect(readFileSync(runtimeAuthPath, 'utf-8')).toBe('{"account":"host-system"}\n')
       expect(service.prepareForCodexLaunch()).toBe(getRuntimeCodexHomePath())
       expect(service.prepareForCodexLaunch({ runtime: 'wsl', wslDistro: 'Ubuntu' })).toBe(

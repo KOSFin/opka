@@ -51,7 +51,7 @@ export function createProviderAccountServices(
   rateLimits.setCodexHomePathResolver(async (target) =>
     target?.runtime === 'wsl' && !(await isWslDistroRunningForBackgroundWork(target.wslDistro))
       ? { kind: 'skip' }
-      : codexRuntimeHome.prepareForRateLimitFetch(target)
+      : codexRuntimeHome.prepareForRateLimitFetchWithIdentity(target)
   )
   rateLimits.setCodexFetchTarget(getInitialCodexRateLimitTarget(store.getSettings()))
   // Why: Kimi's CLI refreshes its OAuth token in whichever runtime it runs in, so the

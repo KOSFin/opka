@@ -55,6 +55,9 @@ describe('CodexRuntimeHomeService', () => {
       const service = new CodexRuntimeHomeService(store as never)
       const target = { runtime: 'wsl' as const, wslDistro: 'Ubuntu' }
       const expectedHome = join(wslHome, '.codex')
+      expect(service.prepareForRateLimitFetchWithIdentity(target)).toMatchObject({
+        authProvenance: 'wsl:Ubuntu:system'
+      })
 
       expect(service.prepareForRateLimitFetch(target)).toEqual({
         kind: 'ready',

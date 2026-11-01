@@ -77,8 +77,8 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
         </h3>
         <p className="text-xs text-muted-foreground">
           {translate(
-            'auto.components.settings.AccountsPane.72b36ea174',
-            'Optional. Orca can use your normal Claude login; add accounts only if you want quick switching without moving chat sessions.'
+            'accounts.claude.defaultOutsidePools',
+            'Choose the default login for new chats outside automatic pools. Saved accounts can also participate in account pools. Existing chats keep their assigned account.'
           )}
         </p>
       </div>
@@ -86,8 +86,8 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
       <SearchableSetting
         title={translate('auto.components.settings.AccountsPane.8bbfd74556', 'Claude Accounts')}
         description={translate(
-          'accounts.claude.profileSwitching',
-          'Switching applies to the next Claude you start in any tab.'
+          'accounts.defaultSelectionScope',
+          'Choose the manual default for new chats on this host. Automatic pools use their own selection policy.'
         )}
         keywords={['claude', 'account', 'rate limit', 'status bar', 'quota']}
         className="space-y-3 py-2"
@@ -151,46 +151,30 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
         {remoteAccountScopeNotice}
 
         <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() =>
-              void runClaudeAccountAction('select:system', () =>
-                selectClaudeProviderAccount(accountOwner, {
-                  accountId: null,
-                  runtime: accountRuntime.runtime,
-                  wslDistro: accountRuntime.wslDistro
-                })
-              )
-            }
-            disabled={claudeAction !== 'idle' || accountRuntimeUnavailable}
+          <div
             className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
-              systemClaudeActive
-                ? 'border-foreground/20 bg-accent/15'
-                : 'border-border/70 hover:border-border hover:bg-accent/8'
-            } disabled:cursor-default disabled:opacity-100`}
+              systemClaudeActive ? 'border-foreground/20 bg-accent/15' : 'border-border/70'
+            }`}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-sm font-medium">
                   {systemDefaultEmail
                     ? translate(
-                        'accounts.claude.systemDefaultNamed',
-                        'System default: {{value0}}',
+                        'accounts.cliLoginOnHostNamed',
+                        'CLI login on this host: {{value0}}',
                         {
                           value0: systemDefaultEmail
                         }
                       )
-                    : translate(
-                        'auto.components.settings.AccountsPane.f2a265f8c7',
-                        'System default'
-                      )}
+                    : translate('accounts.cliLoginOnHost', 'CLI login on this host')}
                 </span>
                 {systemClaudeActive ? (
                   <Badge
                     variant="outline"
                     className="h-4 shrink-0 rounded px-1.5 text-[10px] font-medium leading-none text-foreground/80"
                   >
-                    {translate('auto.components.settings.AccountsPane.e74831fb6b', 'Active')}
+                    {translate('accounts.defaultForNewChats', 'Default for new chats')}
                   </Badge>
                 ) : null}
               </div>
@@ -202,7 +186,23 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
                 )}
               </span>
             </div>
-          </button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void runClaudeAccountAction('select:system', () =>
+                  selectClaudeProviderAccount(accountOwner, {
+                    accountId: null,
+                    runtime: accountRuntime.runtime,
+                    wslDistro: accountRuntime.wslDistro
+                  })
+                )
+              }
+              disabled={claudeAction !== 'idle' || accountRuntimeUnavailable || systemClaudeActive}
+            >
+              {translate('accounts.useForNewChats', 'Use for new chats')}
+            </Button>
+          </div>
           {systemDefaultIsSaved ? (
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs text-muted-foreground">
@@ -260,29 +260,14 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
               return (
                 <div
                   key={account.id}
+                  role="group"
+                  aria-label={account.email}
                   className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
-                    isActive
-                      ? 'border-foreground/20 bg-accent/15'
-                      : 'border-border/70 hover:border-border hover:bg-accent/8'
+                    isActive ? 'border-foreground/20 bg-accent/15' : 'border-border/70'
                   }`}
                 >
                   <div className="flex w-full items-center justify-between gap-3 max-md:flex-col max-md:items-start">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void runClaudeAccountAction(
-                          `select:${account.id}`,
-                          () =>
-                            selectClaudeProviderAccount(accountOwner, {
-                              accountId: account.id,
-                              ...accountRuntimeView
-                            }),
-                          accountRuntimeView
-                        )
-                      }}
-                      disabled={isBusy || account.needsSignIn}
-                      className="flex min-w-0 flex-1 flex-col gap-0.5 text-left disabled:cursor-default"
-                    >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-sm font-medium">{account.email}</span>
                         <Badge
@@ -296,10 +281,7 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
                             variant="outline"
                             className="h-4 shrink-0 rounded px-1.5 text-[10px] font-medium leading-none text-foreground/80"
                           >
-                            {translate(
-                              'auto.components.settings.AccountsPane.e74831fb6b',
-                              'Active'
-                            )}
+                            {translate('accounts.defaultForNewChats', 'Default for new chats')}
                           </Badge>
                         ) : null}
                       </div>
@@ -313,8 +295,26 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
                             ? `${account.organizationName} · ${formatAccountTimestamp(account.lastAuthenticatedAt)}`
                             : formatAccountTimestamp(account.lastAuthenticatedAt)}
                       </span>
-                    </button>
+                    </div>
                     <div className="flex shrink-0 items-center justify-end gap-1 max-md:w-full max-md:flex-wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void runClaudeAccountAction(
+                            `select:${account.id}`,
+                            () =>
+                              selectClaudeProviderAccount(accountOwner, {
+                                accountId: account.id,
+                                ...accountRuntimeView
+                              }),
+                            accountRuntimeView
+                          )
+                        }}
+                        disabled={isBusy || account.needsSignIn || isActive}
+                      >
+                        {translate('accounts.useForNewChats', 'Use for new chats')}
+                      </Button>
                       <ButtonGroup>
                         <Button
                           variant="ghost"

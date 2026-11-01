@@ -28,6 +28,7 @@ type OwnedUsage = {
   ownerId: string
   rateLimits: RateLimitState | null
   failure: OwnerUsageFailureReason | null
+  accounts: ProviderAccountsSnapshot | null
 }
 
 /** A remote host (SSH-managed server or paired Orca) that owns the shown usage. */
@@ -45,6 +46,8 @@ export function getUsageOwnerHostScope(remoteOwner: RemoteUsageOwner | null): Ru
 
 export type OwnerUsageRateLimits = {
   rateLimits: RateLimitState
+  accountSnapshot: ProviderAccountsSnapshot | null
+  accountsVerified: boolean
   /** Null when this device owns the shown usage. */
   remoteOwner: RemoteUsageOwner | null
   /** Forces the owning host to re-read usage; null when this device owns it. */
@@ -77,7 +80,8 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
       apply({
         ownerId: owner,
         rateLimits: current?.ownerId === owner ? current.rateLimits : null,
-        failure
+        failure,
+        accounts: current?.ownerId === owner ? current.accounts : null
       })
     },
     [apply]
@@ -86,7 +90,12 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
   const applySnapshot = useCallback(
     (owner: string, snapshot: ProviderAccountsSnapshot) => {
       if (snapshot.rateLimits) {
-        apply({ ownerId: owner, rateLimits: snapshot.rateLimits, failure: null })
+        apply({
+          ownerId: owner,
+          rateLimits: snapshot.rateLimits,
+          failure: null,
+          accounts: snapshot
+        })
       } else {
         // Why: a host that predates published usage answers without it; say so, never spin.
         fail(owner, 'usage-not-published')
@@ -198,6 +207,8 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
   )
   return {
     rateLimits,
+    accountSnapshot: ownerId && owned?.ownerId === ownerId ? owned.accounts : null,
+    accountsVerified: Boolean(ownerId && owned?.ownerId === ownerId && !owned.failure),
     remoteOwner,
     refreshRemote: ownerId ? refreshRemote : null
   }

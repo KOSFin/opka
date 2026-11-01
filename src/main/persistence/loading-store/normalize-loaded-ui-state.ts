@@ -1,3 +1,4 @@
+import { normalizeStatusBarAccountPins } from '../../../shared/status-bar-account-pins'
 import { resolveStatusBarCompactChangeNoticeDismissed } from '../../../shared/status-bar-compact-change-notice'
 import { migrateExplorerDisplayRoots } from '../../../shared/file-explorer-display-root'
 import {
@@ -210,6 +211,7 @@ export function normalizeLoadedUiState(
     // "Search tab, no explorer view" shape — the defaults spread above fills in 'files'.
     rightSidebarExplorerView,
     setupGuideSidebarDismissed,
+    statusBarAccountPins: normalizeStatusBarAccountPins(parsed.ui?.statusBarAccountPins),
     usagePercentageDisplayChangeNoticeDismissed,
     statusBarCompactChangeNoticeDismissed,
     setupGuideBrowserMilestoneMigrated:

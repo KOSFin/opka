@@ -57,32 +57,18 @@ export function renderCodexAccountRow(
   return (
     <div
       key={account.id}
+      role="group"
+      aria-label={account.email}
       className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
         needsReauthentication
           ? 'border-destructive/50 bg-destructive/5'
           : isActive
             ? 'border-foreground/20 bg-accent/15'
-            : 'border-border/70 hover:border-border hover:bg-accent/8'
+            : 'border-border/70'
       }`}
     >
       <div className="flex w-full items-center justify-between gap-3 max-md:flex-col max-md:items-start">
-        <button
-          type="button"
-          onClick={() => {
-            const accountRuntimeView = getProviderAccountRuntime(account)
-            void runCodexAccountAction(
-              `select:${account.id}`,
-              () =>
-                selectCodexProviderAccount(accountOwner, {
-                  accountId: account.id,
-                  ...accountRuntimeView
-                }),
-              accountRuntimeView
-            )
-          }}
-          disabled={isBusy}
-          className="flex min-w-0 flex-1 flex-col gap-0.5 text-left disabled:cursor-default"
-        >
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-medium">{account.email}</span>
             <Badge
@@ -96,7 +82,7 @@ export function renderCodexAccountRow(
                 variant="outline"
                 className="h-4 shrink-0 rounded px-1.5 text-[10px] font-medium leading-none text-foreground/80"
               >
-                {translate('auto.components.settings.AccountsPane.e74831fb6b', 'Active')}
+                {translate('accounts.defaultForNewChats', 'Default for new chats')}
               </Badge>
             ) : null}
             {needsReauthentication ? (
@@ -130,12 +116,28 @@ export function renderCodexAccountRow(
             {needsReauthentication ? <span className="shrink-0 opacity-50">•</span> : null}
             <span className="shrink-0">{formatAccountTimestamp(account.lastAuthenticatedAt)}</span>
           </div>
-        </button>
+        </div>
 
         <div className="flex shrink-0 items-center justify-end gap-1 max-md:w-full max-md:flex-wrap">
-          {/* Why: selecting an account is the primary action in this row.
-          Keeping maintenance actions visually lighter prevents re-auth/remove
-          controls from overpowering the selection affordance in a dense list. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const accountRuntimeView = getProviderAccountRuntime(account)
+              void runCodexAccountAction(
+                `select:${account.id}`,
+                () =>
+                  selectCodexProviderAccount(accountOwner, {
+                    accountId: account.id,
+                    ...accountRuntimeView
+                  }),
+                accountRuntimeView
+              )
+            }}
+            disabled={isBusy || isActive}
+          >
+            {translate('accounts.useForNewChats', 'Use for new chats')}
+          </Button>
           <Button
             variant="ghost"
             size="xs"

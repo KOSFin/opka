@@ -220,4 +220,18 @@ describe('useOwnerUsageRateLimits', () => {
     })
     expect(result.current.rateLimits.claude?.session?.usedPercent).toBe(20)
   })
+  it('fences account roster and inactive usage when the workspace owner changes', () => {
+    mocks.owner = { kind: 'environment', environmentId: 'mini' }
+    const { result, rerender } = renderHook(() => useOwnerUsageRateLimits(local))
+    const first = snapshot(createEmptyRateLimitState({ codex: provider('codex', 64) }))
+    act(() => mocks.watchers[0].handlers.onSnapshot(first))
+    expect(result.current.accountSnapshot).toBe(first)
+    expect(result.current.accountsVerified).toBe(true)
+    mocks.owner = { kind: 'environment', environmentId: 'other' }
+    rerender()
+    expect(result.current.accountSnapshot).toBeNull()
+    expect(result.current.accountsVerified).toBe(false)
+    act(() => mocks.watchers[0].handlers.onSnapshot(first))
+    expect(result.current.accountSnapshot).toBeNull()
+  })
 })

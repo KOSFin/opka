@@ -42,8 +42,8 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
         </h3>
         <p className="text-xs text-muted-foreground">
           {translate(
-            'auto.components.settings.AccountsPane.cedfab35ab',
-            'Optional. Orca can use your normal Codex login; add accounts only if you want quick switching in Orca.'
+            'accounts.codex.defaultOutsidePools',
+            'Choose the default login for new chats outside automatic pools. Saved accounts can also participate in account pools. Existing chats keep their assigned account.'
           )}
         </p>
         <p className="text-xs text-muted-foreground">
@@ -63,8 +63,8 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
       <SearchableSetting
         title={translate('auto.components.settings.AccountsPane.3180536c7a', 'Codex Accounts')}
         description={translate(
-          'auto.components.settings.AccountsPane.d0d53b7eb0',
-          'Manage which Codex account Orca uses for live rate limit fetching.'
+          'accounts.defaultSelectionScope',
+          'Choose the manual default for new chats on this host. Automatic pools use their own selection policy.'
         )}
         // Why: this single SearchableSetting backs the whole Codex section,
         // including the "Active Codex Account" sub-control (account picker
@@ -198,37 +198,26 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
         {isRemoteAccountScope ? null : <CodexLoginLinkNotice />}
 
         <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() =>
-              void runCodexAccountAction('select:system', () =>
-                selectCodexProviderAccount(accountOwner, {
-                  accountId: null,
-                  runtime: accountRuntime.runtime,
-                  wslDistro: accountRuntime.wslDistro
-                })
-              )
-            }
-            disabled={codexAction !== 'idle' || accountRuntimeUnavailable}
+          <div
             className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
               systemCodexNeedsSignIn
                 ? 'border-destructive/50 bg-destructive/5'
                 : systemCodexActive
                   ? 'border-foreground/20 bg-accent/15'
-                  : 'border-border/70 hover:border-border hover:bg-accent/8'
-            } disabled:cursor-default disabled:opacity-100`}
+                  : 'border-border/70'
+            }`}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-sm font-medium">
-                  {translate('auto.components.settings.AccountsPane.f2a265f8c7', 'System default')}
+                  {translate('accounts.cliLoginOnHost', 'CLI login on this host')}
                 </span>
                 {systemCodexActive ? (
                   <Badge
                     variant="outline"
                     className="h-4 shrink-0 rounded px-1.5 text-[10px] font-medium leading-none text-foreground/80"
                   >
-                    {translate('auto.components.settings.AccountsPane.e74831fb6b', 'Active')}
+                    {translate('accounts.defaultForNewChats', 'Default for new chats')}
                   </Badge>
                 ) : null}
                 {systemCodexNeedsSignIn ? (
@@ -260,7 +249,23 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
                   : getCodexSystemDefaultSubtitle(systemCodexIdentity, accountRuntimeSentenceLabel)}
               </span>
             </div>
-          </button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void runCodexAccountAction('select:system', () =>
+                  selectCodexProviderAccount(accountOwner, {
+                    accountId: null,
+                    runtime: accountRuntime.runtime,
+                    wslDistro: accountRuntime.wslDistro
+                  })
+                )
+              }
+              disabled={codexAction !== 'idle' || accountRuntimeUnavailable || systemCodexActive}
+            >
+              {translate('accounts.useForNewChats', 'Use for new chats')}
+            </Button>
+          </div>
           {visibleCodexAccounts.length === 0 ? (
             <div className="rounded-md border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
               {isRemoteAccountScope

@@ -1,3 +1,4 @@
+import type { StatusBarAccountPin } from './status-bar-account-pins'
 import type { JiraQuickFilterState } from './jira-quick-filters'
 import type { JiraSavedFilterState } from './jira-saved-filters'
 import type { ReleaseChannel } from './release-channel'
@@ -138,6 +139,7 @@ export type PersistedUIState = {
   /** Why: this is client-side presentation, not a provider/account or execution-host setting. */
   usagePercentageDisplay?: UsagePercentageDisplay
   /** Client-side footer presentation; verbose preserves the pre-roster all-window default. */
+  statusBarAccountPins?: StatusBarAccountPin[]
   statusBarUsageMode?: StatusBarUsageMode
   dismissedUpdateVersion: string | null
   /** Version when the sign-out notice was seen or dismissed; any value suppresses future appearances. */

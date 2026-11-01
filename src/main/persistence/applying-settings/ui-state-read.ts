@@ -1,3 +1,4 @@
+import { normalizeStatusBarAccountPins } from '../../../shared/status-bar-account-pins'
 import { normalizeExplorerDisplayRootByWorktree } from '../../../shared/file-explorer-display-root'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import {
@@ -57,6 +58,7 @@ export function getPersistedUI(
     workspaceBoardColumnWidth: clampWorkspaceBoardColumnWidth(state.ui?.workspaceBoardColumnWidth),
     syncTaskStatusFromWorkspaceBoard: state.ui?.syncTaskStatusFromWorkspaceBoard === true,
     usagePercentageDisplay: normalizeUsagePercentageDisplay(state.ui?.usagePercentageDisplay),
+    statusBarAccountPins: normalizeStatusBarAccountPins(state.ui?.statusBarAccountPins),
     statusBarUsageMode: normalizeStatusBarUsageMode(state.ui?.statusBarUsageMode),
     statusBarCompactChangeNoticeDismissed:
       state.ui?.statusBarCompactChangeNoticeDismissed !== false,

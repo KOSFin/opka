@@ -1,6 +1,8 @@
+import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
+import type * as ProviderAccountsModule from '@/runtime/runtime-provider-accounts-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type {
@@ -39,11 +41,13 @@ function snapshot(): ClaudeRateLimitAccountsState {
 }
 
 vi.mock('sonner', () => ({ toast: { error: toastError, info: vi.fn(), success: vi.fn() } }))
-vi.mock('@/runtime/runtime-provider-accounts-client', () => ({
+vi.mock('@/runtime/runtime-provider-accounts-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProviderAccountsModule>()),
   fetchProviderAccountsSnapshot: vi.fn(async () => ({
     claude: snapshot(),
     codex: { accounts: [], activeAccountId: null },
-    failedProviders: []
+    failedProviders: [],
+    rateLimits: createEmptyRateLimitState()
   })),
   selectClaudeProviderAccount
 }))
@@ -238,5 +242,7 @@ describe('status bar Claude account that needs a sign-in', () => {
     await openAccounts()
     expect(screen.queryByRole('button', { name: /Sign in/ })).toBeNull()
     expect(screen.getByText('Sign in again to use this account')).toBeTruthy()
+    expect(reauthenticate).not.toHaveBeenCalled()
+    expect(selectClaudeProviderAccount).not.toHaveBeenCalled()
   })
 })

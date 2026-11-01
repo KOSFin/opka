@@ -237,6 +237,29 @@ describe('createUISlice hydratePersistedUI', () => {
     expect(store.getState().usagePercentageDisplay).toBe('used')
   })
 
+  it('persists and hydrates bounded account display pins independently of host account selection', () => {
+    const pins = [
+      {
+        owner: 'local',
+        provider: 'codex' as const,
+        runtimeKey: 'host',
+        accountId: 'saved',
+        label: 'Saved'
+      }
+    ]
+    const setUI = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('window', { api: { ui: { set: setUI } } })
+    const store = createUIStore()
+    expect(store.getState().statusBarAccountPins).toEqual([])
+    store.getState().setStatusBarAccountPins(pins)
+    expect(setUI).toHaveBeenCalledWith({ statusBarAccountPins: pins })
+    const restored = createUIStore()
+    restored.getState().hydratePersistedUI(makePersistedUI({ statusBarAccountPins: pins }))
+    expect(restored.getState().statusBarAccountPins).toEqual(pins)
+    restored.getState().hydratePersistedUI(makePersistedUI())
+    expect(restored.getState().statusBarAccountPins).toEqual([])
+  })
+
   it('initializes new users with compact status bar usage', () => {
     expect(createUIStore().getState().statusBarUsageMode).toBe('compact')
   })
