@@ -19,6 +19,10 @@ def visible_labels(root):
             for value in (node.get('text', ''), node.get('content-desc', '')) if value}
 
 
+def host_list_ready(root):
+    return {'Workspace options', 'Accounts', 'Tasks'} <= visible_labels(root)
+
+
 def onboarding_action(root):
     labels = visible_labels(root)
     if 'Accounts' in labels:
@@ -180,7 +184,7 @@ def main():
     def host_list():
         for _ in range(6):
             root = tree()
-            if any(node.get('content-desc') == 'Accounts' for node in root.iter('node')):
+            if host_list_ready(root):
                 return
             command('shell', 'input', 'keyevent', 'KEYCODE_BACK')
             time.sleep(0.4)

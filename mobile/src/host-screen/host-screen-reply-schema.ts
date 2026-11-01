@@ -84,6 +84,8 @@ export const hostRepoCatalogSchema = z
         id: z.string(),
         displayName: z.string(),
         path: salvagedOptional('path', z.string()),
+        projectGroupId: salvagedOptional('projectGroupId', z.string().nullable()),
+        projectGroupOrder: salvagedOptional('projectGroupOrder', z.number().finite()),
         badgeColor: salvagedOptional('badgeColor', z.string()),
         repoIcon: salvagedOptional('repoIcon', mobileRepoIconSchema),
         connectionId: salvagedOptional('connectionId', z.string().nullable()),

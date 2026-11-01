@@ -53,6 +53,21 @@ class NormalOnboarding(unittest.TestCase):
         self.assertTrue(journey.safe_failure_screen(screen('Accounts')))
 
 
+class HostListReadiness(unittest.TestCase):
+    def test_captured_host_toolbar_is_ready_with_text_labels(self):
+        fixture = Path(__file__).with_name('fixtures') / 'android-webview-accessibility/project-hierarchy.xml'
+        self.assertTrue(journey.host_list_ready(ET.parse(fixture).getroot()))
+
+    def test_accounts_header_and_tab_or_partial_toolbar_are_not_host_list(self):
+        self.assertFalse(journey.host_list_ready(screen('Accounts', 'Accounts', 'Pools & switching')))
+        self.assertFalse(journey.host_list_ready(screen('Accounts', 'Tasks')))
+        root = screen('Workspace options', 'Accounts')
+        ET.SubElement(root, 'node', {'content-desc': 'Tasks', 'enabled': 'false'})
+        self.assertFalse(journey.host_list_ready(root))
+        root[-1].set('enabled', 'true')
+        self.assertTrue(journey.host_list_ready(root))
+
+
 class NativeActionTargets(unittest.TestCase):
     def test_header_title_does_not_hide_clickable_accounts_tab(self):
         root = screen('Accounts')

@@ -157,6 +157,29 @@ class InstallerUiTransitionContract(unittest.TestCase):
         self.assertEqual(tree.find('node').get('text'), 'Accounts')
         self.assertEqual(dumps, [('uiautomator', 'dump', '--compressed', '/synthetic.xml')] * 2)
 
+    def test_title_only_captured_webview_retries_full_dump_before_accepting_rows(self):
+        fixtures = Path(__file__).with_name('fixtures') / 'android-webview-accessibility'
+        xml = [(fixtures / name).read_text() for name in ['title-only.xml', 'project-hierarchy.xml']]
+        clock, dumps = iter(range(10)), []
+        def shell(*parts):
+            if parts[0] == 'uiautomator':
+                dumps.append(parts)
+                return 'UI hierchary dumped to: /synthetic.xml'
+            return xml[min(len(dumps) - 1, 1)] if parts[0] == 'cat' else ''
+        tree, _ = ui_snapshot(shell, '/synthetic.xml', 8, now=lambda: next(clock), pause=lambda _: None)
+        self.assertTrue(any('Synthetic integration' in node.get('text', '') or
+                            'Synthetic integration' in node.get('content-desc', '') for node in tree.iter('node')))
+        self.assertEqual(dumps, [('uiautomator', 'dump', '--compressed', '/synthetic.xml'),
+                                 ('uiautomator', 'dump', '/synthetic.xml')])
+
+    def test_persistently_title_only_webview_expires_instead_of_claiming_empty_rows(self):
+        xml = (Path(__file__).with_name('fixtures') / 'android-webview-accessibility/title-only.xml').read_text()
+        clock = iter(range(10))
+        def shell(*parts):
+            return xml if parts[0] == 'cat' else 'UI hierchary dumped to: /synthetic.xml'
+        with self.assertRaisesRegex(TimeoutError, 'WebView accessibility content is unavailable'):
+            ui_snapshot(shell, '/synthetic.xml', 3, now=lambda: next(clock), pause=lambda _: None)
+
     def test_ui_snapshot_has_an_overall_deadline(self):
         clock = iter(range(20))
         with self.assertRaisesRegex(TimeoutError, 'No fresh Android UI snapshot'):

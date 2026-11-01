@@ -34,16 +34,24 @@ def ui_snapshot(shell, path, deadline, now=None, pause=None):
     now = now or time.monotonic
     pause = pause or time.sleep
     last_error = 'no snapshot'
+    compressed = True
     while now() < deadline:
         try:
             shell('rm', '-f', path)
-            result = shell('uiautomator', 'dump', '--compressed', path)
+            result = shell('uiautomator', 'dump', *(['--compressed'] if compressed else []), path)
             if ' dumped to:' not in result:
                 raise ValueError(result[-160:] or 'dump returned no hierarchy path')
             xml = shell('cat', path)
             tree = ET.fromstring(xml)
             if tree.tag != 'hierarchy' or next(tree.iter('node'), None) is None:
                 raise ValueError('empty UI hierarchy during transition')
+            webviews = [node for node in tree.iter('node') if node.get('class') == 'android.webkit.WebView']
+            if webviews and not any(
+                    node.get('class') != 'android.webkit.WebView' and
+                    (node.get('text') or node.get('content-desc'))
+                    for view in webviews for node in view.iter('node')):
+                compressed = False
+                raise ValueError('WebView accessibility content is unavailable; retrying full hierarchy')
             return tree, xml
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ET.ParseError, ValueError) as error:
             last_error = str(error)[-200:]

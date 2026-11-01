@@ -55,6 +55,8 @@ jobs:
       - name: Verify source qualification, build provenance, payload and release identity
         run: python3 config/scripts/opka-android-release-followup.py --verify-inputs
       - uses: ./.github/actions/install-mobile-dependencies
+      - name: Check only the changed headless project metadata boundary
+        run: node node_modules/vitest/vitest.mjs run --config mobile/vitest.config.ts mobile/src/host-screen/host-screen-reply-schema.test.ts mobile/src/worktree/project-section-catalog.test.ts mobile/src/worktree/project-group-workspace-sections.test.ts --maxWorkers=1
       - name: Build only the disposable synthetic host and generated web pages
         env:
           OPKA_VERSION: ${{ env.CANDIDATE_VERSION }}
@@ -100,6 +102,13 @@ jobs:
           path: |
             out/android-release-followup/verified-inputs.json
             out/android-release-followup/stage-outcomes.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve the separately versioned tested server-web component
+        uses: actions/upload-artifact@v7
+        with:
+          name: opka-rc8-server-web-${{ github.run_id }}
+          path: out/mobile-web-release-patch/
           if-no-files-found: error
           retention-days: 14
   publish:
@@ -168,6 +177,8 @@ jobs:
           assert proof['sourceCommit'] == os.environ['OPKA_BUILT_SOURCE'] and proof['buildRun'] == 41326135452
           assert proof['artifactId'] == 13092296535 and proof['version'] == os.environ['OPKA_VERSION']
           assert proof['signedApkRebuilt'] is False
+          assert proof['webSourceCommit'] == os.environ['GITHUB_SHA']
+          assert len(proof['webBuildId']) == 64
           outcome = json.loads((root / 'stage-outcomes.json').read_text())
           stages = outcome['stages']
           assert outcome['allPassed'] is True and len(stages) == 2
@@ -185,6 +196,46 @@ jobs:
           node config/scripts/opka-release-assets.mjs complete dist
           sha256sum dist/* > "$RUNNER_TEMP/opka-qualified-asset-hashes"
           diff -u "$RUNNER_TEMP/opka-original-asset-hashes" "$RUNNER_TEMP/opka-qualified-asset-hashes"
+      - uses: actions/download-artifact@v8
+        with:
+          name: opka-rc8-server-web-${{ github.run_id }}
+          path: webpatch
+      - name: Verify the independent tested server-web component without changing core assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, tarfile
+          from pathlib import Path
+          root = Path('webpatch')
+          archive = root / 'opka-mobile-web-rc8.tar.gz'
+          sidecar = root / 'opka-mobile-web-provenance.json'
+          sums = root / 'opka-mobile-web-SHA256SUMS'
+          assert {path.name for path in root.iterdir()} == {archive.name, sidecar.name, sums.name}
+          proof = json.loads((Path(os.environ['RUNNER_TEMP']) / 'opka-tested-apk/verified-inputs.json').read_text())
+          metadata = json.loads(sidecar.read_text())
+          assert metadata['schemaVersion'] == 1 and metadata['sourceCommit'] == proof['webSourceCommit'] == os.environ['GITHUB_SHA']
+          assert metadata['baseBinarySource'] == os.environ['OPKA_BUILT_SOURCE'] and metadata['version'] == os.environ['OPKA_VERSION']
+          assert metadata['buildId'] == proof['webBuildId'] and metadata['testedApkSha256'] == proof['apkSha256']
+          with archive.open('rb') as stream:
+              assert metadata['tarSha256'] == hashlib.file_digest(stream, 'sha256').hexdigest()
+          assert archive.stat().st_size == metadata['tarBytes']
+          with tarfile.open(archive) as package:
+              members = package.getmembers()
+              assert all(member.isfile() for member in members)
+              manifest_bytes = package.extractfile('manifest.json').read()
+              assert hashlib.sha256(manifest_bytes).hexdigest() == metadata['manifestSha256']
+              manifest = json.loads(manifest_bytes)
+              assert manifest['buildId'] == metadata['buildId']
+              names = ['manifest.json', *[asset['path'] for asset in manifest['assets']]]
+              assert len(members) == len(names) and {member.name for member in members} == set(names)
+              assert all(not name.startswith('/') and '\\' not in name and not any(part in ('', '.', '..') for part in name.split('/')) for name in names)
+          expected = ''
+          for path in (archive, sidecar):
+              with path.open('rb') as stream:
+                  expected += hashlib.file_digest(stream, 'sha256').hexdigest() + '  ' + path.name + '\n'
+          assert sums.read_text() == expected
+          PY
       - name: Refuse replacing any existing tag or release
         shell: bash
         run: |
@@ -204,7 +255,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "v$OPKA_VERSION" dist/* --target "$OPKA_BUILT_SOURCE" --draft --prerelease --title "Opka $OPKA_VERSION — Mac and Android beta" --notes-file fork-docs/releases/beta-notes.md
+          cp fork-docs/releases/beta-notes.md "$RUNNER_TEMP/opka-release-notes.md"
+          printf '\nServer mobile pages: apply the separately checksummed opka-mobile-web-rc8.tar.gz component alongside this server release. Its provenance records the tested web source; APK, Mac and backend binaries retain their original build source.\n' >> "$RUNNER_TEMP/opka-release-notes.md"
+          gh release create "v$OPKA_VERSION" dist/* webpatch/* --target "$OPKA_BUILT_SOURCE" --draft --prerelease --title "Opka $OPKA_VERSION — Mac and Android beta" --notes-file "$RUNNER_TEMP/opka-release-notes.md"
           gh release edit "v$OPKA_VERSION" --draft=false --prerelease --latest=false
       - name: Verify the immutable built-source tag and published asset metadata
         shell: bash
@@ -215,7 +268,9 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, os, subprocess, time
           from pathlib import Path
-          files = {path.name: path for path in Path('dist').iterdir() if path.is_file()}
+          paths = [path for directory in ('dist', 'webpatch') for path in Path(directory).iterdir() if path.is_file()]
+          files = {path.name: path for path in paths}
+          assert len(files) == len(paths), 'Core and web component filenames must not overlap'
           expected = {}
           for name, path in files.items():
               with path.open('rb') as stream:
