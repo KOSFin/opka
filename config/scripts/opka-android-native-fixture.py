@@ -93,21 +93,25 @@ def certificate(apksigner, apk):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--a', required=True)
+    parser.add_argument('--a')
     parser.add_argument('--b', required=True)
     parser.add_argument('--apksigner', required=True)
     parser.add_argument('--version', default='1.4.236-rc.6')
     parser.add_argument('--legacy-a')
+    parser.add_argument('--legacy-only', action='store_true')
     parser.add_argument('--output', default='out/android-native-update-acceptance')
     args = parser.parse_args()
     serial = require_isolated_avd()
-    a, b = Path(args.a).resolve(), Path(args.b).resolve()
+    if args.legacy_only:
+        assert os.environ.get('RELEASE_SIGNER') == 'true' and args.legacy_a, 'Legacy-only requires protected release identity and original baseline'
+    assert args.a or args.legacy_only, 'Current-source baseline A is required unless legacy-only'
+    a, b = Path(args.a or args.legacy_a).resolve(), Path(args.b).resolve()
     signer = certificate(args.apksigner, b)
     assert certificate(args.apksigner, a) == signer, 'A and B must use the same signer'
     assert re.fullmatch(r'\d+\.\d+\.\d+-rc\.[1-9]\d*', args.version), 'Target must be a beta version'
     target_code = version_code(args.version)
     assert target_code > version_code('1.4.236-rc.5'), 'Target must upgrade current-source baseline'
-    scenarios = [('home', a, '1.4.236-rc.5', 'home'), ('settings', a, '1.4.236-rc.5', 'settings')]
+    scenarios = [] if args.legacy_only else [('home', a, '1.4.236-rc.5', 'home'), ('settings', a, '1.4.236-rc.5', 'settings')]
     if args.legacy_a:
         assert os.environ.get('RELEASE_SIGNER') == 'true', 'Released baseline requires protected release identity'
         legacy = Path(args.legacy_a).resolve()

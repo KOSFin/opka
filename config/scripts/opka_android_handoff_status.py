@@ -22,6 +22,11 @@ def handoff_ready(text, expected_hash, expected_bytes, expected_code):
     )
 
 
+def is_package_resumed(activities, package):
+    marker = r'^\s*(?:mResumedActivity\s*[:=]|topResumedActivity\s*[:=]|ResumedActivity\s*:)\s*ActivityRecord\{[^\r\n]*\s'
+    return re.search(marker + re.escape(package) + r'/', activities, re.MULTILINE) is not None
+
+
 def ui_snapshot(shell, path, deadline, now=None, pause=None):
     import subprocess
     import time
@@ -32,7 +37,7 @@ def ui_snapshot(shell, path, deadline, now=None, pause=None):
     while now() < deadline:
         try:
             shell('rm', '-f', path)
-            result = shell('uiautomator', 'dump', path)
+            result = shell('uiautomator', 'dump', '--compressed', path)
             if ' dumped to:' not in result:
                 raise ValueError(result[-160:] or 'dump returned no hierarchy path')
             xml = shell('cat', path)

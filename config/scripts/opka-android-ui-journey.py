@@ -10,6 +10,8 @@ import time
 from urllib.parse import urlsplit, urlunsplit
 import xml.etree.ElementTree as ET
 
+from opka_android_handoff_status import ui_snapshot
+
 
 def visible_labels(root):
     return {value for node in root.iter('node')
@@ -84,12 +86,16 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     adb = ['adb', '-s', args.serial]
 
-    def command(*values, timeout=20, binary=False):
+    def command(*values, timeout=20, binary=False, raw_errors=False):
         try:
             reply = subprocess.run([*adb, *values], capture_output=True, timeout=timeout, check=True)
         except subprocess.CalledProcessError as error:
+            if raw_errors:
+                raise
             raise RuntimeError(f'ADB operation failed with exit code {error.returncode}') from None
         except subprocess.TimeoutExpired:
+            if raw_errors:
+                raise
             raise RuntimeError('ADB operation timed out') from None
         return reply.stdout if binary else reply.stdout.decode(errors='replace')
 
@@ -113,8 +119,9 @@ def main():
     paired = False
 
     def tree():
-        command('shell', 'uiautomator', 'dump', '/sdcard/opka-ui-journey.xml')
-        return ET.fromstring(command('shell', 'cat', '/sdcard/opka-ui-journey.xml'))
+        root, _ = ui_snapshot(lambda *values: command('shell', *values, raw_errors=True),
+                              '/sdcard/opka-ui-journey.xml', time.monotonic() + 10)
+        return root
 
     def find(label, timeout=25, contains=False, actionable=False):
         end = time.monotonic() + timeout

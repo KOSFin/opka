@@ -9,7 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from opka_android_handoff_status import completion_action, handoff_ready, ui_snapshot
+from opka_android_handoff_status import completion_action, handoff_ready, is_package_resumed, ui_snapshot
 from opka_android_published_update import open_published_update, verify_native_download, verify_cache_cleanup, version_code
 
 PACKAGE = 'com.kosfin.opka.mobile'
@@ -116,7 +116,7 @@ def main():
         while time.monotonic() < deadline:
             process = subprocess.run(['adb', 'shell', 'pidof', PACKAGE], capture_output=True, text=True, timeout=10)
             activities = shell('dumpsys', 'activity', 'activities')
-            if process.returncode == 0 and any(PACKAGE in line and 'mResumedActivity' in line for line in activities.splitlines()):
+            if process.returncode == 0 and is_package_resumed(activities, PACKAGE):
                 break
             time.sleep(1)
         else:
@@ -200,7 +200,7 @@ def main():
             tree, xml = ui_snapshot(shell, '/sdcard/opka-completion-ui.xml', deadline)
             (output / 'last-completion-ui.xml').write_text(xml)
             activities = shell('dumpsys', 'activity', 'activities')
-            resumed = any(PACKAGE in line and 'mResumedActivity' in line for line in activities.splitlines())
+            resumed = is_package_resumed(activities, PACKAGE)
             action, stable_count = completion_action(True, tree, resumed, stable_count)
             if action == 'ready':
                 break

@@ -10,7 +10,7 @@ from unittest.mock import patch
 import zipfile
 
 import opka_android_published_update as updater
-from opka_android_handoff_status import completion_action, handoff_ready, ui_snapshot
+from opka_android_handoff_status import completion_action, handoff_ready, is_package_resumed, ui_snapshot
 import subprocess
 import xml.etree.ElementTree as ET
 
@@ -80,6 +80,25 @@ class CacheCleanupContract(unittest.TestCase):
                     updater.verify_cache_cleanup('/synthetic', lambda *args: 'update.apk', Path(directory), timeout=3)
 
 
+class ResumedActivityContract(unittest.TestCase):
+    def test_api30_and_api33_foreground_markers_from_captured_activity_dumps(self):
+        for text in [
+            '  mResumedActivity: ActivityRecord{42122ca u0 com.kosfin.opka.mobile/.MainActivity t9}',
+            '    topResumedActivity=ActivityRecord{42122ca u0 com.kosfin.opka.mobile/.MainActivity} t9}',
+            '  ResumedActivity: ActivityRecord{42122ca u0 com.kosfin.opka.mobile/.MainActivity} t9}'
+        ]:
+            self.assertTrue(is_package_resumed(text, 'com.kosfin.opka.mobile'))
+
+    def test_other_packages_historical_records_and_paused_state_are_not_foreground(self):
+        for text in [
+            'mResumedActivity: ActivityRecord{1 u0 com.kosfin.opka.mobile.other/.MainActivity t1}',
+            'mResumedActivity: ActivityRecord{1 u0 other.com.kosfin.opka.mobile/.MainActivity t1}',
+            'ActivityRecord{1 u0 com.kosfin.opka.mobile/.MainActivity t1} state=PAUSED',
+            'mLastPausedActivity: ActivityRecord{1 u0 com.kosfin.opka.mobile/.MainActivity t1}'
+        ]:
+            self.assertFalse(is_package_resumed(text, 'com.kosfin.opka.mobile'))
+
+
 class HandoffProbeContract(unittest.TestCase):
     def test_probe_failure_is_actionable_without_blob_artifacts(self):
         status = 'INSTRUMENTATION_STATUS: probe=failed\nINSTRUMENTATION_STATUS: probeStage=content-resolver-read\nINSTRUMENTATION_STATUS: probeException=FileNotFoundException\n'
@@ -123,6 +142,20 @@ class InstallerUiTransitionContract(unittest.TestCase):
         self.assertEqual(tree.find('node').get('text'), 'Install')
         self.assertEqual(removals, 4)
         self.assertEqual(attempts, 4)
+
+    def test_snapshot_retries_uiautomator_137_with_compressed_fresh_dump(self):
+        clock = iter(range(10))
+        dumps = []
+        def shell(*parts):
+            if parts[0] == 'uiautomator':
+                dumps.append(parts)
+                if len(dumps) == 1:
+                    raise subprocess.CalledProcessError(137, 'uiautomator')
+                return 'UI hierchary dumped to: /synthetic.xml'
+            return '<hierarchy><node text="Accounts" /></hierarchy>' if parts[0] == 'cat' else ''
+        tree, _ = ui_snapshot(shell, '/synthetic.xml', 8, now=lambda: next(clock), pause=lambda _: None)
+        self.assertEqual(tree.find('node').get('text'), 'Accounts')
+        self.assertEqual(dumps, [('uiautomator', 'dump', '--compressed', '/synthetic.xml')] * 2)
 
     def test_ui_snapshot_has_an_overall_deadline(self):
         clock = iter(range(20))

@@ -246,7 +246,7 @@ class DisposableAvdTrust(unittest.TestCase):
         self.assertFalse(any('rm' in call and '/system/etc/security/cacerts/abcdef01.0' in call for call in calls))
 
 
-    def test_home_failure_does_not_suppress_settings_and_overall_still_fails(self):
+    def exercise_scenario_failures(self, legacy=False):
         wrapper = load_native_fixture()
         def fake(*args, **kwargs):
             if args[0] == 'openssl' and '-subject_hash_old' in args:
@@ -258,15 +258,32 @@ class DisposableAvdTrust(unittest.TestCase):
             a.write_bytes(b'a')
             b.write_bytes(b'b')
             argv = ['fixture', '--a', str(a), '--b', str(b), '--apksigner', 'fake', '--output', str(root / 'output')]
-            with patch.object(wrapper.sys, 'argv', argv), patch.object(wrapper, 'require_isolated_avd', return_value='emulator-5554'), patch.object(wrapper, 'certificate', return_value='a' * 64), patch.object(wrapper, 'version_code', side_effect=lambda version: 6 if version.endswith('.6') else 5), patch.object(wrapper, 'command', side_effect=fake), patch.object(wrapper, 'prepare_writable_system_ca_store', return_value=nullcontext('emulator-5554')), patch.object(wrapper, 'create_server', return_value=Mock()), patch.object(wrapper.threading, 'Thread'), patch.object(wrapper.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['synthetic-scenario'])) as scenarios:
-                with self.assertRaisesRegex(AssertionError, 'home, settings'):
+            if legacy:
+                original = root / 'opka-android.apk'
+                original.write_bytes(b'original published baseline')
+                argv += ['--legacy-a', str(original), '--legacy-only']
+            with patch.dict(wrapper.os.environ, {'RELEASE_SIGNER': 'true'}), patch.object(wrapper, 'verify_published_baseline', return_value={'version': '1.4.236-rc.5', 'certificateSha256': 'a' * 64}), patch.object(wrapper.sys, 'argv', argv), patch.object(wrapper, 'require_isolated_avd', return_value='emulator-5554'), patch.object(wrapper, 'certificate', return_value='a' * 64), patch.object(wrapper, 'version_code', side_effect=lambda version: 6 if version.endswith('.6') else 5), patch.object(wrapper, 'command', side_effect=fake), patch.object(wrapper, 'prepare_writable_system_ca_store', return_value=nullcontext('emulator-5554')), patch.object(wrapper, 'create_server', return_value=Mock()), patch.object(wrapper.threading, 'Thread'), patch.object(wrapper.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['synthetic-scenario'])) as scenarios:
+                with self.assertRaisesRegex(AssertionError, 'legacy-settings' if legacy else 'home, settings'):
                     wrapper.main()
-            self.assertEqual(scenarios.call_count, 2)
+            self.assertEqual(scenarios.call_count, 1 if legacy else 2)
             surfaces = [call.args[0][call.args[0].index('--surface') + 1] for call in scenarios.call_args_list]
-            self.assertEqual(surfaces, ['home', 'settings'])
+            self.assertEqual(surfaces, ['settings'] if legacy else ['home', 'settings'])
             report = json.loads((root / 'output/scenario-results.json').read_text())
             self.assertFalse(report['allPassed'])
-            self.assertEqual([result['scenario'] for result in report['completed']], ['home', 'settings'])
+            self.assertEqual([result['scenario'] for result in report['completed']], ['legacy-settings'] if legacy else ['home', 'settings'])
+
+
+    def test_home_failure_does_not_suppress_settings_and_overall_still_fails(self):
+        self.exercise_scenario_failures()
+
+    def test_protected_legacy_only_never_runs_current_source_scenarios(self):
+        self.exercise_scenario_failures(legacy=True)
+
+    def test_legacy_only_refuses_unprotected_invocation(self):
+        wrapper = load_native_fixture()
+        with patch.dict(wrapper.os.environ, {'RELEASE_SIGNER': 'false'}), patch.object(wrapper.sys, 'argv', ['fixture', '--b', 'fake.apk', '--apksigner', 'fake', '--legacy-only']), patch.object(wrapper, 'require_isolated_avd', return_value='emulator-5554'):
+            with self.assertRaisesRegex(AssertionError, 'protected release identity'):
+                wrapper.main()
 
 if __name__ == '__main__':
     unittest.main()
