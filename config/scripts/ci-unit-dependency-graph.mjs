@@ -87,7 +87,13 @@ export function collectUnitDependencyGraph(root = process.cwd(), { includeMobile
   const sources = new Map(
     files.map((file) => [file.replaceAll('\\', '/'), readFileSync(join(root, file), 'utf8')])
   )
-  const workspace = createWorkspaceSourceResolver(root)
+  const workspace = createWorkspaceSourceResolver(root, {
+    additionalManifests: includeMobile
+      ? globSync('mobile/packages/*/package.json', { cwd: root }).map((file) =>
+          file.replaceAll('\\', '/')
+        )
+      : []
+  })
   return { ...buildUnitDependencyGraph(sources, workspace), files: new Set(sources.keys()) }
 }
 

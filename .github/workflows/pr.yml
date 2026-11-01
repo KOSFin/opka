@@ -46,6 +46,7 @@ jobs:
       base: ${{ steps.scope.outputs.base }}
       head: ${{ steps.scope.outputs.head }}
       full: ${{ steps.scope.outputs.full }}
+      comparison_valid: ${{ steps.scope.outputs.comparison_valid }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -130,13 +131,13 @@ jobs:
           ORCA_MOBILE_WEB_APP_DEPS_REQUIRED: '1'
           OPKA_CI_DIFF_BASE: ${{ needs.scope.outputs.base }}
           OPKA_CI_DIFF_HEAD: ${{ needs.scope.outputs.head }}
-          OPKA_CI_FULL: ${{ needs.scope.outputs.full }}
+          OPKA_CI_COMPARISON_VALID: ${{ needs.scope.outputs.comparison_valid }}
         shell: bash
         run: |
-          if [ "$OPKA_CI_FULL" = true ]; then
-            pnpm run test:fork
-          else
+          if [ "$OPKA_CI_COMPARISON_VALID" = true ]; then
             pnpm run test:fork -- --changed "$OPKA_CI_DIFF_BASE" "$OPKA_CI_DIFF_HEAD"
+          else
+            pnpm run test:fork
           fi
       - name: Save synthetic mobile page evidence
         if: always()

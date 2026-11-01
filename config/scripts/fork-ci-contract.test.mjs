@@ -233,6 +233,21 @@ describe('fork CI safety and required checks', () => {
       }
     }
   })
+  it('uses changed-test discovery for every valid comparison including global-policy changes', () => {
+    expect(workflow.jobs.scope.outputs.comparison_valid).toBe(
+      '${{ steps.scope.outputs.comparison_valid }}'
+    )
+    const step = workflow.jobs.regression.steps.find(
+      (entry) => entry.name === 'Test host accounts, mobile state and generated pages'
+    )
+    expect(step.env.OPKA_CI_COMPARISON_VALID).toBe('${{ needs.scope.outputs.comparison_valid }}')
+    expect(step.env.OPKA_CI_FULL).toBeUndefined()
+    expect(step.run).toContain('if [ "$OPKA_CI_COMPARISON_VALID" = true ]; then')
+    expect(step.run).toContain(
+      'pnpm run test:fork -- --changed "$OPKA_CI_DIFF_BASE" "$OPKA_CI_DIFF_HEAD"'
+    )
+    expect(step.run).toContain('else\n  pnpm run test:fork\nfi')
+  })
   it('does not silently accept misspelled test filters', () => {
     const files = globSync(UNIT_INCLUDE).map((file) => file.replaceAll('\\', '/'))
     for (const filter of FORK_TEST_FILTERS) {

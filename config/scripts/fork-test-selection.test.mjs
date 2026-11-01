@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildUnitDependencyGraph } from './ci-unit-dependency-graph.mjs'
 import {
+  forkGraphFailureReason,
   parseForkSelectionArgs,
   selectForkTests,
   splitForkTestLanes
@@ -21,14 +22,18 @@ const graph = { ...buildUnitDependencyGraph(sources), files: new Set(sources.key
 const files = [...sources.keys()].filter((file) => /\.test\./.test(file))
 
 describe('fork changed-component selection', () => {
-  it('follows shared imports into both workspaces and retains opaque rendered consumers', () => {
-    expect(selectForkTests(files, ['src/shared/contract.ts'], graph)).toMatchObject({
+  it('follows shared imports into both workspaces and retains approved rendered coverage', () => {
+    expect(
+      selectForkTests(files, ['src/shared/contract.ts'], graph, [
+        'config/scripts/actual-render.test.mjs'
+      ])
+    ).toMatchObject({
       full: false,
       files: [
-        'src/main/consumer.test.ts',
-        'mobile/src/feature.test.tsx',
+        'config/scripts/actual-render.test.mjs',
         'mobile/src/aliased.test.ts',
-        'config/scripts/actual-render.test.mjs'
+        'mobile/src/feature.test.tsx',
+        'src/main/consumer.test.ts'
       ]
     })
   })
@@ -54,7 +59,7 @@ describe('fork changed-component selection', () => {
       ['unknown/new.ts']
     ].map((changed) => ({ changed }))
   )('falls back conservatively for $changed', ({ changed }) => {
-    expect(selectForkTests(files, changed, graph)).toMatchObject({ full: true, files })
+    expect(selectForkTests(files, changed, graph)).toMatchObject({ full: true, files: [...files].sort() })
   })
   it('falls back for code with no proven consumer rather than claiming zero tests passed', () => {
     expect(
@@ -69,6 +74,42 @@ describe('fork changed-component selection', () => {
     expect(Object.values(lanes).flat().sort()).toEqual([...files].sort())
     expect(new Set(Object.values(lanes).flat()).size).toBe(files.length)
     expect(lanes.render).toEqual(['config/scripts/actual-render.test.mjs'])
+  })
+  it('falls back to approved qualification plus every changed discovered test, not the upstream world', () => {
+    const fallback = ['src/main/consumer.test.ts']
+    const result = selectForkTests(
+      files,
+      ['config/vitest.config.ts', 'mobile/src/unrelated.test.ts'],
+      graph,
+      fallback
+    )
+    expect(result.full).toBe(true)
+    expect(result.files).toEqual(['mobile/src/unrelated.test.ts', 'src/main/consumer.test.ts'])
+    expect(result.files).not.toContain('mobile/src/aliased.test.ts')
+  })
+  it('never fans an unrelated opaque upstream reader into the approved fork inventory', () => {
+    const result = selectForkTests(files, ['mobile/src/adapter.ts'], graph, [
+      'mobile/src/unrelated.test.ts'
+    ])
+    expect(result.files).toEqual([
+      'mobile/src/aliased.test.ts',
+      'mobile/src/feature.test.tsx',
+      'mobile/src/unrelated.test.ts'
+    ])
+    expect(result.files).not.toContain('config/scripts/actual-render.test.mjs')
+  })
+  it('keeps transitive consumers beyond the fallback inventory when the graph is proven', () => {
+    expect(selectForkTests(files, ['mobile/src/adapter.ts'], graph, []).files).toContain(
+      'mobile/src/feature.test.tsx'
+    )
+  })
+  it('reports a bounded public missing export but never echoes arbitrary exception content', () => {
+    expect(
+      forkGraphFailureReason(new Error('No public orca-source export for @orca/expo-two-way-audio'))
+    ).toContain('missing-source:@orca/expo-two-way-audio')
+    expect(forkGraphFailureReason(new Error('private-token /private/path'))).toBe(
+      'Dependency graph unavailable (Error)'
+    )
   })
   it('preserves full default and admits only immutable explicit changed refs', () => {
     expect(parseForkSelectionArgs([])).toBeNull()

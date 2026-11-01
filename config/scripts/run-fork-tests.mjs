@@ -135,6 +135,7 @@ export const FORK_TEST_FILTERS = [
   'config/scripts/fork-ci-contract.test.mjs',
   'config/scripts/fork-test-',
   'config/scripts/ci-unit-dependency-graph.test.mjs',
+  'config/scripts/workspace-source-exports.test.mjs',
   'config/scripts/ci-unit-selection.test.mjs',
   'config/scripts/opka-ci-',
   'config/scripts/opka-verify-tested-android.test.mjs',
@@ -193,7 +194,13 @@ function run(program, args, environment = {}) {
 
 if (isDirectInvocation(import.meta.url, process.argv[1])) {
   const request = parseForkSelectionArgs(process.argv.slice(2))
-  const plan = request ? prepareForkTestSelection(request, root) : null
+  const plan = request
+    ? prepareForkTestSelection(request, root, [
+        ...FORK_TEST_FILTERS,
+        ...MOBILE_FORK_TEST_FILTERS,
+        ...MOBILE_RENDER_TEST_FILTERS
+      ])
+    : null
   if (plan) {
     console.log(`Fork test selection: ${plan.reason}; ${plan.files.length} files`)
   }

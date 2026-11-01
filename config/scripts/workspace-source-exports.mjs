@@ -57,16 +57,23 @@ function packageExports(manifest, metadata) {
   return entries
 }
 
-export function createWorkspaceSourceResolver(root = process.cwd()) {
+export function createWorkspaceSourceResolver(
+  root = process.cwd(),
+  { additionalManifests = [] } = {}
+) {
   root = realpathSync(root)
   const packages = new Map()
   const sources = new Map()
-  for (const manifest of workspacePackageManifests(root)) {
+  for (const manifest of [...workspacePackageManifests(root), ...additionalManifests]) {
     const metadata = JSON.parse(readFileSync(join(root, manifest), 'utf8'))
     if (typeof metadata.name !== 'string' || packages.has(metadata.name)) {
       throw new Error(`Missing or duplicate workspace package name: ${manifest}`)
     }
     packages.set(metadata.name, { manifest, native: manifest.startsWith('native/') })
+    if (additionalManifests.includes(manifest) && typeof metadata.main === 'string') {
+      const target = metadata.main.startsWith('./') ? metadata.main : `./${metadata.main}`
+      sources.set(metadata.name, sourceTarget(root, manifest, target))
+    }
     for (const [key, conditions] of packageExports(manifest, metadata)) {
       if (
         !conditions ||

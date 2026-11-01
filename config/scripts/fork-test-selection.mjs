@@ -22,10 +22,36 @@ export function parseForkSelectionArgs(args) {
   return { base: args[1], head: args[2] }
 }
 
-export function selectForkTests(files, changed, graph) {
-  return selectUnitFiles(files, changed, graph, {
+export function selectForkTests(files, changed, graph, fallbackFiles) {
+  // Fork qualification retains its approved indirect-input coverage, not every upstream opaque reader.
+  const directGraph = () => ({
+    ...(typeof graph === 'function' ? graph() : graph),
+    opaque: new Set()
+  })
+  const selected = selectUnitFiles(files, changed, directGraph, {
     sourcePrefixes: ['src/', 'mobile/src/', 'mobile/app/', 'mobile/scripts/', 'mobile/packages/']
   })
+  const covered = selected.full
+    ? (fallbackFiles ?? files)
+    : [...(fallbackFiles ?? []), ...selected.files]
+  return {
+    ...selected,
+    reason: selected.full
+      ? selected.reason
+      : 'Approved fork qualification plus transitive consumers',
+    files: [...new Set([...covered, ...files.filter((file) => changed.includes(file))])].sort()
+  }
+}
+
+export function forkGraphFailureReason(error) {
+  if (error instanceof Error) {
+    const match = /^No public orca-source export for (@orca\/[a-z0-9_./-]+)$/.exec(error.message)
+    if (match) {
+      return `Dependency graph unavailable (missing-source:${match[1]})`
+    }
+    return `Dependency graph unavailable (${error.name === 'Error' ? 'Error' : 'UnexpectedError'})`
+  }
+  return 'Dependency graph unavailable (UnknownError)'
 }
 
 export function splitForkTestLanes(files) {
@@ -36,7 +62,11 @@ export function splitForkTestLanes(files) {
   }
 }
 
-export function prepareForkTestSelection({ base, head }, root = process.cwd()) {
+export function prepareForkTestSelection(
+  { base, head },
+  root = process.cwd(),
+  baselineFilters = []
+) {
   const checkout = runProcessSync({ program: 'git', args: ['rev-parse', 'HEAD'], cwd: root })
   if (checkout.code !== 0 || checkout.stdout.trim() !== head) {
     throw new Error('Changed test plan HEAD must match the tested checkout')
@@ -48,6 +78,12 @@ export function prepareForkTestSelection({ base, head }, root = process.cwd()) {
       { cwd: root, exclude: ['**/node_modules/**'] }
     ).map((file) => file.replaceAll('\\', '/'))
   ].sort()
+  const fallbackFiles = files.filter((file) =>
+    baselineFilters.some((filter) => file.includes(filter))
+  )
+  if (!fallbackFiles.length) {
+    throw new Error('Approved fork fallback inventory is empty')
+  }
   const diff = runProcessSync({
     program: 'git',
     args: ['diff', '--name-only', '--no-renames', '-z', base, head],
@@ -60,13 +96,22 @@ export function prepareForkTestSelection({ base, head }, root = process.cwd()) {
     selection = selectForkTests(
       files,
       changed,
-      collectUnitDependencyGraph(root, { includeMobile: true })
+      () => collectUnitDependencyGraph(root, { includeMobile: true }),
+      fallbackFiles
     )
-  } catch {
-    selection = { files, full: true, reason: 'Dependency graph unavailable' }
+  } catch (error) {
+    selection = {
+      files: [
+        ...new Set([...fallbackFiles, ...files.filter((file) => changed.includes(file))])
+      ].sort(),
+      full: true,
+      reason: forkGraphFailureReason(error)
+    }
   }
   const plan = {
     schema: 1,
+    discoveredCount: files.length,
+    fallbackCount: fallbackFiles.length,
     base,
     head,
     changed,

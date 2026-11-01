@@ -10,6 +10,7 @@ export function classifyCiPaths(paths) {
   const lanes = Object.fromEntries(CI_LANES.map((lane) => [lane, false]))
   lanes.static = true
   const reasons = new Set()
+  let full = false
   const enable = (reason, names) => {
     reasons.add(reason)
     for (const name of names) {
@@ -37,10 +38,11 @@ export function classifyCiPaths(paths) {
         enable('packaged-journey', ['installers'])
       }
     } else {
+      full = true
       enable('build-policy-native-or-unknown', CI_LANES)
     }
   }
-  return { ...lanes, docs_only: reasons.size === 0, reasons: [...reasons] }
+  return { ...lanes, full, docs_only: reasons.size === 0, reasons: [...reasons] }
 }
 
 export function evaluateCiResults(scope, needs) {
@@ -81,6 +83,7 @@ export async function detectCiScope(env = process.env) {
         return {
           ...Object.fromEntries(CI_LANES.map((lane) => [lane, false])),
           reused: true,
+          comparison_valid: false,
           docs_only: false,
           head,
           tree,
@@ -117,7 +120,15 @@ export async function detectCiScope(env = process.env) {
       throw new Error('No complete change list')
     }
     const paths = result.stdout.split('\0').filter(Boolean)
-    return { ...classifyCiPaths(paths), reused: false, base, head, tree, paths }
+    return {
+      ...classifyCiPaths(paths),
+      comparison_valid: true,
+      reused: false,
+      base,
+      head,
+      tree,
+      paths
+    }
   } catch {
     return {
       ...allLanes(),
@@ -127,7 +138,8 @@ export async function detectCiScope(env = process.env) {
       head,
       tree,
       reasons: ['scope-unavailable-full'],
-      full: true
+      full: true,
+      comparison_valid: false
     }
   }
 }
@@ -159,7 +171,15 @@ async function main() {
   )
   appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `plan=${JSON.stringify(scope)}\n${[...CI_LANES, 'docs_only', 'reused', 'base', 'head', 'full']
+    `plan=${JSON.stringify(scope)}\n${[
+      ...CI_LANES,
+      'docs_only',
+      'reused',
+      'base',
+      'head',
+      'full',
+      'comparison_valid'
+    ]
       .map((key) => `${key}=${scope[key] ?? false}\n`)
       .join('')}`
   )
