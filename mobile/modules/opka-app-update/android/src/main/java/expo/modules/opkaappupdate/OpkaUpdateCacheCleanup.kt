@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -40,14 +41,27 @@ object OpkaUpdateCacheCleanup {
     pending.forEach { runCatching { it() } }
   }
 
+  private fun readReceipt(receipt: File): String? = runCatching {
+    if (!receipt.isFile) return@runCatching null
+    receipt.inputStream().use { input ->
+      val bytes = ByteArrayOutputStream(OpkaUpdateCachePolicy.MAX_RECEIPT_BYTES)
+      repeat(OpkaUpdateCachePolicy.MAX_RECEIPT_BYTES + 1) {
+        val next = input.read()
+        if (next < 0) return@use bytes.toString("UTF-8")
+        bytes.write(next)
+      }
+      null
+    }
+  }.getOrNull()
+
   internal fun cleanDirectory(context: Context) {
     runCatching {
       val directory = File(context.cacheDir, "opka-updates")
       val apk = File(directory, "update.apk")
       val receipt = File(directory, "version-code")
-      val target = if (receipt.isFile) receipt.readText().toLongOrNull() else {
+      val target = OpkaUpdateCachePolicy.legacyTarget(readReceipt(receipt)) {
         val archive = if (apk.isFile) runCatching { context.packageManager.getPackageArchiveInfo(apk.path, 0) }.getOrNull() else null
-        OpkaUpdateCachePolicy.legacyArchiveTarget(archive?.packageName, archive?.longVersionCode)
+        archive?.packageName to archive?.longVersionCode
       }
       val current = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
       directory.listFiles()?.forEach { file ->

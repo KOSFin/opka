@@ -48,4 +48,31 @@ class OpkaUpdateCachePolicyTest {
     assertFalse(OpkaUpdateCachePolicy.shouldDelete(20, unreadable, 100, 200))
     assertTrue(OpkaUpdateCachePolicy.shouldDelete(20, unreadable, 100, 100 + 8L * 24 * 60 * 60 * 1000))
   }
+  @Test fun newlineReceiptCleansInstalledButPreservesPendingArtifact() {
+    val target = OpkaUpdateCachePolicy.legacyTarget(" 104236006\n") {
+      throw AssertionError("Valid receipt must not parse the APK archive")
+    }
+    assertEquals(104236006L, target)
+    assertEquals(104236006L, OpkaUpdateCachePolicy.receiptTarget(" ".repeat(54) + "104236006\n"))
+    assertFalse(OpkaUpdateCachePolicy.shouldDelete(104236005, target, 100, 200))
+    assertTrue(OpkaUpdateCachePolicy.shouldDelete(104236006, target, 100, 200))
+  }
+
+  @Test fun invalidReceiptsUseOnlyOwnArchiveIdentity() {
+    for (receipt in listOf(null, "", "zero", "0", "-1", "9223372036854775808", " ".repeat(55) + "104236006\n")) {
+      assertNull(OpkaUpdateCachePolicy.receiptTarget(receipt))
+      val own = OpkaUpdateCachePolicy.legacyTarget(receipt) { "com.kosfin.opka.mobile" to 20L }
+      assertTrue(OpkaUpdateCachePolicy.shouldDelete(20, own, 100, 200))
+      val pending = OpkaUpdateCachePolicy.legacyTarget(receipt) { "com.kosfin.opka.mobile" to 21L }
+      assertFalse(OpkaUpdateCachePolicy.shouldDelete(20, pending, 100, 200))
+      val other = OpkaUpdateCachePolicy.legacyTarget(receipt) { "com.other.app" to 19L }
+      assertNull(other)
+      assertFalse(OpkaUpdateCachePolicy.shouldDelete(20, other, 100, 200))
+      val unreadable = OpkaUpdateCachePolicy.legacyTarget(receipt) { null to null }
+      assertNull(unreadable)
+      assertFalse(OpkaUpdateCachePolicy.shouldDelete(20, unreadable, 100, 200))
+      assertTrue(OpkaUpdateCachePolicy.shouldDelete(20, unreadable, 100, 100 + 8L * 24 * 60 * 60 * 1000))
+    }
+  }
+
 }
