@@ -35,6 +35,34 @@ def safe_failure_screen(root):
             and onboarding_action(root) is not None)
 
 
+def label_matches(node, label, contains=False):
+    labels = (node.get('text', ''), node.get('content-desc', ''))
+    return any(label.casefold() in value.casefold() if contains else label == value for value in labels)
+
+
+def actionable_match(root, label, contains=False):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    for node in root.iter('node'):
+        if not label_matches(node, label, contains):
+            continue
+        candidate = None
+        current = node
+        while current is not None:
+            if current.get('enabled', 'true') != 'true':
+                candidate = None
+                break
+            if candidate is None and current.get('clickable') == 'true':
+                candidate = current
+            current = parents.get(current)
+        if candidate is not None and candidate.get('bounds'):
+            return candidate
+    return None
+
+
+def task_editor_present(root):
+    return any(label_matches(node, 'Task title') for node in root.iter('node'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
@@ -74,20 +102,25 @@ def main():
         command('shell', 'uiautomator', 'dump', '/sdcard/opka-ui-journey.xml')
         return ET.fromstring(command('shell', 'cat', '/sdcard/opka-ui-journey.xml'))
 
-    def find(label, timeout=25, contains=False):
+    def find(label, timeout=25, contains=False, actionable=False):
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             root = tree()
+            if actionable:
+                node = actionable_match(root, label, contains)
+                if node is not None:
+                    return node
+                time.sleep(0.35)
+                continue
             for node in root.iter('node'):
-                labels = (node.get('text', ''), node.get('content-desc', ''))
-                if any(label.casefold() in value.casefold() if contains else label == value for value in labels):
+                if label_matches(node, label, contains):
                     if node.get('bounds') and node.get('enabled', 'true') == 'true':
                         return node
             time.sleep(0.35)
         raise AssertionError(f'UI did not expose {label!r}')
 
     def tap(label, contains=False):
-        node = find(label, contains=contains)
+        node = find(label, contains=contains, actionable=True)
         numbers = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
         if len(numbers) != 4:
             raise AssertionError(f'No touch bounds for {label!r}')
@@ -107,6 +140,14 @@ def main():
                 command('shell', 'input', 'keyevent', *(['KEYCODE_DEL'] * len(previous)))
         command('shell', 'input', 'text', value.replace(' ', '%s'))
         command('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+
+    def wait_for_saved_editor():
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            if not task_editor_present(tree()):
+                return
+            time.sleep(0.35)
+        raise AssertionError('Task editor did not close after save')
 
     def capture(name):
         (output / f'{name}.png').write_bytes(command('exec-out', 'screencap', '-p', binary=True))
@@ -155,7 +196,8 @@ def main():
         capture('01-project-hierarchy')
         tap('Synthetic integration', contains=True)
         collapsed = tree()
-        if any(node.get('text', '').casefold() in ('client', 'service') for node in collapsed.iter('node')):
+        if any(label_matches(node, label, contains=True) for node in collapsed.iter('node')
+               for label in ('client', 'service')):
             raise AssertionError('Collapsed project still exposes repository children')
         tap('Synthetic integration', contains=True)
         find('client', contains=True)
@@ -166,15 +208,15 @@ def main():
         capture('03-accounts')
         tap('Pools & switching')
         tap('Codex pool settings')
-        find('Selection:', contains=True)
+        find('codex pool mode')
         capture('04-pools-expanded')
         tap('Accounts')
         find('Add Codex account')
         host_list()
         capture('05-project-return')
         tap('Tasks')
-        tap(fixture['projectName'])
-        find('Native QA starter')
+        tap(fixture['projectName'], contains=True)
+        find('Native QA starter', contains=True)
         capture('06-board')
         tap('Add project task')
         fill('Task title', 'Native QA new card')
@@ -182,24 +224,27 @@ def main():
         fill('Task acceptance criteria', 'Card is saved and movable')
         capture('07-create-card')
         tap('Save task')
-        tap('Native QA new card')
+        wait_for_saved_editor()
+        tap('Native QA new card', contains=True)
         tap('Edit task')
         fill('Task title', 'Native QA edited card', replace=True)
         tap('Save task')
-        tap('Native QA edited card')
+        wait_for_saved_editor()
+        tap('Native QA edited card', contains=True)
         tap('Move task')
         root = tree()
-        if any(node.get('text') == 'Done' for node in root.iter('node')):
+        if any(label_matches(node, 'Done') for node in root.iter('node')):
             raise AssertionError('Move exposed Done instead of requiring result acceptance')
         capture('08-move-card')
         tap('Review')
-        find('Native QA edited card')
+        find('Add project task')
+        find('Native QA edited card', contains=True)
         capture('09-review-board')
         # Normal Back intentionally returns through the catalog; reopen the saved backend card.
         host_list()
         tap('Tasks')
-        tap(fixture['projectName'])
-        find('Native QA edited card')
+        tap(fixture['projectName'], contains=True)
+        find('Native QA edited card', contains=True)
         capture('10-board-reopened')
         report = {'schema': 1, 'steps': steps, 'realCandidateApk': True, 'realSyntheticHost': True,
                   'normalMobilePairing': True, 'credentialsInjected': False,

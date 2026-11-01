@@ -40,5 +40,30 @@ class NormalOnboarding(unittest.TestCase):
         self.assertTrue(journey.safe_failure_screen(screen('Accounts')))
 
 
+class NativeActionTargets(unittest.TestCase):
+    def test_header_title_does_not_hide_clickable_accounts_tab(self):
+        root = screen('Accounts')
+        tab = ET.SubElement(root, 'node', {'clickable': 'true', 'enabled': 'true', 'bounds': '[1,2][3,4]'})
+        ET.SubElement(tab, 'node', {'text': 'Accounts'})
+        self.assertIs(journey.actionable_match(root, 'Accounts'), tab)
+
+    def test_label_child_targets_nearest_enabled_clickable_ancestor(self):
+        root = screen()
+        outer = ET.SubElement(root, 'node', {'clickable': 'true', 'bounds': '[0,0][50,50]'})
+        inner = ET.SubElement(outer, 'node', {'clickable': 'true', 'bounds': '[1,1][20,20]'})
+        ET.SubElement(inner, 'node', {'content-desc': 'Native QA card, 0 attempts'})
+        self.assertIs(journey.actionable_match(root, 'Native QA card', contains=True), inner)
+        outer.set('enabled', 'false')
+        self.assertIsNone(journey.actionable_match(root, 'Native QA card', contains=True))
+
+    def test_saved_editor_wait_includes_disabled_title_but_not_card_title(self):
+        root = screen('Native QA new card')
+        self.assertFalse(journey.task_editor_present(root))
+        editor = ET.SubElement(root, 'node', {'content-desc': 'Task title', 'enabled': 'false'})
+        self.assertTrue(journey.task_editor_present(root))
+        root.remove(editor)
+        self.assertFalse(journey.task_editor_present(root))
+
+
 if __name__ == '__main__':
     unittest.main()
