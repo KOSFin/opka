@@ -84,6 +84,7 @@ jobs:
           python3 mobile/scripts/android_batterystats_test.py
           python3 config/scripts/opka_android_fixture_proxy_test.py
           python3 config/scripts/opka_android_ci_acceptance_test.py
+          python3 config/scripts/opka_android_ui_journey_test.py
       - uses: ./.github/actions/prepare-android-build-storage
       - uses: ./.github/actions/install-node-dependencies
         with:

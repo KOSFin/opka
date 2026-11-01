@@ -163,17 +163,23 @@ def main():
             command('adb', '-s', serial, 'shell', 'settings', 'put', 'global', 'http_proxy', '10.0.2.2:8080')
             for name, baseline_apk, baseline_version, surface in scenarios:
                 command('adb', '-s', serial, 'uninstall', PACKAGE, check=False)
-                before = len(events)
-                environment = {**os.environ, 'OPKA_ANDROID_ISOLATED_FIXTURE': '1', 'ANDROID_SERIAL': serial}
-                subprocess.run([sys.executable, str(Path(__file__).with_name('opka-android-update-acceptance.py')),
-                                '--a', str(baseline_apk), '--a-version', baseline_version, '--published-version', manifest['version'],
-                                '--fixture-manifest', str(output / 'fixture-manifest.json'),
-                                '--surface', surface, '--output', str(output / name)],
-                               env=environment, check=True, timeout=600)
-                observed = events[before:]
-                assert any(event.startswith('302:github.com:') for event in observed), 'Production native APK redirect was not observed'
-                assert '200:release-assets.githubusercontent.com:/opka-ci/opka-android.apk' in observed, 'Production native APK download was not observed'
-                results.append({'scenario': name, 'baselineVersion': baseline_version, 'targetVersion': args.version, 'passed': True})
+                try:
+                    before = len(events)
+                    environment = {**os.environ, 'OPKA_ANDROID_ISOLATED_FIXTURE': '1', 'ANDROID_SERIAL': serial}
+                    subprocess.run([sys.executable, str(Path(__file__).with_name('opka-android-update-acceptance.py')),
+                                    '--a', str(baseline_apk), '--a-version', baseline_version, '--published-version', manifest['version'],
+                                    '--fixture-manifest', str(output / 'fixture-manifest.json'),
+                                    '--surface', surface, '--output', str(output / name)],
+                                   env=environment, check=True, timeout=600)
+                    observed = events[before:]
+                    assert any(event.startswith('302:github.com:') for event in observed), 'Production native APK redirect was not observed'
+                    assert '200:release-assets.githubusercontent.com:/opka-ci/opka-android.apk' in observed, 'Production native APK download was not observed'
+                    results.append({'scenario': name, 'baselineVersion': baseline_version, 'targetVersion': args.version, 'passed': True})
+                except (AssertionError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+                    results.append({'scenario': name, 'passed': False, 'failureType': type(error).__name__})
+            failed = [result['scenario'] for result in results if not result['passed']]
+            if failed:
+                raise AssertionError('Native update scenarios failed: ' + ', '.join(failed))
             (output / 'native-fixture-receipt.json').write_text(json.dumps({
                 'scenarios': results, 'apkSha256': manifest['sha256'],
                 'certificateSha256': signer, 'nativeModuleRecreation': False,
@@ -193,7 +199,7 @@ def main():
             (output / 'proxy-events.json').write_text(json.dumps(events, indent=2) + '\n')
             (output / 'scenario-results.json').write_text(json.dumps({
                 'completed': results, 'requested': [scenario[0] for scenario in scenarios],
-                'allPassed': len(results) == len(scenarios),
+                'allPassed': len(results) == len(scenarios) and all(result['passed'] for result in results),
                 'legacyFailureRecovery': 'If released updater cannot open the native installer, preserve failure evidence and require an explicit one-time manual APK update; do not re-sign baseline or mark migration passed.'
             }, indent=2) + '\n')
             cleanup = [('shell', 'settings', 'delete', 'global', 'http_proxy')]

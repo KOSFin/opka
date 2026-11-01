@@ -1,6 +1,7 @@
 import { QrCode } from 'lucide-react-native'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { colors, radii, spacing } from '../theme/mobile-theme'
+import { MobileHomeAppUpdateCard } from './MobileHomeAppUpdateCard'
 
 const ONBOARDING_STEPS = [
   {
@@ -36,6 +37,9 @@ export function MobileHomeEmptyState(props: {
         }
       ]}
     >
+      <View style={styles.stepsSection}>
+        <MobileHomeAppUpdateCard />
+      </View>
       <View style={styles.emptyHero}>
         <Text style={styles.emptyTitle}>Connect your desktop</Text>
         <Text style={styles.emptyBody}>

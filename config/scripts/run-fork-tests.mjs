@@ -145,6 +145,7 @@ export const MOBILE_FORK_TEST_FILTERS = [
   'mobile/src/cache/',
   'mobile/src/notifications/',
   'mobile/src/app-update/',
+  'mobile/src/home/MobileHomeEmptyState.test.tsx',
   'mobile/src/transport/host-store',
   'mobile/src/components/accounts-snapshot.test.ts',
   'mobile/src/components/account-usage-state.test.ts',

@@ -10,7 +10,7 @@ import tempfile
 import threading
 import unittest
 import importlib.util
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from opka_android_fixture_proxy import create_server, fixture_response
 
@@ -235,6 +235,29 @@ class DisposableAvdTrust(unittest.TestCase):
                     wrapper.main()
         self.assertFalse(any(len(call) > 3 and call[3] == 'push' for call in calls))
         self.assertFalse(any('rm' in call and '/system/etc/security/cacerts/abcdef01.0' in call for call in calls))
+
+
+    def test_home_failure_does_not_suppress_settings_and_overall_still_fails(self):
+        wrapper = load_native_fixture()
+        def fake(*args, **kwargs):
+            if args[0] == 'openssl' and '-subject_hash_old' in args:
+                return 'abcdef01'
+            return ''
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            a, b = root / 'a.apk', root / 'b.apk'
+            a.write_bytes(b'a')
+            b.write_bytes(b'b')
+            argv = ['fixture', '--a', str(a), '--b', str(b), '--apksigner', 'fake', '--output', str(root / 'output')]
+            with patch.object(wrapper.sys, 'argv', argv), patch.object(wrapper, 'require_isolated_avd', return_value='emulator-5554'), patch.object(wrapper, 'certificate', return_value='a' * 64), patch.object(wrapper, 'version_code', side_effect=lambda version: 6 if version.endswith('.6') else 5), patch.object(wrapper, 'command', side_effect=fake), patch.object(wrapper, 'prepare_writable_system_ca_store', return_value=nullcontext('emulator-5554')), patch.object(wrapper, 'create_server', return_value=Mock()), patch.object(wrapper.threading, 'Thread'), patch.object(wrapper.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['synthetic-scenario'])) as scenarios:
+                with self.assertRaisesRegex(AssertionError, 'home, settings'):
+                    wrapper.main()
+            self.assertEqual(scenarios.call_count, 2)
+            surfaces = [call.args[0][call.args[0].index('--surface') + 1] for call in scenarios.call_args_list]
+            self.assertEqual(surfaces, ['home', 'settings'])
+            report = json.loads((root / 'output/scenario-results.json').read_text())
+            self.assertFalse(report['allPassed'])
+            self.assertEqual([result['scenario'] for result in report['completed']], ['home', 'settings'])
 
 if __name__ == '__main__':
     unittest.main()

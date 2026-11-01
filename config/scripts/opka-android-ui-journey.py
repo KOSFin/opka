@@ -11,6 +11,30 @@ from urllib.parse import urlsplit, urlunsplit
 import xml.etree.ElementTree as ET
 
 
+def visible_labels(root):
+    return {value for node in root.iter('node')
+            if node.get('enabled', 'true') == 'true'
+            for value in (node.get('text', ''), node.get('content-desc', '')) if value}
+
+
+def onboarding_action(root):
+    labels = visible_labels(root)
+    if 'Accounts' in labels:
+        return 'ready'
+    if 'How should sessions open?' in labels and 'Open sessions in Chat UI' in labels:
+        return 'Open sessions in Chat UI'
+    if 'Don’t miss when an agent needs you' in labels and 'Skip notifications for now' in labels:
+        return 'Skip notifications for now'
+    return None
+
+
+def safe_failure_screen(root):
+    # Pair confirmation/error may contain connection credentials; never capture that surface.
+    labels = visible_labels(root)
+    return ('Pair' not in labels and 'Pair with this desktop?' not in labels
+            and onboarding_action(root) is not None)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
@@ -110,7 +134,20 @@ def main():
         command('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW',
                 '-d', pairing_link, '-p', args.package)
         tap('Pair')
-        find('Accounts', timeout=90)
+        # A clean normal pairing presents explicit local onboarding decisions before the host.
+        deadline = time.monotonic() + 90
+        choices = set()
+        while time.monotonic() < deadline:
+            action = onboarding_action(tree())
+            if action == 'ready':
+                break
+            if action and action not in choices:
+                tap(action)
+                choices.add(action)
+            else:
+                time.sleep(0.35)
+        else:
+            raise AssertionError('Pairing/onboarding did not reach the synthetic host')
         paired = True
         find('Synthetic integration', contains=True)
         find('client', contains=True)
@@ -173,7 +210,7 @@ def main():
     except Exception as error:
         (output / 'failure.json').write_text(json.dumps({'steps': steps, 'error': str(error)}, indent=2))
         try:
-            if paired:
+            if paired or safe_failure_screen(tree()):
                 capture('failure')
         except Exception:
             pass
