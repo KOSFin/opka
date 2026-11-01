@@ -13,6 +13,7 @@ const APS_ENVIRONMENT =
 
 const opkaVersionCode = require('./scripts/opka-version-code.cjs')
 const opkaBuild = process.env.OPKA_MOBILE_BUILD === '1'
+const opkaGoogleServicesFile = process.env.OPKA_GOOGLE_SERVICES_FILE || undefined
 
 module.exports = ({ config }) => ({
   ...config,
@@ -22,6 +23,7 @@ module.exports = ({ config }) => ({
         name: 'Opka',
         slug: 'opka-mobile',
         scheme: 'opka',
+        extra: { ...config.extra, opkaAndroidPushConfigured: Boolean(opkaGoogleServicesFile) },
         android: {
           ...config.android,
           package: 'com.kosfin.opka.mobile',
@@ -32,7 +34,7 @@ module.exports = ({ config }) => ({
           ...(process.env.OPKA_VERSION
             ? { versionCode: opkaVersionCode(process.env.OPKA_VERSION) }
             : {}),
-          googleServicesFile: undefined
+          googleServicesFile: opkaGoogleServicesFile
         }
       }
     : {}),

@@ -1,3 +1,9 @@
+import {
+  readGitLabTaskList,
+  gitLabTaskListEpoch,
+  saveGitLabTaskList,
+  invalidateGitLabTaskLists
+} from './gitlab-task-list-cache'
 import type { ProviderLoadActionsModel } from './use-mobile-tasks-provider-load-actions'
 import { fetchJiraTaskIssues } from './mobile-jira-task-source'
 import { isHostedTaskRepo, useCallback, useEffect, useRef } from './mobile-tasks-dependencies'
@@ -60,18 +66,51 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     taskStateHydrated,
     tasksSupported
   } = model
+  const authorityGeneration = client?.getGeneration?.() ?? 0
   const loadTasks = useCallback(
     async (options: { silent?: boolean } = {}): Promise<void> => {
-      if (!client || connState !== 'connected' || !tasksSupported || !taskStateHydrated) {
+      if (
+        !client ||
+        connState !== 'connected' ||
+        !tasksSupported ||
+        !taskStateHydrated ||
+        authorityGeneration !== (client.getGeneration?.() ?? 0)
+      ) {
         return
       }
       const generation = loadGenerationRef.current + 1
       loadGenerationRef.current = generation
       const requestClient = client
       const isCurrent = () =>
-        loadGenerationRef.current === generation && clientRef.current === requestClient
+        loadGenerationRef.current === generation &&
+        clientRef.current === requestClient &&
+        authorityGeneration === (requestClient.getGeneration?.() ?? 0)
+      const cacheKey =
+        provider === 'gitlab'
+          ? JSON.stringify([
+              gitlabView,
+              gitlabFilter,
+              appliedQuery,
+              [...effectiveRepoIds].sort(),
+              model.repos.map((repo) => [repo.id, repo.path, repo.issueSourcePreference])
+            ])
+          : null
+      const retained = cacheKey ? readGitLabTaskList(requestClient, cacheKey) : null
+      if (retained) {
+        setItems(retained.items)
+        setError(retained.notice)
+      }
+      if (retained?.fresh && !options.silent) {
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+      if (cacheKey && options.silent) {
+        invalidateGitLabTaskLists(requestClient)
+      }
+      const cacheEpoch = gitLabTaskListEpoch(requestClient)
       setError('')
-      if (options.silent) {
+      if (options.silent || retained) {
         setRefreshing(true)
       } else {
         setLoading(true)
@@ -168,11 +207,13 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
             if (!isCurrent()) {
               return
             }
-            setItems(
-              (todos ?? [])
-                .map(createGitLabTodoTask)
-                .sort((a, b) => taskTime(b.updatedAt) - taskTime(a.updatedAt))
-            )
+            const items = (todos ?? [])
+              .map(createGitLabTodoTask)
+              .sort((a, b) => taskTime(b.updatedAt) - taskTime(a.updatedAt))
+            setItems(items)
+            if (cacheKey) {
+              saveGitLabTaskList(requestClient, cacheKey, items, '', Date.now(), cacheEpoch)
+            }
             return
           }
           const results = await mapWithConcurrency(
@@ -214,15 +255,15 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
               results.find((result) => result.error)?.error ?? 'Failed to load GitLab tasks'
             )
           }
-          setItems(
-            results
-              .flatMap((result) => result.items)
-              .sort((a, b) => taskTime(b.updatedAt) - taskTime(a.updatedAt))
-          )
-          if (failedCount > 0) {
-            setError(buildPartialRepositoryNotice(failedCount, queriedRepos.length))
-          } else {
-            setError('')
+          const items = results
+            .flatMap((result) => result.items)
+            .sort((a, b) => taskTime(b.updatedAt) - taskTime(a.updatedAt))
+          const notice =
+            failedCount > 0 ? buildPartialRepositoryNotice(failedCount, queriedRepos.length) : ''
+          setItems(items)
+          setError(notice)
+          if (cacheKey) {
+            saveGitLabTaskList(requestClient, cacheKey, items, notice, Date.now(), cacheEpoch)
           }
         } else {
           const normalizedQuery = appliedQuery.trim()
@@ -258,7 +299,9 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
         if (!isCurrent()) {
           return
         }
-        setItems([])
+        if (!retained) {
+          setItems([])
+        }
         resetGitHubItemsState()
         setError(err instanceof Error ? err.message : 'Failed to load tasks')
       } finally {
@@ -271,6 +314,8 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     [
       appliedQuery,
       client,
+      authorityGeneration,
+      model.repos,
       connState,
       countGitHubItemPages,
       fetchGitHubItemsPage,

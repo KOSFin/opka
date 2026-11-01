@@ -2,6 +2,7 @@ import { StyleSheet } from 'react-native'
 import { colors, spacing, typography, radii } from '../theme/mobile-theme'
 
 export const styles = StyleSheet.create({
+  hiddenSection: { display: 'none' },
   container: {
     flex: 1,
     backgroundColor: colors.bgBase

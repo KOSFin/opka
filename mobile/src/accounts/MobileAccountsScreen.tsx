@@ -13,24 +13,24 @@ import {
   type AccountsSnapshot,
   type ProviderKey,
   decodeAccountsSnapshot,
-  getActiveProviderRateLimits,
   getInactiveProviderUsage,
   getUsageBarState,
   getWindowResetLabel,
   hasActiveProviderUsage,
   UsageBar
 } from '../components/AccountUsage'
+import { getCodexResetCreditSummary } from '../components/codex-reset-credit'
 import {
-  getActiveCodexAccountIdForRateLimitTarget,
-  getCodexResetCreditSummary
-} from '../components/codex-reset-credit'
+  getAccountProviderUsage,
+  getProviderAccountSelection
+} from '../components/provider-account-usage'
 import { CodexResetCreditAction } from '../components/CodexResetCreditAction'
 import { useCodexResetCreditAction } from '../components/use-codex-reset-credit-action'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { useRouteHandoff } from '../navigation/route-handoff'
 import { MobileAccountPoolSection } from './MobileAccountPoolSection'
 import { MobileAccountSignInSection } from './MobileAccountSignInSection'
-import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
+import { MobileAccountModes } from './MobileAccountModes'
 import { MobileAccountsHeader } from './MobileAccountsHeader'
 
 type AccountsNotice = { title: string; message: string }
@@ -208,11 +208,8 @@ export function MobileAccountsScreen() {
       return null
     }
     const state = provider === 'claude' ? snapshot.claude : snapshot.codex
-    const activeAccountId =
-      provider === 'codex' && snapshot.codex.activeAccountIdsByRuntime
-        ? getActiveCodexAccountIdForRateLimitTarget(snapshot)
-        : state.activeAccountId
-    const activeUsage = getActiveProviderRateLimits(snapshot, provider)
+    const { accountId: activeAccountId } = getProviderAccountSelection(snapshot, provider)
+    const activeUsage = getAccountProviderUsage(snapshot, provider, activeAccountId)
     const activeSessionBar = getUsageBarState(activeUsage, 'session')
     const activeWeeklyBar = getUsageBarState(activeUsage, 'weekly')
     const resetCredit = provider === 'codex' ? getCodexResetCreditSummary(activeUsage, now) : null
@@ -227,15 +224,18 @@ export function MobileAccountsScreen() {
           {/* System default row */}
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`Use normal ${provider} CLI login for new manual chats`}
+            accessibilityState={{ selected: activeAccountId === null }}
             onPress={() => selectAccount(provider, null)}
             disabled={busyAccountId !== null || resettingCodex || connState !== 'connected'}
           >
             <View style={styles.rowMain}>
-              <Text style={styles.rowTitle}>System default</Text>
-              <Text style={styles.rowSubtitle}>Use the agent&apos;s own login</Text>
-              {/* Why: when system default is the active selection, activeUsage
-                  holds the system-default login's rate limits — surface them
-                  here so non-managed users still see their usage. */}
+              <Text style={styles.rowTitle}>Normal CLI login</Text>
+              <Text style={styles.rowSubtitle}>
+                Existing login on this host · not a saved pool member
+              </Text>
+              {/* Only show quota proven to belong to this host's normal CLI login. */}
               {activeAccountId === null && hasActiveProviderUsage(activeUsage) ? (
                 <View style={styles.usageRow}>
                   <UsageBar
@@ -269,7 +269,7 @@ export function MobileAccountsScreen() {
             const inactiveEntry = !isActive
               ? getInactiveProviderUsage(snapshot, provider, account.id)
               : null
-            const usage = isActive ? activeUsage : (inactiveEntry?.rateLimits ?? null)
+            const usage = getAccountProviderUsage(snapshot, provider, account.id)
             const isFetching =
               (isActive && usage?.status === 'fetching') ||
               (!isActive && inactiveEntry?.isFetching === true)
@@ -280,6 +280,9 @@ export function MobileAccountsScreen() {
                 <View style={styles.separator} />
                 <Pressable
                   style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${account.email} for new manual ${provider} chats`}
+                  accessibilityState={{ selected: isActive }}
                   onPress={() => selectAccount(provider, account.id)}
                   disabled={
                     busyAccountId !== null ||
@@ -291,6 +294,9 @@ export function MobileAccountsScreen() {
                   <View style={styles.rowMain}>
                     <Text style={styles.rowTitle} numberOfLines={1}>
                       {account.email}
+                    </Text>
+                    <Text style={styles.rowSubtitle}>
+                      {isActive ? 'Default for new manual chats' : 'Use for new manual chats'}
                     </Text>
                     <View style={styles.usageRow}>
                       <UsageBar
@@ -367,17 +373,10 @@ export function MobileAccountsScreen() {
             <Text style={styles.placeholderText}>Loading accounts…</Text>
           </View>
         ) : (
-          <>
-            <MobileSegmentedControl
-              fill
-              selected={section}
-              onSelect={setSection}
-              segments={[
-                { value: 'accounts', label: 'Accounts' },
-                { value: 'pools', label: 'Pools & switching' }
-              ]}
-            />
-            {section === 'accounts' ? (
+          <MobileAccountModes
+            mode={section}
+            onSelect={setSection}
+            accounts={
               <>
                 <MobileAccountSignInSection
                   key={`sign-in:${hostId}`}
@@ -393,15 +392,17 @@ export function MobileAccountsScreen() {
                 {renderProviderSection('claude', 'Claude')}
                 {renderProviderSection('codex', 'Codex')}
               </>
-            ) : (
+            }
+            pools={
               <MobileAccountPoolSection
-                key={`${hostId}:${enrollmentRevision}`}
+                key={hostId}
+                refreshKey={enrollmentRevision}
                 client={client}
                 connected={connState === 'connected'}
                 hostName={hostName}
               />
-            )}
-          </>
+            }
+          />
         )}
       </ScrollView>
       <ConfirmModal

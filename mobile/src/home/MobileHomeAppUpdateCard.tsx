@@ -1,3 +1,4 @@
+import { useAppUpdateInstallState } from '../app-update/app-update-install-state'
 import { StyleSheet, View } from 'react-native'
 import { undismissedAppUpdate } from '../app-update/app-update-checker'
 import {
@@ -9,6 +10,7 @@ import { AppUpdateCard } from './AppUpdateCard'
 import { spacing } from '../theme/mobile-theme'
 
 export function MobileHomeAppUpdateCard() {
+  const install = useAppUpdateInstallState()
   const available = undismissedAppUpdate(useAppUpdateState())
   if (!available) {
     return null
@@ -17,6 +19,8 @@ export function MobileHomeAppUpdateCard() {
     <View style={styles.slot}>
       <AppUpdateCard
         version={available.version}
+        busy={install.busy}
+        status={install.label}
         onPress={() => openAppUpdate(available.url)}
         onDismiss={() => appUpdateChecker.dismiss(available.version)}
       />

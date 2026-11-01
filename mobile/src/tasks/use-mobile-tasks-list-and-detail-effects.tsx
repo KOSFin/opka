@@ -25,6 +25,8 @@ export function useMobileTasksListAndDetailEffects(model: ProjectLoadingActionsM
     githubKind,
     githubMode,
     githubPreset,
+    gitlabView,
+    gitlabFilter,
     hostedRepos,
     linearConnected,
     linearFilter,
@@ -110,6 +112,12 @@ export function useMobileTasksListAndDetailEffects(model: ProjectLoadingActionsM
       githubItemsQuery: trimmed
     })
   }, [appliedQuery, githubMode, githubPreset, persistTaskResumeState, provider, taskUiReady])
+
+  useEffect(() => {
+    if (taskUiReady && provider === 'gitlab') {
+      persistTaskResumeState({ gitlabView, gitlabFilter, gitlabQuery: appliedQuery.trim() })
+    }
+  }, [appliedQuery, gitlabView, gitlabFilter, persistTaskResumeState, provider, taskUiReady])
 
   useEffect(() => {
     if (!taskUiReady || provider !== 'linear') {
@@ -283,6 +291,7 @@ export function useMobileTasksListAndDetailEffects(model: ProjectLoadingActionsM
     }
   }, [client, linearMetadataItem, tasksSupported])
 
+  const detailOwnerGeneration = client?.getGeneration?.() ?? 0
   useEffect(() => {
     if (!actionItem) {
       setItemTitleDraft('')
@@ -315,7 +324,8 @@ export function useMobileTasksListAndDetailEffects(model: ProjectLoadingActionsM
     setPrFileLoadingPath(null)
     setPrFileCommentDrafts({})
     setExpandedResolvedCommentGroups(new Set())
-  }, [actionItem])
+    // Detail hydration may replace the same item; preserve drafts and expanded files.
+  }, [client, actionItem?.provider, actionItem?.key, detailOwnerGeneration])
   return Object.assign(model, { refreshGitHubProject, setTaskCopyFeedbackRootRef })
 }
 

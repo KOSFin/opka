@@ -51,7 +51,7 @@ describe('GitLab task detail hydration', () => {
     for (let round = 0; round < 6; round += 1) {
       await fixture.transport.answer()
     }
-    expect(fixture.transport.requests).toHaveLength(2)
+    expect(fixture.transport.requests).toHaveLength(1)
     expect(fixture.transport.pending()).toHaveLength(0)
     expect(fixture.state()).toMatchObject({
       loading: false,
@@ -92,7 +92,7 @@ describe('GitLab task detail hydration', () => {
       const selected = fixture.state().actionItem
       const items = fixture.state().items
       await fixture.transport.answer()
-      expect(fixture.transport.requests).toHaveLength(2)
+      expect(fixture.transport.requests).toHaveLength(1)
       expect(fixture.transport.pending()).toHaveLength(0)
       expect(fixture.state().actionItem).toBe(selected)
       expect(fixture.state().items).toBe(items)
@@ -108,7 +108,7 @@ describe('GitLab task detail hydration', () => {
       reviewerCount: 1
     })
     await fixture.transport.answer()
-    expect(fixture.transport.requests).toHaveLength(2)
+    expect(fixture.transport.requests).toHaveLength(1)
     expect(fixture.transport.pending()).toHaveLength(0)
   })
 
@@ -128,7 +128,7 @@ describe('GitLab task detail hydration', () => {
       reviewerCount: 9
     })
     await fixture.transport.answer(reply)
-    expect(fixture.transport.requests).toHaveLength(2)
+    expect(fixture.transport.requests).toHaveLength(1)
     expect(fixture.state()).toMatchObject({ loading: false, payload: { body: 'No status fields' } })
   })
 
@@ -140,4 +140,38 @@ describe('GitLab task detail hydration', () => {
     expect(fixture.transport.requests).toHaveLength(2)
     expect(fixture.state()).toMatchObject({ loading: false, payload: { body: 'Updated body' } })
   })
+})
+
+it('reopens the same MR immediately and retains content while explicit refresh fails', async () => {
+  const fixture = await mount(hydratedItem())
+  await fixture.transport.answer()
+  const selected = fixture.state().actionItem
+  await fixture.select(null)
+  await fixture.select(selected)
+  expect(fixture.transport.requests).toHaveLength(1)
+  expect(fixture.state()).toMatchObject({ loading: false, payload: { body: GITLAB_DETAILS.body } })
+  await fixture.refresh()
+  expect(fixture.state()).toMatchObject({ loading: true, payload: { body: GITLAB_DETAILS.body } })
+  await fixture.transport.reject(new Error('Offline'))
+  expect(fixture.state()).toMatchObject({
+    loading: false,
+    error: 'Offline',
+    payload: { body: GITLAB_DETAILS.body }
+  })
+})
+
+it('rejects late detail replies after same-client authority migration', async () => {
+  const fixture = await mount(hydratedItem())
+  let generation = 0
+  Object.assign(fixture.transport.client, { getGeneration: () => generation })
+  const previousRequests = fixture.transport.pending()
+  generation += 1
+  await fixture.rerender()
+  await fixture.transport.answer(
+    success({ ...GITLAB_DETAILS, body: 'Old owner' }),
+    previousRequests
+  )
+  expect(fixture.state().payload).toBeNull()
+  await fixture.transport.answer(success({ ...GITLAB_DETAILS, body: 'New owner' }))
+  expect(fixture.state()).toMatchObject({ loading: false, payload: { body: 'New owner' } })
 })

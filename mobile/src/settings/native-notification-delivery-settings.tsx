@@ -1,3 +1,4 @@
+import { pushBuildConfigurationIssue } from '../notifications/push-build-support'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, Text } from 'react-native'
 import { useFocusEffect } from 'expo-router'
@@ -18,6 +19,7 @@ export function NativeNotificationDeliverySettings({ enabled }: { enabled: boole
   const [error, setError] = useState<string | null>(null)
   const refreshRevision = useRef(0)
   const saveInProgress = useRef(false)
+  const buildIssue = pushBuildConfigurationIssue()
   const support = useRemotePushCapableHosts()
   const refresh = useCallback(async () => {
     if (saveInProgress.current) {
@@ -87,7 +89,8 @@ export function NativeNotificationDeliverySettings({ enabled }: { enabled: boole
           {error}
         </Text>
       )}
-      {support.resolved && !support.supported && (
+      {buildIssue && <Text style={hintStyle}>{buildIssue}</Text>}
+      {!buildIssue && support.resolved && !support.supported && (
         <Text style={hintStyle}>
           Pair an updated desktop to receive notifications on this phone.
         </Text>

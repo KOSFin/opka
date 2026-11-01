@@ -16,6 +16,18 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.xs
   },
+  projectGroupHeader: {
+    backgroundColor: colors.bgPanel,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm
+  },
+  projectGroupTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.bodySize,
+    textTransform: 'none',
+    letterSpacing: 0
+  },
+  nestedRepoHeader: { paddingLeft: spacing.xl },
   sectionIcon: {
     marginRight: spacing.xs
   },

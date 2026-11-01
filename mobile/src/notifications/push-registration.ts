@@ -276,6 +276,13 @@ export async function setNotificationDeliveryPreferences(
   await reconcileAllHosts()
 }
 
+/** Retry the existing connected owner without dropping the connection. */
+export async function retryRemotePushRegistration(hostId: string): Promise<void> {
+  if (hostsById.get(hostId)?.connection.client) {
+    await enqueueReconcile(hostId)
+  }
+}
+
 // Offline hosts retain the registration until unpaired or its mobile-use lease expires.
 export async function unregisterPushForRemovedHost(hostId: string): Promise<() => void> {
   const state = hostsById.get(hostId)

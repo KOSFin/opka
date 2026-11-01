@@ -41,6 +41,9 @@ export type DetailCommentGroup =
   | { kind: 'thread'; threadId: string; root: DetailComment; replies: DetailComment[] }
 
 export type TaskResumeState = {
+  gitlabView?: GitLabView
+  gitlabFilter?: GitLabFilter
+  gitlabQuery?: string
   githubMode?: 'items' | 'project'
   githubItemsPreset?: GitHubPreset | 'all' | null
   githubItemsQuery?: string

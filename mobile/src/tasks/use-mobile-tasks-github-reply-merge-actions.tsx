@@ -1,3 +1,4 @@
+import { invalidateGitLabMrItem } from './gitlab-mr-detail-cache'
 import type { GithubCheckFileActionsModel } from './use-mobile-tasks-github-check-file-actions'
 import { useCallback } from './mobile-tasks-dependencies'
 import {
@@ -168,6 +169,7 @@ export function useMobileTasksGithubReplyMergeActions(model: GithubCheckFileActi
         if (merged.ok === false) {
           throw new Error(merged.error ?? 'Failed to merge')
         }
+        invalidateGitLabMrItem(client, item)
         setActionItem(null)
         await loadTasks({ silent: true })
       } catch (err) {

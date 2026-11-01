@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { RpcClient } from '../transport/rpc-client'
-import { getCachedRepos, setCachedRepos } from '../cache/repo-cache'
+import { getRetainedRepos, setCachedRepos } from '../cache/repo-cache'
 import { listHostRepos } from '../worktree/server-repos'
 import { useServerRepos } from '../worktree/use-server-repos'
 import { useLastVisitedWorktreeRepoId } from '../worktree/use-last-visited-worktree-repo'
@@ -32,9 +32,10 @@ export function useNewWorkspaceRepositories(args: {
 } {
   const { client, serverClients = NO_SERVER_CLIENTS, hostId, visible } = args
   const [initialRepos] = useState(() =>
-    hostId ? (getCachedRepos(hostId) as MobileWorkspaceRepo[] | null) : null
+    hostId ? (getRetainedRepos(hostId) as MobileWorkspaceRepo[] | null) : null
   )
-  const [desktopRepos, setDesktopRepos] = useState<MobileWorkspaceRepo[]>(initialRepos ?? [])
+  const [desktopSnapshot, setDesktopSnapshot] = useState({ hostId, repos: initialRepos ?? [] })
+  const desktopRepos = desktopSnapshot.hostId === hostId ? desktopSnapshot.repos : []
   const serverRepos = useServerRepos<MobileWorkspaceRepo>(serverClients, visible)
   const [pickedRepo, setSelectedRepo] = useState<MobileWorkspaceRepo | null>(null)
   const [loading, setLoading] = useState(initialRepos == null)
@@ -51,6 +52,10 @@ export function useNewWorkspaceRepositories(args: {
     () => refreshMobileNewWorkspaceDialogSelectedRepo(repos, pickedRepo),
     [pickedRepo, repos]
   )
+
+  useEffect(() => {
+    setSelectedRepo(null)
+  }, [hostId])
 
   useEffect(() => {
     if (!visible || !lastVisitedRepo.loaded || selectedRepo || repos.length === 0) {
@@ -78,7 +83,7 @@ export function useNewWorkspaceRepositories(args: {
         if (stale || !listed) {
           return
         }
-        setDesktopRepos(listed)
+        setDesktopSnapshot({ hostId, repos: listed })
         if (hostId) {
           setCachedRepos(hostId, listed)
         }

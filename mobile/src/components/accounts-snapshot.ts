@@ -50,6 +50,7 @@ export const ProviderRateLimitsSchema = z
       .array(RateLimitWindowSchema.extend({ name: z.string().min(1) }).passthrough())
       .optional(),
     rateLimitResetCredits: RateLimitResetCreditsSchema.nullable().optional(),
+    usageMetadata: z.object({ authProvenance: z.string().optional() }).passthrough().optional(),
     updatedAt: TimestampSchema,
     error: z.string().nullable(),
     status: z.enum(['idle', 'fetching', 'ok', 'error', 'unavailable'])

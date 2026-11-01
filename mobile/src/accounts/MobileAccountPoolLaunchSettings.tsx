@@ -32,15 +32,6 @@ export function MobileAccountPoolLaunchSettings({
           onValueChange={(applyToNewWork) => onChange({ ...policy, applyToNewWork })}
         />
       </View>
-      <View style={poolStyles.toggleRow}>
-        <Text style={[styles.rowTitle, styles.rowMain]}>Allow reserve accounts</Text>
-        <MobileSwitch
-          accessibilityLabel={`${policy.provider} allow reserve accounts`}
-          disabled={disabled}
-          value={policy.allowReserve}
-          onValueChange={(allowReserve) => onChange({ ...policy, allowReserve })}
-        />
-      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${policy.provider} account switching`}

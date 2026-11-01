@@ -1,3 +1,4 @@
+import { pushBuildConfigurationIssue } from './push-build-support'
 import * as Notifications from 'expo-notifications'
 import type {
   MobilePushApnsEnvironment,
@@ -33,6 +34,9 @@ function toMobilePushToken(raw: { type: string; data: unknown }): MobilePushToke
  * The native push token, or null if registration is unavailable or fails.
  */
 export async function getDevicePushToken(): Promise<MobilePushToken | null> {
+  if (pushBuildConfigurationIssue()) {
+    return null
+  }
   try {
     return toMobilePushToken(await Notifications.getDevicePushTokenAsync())
   } catch {

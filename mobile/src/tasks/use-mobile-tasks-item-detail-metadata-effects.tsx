@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import type { ListAndDetailEffectsModel } from './use-mobile-tasks-list-and-detail-effects'
 import { useEffect } from './mobile-tasks-dependencies'
 import {
@@ -6,7 +7,21 @@ import {
 } from './mobile-task-item-detail-operations'
 import { detailPayloadBody } from './mobile-tasks-provider-detail-types'
 
-export function useMobileTasksItemDetailMetadataEffects(model: ListAndDetailEffectsModel) {
+type MetadataInput = Pick<
+  ListAndDetailEffectsModel,
+  | 'actionItem'
+  | 'client'
+  | 'detailPayload'
+  | 'setItemAssignableUsers'
+  | 'setItemAssignableUsersError'
+  | 'setItemAssignableUsersLoading'
+  | 'setItemAvailableLabels'
+  | 'setItemBodyDraft'
+  | 'setItemLabelsError'
+  | 'setItemLabelsLoading'
+  | 'tasksSupported'
+>
+export function useMobileTasksItemDetailMetadataEffects<Model extends MetadataInput>(model: Model) {
   const {
     actionItem,
     client,
@@ -20,12 +35,25 @@ export function useMobileTasksItemDetailMetadataEffects(model: ListAndDetailEffe
     setItemLabelsLoading,
     tasksSupported
   } = model
+  const lastBody = useRef<{
+    client: typeof client
+    key: string | undefined
+    generation: number
+    body: string
+  } | null>(null)
   useEffect(() => {
     if (!detailPayload) {
-      setItemBodyDraft('')
       return
     }
-    setItemBodyDraft(detailPayloadBody(detailPayload))
+    const previous = lastBody.current
+    const generation = client?.getGeneration?.() ?? 0
+    const sameOwner =
+      previous?.client === client &&
+      previous?.key === actionItem?.key &&
+      previous?.generation === generation
+    const body = detailPayloadBody(detailPayload)
+    setItemBodyDraft((draft) => (!sameOwner || draft === previous?.body ? body : draft))
+    lastBody.current = { client, key: actionItem?.key, generation, body }
   }, [detailPayload])
 
   useEffect(() => {
@@ -99,6 +127,4 @@ export function useMobileTasksItemDetailMetadataEffects(model: ListAndDetailEffe
   return model
 }
 
-export type ItemDetailMetadataEffectsModel = ReturnType<
-  typeof useMobileTasksItemDetailMetadataEffects
->
+export type ItemDetailMetadataEffectsModel = ListAndDetailEffectsModel

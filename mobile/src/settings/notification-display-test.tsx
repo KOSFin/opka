@@ -1,3 +1,5 @@
+import { pushBuildConfigurationIssue } from '../notifications/push-build-support'
+import { retryRemotePushRegistration } from '../notifications/push-registration'
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useAllHostClients } from '../transport/use-all-host-clients'
@@ -25,6 +27,10 @@ export function NotificationDisplayTest({ onTroubleshoot }: { onTroubleshoot: ()
     setSending(true)
     setMessage(null)
     try {
+      const configurationIssue = pushBuildConfigurationIssue()
+      if (configurationIssue) {
+        throw new Error(configurationIssue)
+      }
       if (hostIds.length === 0) {
         throw new Error('Pair a desktop and try again.')
       }
@@ -33,7 +39,8 @@ export function NotificationDisplayTest({ onTroubleshoot }: { onTroubleshoot: ()
         throw new Error('Connect a desktop and try again.')
       }
       let unavailable = 'Update your desktop to run this test.'
-      for (const { client } of connected) {
+      for (const { client, hostId } of connected) {
+        await retryRemotePushRegistration(hostId)
         const reply = await pushDeliveryTest.request(client, null, {
           timeoutMs: 20000,
           failWhenDisconnected: true
@@ -53,7 +60,8 @@ export function NotificationDisplayTest({ onTroubleshoot }: { onTroubleshoot: ()
           return
         }
         if (result?.reason === 'not_registered') {
-          unavailable = 'Reconnect to register this phone for notifications.'
+          unavailable =
+            'This phone is not registered for remote push. Check notification permission and push configuration; registration was retried without disconnecting.'
           continue
         }
         throw new Error(

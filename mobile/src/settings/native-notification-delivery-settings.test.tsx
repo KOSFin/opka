@@ -1,3 +1,4 @@
+vi.mock('../notifications/push-build-support', () => ({ pushBuildConfigurationIssue: () => null }))
 import { createElement, useEffect } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'

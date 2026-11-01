@@ -4,6 +4,8 @@ import { colors, radii, spacing } from '../theme/mobile-theme'
 
 /** Home's update notice, drawn in the host card's frame so it reads as part of that list. */
 export function AppUpdateCard(props: {
+  busy?: boolean
+  status?: string | null
   version: string
   onPress: () => void
   onDismiss: () => void
@@ -13,7 +15,9 @@ export function AppUpdateCard(props: {
     <View style={styles.card}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${title}, tap to update`}
+        accessibilityLabel={`${title}, ${props.status ?? 'tap to update'}`}
+        accessibilityState={{ busy: props.busy }}
+        disabled={props.busy}
         style={({ pressed }) => [styles.cardMain, pressed && styles.cardPressed]}
         onPress={props.onPress}
       >
@@ -25,7 +29,7 @@ export function AppUpdateCard(props: {
             {title}
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            Tap to update
+            {props.status ?? 'Tap to update'}
           </Text>
         </View>
       </Pressable>

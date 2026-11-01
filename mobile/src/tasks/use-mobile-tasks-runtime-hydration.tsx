@@ -1,3 +1,4 @@
+import { readGitLabTaskPreferences } from './gitlab-task-list-cache'
 import { settingsRead } from '../transport/settings-read-operations'
 import type { ClientSettingsActionsModel } from './use-mobile-tasks-client-settings-actions'
 import { jiraConnectionStatusProbe } from './mobile-jira-operations'
@@ -38,6 +39,8 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setDetailPayload,
     setError,
     setGithubKind,
+    setGitlabView,
+    setGitlabFilter,
     setGithubMode,
     setGithubPreset,
     setGithubProjectHiddenFieldIdsByView,
@@ -98,6 +101,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     taskResumeRef,
     visibleProviders
   } = model
+  const authorityGeneration = client?.getGeneration?.() ?? 0
   useEffect(() => {
     if (!client || connState !== 'connected') {
       taskResumeRef.current = {}
@@ -188,7 +192,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
 
     const hydrateTaskState = async (): Promise<void> => {
       const statusReply = await taskRuntimeStatusRead.request(client)
-      if (stale) {
+      if (stale || authorityGeneration !== (client?.getGeneration?.() ?? 0)) {
         return
       }
       // The guard stays between the request and the interpretation: a screen that has moved on
@@ -262,7 +266,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
         taskPreflightRead.request(client),
         taskLinearStatusRead.request(client)
       ])
-      if (stale) {
+      if (stale || authorityGeneration !== (client?.getGeneration?.() ?? 0)) {
         return
       }
 
@@ -283,7 +287,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
             | undefined)
         : null
       setTrustedOrcaHooks(uiState?.trustedOrcaHooks ?? {})
-      const resume = uiState?.taskResumeState ?? {}
+      const resume = { ...uiState?.taskResumeState, ...readGitLabTaskPreferences(client) }
       taskResumeRef.current = resume
       setGithubProjectHiddenFieldIdsByView(resume.githubProjectHiddenFieldIdsByView ?? {})
 
@@ -320,6 +324,8 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
 
       setVisibleProviders(nextVisibleProviders)
       setProvider(view.provider)
+      setGitlabView(view.gitlabView)
+      setGitlabFilter(view.gitlabFilter)
       setGithubMode(resume.githubMode === 'project' ? 'project' : 'items')
       setDefaultGitHubPreset(view.defaultGithubPreset)
       setGithubPreset(view.githubPreset)
@@ -333,7 +339,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     }
 
     void hydrateTaskState().catch((err) => {
-      if (stale) {
+      if (stale || authorityGeneration !== (client?.getGeneration?.() ?? 0)) {
         return
       }
       setError(err instanceof Error ? err.message : 'Failed to load Tasks settings')
@@ -343,7 +349,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     return () => {
       stale = true
     }
-  }, [client, connState, requestedTaskSource, resetWorkspaceCreateState])
+  }, [client, connState, requestedTaskSource, resetWorkspaceCreateState, authorityGeneration])
 
   useEffect(() => {
     if (visibleProviders.includes(provider)) {

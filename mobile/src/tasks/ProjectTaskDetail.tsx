@@ -7,6 +7,7 @@ import { colors } from '../theme/mobile-theme'
 import type { RpcClient } from '../transport/rpc-client'
 import { ProjectTaskSessionLink } from './ProjectTaskSessionLink'
 import { ProjectTaskLaunch } from './ProjectTaskLaunch'
+import { ProjectTaskCardActions } from './ProjectTaskCardActions'
 import { ProjectTaskDecision } from './ProjectTaskDecision'
 import type { MobileProjectTask } from './project-task-rpc'
 import {
@@ -22,6 +23,7 @@ type Props = {
   executionHostId: string
   task: MobileProjectTask
   body: string
+  content?: string
   documents: string[]
   selectedDocument: string | null
   report: string
@@ -59,6 +61,7 @@ export function ProjectTaskDetail(props: Props) {
             {task.workflow.revisionChanged ? ' · Plan changed' : ''}
           </Text>
           <MobileMarkdown content={props.body} fallback="Loading task…" />
+          <ProjectTaskCardActions {...props} content={props.content ?? ''} />
           <ProjectTaskLaunch {...props} />
           <View style={styles.section}>
             <Text style={styles.sectionHeading}>

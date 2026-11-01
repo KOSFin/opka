@@ -7,6 +7,7 @@ vi.mock('react-native', () => ({ AppState: {} }))
 vi.mock('expo-router', () => ({ useFocusEffect: () => {} }))
 vi.mock('../cache/worktree-cache', () => ({
   getCachedWorktrees: () => null,
+  getRetainedWorktrees: () => null,
   setCachedWorktrees: () => {}
 }))
 vi.mock('../storage/preferences', () => ({

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { MobileSectionReveal } from '../components/MobileSectionReveal'
+import { ProjectTaskFilters } from './ProjectTaskFilters'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { ChevronLeft, RefreshCw } from 'lucide-react-native'
 import { useLocalSearchParams } from 'expo-router'
@@ -9,146 +10,52 @@ import { useRouteHandoff } from '../navigation/route-handoff'
 import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
 import { colors } from '../theme/mobile-theme'
 import { ProjectTaskCatalog, ProjectTaskBoard } from './ProjectTaskLists'
+import { ProjectTaskEditor } from './ProjectTaskEditor'
 import { ProjectTaskDetail } from './ProjectTaskDetail'
 import { projectTaskScreenStyles as styles } from './project-task-screen-styles'
-import {
-  catalogRead,
-  documentsRead,
-  loadProjectTaskBoard,
-  taskRead,
-  type MobileProjectTask
-} from './project-task-rpc'
+import { useProjectTaskPresentation } from './use-project-task-presentation'
 
 export function MobileProjectTasksScreen() {
   const params = useLocalSearchParams<{ hostId: string }>()
   const { client, state } = useHostClient(params.hostId)
   const router = useRouteHandoff()
   const insets = useSafeAreaInsets()
-  const [refresh, setRefresh] = useState(0)
-  const [projects, setProjects] = useState<
-    { selector: string; name: string; state: string; message?: string }[]
-  >([])
-  const [project, setProject] = useState<string | null>(null)
-  const [executionHostId, setExecutionHostId] = useState('')
-  const [tasks, setTasks] = useState<MobileProjectTask[]>([])
-  const [task, setTask] = useState<MobileProjectTask | null>(null)
-  const [body, setBody] = useState('')
-  const [documents, setDocuments] = useState<string[]>([])
-  const [document, setDocument] = useState<string | null>(null)
-  const [report, setReport] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    setProjects([])
-    setProject(null)
-    setTasks([])
-    setTask(null)
-  }, [params.hostId])
-  useEffect(() => {
-    if (!client || state !== 'connected') {
-      return
-    }
-    let current = true
-    setLoading(true)
-    setError('')
-    void (async () => {
-      if (!project) {
-        const result = catalogRead.interpret(await catalogRead.request(client))
-        if (current) {
-          setProjects(result.projects)
-        }
-      } else {
-        const result = await loadProjectTaskBoard(client, project)
-        if (current) {
-          setTasks(result.tasks)
-          setTask((selected) =>
-            selected ? (result.tasks.find((item) => item.id === selected.id) ?? null) : null
-          )
-          setExecutionHostId(result.executionHostId)
-        }
-      }
-    })()
-      .catch((failure: unknown) => {
-        if (current) {
-          setError(failure instanceof Error ? failure.message : 'Could not read project tasks.')
-        }
-      })
-      .finally(() => {
-        if (current) {
-          setLoading(false)
-        }
-      })
-    return () => {
-      current = false
-    }
-  }, [client, state, project, refresh])
-  useEffect(() => {
-    setBody('')
-    setDocuments([])
-    setDocument(null)
-  }, [params.hostId, project, task?.id, task?.revision])
-  useEffect(() => {
-    if (!client || !project || !task || state !== 'connected') {
-      return
-    }
-    let current = true
-    void Promise.all([
-      taskRead.request(client, { worktree: project, id: task.id }).then(taskRead.interpret),
-      documentsRead
-        .request(client, { worktree: project, id: task.id })
-        .then(documentsRead.interpret)
-    ])
-      .then(([detail, files]) => {
-        if (!current) {
-          return
-        }
-        if (detail.revision !== task.revision) {
-          throw new Error('Task changed. Return to the board and refresh.')
-        }
-        setBody(detail.body)
-        setDocuments(files.paths)
-      })
-      .catch((failure: unknown) => {
-        if (current) {
-          setError(String(failure))
-        }
-      })
-    return () => {
-      current = false
-    }
-  }, [client, state, project, task?.id, task?.revision, refresh])
-  useEffect(() => {
-    setReport('')
-    if (!client || !project || !task || !document || state !== 'connected') {
-      return
-    }
-    let current = true
-    void documentsRead
-      .request(client, { worktree: project, id: task.id, path: document })
-      .then(documentsRead.interpret)
-      .then((result) => {
-        if (current) {
-          setReport(result.content ?? '')
-        }
-      })
-      .catch((failure: unknown) => {
-        if (current) {
-          setError(String(failure))
-        }
-      })
-    return () => {
-      current = false
-    }
-  }, [client, state, project, task?.id, task?.revision, document, refresh])
+  const {
+    projects,
+    project,
+    executionHostId,
+    tasks,
+    task,
+    body,
+    content,
+    sources,
+    creating,
+    documents,
+    document,
+    report,
+    error,
+    loading,
+    verified,
+    selection,
+    setProject,
+    setTask,
+    setDocument,
+    setCreating,
+    setError,
+    setQuery,
+    setPhase,
+    refreshTasks
+  } = useProjectTaskPresentation(client, state, params.hostId)
   function back() {
     setError('')
-    if (document) {
+    if (creating) {
+      setCreating(false)
+    } else if (document) {
       setDocument(null)
     } else if (task) {
       setTask(null)
     } else if (project) {
       setProject(null)
-      setTasks([])
     } else {
       router.back()
     }
@@ -185,7 +92,7 @@ export function MobileProjectTasksScreen() {
           accessibilityRole="button"
           accessibilityLabel="Refresh project tasks"
           disabled={loading || state !== 'connected'}
-          onPress={() => setRefresh((n) => n + 1)}
+          onPress={() => refreshTasks()}
           style={[styles.iconButton, (loading || state !== 'connected') && styles.disabled]}
         >
           <RefreshCw size={18} color={colors.textSecondary} />
@@ -208,52 +115,104 @@ export function MobileProjectTasksScreen() {
         />
       ) : null}
       <ScrollView contentContainerStyle={styles.content}>
-        {state !== 'connected' ? (
-          <Text style={styles.notice}>
-            Host disconnected. Task execution is unverifiable until reconnected.
-          </Text>
-        ) : null}
-        {loading ? (
-          <Text accessibilityRole="text" style={styles.meta}>
-            Refreshing…
-          </Text>
-        ) : null}
-        {error ? (
-          <Text style={styles.notice}>
-            {error} Update the execution host if project tasks are unavailable, then refresh.
-          </Text>
-        ) : null}
-        {!project ? (
-          <ProjectTaskCatalog
-            projects={projects}
-            loading={loading}
-            onSelect={(selector) => {
-              setTask(null)
-              setProject(selector)
-            }}
-          />
-        ) : !task ? (
-          <ProjectTaskBoard tasks={tasks} loading={loading} onSelect={setTask} />
-        ) : (
-          <ProjectTaskDetail
-            key={`${params.hostId}:${project}:${task.id}`}
-            client={client}
-            connected={state === 'connected'}
-            hostId={params.hostId}
-            worktree={project}
-            executionHostId={executionHostId}
-            task={task}
-            body={body}
-            documents={documents}
-            selectedDocument={document}
-            report={report}
-            onDocument={setDocument}
-            onDone={() => {
-              setTask(null)
-              setRefresh((n) => n + 1)
-            }}
-          />
-        )}
+        <MobileSectionReveal
+          style={styles.revealContent}
+          sectionKey={`${project ?? 'catalog'}:${task?.id ?? 'board'}:${document ?? ''}:${creating ? 'create' : ''}`}
+        >
+          {state !== 'connected' ? (
+            <Text style={styles.notice}>
+              Host disconnected. Task execution is unverifiable until reconnected.
+            </Text>
+          ) : null}
+          {loading ? (
+            <Text accessibilityRole="text" style={styles.meta}>
+              Refreshing…
+            </Text>
+          ) : null}
+          {error ? (
+            <Text style={styles.notice}>
+              {error} Update the execution host if project tasks are unavailable, then refresh.
+            </Text>
+          ) : null}
+          {!project ? (
+            <ProjectTaskCatalog
+              projects={projects}
+              loading={loading}
+              onSelect={(selector) => {
+                setTask(null)
+                setProject(selector)
+              }}
+            />
+          ) : !task ? (
+            creating ? (
+              <ProjectTaskEditor
+                key={`${params.hostId}:${project}`}
+                client={client}
+                connected={state === 'connected' && verified}
+                worktree={project}
+                executionHostId={executionHostId}
+                sources={sources}
+                onCancel={() => setCreating(false)}
+                onDone={() => {
+                  setCreating(false)
+                  refreshTasks()
+                }}
+              />
+            ) : (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Add project task"
+                  style={styles.row}
+                  disabled={loading || !verified || state !== 'connected' || !sources.length}
+                  onPress={() => setCreating(true)}
+                >
+                  <Text style={styles.text}>Add task</Text>
+                </Pressable>
+                {!loading && !sources.length ? (
+                  <Text style={styles.notice}>
+                    Task source unavailable. Refresh the project or update its execution host.
+                  </Text>
+                ) : null}
+                <ProjectTaskFilters
+                  query={selection.query}
+                  phase={selection.phase}
+                  onQuery={setQuery}
+                  onPhase={setPhase}
+                />
+                <ProjectTaskBoard
+                  tasks={tasks.filter(
+                    (item) =>
+                      item.title.toLowerCase().includes(selection.query.toLowerCase()) &&
+                      (selection.phase === 'all' || item.workflow.phase === selection.phase)
+                  )}
+                  loading={loading}
+                  onSelect={setTask}
+                />
+              </>
+            )
+          ) : (
+            <ProjectTaskDetail
+              key={`${params.hostId}:${project}:${task.id}`}
+              client={client}
+              connected={state === 'connected' && verified}
+              hostId={params.hostId}
+              worktree={project}
+              executionHostId={executionHostId}
+              task={task}
+              body={body}
+              content={content}
+              documents={documents}
+              selectedDocument={document}
+              report={report}
+              onDocument={setDocument}
+              onDone={() => {
+                setTask(null)
+                refreshTasks()
+              }}
+            />
+          )}
+        </MobileSectionReveal>
       </ScrollView>
     </View>
   )

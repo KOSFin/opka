@@ -79,8 +79,9 @@ function outline(sections: ReturnType<typeof sectionsFor>): string[] {
 describe('the phone list from the sidebar feed', () => {
   it('draws the shared builder’s headers, order, nesting and single highlight', () => {
     const lines = outline(sectionsFor(phoneView()))
-    // The pinned parent carries its nested child.
-    expect(lines[0]).toMatch(/ "Pinned" 2 pin$/)
+    // Host scope comes first; its pinned parent still carries its nested child.
+    expect(lines[0]).toMatch(/host:local "Local Mac" 2$/)
+    expect(lines[1]).toMatch(/ "Pinned" 2 pin$/)
     expect(lines.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
     expect(lines.some((line) => line.includes('orca::/w/child depth=1'))).toBe(true)
     expect(lines.some((line) => line.includes('"lab"'))).toBe(true)
@@ -259,12 +260,16 @@ describe('the phone list from the sidebar feed', () => {
     expect(creating('lab::/w/gpu').pendingCreations).toBeUndefined()
   })
 
-  it('draws creations above every group when not grouped by project', () => {
+  it('draws creations below their host header when not grouped by project', () => {
     const [first] = sectionsFromDomains(
       feedDomains({ creations: new Map([['c1', { repoId: 'orca' }]]) }),
       phoneView({ groupBy: 'none' })
     )
-    expect(first).toMatchObject({ title: '', pendingCreations: [{ repoName: 'orca' }] })
+    expect(first).toMatchObject({
+      key: 'host:local',
+      title: 'Local Mac',
+      pendingCreations: [{ repoName: 'orca' }]
+    })
   })
 
   it('drops a creation from a section search narrows to its matching rows', () => {
@@ -289,7 +294,7 @@ describe('the phone list from the sidebar feed', () => {
     expect(sections.flatMap((section) => section.data.map((row) => row.worktreeId))).toEqual([
       'lab::/w/gpu'
     ])
-    expect(sections.map((section) => section.title)).toEqual(['lab'])
+    expect(sections.map((section) => section.title)).toEqual(['GPU box', 'lab'])
   })
 })
 

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
-import { getCachedWorktrees } from '../cache/worktree-cache'
+import { getRetainedWorktrees } from '../cache/worktree-cache'
 import { loadPinnedIds } from '../storage/preferences'
 import { loadHosts, updateLastConnected } from '../transport/host-store'
 import type { RpcClient } from '../transport/rpc-client'
@@ -76,11 +76,11 @@ export function useHostScreenIdentity(args: {
     setShowPinnedInGroups(false)
     repoMetadataFetchedAtRef.current = 0
     // Why: useState initializer runs only on first mount, so re-seed the cache when Expo Router reuses this screen for a new hostId.
-    const freshCache = hostId ? (getCachedWorktrees(hostId) as Worktree[] | null) : null
+    const retainedCache = hostId ? (getRetainedWorktrees(hostId) as Worktree[] | null) : null
     setCatalogError(null)
-    if (freshCache) {
-      setWorktrees(freshCache)
-      setLastKnownWorktrees(freshCache)
+    if (retainedCache) {
+      setWorktrees(retainedCache)
+      setLastKnownWorktrees(retainedCache)
       setWorktreesLoaded(true)
     } else {
       setWorktreesLoaded(false)

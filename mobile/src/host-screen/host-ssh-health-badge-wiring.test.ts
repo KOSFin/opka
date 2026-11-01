@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('react-native', () => ({ AppState: {} }))
 vi.mock('../cache/worktree-cache', () => ({
   getCachedWorktrees: () => null,
+  getRetainedWorktrees: () => null,
   setCachedWorktrees: () => {}
 }))
 vi.mock('../cache/repo-cache', () => ({ setCachedRepos: () => {} }))

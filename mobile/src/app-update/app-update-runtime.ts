@@ -1,3 +1,4 @@
+import { appUpdateInstallBusy, publishAppUpdateInstall } from './app-update-install-state'
 import Constants from 'expo-constants'
 import { requireOptionalNativeModule } from 'expo-modules-core'
 import { opkaReleaseUpdateSource } from './opka-release-update-source'
@@ -63,25 +64,58 @@ export function useAppUpdateState(): AppUpdateState {
 
 /** Opens the channel's page for the update: the GitHub release (Android) or App Store (iOS). */
 export function openAppUpdate(url: string): void {
-  const opka =
-    Platform.OS === 'android' && Constants.expoConfig?.android?.package === 'com.kosfin.opka.mobile'
-  const installer = opka
-    ? requireOptionalNativeModule<{ install(url: string): Promise<void> }>('OpkaAppUpdate')
-    : null
-  const action = opka
-    ? (installer?.install(url) ??
-      Promise.reject(
-        new Error('This build has no Android installer. Download the current Opka release.')
-      ))
-    : Linking.openURL(url)
-  void action.catch((error: unknown) => {
-    Alert.alert(
-      'Update could not be opened',
-      error instanceof Error ? error.message : 'Please check your connection and retry.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Retry', onPress: () => openAppUpdate(url) }
-      ]
-    )
-  })
+  if (appUpdateInstallBusy()) {
+    return
+  }
+  publishAppUpdateInstall('preparing', 'Preparing update…')
+  void installAppUpdate(url)
+}
+
+async function installAppUpdate(url: string): Promise<void> {
+  let progress: { remove(): void } | undefined
+  try {
+    const opka =
+      Platform.OS === 'android' &&
+      Constants.expoConfig?.android?.package === 'com.kosfin.opka.mobile'
+    if (!opka) {
+      await Linking.openURL(url)
+      publishAppUpdateInstall('idle', null)
+      return
+    }
+    const installer = requireOptionalNativeModule<{
+      install(url: string): Promise<void>
+      addListener?(
+        name: string,
+        listener: (event: { phase?: string; downloadedBytes?: number; totalBytes?: number }) => void
+      ): { remove(): void }
+    }>('OpkaAppUpdate')
+    if (!installer) {
+      throw new Error('This build has no Android installer. Download the current Opka release.')
+    }
+    progress = installer.addListener?.('onInstallProgress', (event) => {
+      if (event.phase === 'downloading') {
+        const total = event.totalBytes ?? 0
+        const downloaded = event.downloadedBytes ?? 0
+        const percent = total > 0 ? Math.min(100, Math.floor((downloaded * 100) / total)) : null
+        publishAppUpdateInstall(
+          'downloading',
+          percent === null ? 'Downloading update…' : `Downloading update… ${percent}%`
+        )
+      } else if (event.phase === 'verifying') {
+        publishAppUpdateInstall('verifying', 'Verifying update…')
+      }
+    })
+    await installer.install(url)
+    publishAppUpdateInstall('installer', 'Confirm installation in Android')
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : 'Please check your connection and retry.'
+    publishAppUpdateInstall('failed', 'Update failed — tap to retry')
+    Alert.alert('Update could not be opened', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Retry', onPress: () => openAppUpdate(url) }
+    ])
+  } finally {
+    progress?.remove()
+  }
 }

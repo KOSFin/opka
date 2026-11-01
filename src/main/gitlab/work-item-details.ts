@@ -40,6 +40,7 @@ type GitLabRawMR = Parameters<typeof mapMRToWorkItem>[0] & {
   diff_refs?: { base_sha?: string; head_sha?: string; start_sha?: string } | null
   head_pipeline?: { id?: number } | null
   reviewers?: GitLabRawUser[] | null
+  assignees?: { username?: string | null }[] | null
 }
 
 /**
@@ -195,6 +196,9 @@ async function fetchMRDetails(
     files,
     ...(pipelineJobs !== undefined ? { pipelineJobs } : {}),
     reviewers,
+    ...(Array.isArray(mrRaw.assignees)
+      ? { assignees: mrRaw.assignees.flatMap((user) => (user.username ? [user.username] : [])) }
+      : {}),
     ...(approvalState ? { approvalState } : {})
   }
 }

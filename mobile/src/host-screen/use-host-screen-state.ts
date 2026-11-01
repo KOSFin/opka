@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
-import { getCachedWorktrees } from '../cache/worktree-cache'
+import { getRetainedWorktrees } from '../cache/worktree-cache'
 import { createInitialHostRouteActionState } from '../host-route-action-state'
 import type { RpcClient } from '../transport/rpc-client'
 import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
@@ -14,7 +14,7 @@ import type { ProjectGroup } from '../../../src/shared/project-group-types'
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
   const [initialCache] = useState(() =>
-    hostId ? (getCachedWorktrees(hostId) as Worktree[] | null) : null
+    hostId ? (getRetainedWorktrees(hostId) as Worktree[] | null) : null
   )
   const clientRef = useRef<RpcClient | null>(null)
   const fetchWorktreesInFlightRef = useRef(false)

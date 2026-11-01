@@ -14,6 +14,10 @@ const dependencies = vi.hoisted(() => ({
   subscriptionListeners: new Array<(payload: unknown) => void>()
 }))
 
+vi.mock('../components/MobileSectionReveal', () => ({
+  MobileSectionReveal: ({ children }: { children: import('react').ReactNode }) => children
+}))
+
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
   AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
@@ -136,6 +140,7 @@ const AVAILABLE_SNAPSHOT = {
       },
       weekly: null,
       rateLimitResetCredits: { availableCount: 1, nextExpiresAt: null },
+      usageMetadata: { authProvenance: 'profile:codex-1' },
       updatedAt: 100,
       error: null,
       status: 'ok'
@@ -187,9 +192,9 @@ function systemDefaultButtons(renderer: ReactTestRenderer) {
   return renderer.root.findAll(
     (node) =>
       String(node.type) === 'Pressable' &&
-      node
-        .findAll((child) => String(child.type) === 'Text')
-        .some((textNode) => textNode.children.join('') === 'System default')
+      /^Use normal (claude|codex) CLI login for new manual chats$/.test(
+        node.props.accessibilityLabel ?? ''
+      )
   )
 }
 
@@ -508,19 +513,25 @@ describe('accounts route Codex reset credit', () => {
     expect(dependencies.back).toHaveBeenCalledOnce()
     act(() => renderer.unmount())
   })
-  it('switches between account management and pool policy sections without mixing their controls', async () => {
+  it('switches visible account controls while retaining both sections for unsaved drafts', async () => {
     const renderer = await renderAccountsRoute()
-    expect(renderer.root.findAll((node) => String(node.type) === 'SignInSection')).toHaveLength(1)
-    expect(
-      renderer.root.findAll((node) => String(node.type) === 'AccountPoolSection')
-    ).toHaveLength(0)
+    const panels = [
+      renderer.root.findByProps({ testID: 'account-management-panel' }),
+      renderer.root.findByProps({ testID: 'account-pools-panel' })
+    ]
+    const expectVisibility = (accountsVisible: boolean) => {
+      panels.forEach((panel, index) => {
+        const hidden = index === 0 ? !accountsVisible : accountsVisible
+        expect(panel.props.style?.display === 'none').toBe(hidden)
+        expect(panel.props.accessibilityElementsHidden).toBe(hidden)
+        expect(panel.props.importantForAccessibility).toBe(hidden ? 'no-hide-descendants' : 'auto')
+      })
+    }
+    expectVisibility(true)
     await act(async () => pressables(renderer, 'Pools & switching')[0]?.props.onPress())
-    expect(renderer.root.findAll((node) => String(node.type) === 'SignInSection')).toHaveLength(0)
-    expect(
-      renderer.root.findAll((node) => String(node.type) === 'AccountPoolSection')
-    ).toHaveLength(1)
+    expectVisibility(false)
     await act(async () => pressables(renderer, 'Accounts')[0]?.props.onPress())
-    expect(renderer.root.findAll((node) => String(node.type) === 'SignInSection')).toHaveLength(1)
+    expectVisibility(true)
     expect(systemDefaultButtons(renderer).length).toBeGreaterThan(0)
     act(() => renderer.unmount())
   })
