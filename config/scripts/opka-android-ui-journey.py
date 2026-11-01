@@ -11,6 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 import xml.etree.ElementTree as ET
 
 from opka_android_handoff_status import ui_snapshot
+from opka_android_task_fields import editable_task_field, task_editor_present
 
 
 def visible_labels(root):
@@ -71,9 +72,6 @@ def actionable_match(root, label, contains=False):
     return None
 
 
-def task_editor_present(root):
-    return any(label_matches(node, 'Task title') for node in root.iter('node'))
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -127,12 +125,12 @@ def main():
                               '/sdcard/opka-ui-journey.xml', time.monotonic() + 10)
         return root
 
-    def find(label, timeout=25, contains=False, actionable=False):
+    def find(label, timeout=25, contains=False, actionable=False, editable=False):
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             root = tree()
-            if actionable:
-                node = actionable_match(root, label, contains)
+            if actionable or editable:
+                node = editable_task_field(root, label) if editable else actionable_match(root, label, contains)
                 if node is not None:
                     return node
                 time.sleep(0.35)
@@ -144,8 +142,8 @@ def main():
             time.sleep(0.35)
         raise AssertionError(f'UI did not expose {label!r}')
 
-    def tap(label, contains=False):
-        node = find(label, contains=contains, actionable=True)
+    def tap(label, contains=False, editable=False):
+        node = find(label, contains=contains, actionable=True, editable=editable)
         numbers = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
         if len(numbers) != 4:
             raise AssertionError(f'No touch bounds for {label!r}')
@@ -154,9 +152,9 @@ def main():
         time.sleep(0.25)
 
     def fill(label, value, replace=False):
-        node = find(label)
+        node = find(label, editable=True)
         previous = node.get('text', '')
-        tap(label)
+        tap(label, editable=True)
         if replace:
             if len(previous) > 256:
                 raise AssertionError('Refusing an unbounded key sequence')
