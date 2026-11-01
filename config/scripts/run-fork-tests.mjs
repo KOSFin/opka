@@ -132,6 +132,7 @@ export const FORK_TEST_FILTERS = [
   'config/scripts/packaged-cli-dependency-copy.test.mjs',
   'config/scripts/check-root-directory-entries.test.mjs',
   'config/scripts/fork-ci-contract.test.mjs',
+  'config/scripts/opka-release-qualification.test.mjs',
   'config/scripts/e2e-cli-artifact-capability.test.mjs',
   'config/scripts/electron-builder-config.test.mjs',
   'config/scripts/verify-skills-cli-runtime.test.mjs',

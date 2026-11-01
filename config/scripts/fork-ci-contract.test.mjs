@@ -30,6 +30,19 @@ describe('fork CI safety and required checks', () => {
   it('blocks beta publication until Android confirms a same-signer update', () => {
     const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
     expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
+    expect(release.jobs.qualification).toMatchObject({
+      needs: 'admission',
+      uses: './.github/workflows/opka-installers.yml',
+      with: { version: '${{ inputs.version }}' }
+    })
+    const qualification = release.jobs.admission.steps.find(
+      (step) => step.name === 'Require successful full checks for the same application source'
+    )
+    expect(qualification.run).toBe('node config/scripts/opka-release-qualification.mjs')
+    expect(qualification.env.OPKA_QUALIFIED_COMMIT).toBe(
+      '${{ inputs.qualified_commit || github.sha }}'
+    )
+    expect(FORK_TEST_FILTERS).toContain('config/scripts/opka-release-qualification.test.mjs')
     expect(release.jobs.android_update).toMatchObject({
       needs: 'admission',
       uses: './.github/workflows/opka-android-update-acceptance.yml',
