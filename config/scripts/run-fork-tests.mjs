@@ -150,6 +150,18 @@ export const MOBILE_FORK_TEST_FILTERS = [
   'mobile/src/components/account-usage-state.test.ts',
   'mobile/src/components/provider-account-usage.test.ts',
   'mobile/src/components/MobileSectionReveal.test.tsx',
+  'mobile/src/components/bottom-drawer-back-while-hiding.test.tsx',
+  'mobile/src/components/use-new-workspace-repositories.test.ts',
+  'mobile/src/host-screen/host-list-settings-sync.test.ts',
+  'mobile/src/host-screen/host-server-workspaces-wiring.test.ts',
+  'mobile/src/host-screen/host-sidebar-feed-sections.test.ts',
+  'mobile/src/host-screen/host-ssh-health-badge-wiring.test.ts',
+  'mobile/src/host-screen/host-view-changes-reconnect.test.ts',
+  'mobile/src/host-screen/use-host-project-sections.test.tsx',
+  'mobile/src/settings/native-notification-delivery-settings.test.tsx',
+  'mobile/src/settings/notification-display-test.test.tsx',
+  'mobile/src/settings/settings-screen-state.test.tsx',
+  'mobile/src/settings/voice-settings-poller-refresh.test.tsx',
   'mobile/src/session/MobileNativeChatTurnStatus.test.ts',
   'mobile/scripts/opka-app-config.test.ts'
 ]
