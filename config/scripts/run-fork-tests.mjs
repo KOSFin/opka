@@ -147,6 +147,10 @@ export const FORK_TEST_FILTERS = [
 ]
 
 export const MOBILE_FORK_TEST_FILTERS = [
+  'mobile/src/diagnostics/connection-diagnostics-analysis.test.ts',
+  'mobile/src/diagnostics/connection-diagnostics-relay-dial.test.ts',
+  'mobile/src/mobile-web-shell/bridge/page-back-consumers.test.ts',
+  'mobile/src/mobile-web-shell/bridge/bridge-back-round-trip.test.ts',
   'mobile/src/accounts/',
   'mobile/src/tasks/',
   'mobile/src/worktree/',
