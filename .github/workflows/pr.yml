@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: opka-checks-${{ github.event.pull_request.number || github.ref }}
@@ -27,9 +28,45 @@ env:
   HUSKY: '0'
 
 jobs:
+  scope:
+    name: Determine required component checks
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      plan: ${{ steps.scope.outputs.plan }}
+      static: ${{ steps.scope.outputs.static }}
+      regression: ${{ steps.scope.outputs.regression }}
+      desktop: ${{ steps.scope.outputs.desktop }}
+      electron: ${{ steps.scope.outputs.electron }}
+      installers: ${{ steps.scope.outputs.installers }}
+      android: ${{ steps.scope.outputs.android }}
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+      reused: ${{ steps.scope.outputs.reused }}
+      base: ${{ steps.scope.outputs.base }}
+      head: ${{ steps.scope.outputs.head }}
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Resolve exact inputs and previous PR qualification
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node config/scripts/opka-ci-component-scope.mjs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opka-ci-scope-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/opka-ci/
+          retention-days: 7
+
   static:
     name: Types and changed-code quality
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.static == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -39,20 +76,28 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/install-node-dependencies
       - uses: ./.github/actions/install-mobile-dependencies
+        if: needs.scope.outputs.docs_only != 'true'
+      - name: Fetch the exact comparison base
+        env:
+          OPKA_CI_DIFF_BASE: ${{ needs.scope.outputs.base }}
+        run: git fetch --no-tags --depth=1 origin "$OPKA_CI_DIFF_BASE"
       - name: Reject new root-level files and folders
+        env:
+          OPKA_CI_DIFF_BASE: ${{ needs.scope.outputs.base }}
         run: |
-          DIFF_BASE="$(node config/scripts/git-pull-request-diff-base.mjs HEAD^1)"
-          node .github/scripts/check-root-directory-entries.mjs "$DIFF_BASE" HEAD
+          node .github/scripts/check-root-directory-entries.mjs "$OPKA_CI_DIFF_BASE" HEAD
       - name: Check types
+        if: needs.scope.outputs.docs_only != 'true'
         run: pnpm tc
       - name: Check mobile application types
+        if: needs.scope.outputs.docs_only != 'true'
         working-directory: mobile
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm typecheck
       - name: Check changed code
         env:
-          ORCA_CODE_QUALITY_BASE: HEAD^1
+          ORCA_CODE_QUALITY_BASE: ${{ needs.scope.outputs.base }}
           GOMEMLIMIT: 6GiB
           GOMAXPROCS: '1'
           RAYON_NUM_THREADS: '1'
@@ -64,13 +109,15 @@ jobs:
 
   regression:
     name: Fork regression tests
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.regression == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: node
@@ -81,7 +128,16 @@ jobs:
         env:
           OPKA_MOBILE_EVIDENCE_DIR: ${{ github.workspace }}/out/mobile-web-qa
           ORCA_MOBILE_WEB_APP_DEPS_REQUIRED: '1'
-        run: pnpm run test:fork
+          OPKA_CI_DIFF_BASE: ${{ needs.scope.outputs.base }}
+          OPKA_CI_DIFF_HEAD: ${{ needs.scope.outputs.head }}
+          OPKA_CI_FULL: ${{ needs.scope.outputs.full }}
+        shell: bash
+        run: |
+          if [ "$OPKA_CI_FULL" = true ]; then
+            pnpm run test:fork
+          else
+            pnpm run test:fork -- --changed "$OPKA_CI_DIFF_BASE" "$OPKA_CI_DIFF_HEAD"
+          fi
       - name: Save synthetic mobile page evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -105,7 +161,8 @@ jobs:
 
   desktop:
     name: Desktop assets (${{ matrix.os }})
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.desktop == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -134,7 +191,8 @@ jobs:
 
   electron:
     name: Hidden Electron journeys and Swift
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.electron == 'true' }}
     runs-on: macos-15
     timeout-minutes: 35
     env:
@@ -221,21 +279,41 @@ jobs:
 
   installers:
     name: Beta installer qualification
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.installers == 'true' }}
     uses: ./.github/workflows/opka-installers.yml
     secrets: inherit
     with:
+      build_android: ${{ needs.scope.outputs.android != 'true' }}
       version: ${{ inputs.release_version || format('1.4.236-rc.{0}', github.run_number) }}
+
+  android:
+    name: Android component acceptance
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.android == 'true' }}
+    uses: ./.github/workflows/opka-android-update-acceptance.yml
+    secrets: inherit
 
   verify:
     name: PR checks passed
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    needs: [static, regression, desktop, electron, installers]
+    needs: [scope, static, regression, desktop, electron, installers, android]
     runs-on: ubuntu-24.04
-    timeout-minutes: 2
+    timeout-minutes: 8
     steps:
-      - name: Require every check to pass
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Require every selected check and reject unexplained skips
         env:
-          RESULTS: ${{ toJSON(needs) }}
-        run: |
-          node -e 'const jobs = Object.values(JSON.parse(process.env.RESULTS)); if (jobs.length !== 5 || jobs.some(job => job.result !== "success")) process.exit(1)'
+          OPKA_CI_RESULTS: ${{ toJSON(needs) }}
+          OPKA_CI_SCOPE: ${{ needs.scope.outputs.plan }}
+        run: node config/scripts/opka-ci-component-scope.mjs --verify
+      - name: Preserve successful source qualification
+        uses: actions/upload-artifact@v7
+        with:
+          name: opka-ci-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/opka-ci/qualification.json
+          if-no-files-found: error
+          retention-days: 30

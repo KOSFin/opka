@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { verifyRequiredPrContext } from '../../.github/scripts/check-required-pr-context.mjs'
 import { FORK_TEST_FILTERS, MOBILE_RENDER_TEST_FILTERS } from './run-fork-tests.mjs'
+import { evaluateCiResults, classifyCiPaths } from './opka-ci-component-scope.mjs'
 import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
@@ -24,7 +25,8 @@ describe('fork CI safety and required checks', () => {
     }
     const runner = readFileSync('config/scripts/run-fork-tests.mjs', 'utf8')
     expect(runner).toContain('run(process.execPath, [')
-    expect(runner).toContain('...MOBILE_RENDER_TEST_FILTERS')
+    expect(runner).toContain('render: MOBILE_RENDER_TEST_FILTERS')
+    expect(runner).toContain('...lanes.render')
     expect(runner).toContain('results.every(Boolean) ? 0 : 1')
   })
   it('blocks beta publication until Android confirms a same-signer update', () => {
@@ -36,15 +38,13 @@ describe('fork CI safety and required checks', () => {
       with: { version: '${{ inputs.version }}' }
     })
     const qualification = release.jobs.admission.steps.find(
-      (step) => step.name === 'Require successful full checks for the same application source'
+      (step) => step.name === 'Require successful checks for this exact release source'
     )
     expect(qualification.run).toBe('node config/scripts/opka-release-qualification.mjs')
-    expect(qualification.env.OPKA_QUALIFIED_COMMIT).toBe(
-      '${{ inputs.qualified_commit || github.sha }}'
-    )
+    expect(qualification.env.OPKA_QUALIFIED_COMMIT).toBe('${{ github.sha }}')
     expect(FORK_TEST_FILTERS).toContain('config/scripts/opka-release-qualification.test.mjs')
     expect(release.jobs.android_update).toMatchObject({
-      needs: 'admission',
+      needs: ['admission', 'qualification'],
       uses: './.github/workflows/opka-android-update-acceptance.yml',
       with: { release_signer: true }
     })
@@ -52,13 +52,17 @@ describe('fork CI safety and required checks', () => {
       readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
     )
     expect(acceptance.on.workflow_call.inputs.release_signer.default).toBe(false)
-    expect(acceptance.permissions).toEqual({ contents: 'read' })
+    expect(acceptance.permissions).toEqual({ contents: 'read', actions: 'read' })
     const steps = acceptance.jobs.update_confirmation.steps
     expect(
       steps.find((step) => step.name === 'Exercise Android confirmation and data retention').with
         .script
     ).toBe('python3 config/scripts/opka-android-ci-acceptance.py')
     expect(release.jobs.android_update.with.candidate_version).toBe('${{ inputs.version }}')
+    expect(release.jobs.android_update.with.candidate_artifact).toBe(
+      "${{ format('opka-android-{0}', github.sha) }}"
+    )
+    expect(acceptance.on.pull_request).toBeUndefined()
     const native = readFileSync('config/scripts/opka-android-ci-acceptance.py', 'utf8')
     expect(native).toContain('opka-android-native-fixture.py')
     expect(native).toContain('--legacy-a')
@@ -87,11 +91,11 @@ describe('fork CI safety and required checks', () => {
     const fingerprint = fingerprintStep.run
     expect(fingerprint).toContain('$FIREBASE_CLIENT_SHA256')
     expect(fingerprint).toContain('$ANDROID_BUILD_ENV_SHA256')
-    expect(restore.if).toBeUndefined()
+    expect(restore.if).toBe("inputs.candidate_artifact == ''")
     expect(save.if).not.toContain('firebase')
     expect(
       steps.find((step) => step.name === 'Test native update ownership, validation and cleanup').if
-    ).toBeUndefined()
+    ).toBe("inputs.candidate_artifact == ''")
     expect(
       steps.find((step) => step.name === 'Validate idle baseline and traffic measurement contracts')
         .run
@@ -165,24 +169,67 @@ describe('fork CI safety and required checks', () => {
   })
   it('executes the aggregate gate against success, missing, failed, cancelled and skipped checks', () => {
     const command = workflow.jobs.verify.steps.find((step) => step.run).run.trim()
-    const match = command.match(/^node -e '([\s\S]+)'$/)
-    expect(match).not.toBeNull()
-    const script = match[1]
+    expect(command).toBe('node config/scripts/opka-ci-component-scope.mjs --verify')
+    const scope = classifyCiPaths(['src/shared/pairing.ts'])
     const results = Object.fromEntries(
       workflow.jobs.verify.needs.map((name) => [name, { result: 'success' }])
     )
-    const run = (value) =>
-      execFileSync(process.execPath, ['-e', script], {
-        env: { ...process.env, RESULTS: JSON.stringify(value) },
-        stdio: 'pipe'
-      })
-    expect(() => run(results)).not.toThrow()
+    expect(() => evaluateCiResults(scope, results)).not.toThrow()
     for (const name of workflow.jobs.verify.needs) {
       const { [name]: omitted, ...missing } = results
       expect(omitted.result).toBe('success')
-      expect(() => run(missing)).toThrow()
+      expect(() => evaluateCiResults(scope, missing)).toThrow()
       for (const result of ['failure', 'cancelled', 'skipped']) {
-        expect(() => run({ ...results, [name]: { result } })).toThrow()
+        expect(() => evaluateCiResults(scope, { ...results, [name]: { result } })).toThrow()
+      }
+    }
+  })
+
+  it('builds Android once per PR and keeps requested installer failures blocking', () => {
+    const installer = parse(readFileSync('.github/workflows/opka-installers.yml', 'utf8'))
+    expect(installer.on.workflow_call.inputs.build_android).toEqual({
+      type: 'boolean',
+      default: true
+    })
+    expect(workflow.jobs.installers.with.build_android).toBe(
+      "${{ needs.scope.outputs.android != 'true' }}"
+    )
+    expect(installer.jobs.android.if).toBe('inputs.build_android')
+    expect(installer.jobs.release_files.if).toBe('inputs.build_android')
+    expect(installer.jobs.mac.if).toBeUndefined()
+    expect(installer.jobs.server_template.if).toBeUndefined()
+    const gate = installer.jobs.installer_gate
+    expect(gate.name).not.toBe('PR checks passed')
+    expect(gate.if).toBe('${{ !cancelled() }}')
+    expect(gate.needs).toEqual(['mac', 'server_template', 'android', 'release_files'])
+    const match = gate.steps[0].run.match(/node --input-type=module -e '([\s\S]+)'/)
+    expect(match).not.toBeNull()
+    const run = (value, android) =>
+      execFileSync(process.execPath, ['--input-type=module', '-e', match[1]], {
+        env: { ...process.env, RESULTS: JSON.stringify(value), BUILD_ANDROID: String(android) },
+        stdio: 'pipe'
+      })
+    for (const android of [true, false]) {
+      const results = Object.fromEntries(
+        gate.needs.map((name) => [
+          name,
+          {
+            result: !android && ['android', 'release_files'].includes(name) ? 'skipped' : 'success'
+          }
+        ])
+      )
+      expect(() => run(results, android)).not.toThrow()
+      for (const name of gate.needs) {
+        const { [name]: omitted, ...missing } = results
+        expect(omitted).toBeDefined()
+        expect(() => run(missing, android)).toThrow()
+        for (const result of [
+          'failure',
+          'cancelled',
+          results[name].result === 'success' ? 'skipped' : 'success'
+        ]) {
+          expect(() => run({ ...results, [name]: { result } }, android)).toThrow()
+        }
       }
     }
   })
@@ -257,11 +304,13 @@ describe('fork CI safety and required checks', () => {
 
   it('requires tests, all desktop platforms and hidden GUI checks', () => {
     expect(workflow.jobs.verify.needs).toEqual([
+      'scope',
       'static',
       'regression',
       'desktop',
       'electron',
-      'installers'
+      'installers',
+      'android'
     ])
     expect(workflow.jobs.desktop.strategy.matrix.os).toEqual([
       'ubuntu-24.04',
@@ -272,12 +321,20 @@ describe('fork CI safety and required checks', () => {
     expect(
       workflow.jobs.electron.steps.find((step) => step.name === 'Build test renderer').run
     ).toContain('pnpm run build:cli')
-    expect(workflow.permissions).toEqual({ contents: 'read' })
+    expect(workflow.permissions).toEqual({ contents: 'read', actions: 'read' })
     const text = readFileSync('.github/workflows/pr.yml', 'utf8')
     expect(text).not.toMatch(
       /secrets\.|pull_request_target|self-hosted|blacksmith|continue-on-error|gh release|electron-builder/
     )
-    expect(text).toContain('job.result !== "success"')
+    expect(workflow.jobs.android.uses).toBe(
+      './.github/workflows/opka-android-update-acceptance.yml'
+    )
+    expect(workflow.jobs.android.needs).toBe('scope')
+    expect(
+      workflow.jobs.regression.steps.find(
+        (step) => step.name === 'Test host accounts, mobile state and generated pages'
+      ).run
+    ).toContain('--changed')
     expect(text).toContain('if-no-files-found: error')
   })
 })

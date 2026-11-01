@@ -26,7 +26,7 @@ function localPath(file, specifier) {
     return `src/renderer/src/${specifier.slice(10)}`
   }
   if (specifier.startsWith('@/')) {
-    return `src/renderer/src/${specifier.slice(2)}`
+    return `${file.startsWith('mobile/') ? 'mobile/src' : 'src/renderer/src'}/${specifier.slice(2)}`
   }
   return null
 }
@@ -74,12 +74,13 @@ export function buildUnitDependencyGraph(sources, workspace = { resolve: () => n
   return { reverse, opaque }
 }
 
-export function collectUnitDependencyGraph(root = process.cwd()) {
+export function collectUnitDependencyGraph(root = process.cwd(), { includeMobile = false } = {}) {
   const files = globSync(
     [
       'src/**/*.{ts,tsx,js,mjs,cjs,json}',
       'config/**/*.{ts,tsx,js,mjs,cjs,json}',
-      'tests/**/*.{ts,tsx,js,mjs,cjs,json}'
+      'tests/**/*.{ts,tsx,js,mjs,cjs,json}',
+      ...(includeMobile ? ['mobile/{src,app,scripts,packages}/**/*.{ts,tsx,js,mjs,cjs,json}'] : [])
     ],
     { cwd: root, exclude: ['**/node_modules/**', '**/dist/**'] }
   )

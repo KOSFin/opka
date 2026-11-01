@@ -6,10 +6,6 @@ on:
         description: 'New immutable beta version, for example 1.4.236-rc.1'
         type: string
         required: true
-      qualified_commit:
-        description: 'Commit with successful full PR checks; only reviewed test-environment differences are allowed'
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -34,10 +30,10 @@ jobs:
         env:
           OPKA_VERSION: ${{ inputs.version }}
         run: node --input-type=module -e 'import {validateBetaVersion} from "./config/scripts/opka-release-assets.mjs"; validateBetaVersion(process.env.OPKA_VERSION)'
-      - name: Require successful full checks for the same application source
+      - name: Require successful checks for this exact release source
         env:
           GH_TOKEN: ${{ github.token }}
-          OPKA_QUALIFIED_COMMIT: ${{ inputs.qualified_commit || github.sha }}
+          OPKA_QUALIFIED_COMMIT: ${{ github.sha }}
         run: node config/scripts/opka-release-qualification.mjs
 
   qualification:
@@ -49,13 +45,14 @@ jobs:
       version: ${{ inputs.version }}
 
   android_update:
-    name: Verify Android update with the release identity
-    needs: admission
+    name: Verify the exact release APK update
+    needs: [admission, qualification]
     uses: ./.github/workflows/opka-android-update-acceptance.yml
     secrets: inherit
     with:
       release_signer: true
       candidate_version: ${{ inputs.version }}
+      candidate_artifact: ${{ format('opka-android-{0}', github.sha) }}
 
   publish:
     name: Publish the complete verified beta
@@ -77,6 +74,12 @@ jobs:
         with:
           name: opka-beta-release-${{ github.sha }}
           path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: opka-android-tested-${{ github.sha }}
+          path: tested-android
+      - name: Require the published APK to be the exact OS-tested artifact
+        run: node config/scripts/opka-verify-tested-android.mjs dist tested-android/candidate-artifact.json
       - name: Require the user-owned Android signing identity
         run: test -n "$OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256"
       - name: Recheck provenance and content before publication
