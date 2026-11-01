@@ -5,6 +5,12 @@ on:
       candidate_artifact:
         type: string
         default: ''
+      candidate_run_id:
+        type: string
+        default: ''
+      candidate_source:
+        type: string
+        default: ''
       release_signer:
         type: boolean
         default: false
@@ -20,7 +26,13 @@ on:
   workflow_dispatch:
     inputs:
       candidate_artifact:
-        description: Exact same-run installer artifact (protected release only)
+        description: Exact qualified installer artifact (protected release only)
+        type: string
+        default: ''
+      candidate_run_id:
+        type: string
+        default: ''
+      candidate_source:
         type: string
         default: ''
       release_signer:
@@ -59,6 +71,8 @@ jobs:
     timeout-minutes: 70
     environment: ${{ github.event_name != 'pull_request' && inputs.release_signer && 'opka-android-release' || 'opka-android-ci' }}
     env:
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id || github.run_id }}
+      CANDIDATE_SOURCE: ${{ inputs.candidate_source || github.sha }}
       CANDIDATE_ARTIFACT: ${{ inputs.candidate_artifact || '' }}
       CANDIDATE_ARTIFACT_DIR: ${{ inputs.candidate_artifact && 'out/android-release-candidate' || '' }}
       OPKA_ANDROID_CERTIFICATE_SHA256: ${{ vars.OPKA_ANDROID_CERTIFICATE_SHA256 }}
@@ -73,13 +87,14 @@ jobs:
       - name: Validate published-channel scope
         run: python3 -c 'import os,re; v=os.environ["PUBLISHED_VERSION"]; assert not v or (os.environ["RELEASE_SIGNER"] == "true" and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*",v)), "Published acceptance requires release_signer and a beta version"'
       - name: Validate exact installer artifact scope
-        run: python3 -c 'import os; a=os.environ["CANDIDATE_ARTIFACT"]; assert not a or (os.environ["RELEASE_SIGNER"] == "true" and a == "opka-android-" + os.environ["GITHUB_SHA"]), "Only this release run installer artifact is admitted"'
+        run: python3 -c 'import os; a=os.environ["CANDIDATE_ARTIFACT"]; assert not a or (os.environ["RELEASE_SIGNER"] == "true" and a == "opka-android-" + os.environ["CANDIDATE_SOURCE"]), "Only an explicitly sourced protected installer artifact is admitted"'
       - name: Validate candidate version as data
         run: python3 -c 'import os,re; assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*",os.environ["CANDIDATE_VERSION"]), "Invalid candidate beta version"'
       - name: Validate published download argument contract offline
         run: python3 config/scripts/opka_android_published_update_test.py
       - name: Validate idle baseline and traffic measurement contracts
         run: |
+          python3 config/scripts/opka_android_built_run_test.py
           python3 config/scripts/opka_android_baseline_artifact_test.py
           python3 mobile/scripts/android_batterystats_test.py
           python3 config/scripts/opka_android_fixture_proxy_test.py
@@ -108,12 +123,19 @@ jobs:
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0
           log-accepted-android-sdk-licenses: 'false'
+      - name: Verify the immutable installer producer run
+        if: inputs.candidate_artifact != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 config/scripts/opka_android_built_run.py
       - name: Download the exact already qualified installer
         if: inputs.candidate_artifact != ''
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.candidate_artifact }}
           path: out/android-release-candidate
+          run-id: ${{ env.CANDIDATE_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Verify installer identity and payload without modifying it
         if: inputs.candidate_artifact != ''
         run: python3 config/scripts/opka_android_candidate_artifact.py --directory out/android-release-candidate --output out/android-native-ui/candidate-artifact.json

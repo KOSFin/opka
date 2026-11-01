@@ -6,6 +6,14 @@ on:
         description: 'New immutable beta version, for example 1.4.236-rc.1'
         type: string
         required: true
+      built_run:
+        description: 'Optional completed release build run to verify without rebuilding'
+        type: string
+        default: ''
+      built_source:
+        description: 'Exact original build commit; only reviewed QA changes may follow it'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -20,6 +28,9 @@ jobs:
     name: Admit a main-only beta release
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    outputs:
+      release_source: ${{ steps.qualification.outputs.release_source }}
+      artifact_run: ${{ steps.qualification.outputs.artifact_run }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -30,15 +41,19 @@ jobs:
         env:
           OPKA_VERSION: ${{ inputs.version }}
         run: node --input-type=module -e 'import {validateBetaVersion} from "./config/scripts/opka-release-assets.mjs"; validateBetaVersion(process.env.OPKA_VERSION)'
-      - name: Require successful checks for this exact release source
+      - name: Require qualified source and verify any reused immutable build
+        id: qualification
         env:
           GH_TOKEN: ${{ github.token }}
           OPKA_QUALIFIED_COMMIT: ${{ github.sha }}
+          OPKA_BUILT_RUN: ${{ inputs.built_run }}
+          OPKA_BUILT_SOURCE: ${{ inputs.built_source }}
         run: node config/scripts/opka-release-qualification.mjs
 
   qualification:
     name: Build and qualify this version's installers
     needs: admission
+    if: inputs.built_run == ''
     uses: ./.github/workflows/opka-installers.yml
     secrets: inherit
     with:
@@ -47,22 +62,28 @@ jobs:
   android_update:
     name: Verify the exact release APK update
     needs: [admission, qualification]
+    if: ${{ !cancelled() && needs.admission.result == 'success' && (needs.qualification.result == 'success' || (inputs.built_run != '' && needs.qualification.result == 'skipped')) }}
     uses: ./.github/workflows/opka-android-update-acceptance.yml
     secrets: inherit
     with:
       release_signer: true
       candidate_version: ${{ inputs.version }}
-      candidate_artifact: ${{ format('opka-android-{0}', github.sha) }}
+      candidate_artifact: ${{ format('opka-android-{0}', needs.admission.outputs.release_source) }}
+      candidate_run_id: ${{ needs.admission.outputs.artifact_run }}
+      candidate_source: ${{ needs.admission.outputs.release_source }}
 
   publish:
     name: Publish the complete verified beta
-    needs: [qualification, android_update]
+    needs: [admission, qualification, android_update]
+    if: ${{ !cancelled() && needs.admission.result == 'success' && needs.android_update.result == 'success' && (needs.qualification.result == 'success' || (inputs.built_run != '' && needs.qualification.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
+      actions: read
     env:
       OPKA_VERSION: ${{ inputs.version }}
+      OPKA_RELEASE_SOURCE: ${{ needs.admission.outputs.release_source }}
       GH_TOKEN: ${{ github.token }}
       OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256: ${{ vars.OPKA_ANDROID_CERTIFICATE_SHA256 }}
     steps:
@@ -70,10 +91,17 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/install-node-dependencies
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.admission.outputs.release_source }}
+          path: .release-source
+          persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
-          name: opka-beta-release-${{ github.sha }}
+          name: opka-beta-release-${{ needs.admission.outputs.release_source }}
           path: dist
+          run-id: ${{ needs.admission.outputs.artifact_run }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@v8
         with:
           name: opka-android-tested-${{ github.sha }}
@@ -82,8 +110,26 @@ jobs:
         run: node config/scripts/opka-verify-tested-android.mjs dist tested-android/candidate-artifact.json
       - name: Require the user-owned Android signing identity
         run: test -n "$OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256"
-      - name: Recheck provenance and content before publication
-        run: node config/scripts/opka-release-assets.mjs complete dist
+      - name: Recheck original build provenance without changing installer bytes
+        working-directory: .release-source
+        run: |
+          python3 - <<'PYCODE'
+          import hashlib, os, pathlib, subprocess
+          directory = pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'dist'
+          def inventory():
+              result = {}
+              for path in directory.iterdir():
+                  assert path.is_file() and not path.is_symlink()
+                  digest = hashlib.sha256()
+                  with path.open('rb') as source:
+                      while chunk := source.read(1024 * 1024):
+                          digest.update(chunk)
+                  result[path.name] = digest.hexdigest()
+              return result
+          before = inventory()
+          subprocess.run(['node', 'config/scripts/opka-release-assets.mjs', 'complete', str(directory)], check=True)
+          assert before == inventory(), 'Qualification changed original release files'
+          PYCODE
       - name: Refuse replacing any existing tag or release
         shell: bash
         run: |
@@ -103,7 +149,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "v$OPKA_VERSION" dist/* --target "$GITHUB_SHA" --draft --prerelease --title "Opka $OPKA_VERSION — Mac and Android beta" --notes-file fork-docs/releases/beta-notes.md
+          gh release create "v$OPKA_VERSION" dist/* --target "$OPKA_RELEASE_SOURCE" --draft --prerelease --title "Opka $OPKA_VERSION — Mac and Android beta" --notes-file fork-docs/releases/beta-notes.md
           gh release edit "v$OPKA_VERSION" --draft=false --prerelease --latest=false
       - name: Verify the remote release and immutable tag
         shell: bash
@@ -111,4 +157,4 @@ jobs:
           set -euo pipefail
           gh release view "v$OPKA_VERSION" --json url,isDraft,isPrerelease,assets
           published=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$OPKA_VERSION" --jq '.object.sha')
-          [ "$published" = "$GITHUB_SHA" ]
+          [ "$published" = "$OPKA_RELEASE_SOURCE" ]

@@ -10,6 +10,8 @@ export function verifyTestedAndroid(proof, provenance, apk, expected) {
     /^\d+\.\d+\.\d+-rc\.[1-9]\d*$/.test(expected.version ?? '') &&
     proof?.schemaVersion === 1 &&
     proof.candidateRebuilt === false &&
+    /^[a-f0-9]{40}$/.test(expected.verificationCommit ?? '') &&
+    proof.verificationCommit === expected.verificationCommit &&
     proof.sourceCommit === expected.commit &&
     provenance.commit === expected.commit &&
     proof.version === expected.version &&
@@ -54,7 +56,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     JSON.parse(readFileSync(resolve(root, 'opka-android-provenance.json'), 'utf8')),
     readFileSync(resolve(root, 'opka-android.apk')),
     {
-      commit: process.env.GITHUB_SHA,
+      commit: process.env.OPKA_RELEASE_SOURCE || process.env.GITHUB_SHA,
+      verificationCommit: process.env.GITHUB_SHA,
       version: process.env.OPKA_VERSION,
       certificate: process.env.OPKA_REQUIRE_ANDROID_CERTIFICATE_SHA256
     }

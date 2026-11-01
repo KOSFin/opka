@@ -179,8 +179,9 @@ def main():
     artifact_proof = None
     if artifact_directory:
         assert os.environ.get('RELEASE_SIGNER') == 'true', 'Built installer acceptance requires protected release scope'
-        artifact_proof = verify_candidate(Path(artifact_directory), version, os.environ['GITHUB_SHA'],
+        artifact_proof = verify_candidate(Path(artifact_directory), version, os.environ.get('CANDIDATE_SOURCE') or os.environ['GITHUB_SHA'],
                                           os.environ['OPKA_ANDROID_CERTIFICATE_SHA256'].lower())
+        artifact_proof['verificationCommit'] = os.environ['GITHUB_SHA']
         native = [python, 'config/scripts/opka-android-native-fixture.py', '--legacy-only',
                   '--legacy-a', baseline, '--b', candidate, '--version', version,
                   '--apksigner', str(Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0/apksigner')]
