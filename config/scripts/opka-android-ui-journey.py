@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 
 from opka_android_handoff_status import ui_snapshot
 from opka_android_task_fields import editable_task_field, task_editor_present
+from opka_android_target_viewport import find_visible, visible_bounds
 
 
 def visible_labels(root):
@@ -68,7 +69,7 @@ def actionable_match(root, label, contains=False):
                 candidate = current
             current = parents.get(current)
         if candidate is not None and candidate.get('bounds'):
-            return candidate
+            return node if node.get('bounds') and visible_bounds(root, node) is None else candidate
     return None
 
 
@@ -126,21 +127,15 @@ def main():
         return root
 
     def find(label, timeout=25, contains=False, actionable=False, editable=False):
-        end = time.monotonic() + timeout
-        while time.monotonic() < end:
-            root = tree()
-            if actionable or editable:
-                node = editable_task_field(root, label) if editable else actionable_match(root, label, contains)
-                if node is not None:
-                    return node
-                time.sleep(0.35)
-                continue
-            for node in root.iter('node'):
-                if label_matches(node, label, contains):
-                    if node.get('bounds') and node.get('enabled', 'true') == 'true':
-                        return node
-            time.sleep(0.35)
-        raise AssertionError(f'UI did not expose {label!r}')
+        def resolve(root):
+            if editable:
+                return editable_task_field(root, label)
+            if actionable:
+                return actionable_match(root, label, contains)
+            return next((node for node in root.iter('node') if label_matches(node, label, contains)
+                         and node.get('enabled', 'true') == 'true'), None)
+        return find_visible(tree, resolve, label, timeout,
+                            lambda *gesture: command('shell', 'input', 'swipe', *gesture))
 
     def tap(label, contains=False, editable=False):
         node = find(label, contains=contains, actionable=True, editable=editable)

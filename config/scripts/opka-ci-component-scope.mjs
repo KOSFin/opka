@@ -23,6 +23,13 @@ export function classifyCiPaths(paths) {
     }
     if (/^(?:config\/scripts|\.github\/scripts)\/[^/]+\.test\.mjs$/.test(path)) {
       enable('ci-contract-test', ['regression'])
+    } else if (
+      /^config\/scripts\/opka[-_]android[^/]*\.py$/.test(path) ||
+      path === 'config/scripts/build-android-update-handoff.py' ||
+      path.startsWith('config/android-update-handoff/') ||
+      path.startsWith('config/scripts/fixtures/android-webview-accessibility/')
+    ) {
+      enable('android-acceptance-driver', ['regression', 'android'])
     } else if (path.startsWith('mobile/')) {
       enable('mobile', ['regression'])
       if (!/\.(?:test|spec)\.[^/]+$/.test(path)) {

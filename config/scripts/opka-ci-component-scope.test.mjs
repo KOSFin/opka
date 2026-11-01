@@ -84,6 +84,38 @@ describe('component CI routing', () => {
     }
     expect(classifyCiPaths(['config/scripts/contract.test.mjs', 'pnpm-lock.yaml']).full).toBe(true)
   })
+  it('routes Android acceptance drivers without rebuilding unrelated desktop and server installers', () => {
+    const drivers = [
+      'config/scripts/opka-android-ui-journey.py',
+      'config/scripts/opka_android_task_fields.py',
+      'config/scripts/opka_android_task_fields_test.py',
+      'config/scripts/opka_android_candidate_artifact.py',
+      'config/scripts/build-android-update-handoff.py',
+      'config/android-update-handoff/AndroidManifest.xml',
+      'config/android-update-handoff/src/InstallerActivity.java',
+      'config/scripts/fixtures/android-webview-accessibility/editor.xml'
+    ]
+    for (const path of drivers) {
+      const scope = classifyCiPaths([path])
+      expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static', 'regression', 'android'])
+      expect(scope.full).toBe(false)
+    }
+    for (const path of [
+      'config/scripts/opka-android-release-assets.mjs',
+      'config/scripts/opka_android_fixture_proxy.mjs',
+      'config/scripts/nested/opka-android-ui.py',
+      'config/scripts/build-android-update-handoff.mjs',
+      'config/android-update-handoff-production/AndroidManifest.xml',
+      'config/scripts/fixtures/android-webview-accessibility-other/editor.xml',
+      'config/scripts/fixtures/nested/android-webview-accessibility/editor.xml',
+      'config/scripts/fixtures/another-ui/editor.xml'
+    ]) {
+      expect(classifyCiPaths([path]).full).toBe(true)
+    }
+    const mixed = classifyCiPaths([drivers[0], 'src/main/runtime/rpc/dispatcher.ts'])
+    expect(CI_LANES.every((lane) => mixed[lane])).toBe(true)
+    expect(classifyCiPaths([drivers[0], 'pnpm-lock.yaml']).full).toBe(true)
+  })
   it('aggregates every requested lane and refuses unexplained skips and failures', () => {
     const scope = classifyCiPaths(['src/renderer/src/App.tsx'])
     expect(() => evaluateCiResults(scope, results(scope))).not.toThrow()
