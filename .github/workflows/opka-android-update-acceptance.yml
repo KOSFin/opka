@@ -95,7 +95,7 @@ jobs:
         run: |
           pnpm build:mobile-web
           pnpm build:orcad
-          pnpm exec esbuild config/scripts/opka-android-ui-fixture.mjs --bundle --platform=node --format=esm --packages=external --outfile=out/android-ui-fixture/fixture.mjs
+          pnpm exec esbuild config/scripts/opka-android-ui-fixture.mjs --bundle --platform=node --format=esm --packages=external --define:__filename=import.meta.filename --define:__dirname=import.meta.dirname --outfile=out/android-ui-fixture/fixture.mjs
           CI=true node out/android-ui-fixture/fixture.mjs --check --ready-file "$RUNNER_TEMP/opka-ui-preflight-private.json" --summary-file out/android-native-ui/host-preflight.json
       - uses: actions/setup-java@v5
         with:
@@ -110,6 +110,12 @@ jobs:
         uses: ./.github/actions/prepare-opka-firebase
         env:
           OPKA_GOOGLE_SERVICES_JSON: ${{ secrets.OPKA_GOOGLE_SERVICES_JSON }}
+      - name: Validate Android JavaScript before native compilation
+        working-directory: mobile
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          OPKA_VERSION: ${{ env.CANDIDATE_VERSION }}
+        run: pnpm exec expo export --platform android --no-bytecode --max-workers 1 --output-dir "$RUNNER_TEMP/opka-android-js-preflight"
       - name: Generate native regression project
         working-directory: mobile
         env:

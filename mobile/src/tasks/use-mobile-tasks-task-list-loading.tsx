@@ -67,6 +67,9 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     tasksSupported
   } = model
   const authorityGeneration = client?.getGeneration?.() ?? 0
+  // Repository arrivals use the existing silent reload path, not a new loader identity.
+  const cacheReposRef = useRef(model.repos)
+  cacheReposRef.current = model.repos
   const loadTasks = useCallback(
     async (options: { silent?: boolean } = {}): Promise<void> => {
       if (
@@ -92,7 +95,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
               gitlabFilter,
               appliedQuery,
               [...effectiveRepoIds].sort(),
-              model.repos.map((repo) => [repo.id, repo.path, repo.issueSourcePreference])
+              cacheReposRef.current.map((repo) => [repo.id, repo.path, repo.issueSourcePreference])
             ])
           : null
       const retained = cacheKey ? readGitLabTaskList(requestClient, cacheKey) : null
@@ -315,7 +318,6 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       appliedQuery,
       client,
       authorityGeneration,
-      model.repos,
       connState,
       countGitHubItemPages,
       fetchGitHubItemsPage,

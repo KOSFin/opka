@@ -192,7 +192,7 @@ export function MountedBottomDrawer({
   const dismiss = useCallback(() => {
     // Why: restarting the hide animation cancels it, so onHidden never fires and the
     // invisible Modal stays up swallowing taps (Android Back lands here mid-close).
-    if (!visible) {
+    if (!visible || !interactive) {
       return
     }
     Keyboard.dismiss()
@@ -201,7 +201,7 @@ export function MountedBottomDrawer({
         runOnJS(onClose)()
       }
     })
-  }, [onClose, progress, visible])
+  }, [interactive, onClose, progress, visible])
 
   // One seam, both platforms: natively this is the hardware key, and inside the shell's page it is
   // a claim the shell hands one press over on. Every session sheet renders through this component,
@@ -325,13 +325,16 @@ export function MountedBottomDrawer({
   // the parent unmounts us.
   const handle = (
     <GestureDetector gesture={handlePanGesture}>
-      <Animated.View
+      <Pressable
         style={styles.handleHitArea}
         accessibilityRole="button"
         accessibilityLabel="Dismiss drawer"
+        accessibilityState={{ disabled: !visible || !interactive }}
+        disabled={!visible || !interactive}
+        onPress={dismiss}
       >
         <View style={styles.handle} />
-      </Animated.View>
+      </Pressable>
     </GestureDetector>
   )
 

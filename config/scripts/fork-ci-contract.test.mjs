@@ -252,3 +252,30 @@ describe('fork CI safety and required checks', () => {
     expect(text).toContain('if-no-files-found: error')
   })
 })
+
+it('bundles Android synthetic host with ESM-safe Node filenames', () => {
+  const android = parse(
+    readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
+  )
+  const fixtureStep = android.jobs.update_confirmation.steps.find(
+    (step) => step.name === 'Build the current synthetic host and generated mobile pages'
+  )
+  expect(fixtureStep.run).toContain('--define:__filename=import.meta.filename')
+  expect(fixtureStep.run).toContain('--define:__dirname=import.meta.dirname')
+  expect(fixtureStep.run).toContain('CI=true node out/android-ui-fixture/fixture.mjs --check')
+})
+
+it('checks the real Android Metro bundle before either native build', () => {
+  for (const file of ['opka-installers.yml', 'opka-android-update-acceptance.yml']) {
+    const jobs = parse(readFileSync(`.github/workflows/${file}`, 'utf8')).jobs
+    const steps = (jobs.android ?? jobs.update_confirmation).steps
+    const preflight = steps.findIndex(
+      (step) => step.name === 'Validate Android JavaScript before native compilation'
+    )
+    expect(preflight).toBeGreaterThan(-1)
+    expect(steps[preflight].run).toContain(
+      'expo export --platform android --no-bytecode --max-workers 1'
+    )
+    expect(preflight).toBeLessThan(steps.findIndex((step) => step.run?.includes('expo prebuild')))
+  }
+})

@@ -129,6 +129,45 @@ describe('bottom drawer close request while hiding', () => {
     act(() => renderer.unmount())
   })
 
+  it('activates the labeled handle through the existing animated close path', () => {
+    const onClose = vi.fn()
+    let renderer!: ReactTestRenderer
+    act(() => {
+      renderer = create(drawer(true, onClose, vi.fn()))
+    })
+    finishAnimations()
+
+    const handle = renderer.root.findByProps({ accessibilityLabel: 'Dismiss drawer' })
+    expect(handle.type).toBe('Pressable')
+    expect(handle.props.disabled).toBe(false)
+    act(() => handle.props.onPress())
+    expect(onClose).not.toHaveBeenCalled()
+    finishAnimations()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    act(() => renderer.unmount())
+  })
+
+  it('does not let an underlying noninteractive drawer handle close its sheet', () => {
+    const onClose = vi.fn()
+    let renderer!: ReactTestRenderer
+    act(() => {
+      renderer = create(
+        <MountedBottomDrawer visible interactive={false} onClose={onClose} onHidden={vi.fn()}>
+          {null}
+        </MountedBottomDrawer>
+      )
+    })
+    finishAnimations()
+
+    const handle = renderer.root.findByProps({ accessibilityLabel: 'Dismiss drawer' })
+    expect(handle.props.disabled).toBe(true)
+    expect(handle.props.accessibilityState).toEqual({ disabled: true })
+    act(() => handle.props.onPress())
+    finishAnimations()
+    expect(onClose).not.toHaveBeenCalled()
+    act(() => renderer.unmount())
+  })
+
   // A Back press inside the hide animation used to restart it, so onHidden never fired
   // and the drawer's invisible Modal stayed up, swallowing every tap on the screen.
   it('lets the hide finish when Back is pressed mid-close', () => {
