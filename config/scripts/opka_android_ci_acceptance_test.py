@@ -97,13 +97,14 @@ class IndependentStages(unittest.TestCase):
                 os.chdir(directory)
                 environment = {'GITHUB_ACTIONS': 'true', 'ANDROID_HOME': '/synthetic',
                     'CANDIDATE_VERSION': '1.4.236-rc.9', 'RELEASE_SIGNER': 'true',
-                    'CANDIDATE_ARTIFACT_DIR': 'qualified-installer', 'GITHUB_SHA': 'b' * 40,
+                    'CANDIDATE_ARTIFACT_DIR': 'qualified-installer', 'GITHUB_SHA': 'c' * 40, 'CANDIDATE_SOURCE': 'b' * 40,
                     'OPKA_ANDROID_CERTIFICATE_SHA256': 'a' * 64}
                 with patch.dict(os.environ, environment), patch.object(acceptance.subprocess, 'check_output', return_value='emulator-5554'), patch.object(acceptance, 'device_available', return_value=True), patch.object(acceptance, 'reset_phase'), patch.object(acceptance, 'clear_proxy'), patch.object(acceptance, 'verify_candidate', return_value={'apkSha256': 'd' * 64, 'candidateRebuilt': False}) as verify, patch.object(acceptance, 'run', side_effect=lambda label, args, **kwargs: calls.append((label, args))), patch.object(acceptance, 'run_ui', side_effect=lambda serial, apk, evidence: calls.append(('UI', apk))):
                     self.assertEqual(acceptance.main(), 0)
                 verify.assert_called_once_with(Path('qualified-installer'), '1.4.236-rc.9', 'b' * 40, 'a' * 64)
                 proof = json.loads(Path('out/android-native-ui/candidate-artifact.json').read_text())
                 self.assertTrue(proof['allPassed'])
+                self.assertEqual(proof['verificationCommit'], 'c' * 40)
                 self.assertEqual([stage['stage'] for stage in proof['stages']], ['baseline-idle', 'real-ui', 'native-https'])
                 self.assertIn(('UI', 'qualified-installer/opka-android.apk'), calls)
                 native = calls[-1][1]
@@ -124,7 +125,7 @@ class IndependentStages(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             try:
                 os.chdir(directory)
-                with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'ANDROID_HOME': '/synthetic', 'CANDIDATE_VERSION': '1.4.236-rc.8', 'RELEASE_SIGNER': 'false'}), \
+                with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'ANDROID_HOME': '/synthetic', 'CANDIDATE_VERSION': '1.4.236-rc.8', 'RELEASE_SIGNER': 'false', 'CANDIDATE_ARTIFACT_DIR': ''}), \
                      patch.object(acceptance.subprocess, 'check_output', return_value='emulator-5554'), \
                      patch.object(acceptance, 'device_available', return_value=True), \
                      patch.object(acceptance, 'reset_phase', side_effect=lambda serial: calls.append('reset')), \
@@ -146,7 +147,7 @@ class IndependentStages(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             try:
                 os.chdir(directory)
-                with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'ANDROID_HOME': '/synthetic', 'RELEASE_SIGNER': 'false'}), \
+                with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'ANDROID_HOME': '/synthetic', 'RELEASE_SIGNER': 'false', 'CANDIDATE_ARTIFACT_DIR': ''}), \
                      patch.object(acceptance.subprocess, 'check_output', return_value='emulator-5554'), \
                      patch.object(acceptance, 'device_available', return_value=True), \
                      patch.object(acceptance, 'reset_phase'), patch.object(acceptance, 'clear_proxy'), \

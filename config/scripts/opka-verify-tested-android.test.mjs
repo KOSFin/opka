@@ -6,7 +6,12 @@ import { verifyTestedAndroid } from './opka-verify-tested-android.mjs'
 function fixture() {
   const apk = Buffer.from('synthetic signed payload')
   const sha256 = createHash('sha256').update(apk).digest('hex')
-  const expected = { commit: 'a'.repeat(40), version: '1.4.236-rc.8', certificate: 'b'.repeat(64) }
+  const expected = {
+    commit: 'a'.repeat(40),
+    verificationCommit: 'd'.repeat(40),
+    version: '1.4.236-rc.8',
+    certificate: 'b'.repeat(64)
+  }
   const provenance = {
     commit: expected.commit,
     version: expected.version,
@@ -19,6 +24,7 @@ function fixture() {
     schemaVersion: 1,
     candidateRebuilt: false,
     sourceCommit: expected.commit,
+    verificationCommit: expected.verificationCommit,
     version: expected.version,
     versionCode: 100,
     certificateSha256: expected.certificate,
@@ -47,6 +53,7 @@ test('rejects substituted bytes despite successful source-level checks', () => {
 test('rejects wrong source, signer, rebuilt candidate and missing or failed UI proof', () => {
   for (const change of [
     { sourceCommit: 'c'.repeat(40) },
+    { verificationCommit: 'c'.repeat(40) },
     { certificateSha256: 'c'.repeat(64) },
     { candidateRebuilt: true },
     { allPassed: false },

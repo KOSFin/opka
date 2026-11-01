@@ -61,8 +61,9 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     assert os.environ.get('RELEASE_SIGNER') == 'true', 'Built candidate requires protected release scope'
-    proof = verify(args.directory, os.environ['CANDIDATE_VERSION'], os.environ['GITHUB_SHA'],
+    proof = verify(args.directory, os.environ['CANDIDATE_VERSION'], os.environ.get('CANDIDATE_SOURCE') or os.environ['GITHUB_SHA'],
                    os.environ['OPKA_ANDROID_CERTIFICATE_SHA256'].lower())
+    proof['verificationCommit'] = os.environ['GITHUB_SHA']
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(proof, indent=2) + '\n')
 

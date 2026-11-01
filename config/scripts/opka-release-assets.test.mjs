@@ -161,7 +161,7 @@ describe('Opka release assets', () => {
     expect(release.jobs.qualification.with.version).toBe('${{ inputs.version }}')
     expect(release.jobs.android_update.needs).toEqual(['admission', 'qualification'])
     expect(release.jobs.android_update.with.candidate_artifact).toBe(
-      "${{ format('opka-android-{0}', github.sha) }}"
+      "${{ format('opka-android-{0}', needs.admission.outputs.release_source) }}"
     )
     const admission = release.jobs.admission.steps.find(
       (step) => step.run === 'node config/scripts/opka-release-qualification.mjs'
@@ -169,7 +169,20 @@ describe('Opka release assets', () => {
     expect(admission.env.OPKA_QUALIFIED_COMMIT).toBe('${{ github.sha }}')
     expect(release.jobs.qualification.secrets).toBe('inherit')
     expect(release.jobs.android_update.secrets).toBe('inherit')
-    expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
-    expect(release.jobs.publish.permissions).toEqual({ contents: 'write' })
+    expect(release.jobs.publish.needs).toEqual(['admission', 'qualification', 'android_update'])
+    expect(release.jobs.publish.permissions).toEqual({ contents: 'write', actions: 'read' })
+    expect(admission.env.OPKA_BUILT_RUN).toBe('${{ inputs.built_run }}')
+    expect(admission.env.OPKA_BUILT_SOURCE).toBe('${{ inputs.built_source }}')
+    expect(release.jobs.android_update.with.candidate_run_id).toBe(
+      '${{ needs.admission.outputs.artifact_run }}'
+    )
+    expect(release.jobs.android_update.with.candidate_source).toBe(
+      '${{ needs.admission.outputs.release_source }}'
+    )
+    expect(release.jobs.publish.env.OPKA_RELEASE_SOURCE).toBe(
+      '${{ needs.admission.outputs.release_source }}'
+    )
+    expect(release.jobs.publish.env.GITHUB_SHA).toBeUndefined()
+    expect(release.jobs.qualification.if).toBe("inputs.built_run == ''")
   })
 })

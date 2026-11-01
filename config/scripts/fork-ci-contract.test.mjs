@@ -1,5 +1,6 @@
 import { globSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { verifyRequiredPrContext } from '../../.github/scripts/check-required-pr-context.mjs'
@@ -31,14 +32,14 @@ describe('fork CI safety and required checks', () => {
   })
   it('blocks beta publication until Android confirms a same-signer update', () => {
     const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
-    expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
+    expect(release.jobs.publish.needs).toEqual(['admission', 'qualification', 'android_update'])
     expect(release.jobs.qualification).toMatchObject({
       needs: 'admission',
       uses: './.github/workflows/opka-installers.yml',
       with: { version: '${{ inputs.version }}' }
     })
     const qualification = release.jobs.admission.steps.find(
-      (step) => step.name === 'Require successful checks for this exact release source'
+      (step) => step.name === 'Require qualified source and verify any reused immutable build'
     )
     expect(qualification.run).toBe('node config/scripts/opka-release-qualification.mjs')
     expect(qualification.env.OPKA_QUALIFIED_COMMIT).toBe('${{ github.sha }}')
@@ -60,7 +61,7 @@ describe('fork CI safety and required checks', () => {
     ).toBe('python3 config/scripts/opka-android-ci-acceptance.py')
     expect(release.jobs.android_update.with.candidate_version).toBe('${{ inputs.version }}')
     expect(release.jobs.android_update.with.candidate_artifact).toBe(
-      "${{ format('opka-android-{0}', github.sha) }}"
+      "${{ format('opka-android-{0}', needs.admission.outputs.release_source) }}"
     )
     expect(acceptance.on.pull_request).toBeUndefined()
     const native = readFileSync('config/scripts/opka-android-ci-acceptance.py', 'utf8')
@@ -70,6 +71,72 @@ describe('fork CI safety and required checks', () => {
     expect(steps.find((step) => step.name === 'Require KVM acceleration').run).toContain(
       'test -c /dev/kvm'
     )
+  })
+  it('admits immutable artifact recovery without skipping required qualification or publishing an untested APK', () => {
+    const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
+    const evaluate = (expression, values, cancelled = false) =>
+      runInNewContext(expression.replace(/^\$\{\{(.*)\}\}$/s, '$1'), {
+        ...values,
+        cancelled: () => cancelled
+      })
+    for (const built_run of ['', '123']) {
+      expect(evaluate(release.jobs.qualification.if, { inputs: { built_run } })).toBe(!built_run)
+      for (const admission of ['success', 'failure', 'skipped']) {
+        for (const qualification of ['success', 'failure', 'skipped']) {
+          for (const android_update of ['success', 'failure', 'skipped']) {
+            const context = {
+              inputs: { built_run },
+              needs: {
+                admission: { result: admission },
+                qualification: { result: qualification },
+                android_update: { result: android_update }
+              }
+            }
+            const admitted =
+              admission === 'success' &&
+              (qualification === 'success' || (Boolean(built_run) && qualification === 'skipped'))
+            expect(evaluate(release.jobs.android_update.if, context)).toBe(admitted)
+            expect(evaluate(release.jobs.publish.if, context)).toBe(
+              admitted && android_update === 'success'
+            )
+            expect(evaluate(release.jobs.publish.if, context, true)).toBe(false)
+          }
+        }
+      }
+    }
+    const admission = release.jobs.admission.steps.find((step) => step.id === 'qualification')
+    expect(admission.env.OPKA_QUALIFIED_COMMIT).toBe('${{ github.sha }}')
+    expect(admission.env.OPKA_BUILT_RUN).toBe('${{ inputs.built_run }}')
+    expect(admission.env.OPKA_BUILT_SOURCE).toBe('${{ inputs.built_source }}')
+    const publish = release.jobs.publish
+    expect(publish.permissions).toEqual({ contents: 'write', actions: 'read' })
+    expect(publish.env.OPKA_RELEASE_SOURCE).toBe('${{ needs.admission.outputs.release_source }}')
+    expect(publish.env.GITHUB_SHA).toBeUndefined()
+    const original = publish.steps.find(
+      (step) => step.uses === 'actions/checkout@v6' && step.with?.path === '.release-source'
+    )
+    expect(original.with.ref).toBe('${{ needs.admission.outputs.release_source }}')
+    const artifacts = publish.steps.filter((step) => step.uses === 'actions/download-artifact@v8')
+    expect(artifacts[0].with).toMatchObject({
+      name: 'opka-beta-release-${{ needs.admission.outputs.release_source }}',
+      'run-id': '${{ needs.admission.outputs.artifact_run }}',
+      'github-token': '${{ github.token }}'
+    })
+    expect(artifacts[1].with.name).toBe('opka-android-tested-${{ github.sha }}')
+    const originalCheck = publish.steps.find(
+      (step) => step.name === 'Recheck original build provenance without changing installer bytes'
+    )
+    expect(originalCheck['working-directory']).toBe('.release-source')
+    expect(originalCheck.run).toContain(
+      "['node', 'config/scripts/opka-release-assets.mjs', 'complete', str(directory)]"
+    )
+    expect(originalCheck.run).toContain("pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'dist'")
+    expect(originalCheck.run).toContain('before = inventory()')
+    expect(originalCheck.run).toContain('assert before == inventory()')
+    const commands = publish.steps.map((step) => step.run ?? '').join('\n')
+    expect(commands).toContain('--target "$OPKA_RELEASE_SOURCE"')
+    expect(commands).toContain('[ "$published" = "$OPKA_RELEASE_SOURCE" ]')
+    expect(commands).not.toContain('--target "$GITHUB_SHA"')
   })
   it('caches only unsigned fixtures under an exact Android input key', () => {
     const acceptance = parse(
