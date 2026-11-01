@@ -25,7 +25,7 @@ const {
 const stopBackground = startPushBackground(config, { challenges, sessions, deliveryStore, worker })
 observability.start()
 
-server.listen(config.port, () => {
+server.listen(config.port, config.bindHost, () => {
   console.log(`[orca-push] listening on ${config.publicUrl} (port ${config.port})`)
 })
 
