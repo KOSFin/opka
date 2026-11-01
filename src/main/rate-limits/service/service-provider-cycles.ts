@@ -67,14 +67,20 @@ export abstract class RateLimitServiceProviderCycles extends RateLimitServiceFul
     const shouldApplyCodex =
       !latestCodexHome.skip &&
       codexGeneration === this.codexFetchGeneration &&
-      codexProvenance === this.getCodexProvenance(codexTarget, latestCodexHome.homePath)
+      codexProvenance === this.getCodexProvenance(codexTarget, latestCodexHome.homePath) &&
+      codexHome.authProvenance === latestCodexHome.authProvenance
 
     if (shouldApplyCodex) {
       this.trackActiveFailureStreak('codex', codex)
     }
     this.updateState({
       ...this.state,
-      codex: shouldApplyCodex ? this.applyStalePolicy(codex, previousState.codex) : this.state.codex
+      codex: shouldApplyCodex
+        ? this.applyStalePolicy(
+            this.withCodexUsageProvenance(codex, codexHome.authProvenance),
+            previousState.codex
+          )
+        : this.state.codex
     })
   }
 

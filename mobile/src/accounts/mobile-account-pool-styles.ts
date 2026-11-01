@@ -2,6 +2,7 @@ import { StyleSheet } from 'react-native'
 import { colors, spacing, typography } from '../theme/mobile-theme'
 
 export const poolStyles = StyleSheet.create({
+  headerText: { marginHorizontal: spacing.sm },
   memberSettings: { gap: spacing.sm },
   content: { padding: spacing.md, gap: spacing.sm },
   account: {

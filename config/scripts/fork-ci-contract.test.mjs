@@ -3,12 +3,30 @@ import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { verifyRequiredPrContext } from '../../.github/scripts/check-required-pr-context.mjs'
-import { FORK_TEST_FILTERS } from './run-fork-tests.mjs'
+import { FORK_TEST_FILTERS, MOBILE_RENDER_TEST_FILTERS } from './run-fork-tests.mjs'
 import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('runs rendered pages with Node and installs the browser their library owns', () => {
+    const steps = workflow.jobs.regression.steps
+    expect(
+      steps.find((step) => step.run?.includes('install --with-deps chromium webkit')).run
+    ).toBe('node node_modules/playwright-core/cli.js install --with-deps chromium webkit')
+    expect(
+      steps.find((step) => step.name === 'Test host accounts, mobile state and generated pages').env
+        .ORCA_MOBILE_WEB_APP_DEPS_REQUIRED
+    ).toBe('1')
+    for (const filter of MOBILE_RENDER_TEST_FILTERS) {
+      expect(FORK_TEST_FILTERS).not.toContain(filter)
+      expect(readFileSync(filter, 'utf8')).toContain('playwright-core')
+    }
+    const runner = readFileSync('config/scripts/run-fork-tests.mjs', 'utf8')
+    expect(runner).toContain('run(process.execPath, [')
+    expect(runner).toContain('...MOBILE_RENDER_TEST_FILTERS')
+    expect(runner).toContain('results.every(Boolean) ? 0 : 1')
+  })
   it('blocks beta publication until Android confirms a same-signer update', () => {
     const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))
     expect(release.jobs.publish.needs).toEqual(['qualification', 'android_update'])
@@ -26,7 +44,12 @@ describe('fork CI safety and required checks', () => {
     expect(
       steps.find((step) => step.name === 'Exercise Android confirmation and data retention').with
         .script
-    ).toBe('python3 config/scripts/opka-android-update-acceptance-entry.py')
+    ).toBe('python3 config/scripts/opka-android-ci-acceptance.py')
+    expect(release.jobs.android_update.with.candidate_version).toBe('${{ inputs.version }}')
+    const native = readFileSync('config/scripts/opka-android-ci-acceptance.py', 'utf8')
+    expect(native).toContain('opka-android-native-fixture.py')
+    expect(native).toContain('--legacy-a')
+    expect(native).toContain('opka-android-ui-journey.py')
     expect(steps.find((step) => step.name === 'Require KVM acceleration').run).toContain(
       'test -c /dev/kvm'
     )
@@ -43,7 +66,23 @@ describe('fork CI safety and required checks', () => {
     expect(restore.with.path).toBe('out/android-update-fixtures/*-unsigned.apk')
     expect(save.with).toEqual(restore.with)
     expect(restore.with['restore-keys']).toBeUndefined()
-    const fingerprint = steps.find((step) => step.id === 'fixture_key').run
+    const fingerprintStep = steps.find((step) => step.id === 'fixture_key')
+    expect(fingerprintStep.env).toEqual({
+      FIREBASE_CLIENT_SHA256: '${{ steps.firebase.outputs.client_sha256 }}',
+      ANDROID_BUILD_ENV_SHA256: '${{ steps.firebase.outputs.build_env_sha256 }}'
+    })
+    const fingerprint = fingerprintStep.run
+    expect(fingerprint).toContain('$FIREBASE_CLIENT_SHA256')
+    expect(fingerprint).toContain('$ANDROID_BUILD_ENV_SHA256')
+    expect(restore.if).toBeUndefined()
+    expect(save.if).not.toContain('firebase')
+    expect(
+      steps.find((step) => step.name === 'Test native update ownership, validation and cleanup').if
+    ).toBeUndefined()
+    expect(
+      steps.find((step) => step.name === 'Validate idle baseline and traffic measurement contracts')
+        .run
+    ).toContain('opka_android_ci_acceptance_test.py')
     for (const input of [
       'mobile',
       'src/shared',
@@ -62,22 +101,25 @@ describe('fork CI safety and required checks', () => {
   it.runIf(process.platform === 'linux')(
     'keeps the fixture handoff and published UI routes separate',
     () => {
-      const entryArgv = (published) =>
+      const entryArgv = (published, candidate = '1.4.236-rc.6') =>
         JSON.parse(
           execFileSync(
             'python3',
             [
               '-c',
-              "import json,runpy,subprocess; subprocess.run=lambda args,**kwargs: print(json.dumps(args)); runpy.run_path('config/scripts/opka-android-update-acceptance-entry.py')"
+              "import json,runpy,subprocess,sys; sys.path.insert(0,'config/scripts'); original=subprocess.run; subprocess.run=lambda args,**kwargs: original(args,**kwargs) if args[0]=='node' else print(json.dumps(args)); runpy.run_path('config/scripts/opka-android-update-acceptance-entry.py')"
             ],
-            { encoding: 'utf8', env: { ...process.env, PUBLISHED_VERSION: published } }
+            {
+              encoding: 'utf8',
+              env: { ...process.env, PUBLISHED_VERSION: published, CANDIDATE_VERSION: candidate }
+            }
           )
         ).slice(2)
       expect(entryArgv('')).toEqual([
         '--a',
         'out/android-update-fixtures/rc5.apk',
         '--b',
-        'out/android-update-fixtures/rc6.apk',
+        'out/android-update-fixtures/candidate.apk',
         '--expected-code',
         '104236006',
         '--handoff',
@@ -87,8 +129,11 @@ describe('fork CI safety and required checks', () => {
         '--a',
         'out/android-update-fixtures/rc5.apk',
         '--published-version',
-        '1.4.236-rc.6'
+        '1.4.236-rc.6',
+        '--surface',
+        'settings'
       ])
+      expect(entryArgv('', '1.4.236-rc.8')).toContain('104236008')
     }
   )
   it('checks an immutable released updater without write permissions or installed app replacement', () => {
@@ -222,4 +267,31 @@ describe('fork CI safety and required checks', () => {
     expect(text).toContain('job.result !== "success"')
     expect(text).toContain('if-no-files-found: error')
   })
+})
+
+it('bundles Android synthetic host with ESM-safe Node filenames', () => {
+  const android = parse(
+    readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
+  )
+  const fixtureStep = android.jobs.update_confirmation.steps.find(
+    (step) => step.name === 'Build the current synthetic host and generated mobile pages'
+  )
+  expect(fixtureStep.run).toContain('--define:__filename=import.meta.filename')
+  expect(fixtureStep.run).toContain('--define:__dirname=import.meta.dirname')
+  expect(fixtureStep.run).toContain('CI=true node out/android-ui-fixture/fixture.mjs --check')
+})
+
+it('checks the real Android Metro bundle before either native build', () => {
+  for (const file of ['opka-installers.yml', 'opka-android-update-acceptance.yml']) {
+    const jobs = parse(readFileSync(`.github/workflows/${file}`, 'utf8')).jobs
+    const steps = (jobs.android ?? jobs.update_confirmation).steps
+    const preflight = steps.findIndex(
+      (step) => step.name === 'Validate Android JavaScript before native compilation'
+    )
+    expect(preflight).toBeGreaterThan(-1)
+    expect(steps[preflight].run).toContain(
+      'expo export --platform android --no-bytecode --max-workers 1'
+    )
+    expect(preflight).toBeLessThan(steps.findIndex((step) => step.run?.includes('expo prebuild')))
+  }
 })

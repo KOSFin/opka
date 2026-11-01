@@ -24,6 +24,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   }
 }))
 vi.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
   AppState: { currentState: 'active', addEventListener: () => ({ remove: vi.fn() }) },
   AccessibilityInfo: {
     addEventListener: () => ({ remove: vi.fn() }),
@@ -40,6 +41,15 @@ vi.mock('react-native', () => ({
   Alert: { alert: vi.fn() },
   Linking: { openSettings: vi.fn() },
   useWindowDimensions: () => ({ width: 390, height: 844 })
+}))
+vi.mock('expo-constants', () => ({
+  default: {
+    expoConfig: {
+      name: 'Synthetic Orca',
+      slug: 'notification-consent-fixture',
+      extra: { opkaAndroidPushConfigured: true }
+    }
+  }
 }))
 vi.mock('expo-router', () => ({
   useFocusEffect: vi.fn(),

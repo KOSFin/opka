@@ -189,3 +189,7 @@ ci-shards/
 /fork-docs/iterations/002-nested-repositories-and-project-tree.md
 /fork-docs/iterations/003-tasks-plans-and-journal.md
 /fork-docs/testing/README.md
+
+# Private own Firebase build input, supplied to CI through a protected secret.
+/google-services.json
+/opka-fcm-service-account.json

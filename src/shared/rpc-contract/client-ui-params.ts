@@ -1,3 +1,4 @@
+import { StatusBarAccountPinSchema, MAX_STATUS_BAR_ACCOUNT_PINS } from '../status-bar-account-pins'
 import { z } from 'zod'
 import { isFeatureTipId } from '../feature-tips'
 import {
@@ -194,6 +195,10 @@ export const UiUpdateFields = z
     statusBarVisible: z.boolean().optional(),
     usagePercentageDisplay: z.enum(['used', 'remaining']).optional(),
     statusBarUsageMode: z.enum(['verbose', 'compact']).optional(),
+    statusBarAccountPins: z
+      .array(StatusBarAccountPinSchema)
+      .max(MAX_STATUS_BAR_ACCOUNT_PINS)
+      .optional(),
     dismissedUpdateVersion: NullableString.optional(),
     dismissedUnexpectedSignoutVersion: NullableString.optional(),
     lastUpdateCheckAt: z.number().finite().nullable().optional(),

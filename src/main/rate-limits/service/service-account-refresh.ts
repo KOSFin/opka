@@ -1,3 +1,4 @@
+import { usageMatchesAccount } from '../../../shared/usage-account-provenance'
 import { consumeCodexRateLimitResetCredit } from '../codex-fetcher'
 import { RateLimitServiceInactiveAccounts } from './service-inactive-accounts'
 import {
@@ -70,7 +71,13 @@ export abstract class RateLimitServiceAccountRefresh extends RateLimitServiceIna
     if (
       outgoingAccountId &&
       (this.state.codex?.session || this.state.codex?.weekly) &&
-      this.isSameCodexTarget(this.codexFetchTarget, nextTarget)
+      this.isSameCodexTarget(this.codexFetchTarget, nextTarget) &&
+      (!this.state.codex?.usageMetadata?.authProvenance ||
+        usageMatchesAccount(
+          this.state.codex,
+          nextTarget.runtime === 'host' ? 'host' : `wsl:${nextTarget.wslDistro ?? '__default__'}`,
+          outgoingAccountId
+        ))
     ) {
       this.inactiveCodexCache.set(outgoingAccountId, this.state.codex)
     }
@@ -115,6 +122,11 @@ export abstract class RateLimitServiceAccountRefresh extends RateLimitServiceIna
     const codexTarget = normalizeCodexAccountSelectionTarget(options.target)
     const codexHomePath = options.codexHomePath
     const scopedStateBeforeReset = this.getState()
+    const sourceBeforeReset = await this.resolveCodexHome(codexTarget)
+    const authProvenance =
+      !sourceBeforeReset.skip && sourceBeforeReset.homePath === codexHomePath
+        ? sourceBeforeReset.authProvenance
+        : undefined
     const missingWslCodexHome = codexHomePath
       ? null
       : this.getMissingWslCodexHomeResult(codexTarget)
@@ -133,7 +145,8 @@ export abstract class RateLimitServiceAccountRefresh extends RateLimitServiceIna
         codexTarget,
         codexHomePath,
         scopedStateBeforeReset,
-        outcome
+        outcome,
+        authProvenance
       )
       return { outcome, state }
     } catch (error) {
@@ -153,7 +166,13 @@ export abstract class RateLimitServiceAccountRefresh extends RateLimitServiceIna
     if (
       outgoingAccountId &&
       this.state.claude?.session &&
-      this.isSameClaudeTarget(this.claudeFetchTarget, nextTarget)
+      this.isSameClaudeTarget(this.claudeFetchTarget, nextTarget) &&
+      (!this.state.claude?.usageMetadata?.authProvenance ||
+        usageMatchesAccount(
+          this.state.claude,
+          nextTarget.runtime === 'host' ? 'host' : `wsl:${nextTarget.wslDistro ?? '__default__'}`,
+          outgoingAccountId
+        ))
     ) {
       this.inactiveClaudeCache.set(outgoingAccountId, this.state.claude)
     }

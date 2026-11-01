@@ -3,13 +3,12 @@ import type { CodexRateLimitAccountsState } from '../../../../shared/managed-acc
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import { useAppStore } from '../../store'
 import { defaultScopeHost } from '@/lib/default-creation-host'
+import { useUsageAccounts } from './UsageAccountsContext'
+import { useUsageAccountSource } from './use-usage-account-source'
+import { usageAccountOwnerLabel } from './usage-account-owner-label'
 import { useActiveAccountOwner } from '@/runtime/use-worktree-runtime-target'
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
-import {
-  fetchProviderAccountsSnapshot,
-  selectCodexProviderAccount
-} from '@/runtime/runtime-provider-accounts-client'
-import { translate } from '@/i18n/i18n'
+import { selectCodexProviderAccount } from '@/runtime/runtime-provider-accounts-client'
 import {
   markLiveCodexSessionsForRestart,
   resolveCodexRestartPromptAccountLabel
@@ -47,6 +46,7 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
   const [isSwitching, setIsSwitching] = useState(false)
   const [isRedeemingReset, setIsRedeemingReset] = useState(false)
   const [reauthenticatingAccountId, setReauthenticatingAccountId] = useState<string | null>(null)
+  const usageAccounts = useUsageAccounts()
   const mountedRef = useRef(true)
   const accountsExpandedRef = useRef(accountsExpanded)
   // Why: Radix item-select is separate from the nested button click, so stopPropagation alone won't prevent the row switch.
@@ -65,19 +65,30 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
   const refreshCodexRateLimitsForTarget = useAppStore((s) => s.refreshCodexRateLimitsForTarget)
   const consumeCodexRateLimitResetCredit = useAppStore((s) => s.consumeCodexRateLimitResetCredit)
   const fetchInactiveCodexAccountUsage = useAppStore((s) => s.fetchInactiveCodexAccountUsage)
-  const inactiveCodexAccounts = useAppStore((s) => s.rateLimits.inactiveCodexAccounts)
-  const codexTarget = useAppStore((s) => s.rateLimits.codexTarget)
+  const localInactiveCodexAccounts = useAppStore((s) => s.rateLimits.inactiveCodexAccounts)
+  const localCodexTarget = useAppStore((s) => s.rateLimits.codexTarget)
   const settings = useAppStore((s) => s.settings)
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   // Why: no host picker; the focused workspace's owner, else the default scope host.
-  const { target: runtimeTarget, wslHostDistro } = useActiveAccountOwner(defaultScopeHost(settings))
+  const { target: focusedTarget, wslHostDistro } = useActiveAccountOwner(defaultScopeHost(settings))
+  const runtimeTarget = usageAccounts?.target ?? focusedTarget
   const activeRuntimeEnvironmentId = runtimeTargetEnvironmentId(runtimeTarget)
   const hasActiveRuntimeEnvironment = activeRuntimeEnvironmentId !== null
-  const providerAccountHostLabel = hasActiveRuntimeEnvironment
-    ? (runtimeEnvironments.find((environment) => environment.id === activeRuntimeEnvironmentId)
-        ?.name ??
-      translate('auto.components.status.bar.StatusBar.remoteServerLabel', 'Remote server'))
-    : undefined
+  const {
+    snapshot: ownerSnapshot,
+    loadAccounts,
+    acceptRoster
+  } = useUsageAccountSource(runtimeTarget, 'codex', setAccounts)
+  const inactiveCodexAccounts = hasActiveRuntimeEnvironment
+    ? (ownerSnapshot?.rateLimits?.inactiveCodexAccounts ?? [])
+    : localInactiveCodexAccounts
+  const codexTarget = hasActiveRuntimeEnvironment
+    ? (ownerSnapshot?.rateLimits?.codexTarget ?? null)
+    : localCodexTarget
+  const providerAccountHostLabel = usageAccountOwnerLabel(
+    activeRuntimeEnvironmentId,
+    runtimeEnvironments
+  )
   const windowsTerminalCapabilities = useWindowsTerminalCapabilities(
     navigator.userAgent.includes('Windows') || hasActiveRuntimeEnvironment,
     false,
@@ -87,22 +98,11 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
   const codexAccountSyncKey = useAppStore((s) => getCodexAccountSyncKey(s.settings))
   const accountState = resolveCodexStatusAccountState(
     settings,
-    accounts,
+    hasActiveRuntimeEnvironment
+      ? (ownerSnapshot?.codex ?? { accounts: [], activeAccountId: null })
+      : accounts,
     activeRuntimeEnvironmentId
   )
-
-  // Why: keyed on owner id, not settings identity, so routine settings mutations don't re-run the remote snapshot fetch.
-  const loadAccounts = useCallback(async () => {
-    const snapshot = await fetchProviderAccountsSnapshot(runtimeTarget)
-    // Why: a failed Codex half is a substituted empty roster; keep prior state.
-    if (snapshot.failedProviders?.includes('codex')) {
-      console.error('Codex account list failed; keeping previous status bar state.')
-      return
-    }
-    if (mountedRef.current) {
-      setAccounts(snapshot.codex)
-    }
-  }, [runtimeTarget])
 
   useEffect(() => {
     mountedRef.current = true
@@ -140,7 +140,7 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
       })
       recordFeatureInteraction('codex-account-switching')
       if (mountedRef.current) {
-        setAccounts(next)
+        acceptRoster(next)
       }
       // Why: remote selections live on the server; local GlobalSettings are untouched, so refetching is pure churn.
       if (!hasActiveRuntimeEnvironment) {
@@ -201,10 +201,7 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
     })
 
   const handleSelectRuntime = async (group: CodexStatusSwitchGroup): Promise<void> => {
-    const currentKey = getCodexStatusRuntimeKey(
-      normalizeCodexStatusRuntimeTarget(accountState, toCodexStatusRuntimeTarget(codexTarget))
-    )
-    if (group.key === currentKey) {
+    if (hasActiveRuntimeEnvironment || group.key === selectedRuntimeKey) {
       return
     }
     setAccountsExpanded(false)
@@ -274,24 +271,24 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
     }
   }, [accountsExpanded, fetchInactiveCodexAccountUsage, hasActiveRuntimeEnvironment])
 
-  const selectedRuntimeKey = getCodexStatusRuntimeKey(
-    normalizeCodexStatusRuntimeTarget(accountState, toCodexStatusRuntimeTarget(codexTarget))
-  )
+  const knownTarget =
+    codexTarget === null
+      ? null
+      : normalizeCodexStatusRuntimeTarget(accountState, toCodexStatusRuntimeTarget(codexTarget))
+  const selectedRuntimeKey = knownTarget ? getCodexStatusRuntimeKey(knownTarget) : ''
   // A focused WSL host's accounts are this desktop's for its distro, so that group always shows.
   const fallbackWslDistro =
     wslHostDistro ??
     getStatusBarPreferredWslDistro(settings, windowsTerminalCapabilities.wslDistros)
-  const switchGroups = buildCodexStatusSwitchGroups(
-    accountState,
-    toCodexStatusRuntimeTarget(codexTarget),
-    {
-      fallbackWslDistro,
-      includeFallbackWsl:
-        wslHostDistro !== null ||
-        (!hasActiveRuntimeEnvironment && shouldIncludeSettingsWslRuntime(settings)),
-      hostLabel: providerAccountHostLabel
-    }
-  )
+  const switchGroups = knownTarget
+    ? buildCodexStatusSwitchGroups(accountState, knownTarget, {
+        fallbackWslDistro,
+        includeFallbackWsl:
+          wslHostDistro !== null ||
+          (!hasActiveRuntimeEnvironment && shouldIncludeSettingsWslRuntime(settings)),
+        hostLabel: providerAccountHostLabel
+      })
+    : []
   const selectedGroup =
     switchGroups.find((group) => group.key === selectedRuntimeKey) ?? switchGroups[0]
   const activeTarget = selectedGroup?.targets.find((target) => target.active)

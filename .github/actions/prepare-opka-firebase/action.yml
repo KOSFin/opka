@@ -1,0 +1,20 @@
+name: Prepare own Opka Firebase build input
+description: Validate an optional own Android configuration without exposing its contents.
+outputs:
+  configured:
+    description: Whether an explicit own configuration was prepared
+    value: ${{ steps.prepare.outputs.configured }}
+  client_sha256:
+    description: SHA256 of exact prepared Android client bytes, or unconfigured
+    value: ${{ steps.prepare.outputs.client_sha256 }}
+  build_env_sha256:
+    description: Fingerprint of public Expo and app build settings without their values
+    value: ${{ steps.prepare.outputs.build_env_sha256 }}
+runs:
+  using: composite
+  steps:
+    - id: prepare
+      shell: bash
+      run: |
+        python3 config/scripts/prepare_opka_firebase_test.py
+        python3 config/scripts/prepare-opka-firebase.py

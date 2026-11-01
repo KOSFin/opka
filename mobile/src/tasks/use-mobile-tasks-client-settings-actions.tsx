@@ -1,3 +1,4 @@
+import { splitGitLabTaskResumeState, saveGitLabTaskPreferences } from './gitlab-task-list-cache'
 import type { ProjectRepositoryResolutionModel } from './use-mobile-tasks-project-repository-resolution'
 import {
   type GitHubProjectSettings,
@@ -90,18 +91,28 @@ export function useMobileTasksClientSettingsActions(model: ProjectRepositoryReso
     clientRef.current = client
   }, [client])
 
+  const authorityGeneration = client?.getGeneration?.() ?? 0
   const persistTaskResumeState = useCallback(
     (updates: Partial<TaskResumeState>) => {
-      if (!client || !taskUiReady) {
+      if (!client || !taskUiReady || authorityGeneration !== (client.getGeneration?.() ?? 0)) {
         return
       }
       const next = { ...taskResumeRef.current, ...updates }
       taskResumeRef.current = next
-      void taskUiStateWrite.request(client, { taskResumeState: next }).catch(() => {
+      const { preferences, host } = splitGitLabTaskResumeState(next)
+      saveGitLabTaskPreferences(client, preferences)
+      if (
+        !Object.keys(updates).some(
+          (key) => !['gitlabView', 'gitlabFilter', 'gitlabQuery'].includes(key)
+        )
+      ) {
+        return
+      }
+      void taskUiStateWrite.request(client, { taskResumeState: host }).catch(() => {
         // Best-effort: desktop treats task resume as a convenience preference.
       })
     },
-    [client, taskUiReady]
+    [client, taskUiReady, authorityGeneration]
   )
 
   const toggleGitHubProjectFieldVisibility = useCallback(
@@ -131,19 +142,19 @@ export function useMobileTasksClientSettingsActions(model: ProjectRepositoryReso
 
   const persistTaskSource = useCallback(
     (nextProvider: TaskProvider) => {
-      if (!client || !taskUiReady) {
+      if (!client || !taskUiReady || authorityGeneration !== (client.getGeneration?.() ?? 0)) {
         return
       }
       void taskSettingsWrite.request(client, { defaultTaskSource: nextProvider }).catch(() => {
         // Best-effort: a failed settings write should not block switching views.
       })
     },
-    [client, taskUiReady]
+    [client, taskUiReady, authorityGeneration]
   )
 
   const persistRepoSelection = useCallback(
     (selection: Set<string>, allRepos: RepoSummary[]) => {
-      if (!client || !taskUiReady) {
+      if (!client || !taskUiReady || authorityGeneration !== (client.getGeneration?.() ?? 0)) {
         return
       }
       const nextSelection =
@@ -152,33 +163,33 @@ export function useMobileTasksClientSettingsActions(model: ProjectRepositoryReso
         // Best-effort: the in-memory repo picker already reflects the change.
       })
     },
-    [client, taskUiReady]
+    [client, taskUiReady, authorityGeneration]
   )
 
   const persistDefaultGitHubPreset = useCallback(
     (preset: GitHubPreset) => {
       setDefaultGitHubPreset(preset)
-      if (!client || !taskUiReady) {
+      if (!client || !taskUiReady || authorityGeneration !== (client.getGeneration?.() ?? 0)) {
         return
       }
       void taskSettingsWrite.request(client, { defaultTaskViewPreset: preset }).catch(() => {
         // Best-effort: the current session still uses the selected preset.
       })
     },
-    [client, taskUiReady]
+    [client, taskUiReady, authorityGeneration]
   )
 
   const persistGitHubProjectSettings = useCallback(
     (nextSettings: GitHubProjectSettings) => {
       setGithubProjectSettings(nextSettings)
-      if (!client || !taskUiReady) {
+      if (!client || !taskUiReady || authorityGeneration !== (client.getGeneration?.() ?? 0)) {
         return
       }
       void taskSettingsWrite.request(client, { githubProjects: nextSettings }).catch(() => {
         // Best-effort: project selection can still work for the current session.
       })
     },
-    [client, taskUiReady]
+    [client, taskUiReady, authorityGeneration]
   )
 
   const persistSetupHookTrust = useCallback(

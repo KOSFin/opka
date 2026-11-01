@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { gitLabMrFilesSchema, gitLabReviewersSchema } from './gitlab-mr-metadata-schema'
 import { salvagedOptional, salvagingArray } from '../../../src/shared/zod-salvage'
 import {
   MERGEABLE_STATE,
@@ -92,7 +93,8 @@ export const gitlabWorkItemDetailSchema = z
         })
       )
     ),
-    reviewers: salvagedOptional('reviewers', z.array(z.unknown())),
+    reviewers: salvagedOptional('reviewers', gitLabReviewersSchema),
+    files: salvagedOptional('files', gitLabMrFilesSchema),
     approvalState: salvagedOptional(
       'approvalState',
       z.looseObject({

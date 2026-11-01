@@ -24,6 +24,8 @@ function checkRowValue(status: AppUpdateCheckRowStatus, lastCheckedAt: number | 
 
 /** Settings' version row and manual check; the update row stays after the home card is dismissed. */
 export function AppUpdateSettingsRows(props: {
+  installBusy?: boolean
+  installLabel?: string | null
   installedVersion: string | null
   available: KnownAppUpdate | null
   lastCheckedAt: number | null
@@ -39,10 +41,12 @@ export function AppUpdateSettingsRows(props: {
       accessibilityRole="button"
       accessibilityLabel={`Update to Orca ${available.version}`}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      disabled={props.installBusy}
+      accessibilityState={{ busy: props.installBusy }}
       onPress={() => onUpdate(available.url)}
     >
       <Text style={styles.rowLabel}>Update to Orca {available.version}</Text>
-      <Text style={styles.actionValue}>Update</Text>
+      <Text style={styles.actionValue}>{props.installLabel ?? 'Update'}</Text>
     </Pressable>
   ) : installedVersion ? (
     <View style={styles.row}>
@@ -91,7 +95,14 @@ const styles = StyleSheet.create({
     color: colors.textPrimary
   },
   rowValue: { fontSize: typography.metaSize, color: colors.textSecondary },
-  actionValue: { fontSize: typography.bodySize, fontWeight: '600', color: colors.textPrimary },
+  actionValue: {
+    fontSize: typography.bodySize,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    flexShrink: 1,
+    maxWidth: '50%',
+    textAlign: 'right'
+  },
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.borderSubtle,

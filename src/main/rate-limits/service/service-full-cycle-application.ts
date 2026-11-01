@@ -20,6 +20,7 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
       previousState,
       codexFetchGated,
       codexStateBeforeFetch,
+      codexAuthProvenance,
       codexProvenance,
       codexGeneration,
       opencodeConfigChanged,
@@ -140,7 +141,8 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
       !codexFetchGated &&
       !latestCodexHome.skip &&
       codexGeneration === this.codexFetchGeneration &&
-      codexProvenance === this.getCodexProvenance(codexTarget, latestCodexHome.homePath)
+      codexProvenance === this.getCodexProvenance(codexTarget, latestCodexHome.homePath) &&
+      codexAuthProvenance === latestCodexHome.authProvenance
     const codexBecameUnavailable =
       !codexFetchGated && latestCodexHome.skip && codexGeneration === this.codexFetchGeneration
     // Why: a gated cycle made no Claude attempt; applying its passthrough result would grow the failure streak and reset stale-policy clocks for free.
@@ -174,7 +176,10 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
         ? this.resolveClaudeFetchApply(claude, previousState.claude)
         : this.state.claude,
       codex: shouldApplyCodex
-        ? this.applyStalePolicy(codex, previousState.codex)
+        ? this.applyStalePolicy(
+            this.withCodexUsageProvenance(codex, codexAuthProvenance),
+            previousState.codex
+          )
         : codexBecameUnavailable
           ? codexStateBeforeFetch
           : this.state.codex,

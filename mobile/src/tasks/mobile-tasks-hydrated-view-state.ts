@@ -13,6 +13,8 @@ import {
 
 export type HydratedTaskViewState = {
   provider: TaskProvider
+  gitlabView: 'project' | 'todos'
+  gitlabFilter: 'opened' | 'merged' | 'closed' | 'all'
   githubPreset: ReturnType<typeof normalizeGitHubPreset>
   defaultGithubPreset: ReturnType<typeof normalizeGitHubPreset>
   githubKind: ReturnType<typeof githubKindFromQuery>
@@ -52,9 +54,18 @@ export function resolveHydratedTaskViewState(args: {
         ? (resume.linearQuery ?? '')
         : provider === 'jira'
           ? (resume.jiraQuery ?? '')
-          : ''
+          : provider === 'gitlab' && resume.gitlabView !== 'todos'
+            ? (resume.gitlabQuery ?? '')
+            : ''
   return {
     provider,
+    gitlabView: resume.gitlabView === 'todos' ? 'todos' : 'project',
+    gitlabFilter:
+      resume.gitlabFilter === 'merged' ||
+      resume.gitlabFilter === 'closed' ||
+      resume.gitlabFilter === 'all'
+        ? resume.gitlabFilter
+        : 'opened',
     githubPreset,
     defaultGithubPreset: normalizeGitHubPreset(settings.defaultTaskViewPreset),
     githubKind: githubKindFromQuery(githubQuery, githubPreset),

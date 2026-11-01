@@ -255,6 +255,18 @@ export type DetailPayload =
     }
   | {
       provider: 'gitlab'
+      pipelineAvailable?: boolean
+      assigneesAvailable?: boolean
+      reviewers?: Array<{ username: string; name?: string | null }>
+      files?: Array<{
+        path: string
+        oldPath?: string
+        status?: string
+        additions?: number
+        deletions?: number
+        isBinary?: boolean
+      }>
+      approvalState?: { approvalsRequired: number | null; approvalsLeft: number | null }
       body: string
       comments: DetailComment[]
       labels: string[]

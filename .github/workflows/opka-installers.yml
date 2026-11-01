@@ -113,6 +113,16 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: 'false'
+      - name: Prepare own Firebase Android configuration
+        id: firebase
+        uses: ./.github/actions/prepare-opka-firebase
+        env:
+          OPKA_GOOGLE_SERVICES_JSON: ${{ secrets.OPKA_GOOGLE_SERVICES_JSON }}
+      - name: Validate Android JavaScript before native compilation
+        working-directory: mobile
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: pnpm exec expo export --platform android --no-bytecode --max-workers 1 --output-dir "$RUNNER_TEMP/opka-android-js-preflight"
       - name: Generate the separate Opka Android project
         working-directory: mobile
         run: pnpm exec expo prebuild --platform android --no-install
@@ -152,6 +162,10 @@ jobs:
             dist/opka-android-provenance.json
           if-no-files-found: error
           retention-days: 14
+      - name: Remove temporary Firebase configuration
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/opka-google-services.json"
   release_files:
     name: Complete beta asset set
     needs: [mac, server_template, android]

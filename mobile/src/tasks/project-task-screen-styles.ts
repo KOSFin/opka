@@ -14,6 +14,7 @@ export const projectTaskScreenStyles = StyleSheet.create({
   },
   headerMain: { flex: 1, minWidth: 0, gap: spacing.xs },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  revealContent: { gap: spacing.lg },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xl * 2 },
   title: { color: colors.textPrimary, fontSize: typography.titleSize, fontWeight: '600' },
   sectionHeading: {

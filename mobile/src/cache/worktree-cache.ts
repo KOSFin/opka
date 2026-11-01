@@ -13,6 +13,7 @@ type CachedWorktrees = {
 const cache = new Map<string, CachedWorktrees>()
 
 const MAX_AGE_MS = 30_000
+const MAX_DISPLAY_AGE_MS = 10 * 60_000
 const MAX_ENTRIES = 20
 
 export function setCachedWorktrees(
@@ -22,7 +23,12 @@ export function setCachedWorktrees(
 ): void {
   // Why: a cold-start snapshot seed landing after a live worktree.ps must not erase
   // the proof — or truncate the host-listed rows — the resume check depends on.
-  if (options?.proven !== true && readFreshEntry(hostId)?.proven) {
+  const retained = cache.get(hostId)
+  if (
+    options?.proven !== true &&
+    retained?.proven &&
+    Date.now() - retained.at <= MAX_DISPLAY_AGE_MS
+  ) {
     return
   }
   // Why: Map.set on an existing key does not move it to the end of iteration
@@ -57,8 +63,24 @@ function readFreshEntry(hostId: string): CachedWorktrees | null {
     return null
   }
   if (Date.now() - entry.at > MAX_AGE_MS) {
-    cache.delete(hostId)
     return null
   }
   return entry
+}
+
+/** Presentation only; expired rows must never prove that a workspace exited. */
+export function getRetainedWorktrees(hostId: string): unknown[] | null {
+  const entry = cache.get(hostId)
+  if (!entry) {
+    return null
+  }
+  if (Date.now() - entry.at > MAX_DISPLAY_AGE_MS) {
+    cache.delete(hostId)
+    return null
+  }
+  return entry.worktrees
+}
+
+export function forgetCachedWorktrees(hostId: string): void {
+  cache.delete(hostId)
 }

@@ -47,6 +47,7 @@ export abstract class RateLimitServiceFetchTargets extends RateLimitServiceResul
   protected async resolveCodexHome(target?: CodexAccountSelectionTarget): Promise<{
     skip: boolean
     homePath: string | null
+    authProvenance?: string
   }> {
     const resolution = await this.codexHomePathResolver?.(target)
     if (!resolution) {
@@ -54,7 +55,20 @@ export abstract class RateLimitServiceFetchTargets extends RateLimitServiceResul
     }
     return resolution.kind === 'skip'
       ? { skip: true, homePath: null }
-      : { skip: false, homePath: resolution.codexHomePath }
+      : {
+          skip: false,
+          homePath: resolution.codexHomePath,
+          authProvenance: resolution.authProvenance
+        }
+  }
+
+  protected withCodexUsageProvenance(
+    result: ProviderRateLimits,
+    provenance: string | undefined
+  ): ProviderRateLimits {
+    return provenance
+      ? { ...result, usageMetadata: { ...result.usageMetadata, authProvenance: provenance } }
+      : result
   }
 
   // Why: resolving a WSL home probes wsl.exe, so it must not run before the other
@@ -108,7 +122,8 @@ export abstract class RateLimitServiceFetchTargets extends RateLimitServiceResul
     target: NormalizedCodexAccountSelectionTarget,
     codexHomePath: string | null,
     stateBeforeReset: RateLimitState,
-    outcome: CodexRateLimitResetOutcome
+    outcome: CodexRateLimitResetOutcome,
+    provenance?: string
   ): Promise<RateLimitState> {
     let fresh: ProviderRateLimits = stateBeforeReset.codex ?? {
       provider: 'codex',
@@ -150,12 +165,14 @@ export abstract class RateLimitServiceFetchTargets extends RateLimitServiceResul
       }
     }
 
+    fresh = this.withCodexUsageProvenance(fresh, provenance)
     const scopedCodex = this.applyStalePolicy(fresh, stateBeforeReset.codex)
     const currentCodexHome = await this.resolveCodexHome(target)
     // Why: a skip has no provenance to compare, so treat it as no longer active
     // rather than publishing this result against the system-default lane.
     const stillActive =
       !currentCodexHome.skip &&
+      currentCodexHome.authProvenance === provenance &&
       this.isSameCodexTarget(this.codexFetchTarget, target) &&
       this.getCodexProvenance(target, currentCodexHome.homePath) ===
         this.getCodexProvenance(target, codexHomePath)

@@ -1,3 +1,4 @@
+import { normalizeStatusBarAccountPins } from '../../../../../shared/status-bar-account-pins'
 import type { UISlice, UISliceGet, UISliceSet } from './ui-slice-contract'
 import { workspaceHostScopeForVisibleHosts } from '../../../../../shared/workspace-view/workspace-host-visibility'
 import { createAgentsViewPreferenceActions } from './ui-slice-agents-view-preference-actions'
@@ -260,6 +261,12 @@ export function createUiPreferenceActions(set: UISliceSet, get: UISliceGet): Par
         usagePercentageDisplay: normalized,
         usagePercentageDisplayChangeNoticeDismissed: true
       })
+    },
+    statusBarAccountPins: [],
+    setStatusBarAccountPins: (pins) => {
+      const statusBarAccountPins = normalizeStatusBarAccountPins(pins)
+      window.api.ui.set({ statusBarAccountPins }).catch(console.error)
+      set({ statusBarAccountPins })
     },
     statusBarUsageMode: DEFAULT_STATUS_BAR_USAGE_MODE,
     setStatusBarUsageMode: (mode) => {

@@ -72,14 +72,18 @@ export const projectWorkRenderReplies = {
     appVersion: '1.4.236-rc.7',
     hostPlatform: 'linux',
     machineName: 'Opka test server',
-    capabilities: ['accounts.device-sign-in.v1', 'orchestration.account-pools.v1']
+    capabilities: [
+      'accounts.device-sign-in.v1',
+      'orchestration.account-pools.v1',
+      'mobile.tasks.v1'
+    ]
   },
   'projectTask.catalog': {
     projects: [{ selector: 'folder:/test', name: 'Website integration', state: 'configured' }],
     truncated: false
   },
   'projectTask.board': {
-    project: { id: 'project-test' },
+    project: { id: 'project-test', sources: [{ id: 'project', path: 'docs/work/tasks' }] },
     executionHostId: 'runtime:test',
     total: 3,
     tasks: [
@@ -91,6 +95,7 @@ export const projectWorkRenderReplies = {
   'projectTask.show': {
     id: 'review',
     revision,
+    content: `---\nschema: 1\nid: review\ntitle: Connect the website to the control panel\n---\n# Connect the website\n\nUse the approved API contract.`,
     body: '# Connect the website\n\nUse the approved API contract. Verify the integration and save a report.'
   },
   'projectTask.documents': {
@@ -98,6 +103,9 @@ export const projectWorkRenderReplies = {
     path: 'reports/result.md',
     content: '# Integration result\n\nThe synthetic contract checks passed.'
   },
+  'projectTask.create': {},
+  'projectTask.update': {},
+  'projectTask.move': {},
   'worktree.list': {
     worktrees: [
       { id: 'folder:render-sign-in', displayName: 'Sign-in workspace', path: '/synthetic/sign-in' }

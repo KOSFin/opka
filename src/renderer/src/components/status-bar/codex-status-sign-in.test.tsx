@@ -9,6 +9,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
+import type * as ProviderAccountsModule from '@/runtime/runtime-provider-accounts-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type {
@@ -84,7 +85,8 @@ vi.mock('@/lib/codex-session-restart', () => ({
   ) => accounts.find((entry) => entry.id === accountId)?.email ?? 'System default'
 }))
 
-vi.mock('@/runtime/runtime-provider-accounts-client', () => ({
+vi.mock('@/runtime/runtime-provider-accounts-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProviderAccountsModule>()),
   fetchProviderAccountsSnapshot: vi.fn(async () => ({
     codex: codexSnapshot(null),
     claude: { accounts: [], activeAccountId: null },

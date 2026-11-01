@@ -148,7 +148,11 @@ it('lists the accounts of the host chosen in the page, not the focused server', 
 it("drops a server's late account result after the page moves to another server", async () => {
   const view = render(renderPane(scopeFor('server-a')))
   await act(async () => {})
-  fireEvent.click(screen.getByText('alpha@server-a.test'))
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'alpha@server-a.test' })).getByRole('button', {
+      name: 'Use for new chats'
+    })
+  )
   expect(fake.pendingSelect).not.toBeNull()
 
   await act(async () => view.rerender(renderPane(scopeFor('server-b'))))
@@ -164,20 +168,20 @@ it("drops a server's late account result after the page moves to another server"
 it('keeps a late account result once the pane is back on the server it was sent to', async () => {
   const view = render(renderPane(scopeFor('server-a')))
   await act(async () => {})
-  fireEvent.click(screen.getByText('alpha@server-a.test'))
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'alpha@server-a.test' })).getByRole('button', {
+      name: 'Use for new chats'
+    })
+  )
   for (const environmentId of ['server-b', 'server-a']) {
     await act(async () => view.rerender(renderPane(scopeFor(environmentId))))
   }
-  const alphaRow = (): HTMLElement => {
-    const row = screen.getByText('alpha@server-a.test').closest('button')
-    expect(row).not.toBeNull()
-    return row ?? document.body
-  }
-  expect(within(alphaRow()).queryByText('Active')).toBeNull()
+  const alphaRow = () => screen.getByRole('group', { name: 'alpha@server-a.test' })
+  expect(within(alphaRow()).queryByText('Default for new chats')).toBeNull()
 
   await act(async () => fake.pendingSelect?.(claudeRoster('acct-a', 'alpha@server-a.test', true)))
 
-  expect(within(alphaRow()).getByText('Active')).toBeTruthy()
+  expect(within(alphaRow()).getByText('Default for new chats')).toBeTruthy()
 })
 
 it("shows a WSL host's distro accounts from this desktop and selects for that distro", async () => {
@@ -201,8 +205,25 @@ it("shows a WSL host's distro accounts from this desktop and selects for that di
   )
   await act(async () => {})
   expect(fake.watchedTargets).toEqual([{ kind: 'local' }])
-  fireEvent.click(screen.getByText('wsl@ubuntu.test'))
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'wsl@ubuntu.test' })).getByRole('button', {
+      name: 'Use for new chats'
+    })
+  )
   expect(fake.selects).toEqual([
     [{ kind: 'local' }, { accountId: 'acct-w', runtime: 'wsl', wslDistro: 'Ubuntu' }]
   ])
+})
+
+it('reading an account identity does not select it', async () => {
+  render(renderPane(scopeFor('server-a')))
+  await act(async () => {})
+  fireEvent.click(screen.getByText('alpha@server-a.test'))
+  expect(fake.selects).toEqual([])
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'alpha@server-a.test' })).getByRole('button', {
+      name: 'Use for new chats'
+    })
+  )
+  expect(fake.selects).toHaveLength(1)
 })

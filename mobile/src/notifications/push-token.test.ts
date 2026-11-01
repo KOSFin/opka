@@ -1,3 +1,4 @@
+vi.mock('./push-build-support', () => ({ pushBuildConfigurationIssue: () => null }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as Notifications from 'expo-notifications'
 import { addPushTokenListener, getDevicePushToken } from './push-token'

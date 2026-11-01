@@ -1,3 +1,5 @@
+import { forgetCachedWorktrees } from '../cache/worktree-cache'
+import { forgetCachedRepos } from '../cache/repo-cache'
 import type { MobileRelayEndpoint } from '../../../src/shared/mobile-relay-credential-contract'
 import { HostProfileSchema } from './types'
 import type { HostCatalogEntry, HostProfile, StoredHostProfile } from './types'
@@ -270,6 +272,8 @@ export async function removeHost(hostId: string): Promise<void> {
     throw error
   }
   tokenCache.delete(hostId)
+  forgetCachedWorktrees(hostId)
+  forgetCachedRepos(hostId)
   try {
     await removeMobileRelayHostRouting(hostId)
     hostListLoads.dropSharedHostListLoad()

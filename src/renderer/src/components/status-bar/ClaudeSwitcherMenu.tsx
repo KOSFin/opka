@@ -9,12 +9,12 @@ import { useAppStore } from '../../store'
 import type { ClaudeRateLimitAccountsState } from '../../../../shared/managed-account-types'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import { defaultScopeHost } from '@/lib/default-creation-host'
+import { useUsageAccounts } from './UsageAccountsContext'
+import { useUsageAccountSource } from './use-usage-account-source'
+import { usageAccountOwnerLabel } from './usage-account-owner-label'
 import { useActiveAccountOwner } from '@/runtime/use-worktree-runtime-target'
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
-import {
-  fetchProviderAccountsSnapshot,
-  selectClaudeProviderAccount
-} from '@/runtime/runtime-provider-accounts-client'
+import { selectClaudeProviderAccount } from '@/runtime/runtime-provider-accounts-client'
 import { toast } from 'sonner'
 import { getClaudeAccountErrorDescription } from '../settings/accounts-pane-action-errors'
 import { translate } from '@/i18n/i18n'
@@ -73,6 +73,7 @@ export function ClaudeSwitcherMenu({
   const [isSwitching, setIsSwitching] = useState(false)
   const [signingInId, setSigningInId] = useState<string | null>(null)
   const signingInRef = useRef(false)
+  const usageAccounts = useUsageAccounts()
   const mountedRef = useRef(true)
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
@@ -80,19 +81,30 @@ export function ClaudeSwitcherMenu({
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
   const refreshClaudeRateLimitsForTarget = useAppStore((s) => s.refreshClaudeRateLimitsForTarget)
   const fetchInactiveClaudeAccountUsage = useAppStore((s) => s.fetchInactiveClaudeAccountUsage)
-  const inactiveClaudeAccounts = useAppStore((s) => s.rateLimits.inactiveClaudeAccounts)
-  const claudeTarget = useAppStore((s) => s.rateLimits.claudeTarget)
+  const localInactiveClaudeAccounts = useAppStore((s) => s.rateLimits.inactiveClaudeAccounts)
+  const localClaudeTarget = useAppStore((s) => s.rateLimits.claudeTarget)
   const settings = useAppStore((s) => s.settings)
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   // Why: no host picker; the focused workspace's owner, else the default scope host.
-  const { target: runtimeTarget, wslHostDistro } = useActiveAccountOwner(defaultScopeHost(settings))
+  const { target: focusedTarget, wslHostDistro } = useActiveAccountOwner(defaultScopeHost(settings))
+  const runtimeTarget = usageAccounts?.target ?? focusedTarget
   const activeRuntimeEnvironmentId = runtimeTargetEnvironmentId(runtimeTarget)
   const hasActiveRuntimeEnvironment = activeRuntimeEnvironmentId !== null
-  const providerAccountHostLabel = hasActiveRuntimeEnvironment
-    ? (runtimeEnvironments.find((environment) => environment.id === activeRuntimeEnvironmentId)
-        ?.name ??
-      translate('auto.components.status.bar.StatusBar.remoteServerLabel', 'Remote server'))
-    : undefined
+  const {
+    snapshot: ownerSnapshot,
+    loadAccounts,
+    acceptRoster
+  } = useUsageAccountSource(runtimeTarget, 'claude', setAccounts)
+  const inactiveClaudeAccounts = hasActiveRuntimeEnvironment
+    ? (ownerSnapshot?.rateLimits?.inactiveClaudeAccounts ?? [])
+    : localInactiveClaudeAccounts
+  const claudeTarget = hasActiveRuntimeEnvironment
+    ? (ownerSnapshot?.rateLimits?.claudeTarget ?? null)
+    : localClaudeTarget
+  const providerAccountHostLabel = usageAccountOwnerLabel(
+    activeRuntimeEnvironmentId,
+    runtimeEnvironments
+  )
   const windowsTerminalCapabilities = useWindowsTerminalCapabilities(
     navigator.userAgent.includes('Windows') || hasActiveRuntimeEnvironment,
     false,
@@ -102,7 +114,9 @@ export function ClaudeSwitcherMenu({
   const claudeAccountSyncKey = useAppStore((s) => getClaudeAccountSyncKey(s.settings))
   const accountState = resolveClaudeStatusAccountState(
     settings,
-    accounts,
+    hasActiveRuntimeEnvironment
+      ? (ownerSnapshot?.claude ?? { accounts: [], activeAccountId: null })
+      : accounts,
     activeRuntimeEnvironmentId
   )
 
@@ -112,19 +126,6 @@ export function ClaudeSwitcherMenu({
       mountedRef.current = false
     }
   }, [])
-
-  // Why: keyed on owner id, not settings identity, so routine settings mutations don't re-run the remote snapshot fetch.
-  const loadAccounts = useCallback(async () => {
-    const snapshot = await fetchProviderAccountsSnapshot(runtimeTarget)
-    // Why: a failed Claude half is a substituted empty roster; keep prior state.
-    if (snapshot.failedProviders?.includes('claude')) {
-      console.error('Claude account list failed; keeping previous status bar state.')
-      return
-    }
-    if (mountedRef.current) {
-      setAccounts(snapshot.claude)
-    }
-  }, [runtimeTarget])
 
   useEffect(() => {
     void loadAccounts().catch((error) => {
@@ -180,7 +181,7 @@ export function ClaudeSwitcherMenu({
       })
       recordFeatureInteraction('claude-account-switching')
       if (mountedRef.current) {
-        setAccounts(next)
+        acceptRoster(next)
       }
       // Why: remote selections live on the server; local GlobalSettings are untouched, so refetching is pure churn.
       if (!hasActiveRuntimeEnvironment) {
@@ -234,10 +235,7 @@ export function ClaudeSwitcherMenu({
   }
 
   const handleSelectRuntime = async (group: ClaudeStatusSwitchGroup): Promise<void> => {
-    const currentKey = getCodexStatusRuntimeKey(
-      normalizeClaudeStatusRuntimeTarget(accountState, toCodexStatusRuntimeTarget(claudeTarget))
-    )
-    if (group.key === currentKey) {
+    if (hasActiveRuntimeEnvironment || group.key === selectedRuntimeKey) {
       return
     }
     setAccountsExpanded(false)
@@ -248,24 +246,26 @@ export function ClaudeSwitcherMenu({
     }
   }
 
-  const selectedRuntimeKey = getCodexStatusRuntimeKey(
-    normalizeClaudeStatusRuntimeTarget(accountState, toCodexStatusRuntimeTarget(claudeTarget))
-  )
+  const selectedRuntimeTarget =
+    claudeTarget === null
+      ? null
+      : normalizeClaudeStatusRuntimeTarget(accountState, toCodexStatusRuntimeTarget(claudeTarget))
+  const selectedRuntimeKey = selectedRuntimeTarget
+    ? getCodexStatusRuntimeKey(selectedRuntimeTarget)
+    : ''
   // A focused WSL host's accounts are this desktop's for its distro, so that group always shows.
   const fallbackWslDistro =
     wslHostDistro ??
     getStatusBarPreferredWslDistro(settings, windowsTerminalCapabilities.wslDistros)
-  const switchGroups = buildClaudeStatusSwitchGroups(
-    accountState,
-    toCodexStatusRuntimeTarget(claudeTarget),
-    {
-      fallbackWslDistro,
-      includeFallbackWsl:
-        wslHostDistro !== null ||
-        (!hasActiveRuntimeEnvironment && shouldIncludeSettingsWslRuntime(settings)),
-      hostLabel: providerAccountHostLabel
-    }
-  )
+  const switchGroups = selectedRuntimeTarget
+    ? buildClaudeStatusSwitchGroups(accountState, selectedRuntimeTarget, {
+        fallbackWslDistro,
+        includeFallbackWsl:
+          wslHostDistro !== null ||
+          (!hasActiveRuntimeEnvironment && shouldIncludeSettingsWslRuntime(settings)),
+        hostLabel: providerAccountHostLabel
+      })
+    : []
   const selectedGroup =
     switchGroups.find((group) => group.key === selectedRuntimeKey) ?? switchGroups[0]
   const activeTarget = selectedGroup?.targets.find((target) => target.active)
@@ -306,7 +306,9 @@ export function ClaudeSwitcherMenu({
       >
         <span className="max-w-[180px] truncate text-[12px] text-foreground">
           {activeTarget?.label ??
-            translate('auto.components.status.bar.StatusBar.c676918adc', 'System default')}
+            (selectedRuntimeKey === ''
+              ? translate('usage.accounts.unavailable', 'Account list unavailable')
+              : translate('accounts.cliLoginOnHost', 'CLI login on this host'))}
         </span>
         {accountsExpanded ? (
           <ChevronDown className="ml-auto size-3.5 text-muted-foreground/85" />

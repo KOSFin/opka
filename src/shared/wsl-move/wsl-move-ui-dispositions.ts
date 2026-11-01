@@ -117,6 +117,7 @@ export const UI_STATE_GLOBAL_FIELDS = [
   'statusBarVisible',
   'usagePercentageDisplay',
   'statusBarUsageMode',
+  'statusBarAccountPins',
   'dismissedUpdateVersion',
   'dismissedUnexpectedSignoutVersion',
   'lastUpdateCheckAt',

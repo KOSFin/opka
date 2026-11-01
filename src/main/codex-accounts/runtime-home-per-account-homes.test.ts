@@ -227,6 +227,9 @@ describe('CodexRuntimeHomeService', () => {
     const service = new CodexRuntimeHomeService(store as never)
 
     expect(service.prepareForRateLimitFetch()).toEqual({ kind: 'ready', codexHomePath: home1 })
+    expect(service.prepareForRateLimitFetchWithIdentity()).toMatchObject({
+      authProvenance: 'profile:account-1'
+    })
   })
 
   it('preserves a managed selection whose auth.json is temporarily missing', async () => {

@@ -42,6 +42,13 @@ export abstract class RateLimitServiceResultPolicy extends RateLimitServiceFetch
       return fresh
     }
 
+    if (
+      fresh.usageMetadata?.authProvenance &&
+      fresh.usageMetadata.authProvenance !== previous.usageMetadata?.authProvenance
+    ) {
+      return fresh
+    }
+
     // Previous data is too old — don't show stale data
     const staleThresholdMs =
       fresh.usageMetadata?.failureKind === 'rate-limited'

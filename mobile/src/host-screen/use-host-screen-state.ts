@@ -1,10 +1,13 @@
 import { useRef, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
-import { getCachedWorktrees } from '../cache/worktree-cache'
+import { getRetainedWorktrees } from '../cache/worktree-cache'
 import { createInitialHostRouteActionState } from '../host-route-action-state'
 import type { RpcClient } from '../transport/rpc-client'
-import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
+import {
+  admitWorktreeCatalogResponse,
+  WorktreeCatalogSnapshotClient
+} from '../worktree/worktree-catalog-snapshot-client'
 import { INITIAL_MOBILE_VIEW, type MobileViewState } from '../worktree/workspace-view-settings'
 import type { Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
@@ -13,9 +16,13 @@ import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
-  const [initialCache] = useState(() =>
-    hostId ? (getCachedWorktrees(hostId) as Worktree[] | null) : null
-  )
+  const [initialCache] = useState(() => {
+    const retained = admitWorktreeCatalogResponse<Worktree>(
+      { worktrees: hostId ? getRetainedWorktrees(hostId) : null },
+      null
+    )
+    return retained.kind === 'full' ? retained.worktrees : null
+  })
   const clientRef = useRef<RpcClient | null>(null)
   const fetchWorktreesInFlightRef = useRef(false)
   // Why: useRef, not useMemo — React may discard memoized values, which would silently

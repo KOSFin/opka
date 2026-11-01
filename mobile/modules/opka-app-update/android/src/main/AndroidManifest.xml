@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application>
+    <receiver android:name="expo.modules.opkaappupdate.OpkaUpdateCleanupReceiver" android:exported="false">
+      <intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter>
+    </receiver>
     <provider android:name="androidx.core.content.FileProvider"
       android:authorities="${applicationId}.opka-updates" android:exported="false"
       android:grantUriPermissions="true">

@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 
 class PublishedDownloadContract(unittest.TestCase):
-    def exercise(self, bad_hash=False):
+    def exercise(self, bad_hash=False, legacy=False):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
             source = output / 'fixture.apk'
@@ -29,16 +29,24 @@ class PublishedDownloadContract(unittest.TestCase):
                 'sha256': '0' * 64 if bad_hash else hashlib.sha256(source.read_bytes()).hexdigest(),
                 'certificateSha256': 'a' * 64
             }
+            manifest['versionCode'] = 104236006
             calls = []
 
             def adb(*parts, timeout=60):
                 calls.append((parts, timeout))
-                self.assertEqual(parts[:2], ('pull', '/synthetic/cache/opka-updates/update.apk'))
+                name = updater.cache_artifact_name(manifest)
+                if parts[:3] == ('shell', 'test', '-f'):
+                    self.assertEqual(parts[3], '/synthetic/cache/opka-updates/' + name)
+                    if legacy:
+                        raise subprocess.CalledProcessError(1, 'test')
+                    return ''
+                expected_name = 'update.apk' if legacy else name
+                self.assertEqual(parts[:2], ('pull', '/synthetic/cache/opka-updates/' + expected_name))
                 shutil.copyfile(source, parts[2])
 
             with patch.object(updater.urllib.request, 'urlopen', return_value=io.BytesIO(json.dumps(manifest).encode())):
                 updater.verify_native_download('1.4.236-rc.6', '/synthetic', adb, output)
-            self.assertEqual(calls[0][1], 90)
+            self.assertEqual(calls[-1][1], 90)
             receipt = json.loads((output / 'native-public-download.json').read_text())
             self.assertTrue(receipt['x86_64'])
             self.assertEqual(receipt['sha256'], manifest['sha256'])
@@ -46,9 +54,30 @@ class PublishedDownloadContract(unittest.TestCase):
     def test_actual_adb_keyword_contract_and_native_file_receipt(self):
         self.exercise()
 
+    def test_old_published_fixed_path_is_still_verifiable(self):
+        self.exercise(legacy=True)
+
     def test_public_manifest_checksum_mismatch_is_rejected(self):
         with self.assertRaisesRegex(AssertionError, 'differs from public manifest'):
             self.exercise(bad_hash=True)
+
+
+class CacheCleanupContract(unittest.TestCase):
+    def test_replacement_cleanup_may_finish_after_restart_but_must_remove_all_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            listings = iter(['update.apk\nversion-code\nabandoned.part', ''])
+            clock = iter(range(10))
+            with patch.object(updater.time, 'monotonic', side_effect=lambda: next(clock)), patch.object(updater.time, 'sleep'):
+                updater.verify_cache_cleanup('/synthetic', lambda *args: next(listings), output, timeout=8)
+            self.assertEqual(json.loads((output / 'native-cache-cleanup.json').read_text())['remainingArtifacts'], [])
+
+    def test_retained_apk_fails_instead_of_claiming_clean_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            clock = iter(range(10))
+            with patch.object(updater.time, 'monotonic', side_effect=lambda: next(clock)), patch.object(updater.time, 'sleep'):
+                with self.assertRaisesRegex(AssertionError, 'retained updater artifacts: update.apk'):
+                    updater.verify_cache_cleanup('/synthetic', lambda *args: 'update.apk', Path(directory), timeout=3)
 
 
 class HandoffProbeContract(unittest.TestCase):

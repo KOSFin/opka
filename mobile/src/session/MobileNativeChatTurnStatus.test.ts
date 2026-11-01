@@ -2,11 +2,28 @@ import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const activity = vi.hoisted(() => ({
+  state: 'active',
+  listeners: new Set<(state: string) => void>()
+}))
 vi.mock('react-native', async () => {
   const React = await import('react')
   const Text = ({ children, ...props }: { children?: unknown }): unknown =>
     React.createElement('Text', props, children)
   return {
+    AppState: {
+      get currentState() {
+        return activity.state
+      },
+      addEventListener: (_event: string, listener: (state: string) => void) => {
+        activity.listeners.add(listener)
+        return {
+          remove: () => {
+            activity.listeners.delete(listener)
+          }
+        }
+      }
+    },
     ActivityIndicator: (props: Record<string, unknown>) =>
       React.createElement('ActivityIndicator', props),
     Pressable: ({ children, ...props }: { children?: unknown }) =>
@@ -30,6 +47,7 @@ const spinners = (node: ReactTestInstance): ReactTestInstance[] =>
 let renderer: ReactTestRenderer | null = null
 
 beforeEach(() => {
+  activity.state = 'active'
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-09-04T00:00:00Z'))
 })
@@ -104,4 +122,35 @@ describe('MobileNativeChatTurnStatus', () => {
     render({ startedAt: Date.now(), workedSeconds: 5 })
     expect(vi.getTimerCount()).toBe(0)
   })
+})
+
+it('pauses elapsed-time wakeups in background and releases every subscription on close', () => {
+  const startedAt = Date.now()
+  act(() => {
+    renderer = create(createElement(MobileNativeChatTurnStatus, { startedAt }))
+  })
+  expect(vi.getTimerCount()).toBe(1)
+  for (let cycle = 0; cycle < 5; cycle++) {
+    act(() => {
+      activity.state = 'background'
+      for (const listener of activity.listeners) {
+        listener('background')
+      }
+    })
+    expect(vi.getTimerCount()).toBe(0)
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    act(() => {
+      activity.state = 'active'
+      for (const listener of activity.listeners) {
+        listener('active')
+      }
+    })
+    expect(vi.getTimerCount()).toBe(1)
+  }
+  act(() => renderer?.unmount())
+  renderer = null
+  expect(vi.getTimerCount()).toBe(0)
+  expect(activity.listeners.size).toBe(0)
 })

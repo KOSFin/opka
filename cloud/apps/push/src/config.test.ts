@@ -57,6 +57,11 @@ describe('push gateway config', () => {
     })
   })
 
+  it('accepts an explicit loopback bind and rejects arbitrary host strings', () => {
+    expect(loadPushConfig({ ...MINIMAL, ORCA_PUSH_BIND_HOST: '127.0.0.1' }).bindHost).toBe('127.0.0.1')
+    expect(() => loadPushConfig({ ...MINIMAL, ORCA_PUSH_BIND_HOST: 'foreign.example' })).toThrow()
+  })
+
   it('requires an explicit FCM project instead of silently targeting production', () => {
     expect(() => loadPushConfig({ ...MINIMAL, ORCA_PUSH_FCM_PROJECT_ID: undefined })).toThrow()
     expect(() => loadPushConfig({ ...MINIMAL, ORCA_PUSH_FCM_PROJECT_ID: ' ' })).toThrow()

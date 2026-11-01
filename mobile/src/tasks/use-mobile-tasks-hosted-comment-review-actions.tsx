@@ -1,3 +1,5 @@
+import { invalidateGitLabTaskLists } from './gitlab-task-list-cache'
+import { gitLabMrDetailKey, invalidateGitLabMrDetail } from './gitlab-mr-detail-cache'
 import { useClipboardWriter } from '../platform/clipboard'
 import type { HostedMetadataActionsModel } from './use-mobile-tasks-hosted-metadata-actions'
 import {
@@ -105,6 +107,13 @@ export function useMobileTasksHostedCommentReviewActions(model: HostedMetadataAc
           body,
           createdAt: new Date().toISOString(),
           author: 'You'
+        }
+        if (item.provider === 'gitlab') {
+          invalidateGitLabTaskLists(client)
+        }
+        const cacheKey = gitLabMrDetailKey(item)
+        if (cacheKey) {
+          invalidateGitLabMrDetail(client, cacheKey)
         }
         setItemCommentDraft('')
         setDetailPayload((current) =>

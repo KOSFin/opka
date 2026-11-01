@@ -4,6 +4,7 @@ import { buildSidebarFeedRows } from '../../../src/shared/sidebar-list/sidebar-f
 import { repoIconFeedKey } from '../../../src/shared/sidebar-list/repo-icon-data-urls-contract'
 import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
 import type { RpcClient } from '../transport/rpc-client'
+import { groupProjectWorkspaceSections } from '../worktree/project-group-workspace-sections'
 import { buildProjectSectionCatalog } from '../worktree/project-section-catalog'
 import { useWorkspaceSections } from '../worktree/use-workspace-sections'
 import { buildFilterRepos, type WorkspaceSectionRepo } from '../worktree/workspace-filter-repos'
@@ -89,7 +90,45 @@ function useLegacyHostListSections({
     workspaceStatuses: state.view.workspaceStatuses,
     repoHostIdByRepoId: state.repoHostIdByRepoId
   })
-  return { ...sectionsResult, collapsedGroups, projectOrderBy: projectCatalog.projectOrderBy }
+  const groups = state.servedProjectSections?.projectGroups ?? state.hostProjectGroups
+  const sections = useMemo(
+    () =>
+      state.view.groupBy === 'repo'
+        ? groupProjectWorkspaceSections(
+            sectionsResult.rawSections,
+            projectCatalog.repos,
+            groups,
+            collapsedGroups
+          )
+        : sectionsResult.sections,
+    [
+      sectionsResult.sections,
+      sectionsResult.rawSections,
+      projectCatalog.repos,
+      groups,
+      collapsedGroups,
+      state.view.groupBy
+    ]
+  )
+  const rawSections = useMemo(
+    () =>
+      state.view.groupBy === 'repo'
+        ? groupProjectWorkspaceSections(
+            sectionsResult.rawSections,
+            projectCatalog.repos,
+            groups,
+            new Set()
+          )
+        : sectionsResult.rawSections,
+    [sectionsResult.rawSections, projectCatalog.repos, groups, state.view.groupBy]
+  )
+  return {
+    ...sectionsResult,
+    sections,
+    rawSections,
+    collapsedGroups,
+    projectOrderBy: projectCatalog.projectOrderBy
+  }
 }
 
 const NO_SECTIONS: Section[] = []

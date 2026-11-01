@@ -102,3 +102,63 @@ describe('Opka native update handoff', () => {
     expect(openURL).not.toHaveBeenCalled()
   })
 })
+
+it('catches synchronous native invocation failures', async () => {
+  mocks.package = 'com.kosfin.opka.mobile'
+  const { requireOptionalNativeModule } = await import('expo-modules-core')
+  vi.mocked(requireOptionalNativeModule).mockReturnValue({
+    install: () => {
+      throw new Error('bridge failed')
+    }
+  })
+  const { openAppUpdate } = await import('./app-update-runtime')
+  const { Alert } = await import('react-native')
+  expect(() => openAppUpdate('manifest')).not.toThrow()
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Update could not be opened',
+    'bridge failed',
+    expect.any(Array)
+  )
+})
+
+it('coalesces repeated taps while native download is pending', async () => {
+  mocks.package = 'com.kosfin.opka.mobile'
+  const { requireOptionalNativeModule } = await import('expo-modules-core')
+  const install = vi.fn(() => new Promise<void>(() => {}))
+  vi.mocked(requireOptionalNativeModule).mockReturnValue({ install })
+  const { openAppUpdate } = await import('./app-update-runtime')
+  const { appUpdateInstallBusy } = await import('./app-update-install-state')
+  openAppUpdate('manifest')
+  openAppUpdate('manifest')
+  expect(install).toHaveBeenCalledOnce()
+  expect(appUpdateInstallBusy()).toBe(true)
+})
+
+it('publishes native transfer progress and removes its listener after handoff', async () => {
+  mocks.package = 'com.kosfin.opka.mobile'
+  const { requireOptionalNativeModule } = await import('expo-modules-core')
+  let notify:
+    | ((event: { phase: string; downloadedBytes?: number; totalBytes?: number }) => void)
+    | undefined
+  let finish: (() => void) | undefined
+  const remove = vi.fn()
+  vi.mocked(requireOptionalNativeModule).mockReturnValue({
+    install: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+    addListener: (_name: string, listener: NonNullable<typeof notify>) => {
+      notify = listener
+      return { remove }
+    }
+  })
+  const { openAppUpdate } = await import('./app-update-runtime')
+  const { getAppUpdateInstallSnapshot } = await import('./app-update-install-state')
+  openAppUpdate('manifest')
+  notify?.({ phase: 'downloading', downloadedBytes: 25, totalBytes: 100 })
+  expect(getAppUpdateInstallSnapshot().label).toContain('25%')
+  finish?.()
+  await Promise.resolve()
+  expect(getAppUpdateInstallSnapshot()).toMatchObject({ phase: 'installer', busy: false })
+  expect(remove).toHaveBeenCalledOnce()
+})

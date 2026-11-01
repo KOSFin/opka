@@ -1,3 +1,4 @@
+import { usageAccountProvenance } from '../../shared/usage-account-provenance'
 import { posix as pathPosix } from 'node:path'
 import { parseWslUncPath, toLinuxPath, toWindowsWslUncPath } from '../../shared/wsl-paths'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
@@ -11,6 +12,7 @@ import {
 } from '../codex/codex-home-paths'
 import { syncSystemConfigIntoManagedCodexHome } from '../codex/codex-config-mirror'
 import {
+  getSelectedCodexAccountIdForTarget,
   getWslSelectionKey,
   normalizeCodexRuntimeSelection,
   type CodexAccountSelectionTarget
@@ -264,11 +266,33 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
   // A skipped poll needs its own channel or the fetcher silently retargets the
   // user's real ~/.codex (#STA-4422).
   prepareForRateLimitFetch(target?: CodexAccountSelectionTarget): CodexRateLimitHomeResolution {
+    const result = this.prepareForRateLimitFetchWithIdentity(target)
+    return result.kind === 'skip' ? result : { kind: 'ready', codexHomePath: result.codexHomePath }
+  }
+
+  prepareForRateLimitFetchWithIdentity(
+    target?: CodexAccountSelectionTarget
+  ): CodexRateLimitHomeResolution {
     if (target?.runtime === 'wsl') {
       const wslTarget = this.resolveWslDefaultTarget(target)
+      const settings = this.store.getSettings()
+      const account = this.getActiveAccount(
+        settings.codexManagedAccounts,
+        getSelectedCodexAccountIdForTarget(settings, wslTarget)
+      )
+      const homePath = this.getPreparedWslRateLimitHomePath(wslTarget)
+      const managedHome = account
+        ? this.getWslLaunchCodexHomePath(account, wslTarget.wslDistro?.trim())
+        : null
       return {
         kind: 'ready',
-        codexHomePath: this.getPreparedWslRateLimitHomePath(wslTarget)
+        codexHomePath: homePath,
+        authProvenance: homePath
+          ? usageAccountProvenance(
+              `wsl:${wslTarget.wslDistro?.trim() || '__default__'}`,
+              managedHome === homePath && account ? account.id : null
+            )
+          : undefined
       }
     }
     const selfContainedAccount = this.getSelfContainedManagedHostAccount()
@@ -277,7 +301,11 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
       if (resolved.kind === 'owned') {
         // Why: the quota fetch reads the account's own auth.json in place; no
         // shared-home hot-swap or per-poll resource relink (that is launch prep).
-        return { kind: 'ready', codexHomePath: resolved.homePath }
+        return {
+          kind: 'ready',
+          codexHomePath: resolved.homePath,
+          authProvenance: usageAccountProvenance('host', selfContainedAccount.id)
+        }
       }
       if (resolved.kind === 'indeterminate') {
         // Why: returning null here would NOT skip — the fetcher maps null to
@@ -296,10 +324,17 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
       // CODEX_HOME before ~/.codex. Nested Orca launches can inherit the
       // managed home, restarting the background OAuth conflict (#5370), so
       // pin this non-interactive lane to the native home explicitly.
-      return { kind: 'ready', codexHomePath: getSystemCodexHomePath() }
+      return { kind: 'ready', codexHomePath: getSystemCodexHomePath(), authProvenance: 'system' }
     }
     this.syncMirrorForReadOnlyAppServer()
-    return { kind: 'ready', codexHomePath: this.getRuntimeHomePath() }
+    return {
+      kind: 'ready',
+      codexHomePath: this.getRuntimeHomePath(),
+      authProvenance: usageAccountProvenance(
+        'host',
+        getSelectedCodexAccountIdForTarget(this.store.getSettings())
+      )
+    }
   }
 
   /**

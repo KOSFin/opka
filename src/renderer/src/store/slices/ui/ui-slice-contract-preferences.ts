@@ -1,3 +1,4 @@
+import type { StatusBarAccountPin } from '../../../../../shared/status-bar-account-pins'
 import type { PersistedUIState } from '../../../../../shared/persisted-ui-state-types'
 import type {
   ActivityGroupBy,
@@ -112,6 +113,8 @@ export type UISlicePreferences = {
   setStatusBarVisible: (v: boolean) => void
   usagePercentageDisplay: UsagePercentageDisplay
   setUsagePercentageDisplay: (display: UsagePercentageDisplay) => void
+  statusBarAccountPins: StatusBarAccountPin[]
+  setStatusBarAccountPins: (pins: StatusBarAccountPin[]) => void
   statusBarUsageMode: StatusBarUsageMode
   setStatusBarUsageMode: (mode: StatusBarUsageMode) => void
 }

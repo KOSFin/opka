@@ -1,3 +1,4 @@
+import { invalidateGitLabMrItem } from './gitlab-mr-detail-cache'
 import type { ProjectFileMergeActionsModel } from './use-mobile-tasks-project-file-merge-actions'
 import { useCallback } from './mobile-tasks-dependencies'
 import type { TaskItem } from './mobile-tasks-legacy-foundation'
@@ -55,6 +56,7 @@ export function useMobileTasksGitlabGithubStatusActions(model: ProjectFileMergeA
         if (updated.ok === false) {
           throw new Error(updated.error ?? 'Failed to update GitLab item')
         }
+        invalidateGitLabMrItem(client, item)
         setActionItem(null)
         await loadTasks({ silent: true })
       } catch (err) {

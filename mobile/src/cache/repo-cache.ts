@@ -10,6 +10,7 @@ type CachedRepos = {
 const cache = new Map<string, CachedRepos>()
 
 const MAX_AGE_MS = 60_000
+const MAX_DISPLAY_AGE_MS = 10 * 60_000
 const MAX_ENTRIES = 20
 
 export function setCachedRepos(hostId: string, repos: unknown[]): void {
@@ -29,8 +30,23 @@ export function getCachedRepos(hostId: string): unknown[] | null {
     return null
   }
   if (Date.now() - entry.at > MAX_AGE_MS) {
+    return null
+  }
+  return entry.repos
+}
+
+export function getRetainedRepos(hostId: string): unknown[] | null {
+  const entry = cache.get(hostId)
+  if (!entry) {
+    return null
+  }
+  if (Date.now() - entry.at > MAX_DISPLAY_AGE_MS) {
     cache.delete(hostId)
     return null
   }
   return entry.repos
+}
+
+export function forgetCachedRepos(hostId: string): void {
+  cache.delete(hostId)
 }

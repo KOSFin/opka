@@ -5,7 +5,15 @@ import { NotificationDisplayTest } from './notification-display-test'
 
 const mocks = vi.hoisted(() => ({
   loadHosts: vi.fn(),
+  buildIssue: vi.fn((): string | null => null),
+  retryRegistration: vi.fn().mockResolvedValue(undefined),
   clients: [] as { state: string; client: { sendRequest: ReturnType<typeof vi.fn> } }[]
+}))
+vi.mock('../notifications/push-build-support', () => ({
+  pushBuildConfigurationIssue: mocks.buildIssue
+}))
+vi.mock('../notifications/push-registration', () => ({
+  retryRemotePushRegistration: mocks.retryRegistration
 }))
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
@@ -20,6 +28,8 @@ let renderer: ReactTestRenderer
 beforeEach(() => {
   mocks.loadHosts.mockReset().mockResolvedValue([{ id: 'first' }, { id: 'second' }])
   mocks.clients = []
+  mocks.buildIssue.mockReturnValue(null)
+  mocks.retryRegistration.mockClear()
 })
 afterEach(() => act(() => renderer?.unmount()))
 
@@ -74,7 +84,9 @@ it('explains when every desktop needs registration or an update', async () => {
     client: { sendRequest: vi.fn().mockResolvedValue(response) }
   }))
   await send()
-  expect(JSON.stringify(renderer.toJSON())).toContain('Reconnect to register this phone')
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'registration was retried without disconnecting'
+  )
 })
 
 it.each([false, true])('explains missing pairing or connection (paired=%s)', async (paired) => {
@@ -85,4 +97,11 @@ it.each([false, true])('explains missing pairing or connection (paired=%s)', asy
   expect(JSON.stringify(renderer.toJSON())).toContain(
     paired ? 'Connect a desktop' : 'Pair a desktop'
   )
+})
+
+it('explains missing build configuration without requiring a reconnect', async () => {
+  mocks.buildIssue.mockReturnValue('Remote push is not configured in this Opka build.')
+  await send()
+  expect(JSON.stringify(renderer.toJSON())).toContain('Remote push is not configured')
+  expect(mocks.retryRegistration).not.toHaveBeenCalled()
 })

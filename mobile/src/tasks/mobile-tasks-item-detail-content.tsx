@@ -1,3 +1,4 @@
+import { GitLabMergeRequestMetadata } from './GitLabMergeRequestMetadata'
 import type { ConnectionPresentationModel } from './use-mobile-tasks-connection-presentation'
 import {
   View,
@@ -25,6 +26,7 @@ import {
   renderMobileTasksItemFiles
 } from './mobile-tasks-item-review-sections'
 import { renderMobileTasksItemFieldEditors } from './mobile-tasks-item-field-editors'
+import { GitLabMergeRequestSummary } from './GitLabMergeRequestSummary'
 import { JiraDetailMeta } from '../components/JiraDetailMeta'
 
 export function renderMobileTasksItemDetailContent(model: ConnectionPresentationModel) {
@@ -53,14 +55,24 @@ export function renderMobileTasksItemDetailContent(model: ConnectionPresentation
   if (!actionItem) {
     return null
   }
-  return detailLoading ? (
+  return detailLoading && !detailPayload ? (
     <View style={styles.detailLoading}>
       <ActivityIndicator size="small" color={colors.textSecondary} />
     </View>
-  ) : detailError ? (
+  ) : detailError && !detailPayload ? (
     <Text style={styles.detailError}>{detailError}</Text>
   ) : detailPayload ? (
     <>
+      {detailLoading ? (
+        <Text accessibilityRole="alert" style={styles.detailMuted}>
+          Refreshing details…
+        </Text>
+      ) : null}
+      {detailError ? (
+        <Text accessibilityRole="alert" style={styles.detailError}>
+          {detailError}
+        </Text>
+      ) : null}
       <View style={styles.detailMetaGrid}>
         <View style={styles.detailMetaItem}>
           <Text style={styles.detailMetaLabel}>Type</Text>
@@ -89,7 +101,10 @@ export function renderMobileTasksItemDetailContent(model: ConnectionPresentation
             projectName={detailPayload.projectName}
           />
         ) : null}
-        {(detailPayload.provider === 'github' || detailPayload.provider === 'gitlab') &&
+        {(detailPayload.provider === 'github' ||
+          (detailPayload.provider === 'gitlab' &&
+            actionItem.provider === 'gitlab' &&
+            actionItem.source.type === 'issue')) &&
         detailPayload.assignees.length > 0 ? (
           <View style={styles.detailMetaItem}>
             <Text style={styles.detailMetaLabel}>Assignees</Text>
@@ -108,6 +123,17 @@ export function renderMobileTasksItemDetailContent(model: ConnectionPresentation
         </View>
       ) : null}
 
+      {detailPayload.provider === 'gitlab' &&
+      actionItem.provider === 'gitlab' &&
+      actionItem.source.type === 'mr' ? (
+        <>
+          <GitLabMergeRequestSummary
+            item={actionItem.source}
+            approval={detailPayload.approvalState}
+          />
+          <GitLabMergeRequestMetadata detail={detailPayload} />
+        </>
+      ) : null}
       <View style={styles.detailSection}>
         <Text style={styles.detailSectionTitle}>Description</Text>
         {renderMobileTasksItemBodyEditor(model)}
@@ -174,8 +200,7 @@ export function renderMobileTasksItemDetailContent(model: ConnectionPresentation
 
       {renderMobileTasksItemFiles(model)}
 
-      {SHOW_MOBILE_DETAIL_REVIEW_PANELS &&
-      detailPayload.provider === 'gitlab' &&
+      {detailPayload.provider === 'gitlab' &&
       actionItem.provider === 'gitlab' &&
       actionItem.source.type === 'mr' ? (
         <View style={styles.detailSection}>
@@ -184,7 +209,9 @@ export function renderMobileTasksItemDetailContent(model: ConnectionPresentation
             <Text style={styles.detailSectionMeta}>
               {detailPayload.pipelineJobs.length
                 ? `${detailPayload.pipelineJobs.length} jobs`
-                : 'None'}
+                : detailPayload.pipelineAvailable === false
+                  ? 'Unavailable'
+                  : 'No jobs reported'}
             </Text>
           </View>
           {detailPayload.pipelineJobs.length === 0 ? (

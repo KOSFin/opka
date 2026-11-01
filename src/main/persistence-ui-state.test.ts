@@ -127,6 +127,26 @@ describe('Store', () => {
     expect(reloaded.getUI().statusBarUsageMode).toBe(mode)
   })
 
+  it('roundtrips host-scoped account display pins without storing quota or credentials', async () => {
+    const pins = [
+      {
+        owner: 'environment:new',
+        provider: 'codex' as const,
+        runtimeKey: 'host',
+        accountId: 'saved',
+        label: 'Saved account'
+      }
+    ]
+    const store = await createStore()
+    expect(store.getUI().statusBarAccountPins).toEqual([])
+    store.updateUI({ statusBarAccountPins: pins })
+    store.flush()
+    const reloaded = await createStore()
+    expect(reloaded.getUI().statusBarAccountPins).toEqual(pins)
+    reloaded.updateUI({ sidebarWidth: 400 })
+    expect(reloaded.getUI().statusBarAccountPins).toEqual(pins)
+  })
+
   it('moves the legacy host scope with a written host list, so "all hosts" sticks', async () => {
     const store = await createStore()
     store.updateUI({ workspaceHostScope: 'ssh:box', visibleWorkspaceHostIds: ['ssh:box'] })

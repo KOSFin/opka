@@ -1,3 +1,4 @@
+export { MobileSectionReveal } from './MobileSectionReveal'
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 

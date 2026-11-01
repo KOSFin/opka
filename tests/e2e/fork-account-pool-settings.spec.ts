@@ -27,6 +27,8 @@ async function openPools(app: ElectronApplication, page: Page, unsupported = fal
         provider: 'codex',
         revision: 3,
         strategy: 'sequential',
+        applyToNewWork: true,
+        rotation: 'on-limit',
         unknownQuota: 'exclude',
         allowReserve: false,
         members: [
@@ -155,7 +157,11 @@ test('pool operator edits real controls and reads the host-confirmed revision', 
     app = launched.app
     await openPools(app, launched.page)
     const section = launched.page.locator('#account-pools')
-    await expect(section.getByText('pool@example.test · Selected login')).toBeVisible()
+    const provider = section.getByRole('button', { name: /Codex/ })
+    await expect(provider).toHaveAttribute('aria-expanded', 'false')
+    await provider.click()
+    await expect(provider).toHaveAttribute('aria-expanded', 'true')
+    await expect(section.getByText('pool@example.test · Default for new chats')).toBeVisible()
     await expect(section.getByText(/Auth: ready · Quota: unknown/)).toBeVisible()
     await launched.page.screenshot({ path: info.outputPath('account-pool-settings-before.png') })
     await section.getByRole('combobox', { name: 'codex pool mode' }).click()
@@ -163,8 +169,14 @@ test('pool operator edits real controls and reads the host-confirmed revision', 
     await section.getByRole('spinbutton', { name: 'pool@example.test priority' }).fill('2')
     await section.getByRole('combobox', { name: 'pool@example.test pool participation' }).click()
     await launched.page.getByRole('option', { name: 'Drain', exact: true }).click()
+    await provider.click()
+    await expect(section.getByRole('button', { name: 'Save codex pool' })).toHaveCount(0)
+    await provider.click()
+    await expect(
+      section.getByRole('spinbutton', { name: 'pool@example.test priority' })
+    ).toHaveValue('2')
     await section.getByRole('button', { name: 'Save codex pool' }).click()
-    await expect(section.getByText(/Pool saved on/)).toBeVisible()
+    await expect(section.getByText(/Codex pool saved on/)).toBeVisible()
     await expect(section.getByRole('combobox', { name: 'codex pool mode' })).toHaveText('Balanced')
     await expect(
       section.getByRole('spinbutton', { name: 'pool@example.test priority' })
@@ -173,6 +185,12 @@ test('pool operator edits real controls and reads the host-confirmed revision', 
       section.getByRole('combobox', { name: 'pool@example.test pool participation' })
     ).toHaveText('Drain')
     await launched.page.screenshot({ path: info.outputPath('account-pool-settings.png') })
+    await launched.page.setViewportSize({ width: 720, height: 900 })
+    await expect(section.getByRole('button', { name: 'Save codex pool' })).toBeVisible()
+    await expect(
+      section.getByRole('spinbutton', { name: 'pool@example.test priority' })
+    ).toHaveValue('2')
+    await launched.page.screenshot({ path: info.outputPath('account-pool-settings-narrow.png') })
   } finally {
     await session.dispose(app)
   }
@@ -212,8 +230,9 @@ test('server accounts show device sign-in, cancel safely and choose a Claude wor
     await launched.page.getByRole('option', { name: 'Synthetic server', exact: true }).click()
     const signIn = launched.page.getByRole('region', { name: 'Server account sign-in' })
     await expect(signIn.getByText(/Sign in for Synthetic server/)).toBeVisible()
+    await launched.page.locator('#account-pools').getByRole('button', { name: /Codex/ }).click()
     await expect(
-      launched.page.locator('#account-pools').getByText('pool@example.test · Selected login')
+      launched.page.locator('#account-pools').getByText('pool@example.test · Default for new chats')
     ).toBeVisible()
     await expect(
       launched.page.getByText('Could not load provider accounts.', { exact: true })

@@ -1,18 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import type { AccountPoolPolicy } from '../../../src/shared/account-pool-policy'
-import {
-  accountPoolDrafts,
-  accountPoolStatus,
-  setPoolMembership
-} from '../../../src/shared/account-pool-view'
+import { accountPoolDrafts, setPoolMembership } from '../../../src/shared/account-pool-view'
 import type { AccountPoolView } from '../../../src/shared/account-pool-view'
 import type { RpcClient } from '../transport/rpc-client'
 import { accountPoolsRead, accountPoolUpdate } from './mobile-account-enrollment-operations'
 import { PickerModal } from '../components/PickerModal'
-import { MobileAccountPoolMemberSettings } from './MobileAccountPoolMemberSettings'
-import { MobileAccountPoolLaunchSettings } from './MobileAccountPoolLaunchSettings'
-import { MobileSwitch } from '../components/MobileSwitch'
+import { MobileAccountPoolCard } from './MobileAccountPoolCard'
 import { poolStyles } from './mobile-account-pool-styles'
 import { styles } from './mobile-accounts-screen-styles'
 
@@ -20,12 +14,32 @@ type PoolPicker = { policyId: string; accountId?: string; value: string }
 export function MobileAccountPoolSection({
   client,
   connected,
-  hostName
+  hostName,
+  refreshKey = 0
 }: {
   client: RpcClient | null
   connected: boolean
   hostName: string
+  refreshKey?: number
 }) {
+  const dirty = useRef(new Set<string>())
+  const generation = client?.getGeneration?.() ?? 0
+  const ownerClient = useRef({ client, generation })
+  const latestOwner = useRef({ client, generation })
+  latestOwner.current = { client, generation }
+  const verifiedOwner = useRef<typeof ownerClient.current | null>(null)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  const owns = (owner: typeof ownerClient.current) =>
+    mounted.current &&
+    owner.client === latestOwner.current.client &&
+    owner.generation === latestOwner.current.generation &&
+    owner.generation === (owner.client?.getGeneration?.() ?? 0)
   const [view, setView] = useState<AccountPoolView | null>(null)
   const [drafts, setDrafts] = useState<AccountPoolPolicy[]>([])
   const [busy, setBusy] = useState(false)
@@ -36,24 +50,46 @@ export function MobileAccountPoolSection({
     if (!client || !connected) {
       return
     }
+    const requestOwner = { client, generation }
     setBusy(true)
     setSaved(false)
     setError('')
     try {
       const next = accountPoolsRead.interpret(await accountPoolsRead.request(client))
+      if (!owns(requestOwner)) {
+        return
+      }
+      verifiedOwner.current = requestOwner
       setView(next)
-      setDrafts(accountPoolDrafts(next))
+      setDrafts((previous) =>
+        accountPoolDrafts(next).map((policy) =>
+          dirty.current.has(policy.id)
+            ? (previous.find((entry) => entry.id === policy.id) ?? policy)
+            : policy
+        )
+      )
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      if (owns(requestOwner)) {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
     } finally {
-      setBusy(false)
+      if (owns(requestOwner)) {
+        setBusy(false)
+      }
     }
-  }, [client, connected])
+  }, [client, connected, generation])
   useEffect(() => {
     let stale = false
-    setView(null)
-    setDrafts([])
-    setSaved(false)
+    const requestOwner = { client, generation }
+    if (ownerClient.current.client !== client || ownerClient.current.generation !== generation) {
+      ownerClient.current = requestOwner
+      verifiedOwner.current = null
+      setPicker(null)
+      dirty.current.clear()
+      setView(null)
+      setDrafts([])
+      setSaved(false)
+    }
     if (!client || !connected) {
       return
     }
@@ -61,36 +97,48 @@ export function MobileAccountPoolSection({
     void accountPoolsRead
       .request(client)
       .then((result) => {
-        if (stale) {
+        if (stale || !owns(requestOwner)) {
           return
         }
         const next = accountPoolsRead.interpret(result)
+        verifiedOwner.current = requestOwner
         setView(next)
-        setDrafts(accountPoolDrafts(next))
+        setDrafts((previous) =>
+          accountPoolDrafts(next).map((policy) =>
+            dirty.current.has(policy.id)
+              ? (previous.find((entry) => entry.id === policy.id) ?? policy)
+              : policy
+          )
+        )
         setError('')
       })
       .catch((cause: unknown) => {
-        if (!stale) {
+        if (!stale && owns(requestOwner)) {
           setError(cause instanceof Error ? cause.message : String(cause))
         }
       })
       .finally(() => {
-        if (!stale) {
+        if (!stale && owns(requestOwner)) {
           setBusy(false)
         }
       })
     return () => {
       stale = true
     }
-  }, [client, connected])
+  }, [client, connected, refreshKey, generation])
   function change(policy: AccountPoolPolicy) {
+    if (!owns({ client, generation })) {
+      return
+    }
+    dirty.current.add(policy.id)
     setDrafts((previous) => previous.map((entry) => (entry.id === policy.id ? policy : entry)))
     setSaved(false)
   }
   async function save(policy: AccountPoolPolicy) {
-    if (!client || !connected || busy) {
+    if (!client || !connected || busy || !verifiedOwner.current || !owns(verifiedOwner.current)) {
       return
     }
+    const requestOwner = { client, generation }
     setBusy(true)
     setSaved(false)
     setError('')
@@ -101,7 +149,13 @@ export function MobileAccountPoolSection({
           expectedRevision: policy.revision
         })
       )
+      if (!owns(requestOwner)) {
+        return
+      }
       const next = accountPoolsRead.interpret(await accountPoolsRead.request(client))
+      if (!owns(requestOwner)) {
+        return
+      }
       setView(next)
       setDrafts((previous) =>
         previous.map((entry) =>
@@ -110,14 +164,22 @@ export function MobileAccountPoolSection({
             : entry
         )
       )
+      dirty.current.delete(policy.id)
       setSaved(true)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      if (owns(requestOwner)) {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
     } finally {
-      setBusy(false)
+      if (owns(requestOwner)) {
+        setBusy(false)
+      }
     }
   }
   function pick(value: string) {
+    if (!owns({ client, generation })) {
+      return
+    }
     const policy = drafts.find((entry) => entry.id === picker?.policyId)
     if (!policy || !picker) {
       return
@@ -168,101 +230,39 @@ export function MobileAccountPoolSection({
       </Pressable>
       {view
         ? drafts.map((policy) => (
-            <View key={policy.id} style={styles.card}>
-              <View style={poolStyles.content}>
-                <Text style={styles.rowTitle}>
-                  {policy.provider === 'claude' ? 'Claude' : 'Codex'}
-                </Text>
-                <MobileAccountPoolLaunchSettings
-                  policy={policy}
-                  disabled={disabled}
-                  onChange={change}
-                />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${policy.provider} pool mode`}
-                  disabled={disabled}
-                  style={poolStyles.action}
-                  onPress={() => setPicker({ policyId: policy.id, value: policy.strategy })}
-                >
-                  <Text style={poolStyles.actionText}>Mode: {policy.strategy}</Text>
-                </Pressable>
-                <View style={poolStyles.toggleRow}>
-                  <Text style={[styles.rowTitle, styles.rowMain]}>Allow unknown quota</Text>
-                  <MobileSwitch
-                    accessibilityLabel={`${policy.provider} allow unknown quota`}
-                    disabled={disabled}
-                    value={policy.unknownQuota === 'allow'}
-                    onValueChange={(allow) =>
-                      change({ ...policy, unknownQuota: allow ? 'allow' : 'exclude' })
-                    }
-                  />
-                </View>
-                {view.accounts[policy.provider].accounts.length === 0 ? (
-                  <Text style={styles.rowSubtitle}>
-                    No saved accounts on this host. Open Accounts to add a login, then return here.
-                  </Text>
-                ) : null}
-                {view.accounts[policy.provider].accounts.map((account) => {
-                  const member = policy.members.find((entry) => entry.accountId === account.id)
-                  return (
-                    <View key={account.id} style={poolStyles.account}>
-                      <Text style={styles.rowTitle}>
-                        {account.email}
-                        {view.accounts[policy.provider].activeAccountId === account.id
-                          ? ' · Selected login'
-                          : ''}
-                      </Text>
-                      <Text style={styles.rowSubtitle}>
-                        {accountPoolStatus(view, policy, account.id)}
-                      </Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`${account.email} pool participation`}
-                        disabled={disabled}
-                        style={poolStyles.action}
-                        onPress={() =>
-                          setPicker({
-                            policyId: policy.id,
-                            accountId: account.id,
-                            value: member?.state ?? 'excluded'
-                          })
-                        }
-                      >
-                        <Text style={poolStyles.actionText}>
-                          Participation: {member?.state ?? 'excluded'}
-                        </Text>
-                      </Pressable>
-                      {member ? (
-                        <MobileAccountPoolMemberSettings
-                          member={member}
-                          accountLabel={account.email}
-                          balanced={policy.strategy === 'balanced'}
-                          disabled={disabled}
-                          onChange={(next) =>
-                            change({
-                              ...policy,
-                              members: policy.members.map((entry) =>
-                                entry.accountId === account.id ? next : entry
-                              )
-                            })
-                          }
-                        />
-                      ) : null}
-                    </View>
+            <MobileAccountPoolCard
+              key={policy.id}
+              policy={policy}
+              view={view}
+              disabled={disabled}
+              dirty={dirty.current.has(policy.id)}
+              onDiscard={() => {
+                if (!owns({ client, generation })) {
+                  return
+                }
+                dirty.current.delete(policy.id)
+                const saved = accountPoolDrafts(view).find((entry) => entry.id === policy.id)
+                if (saved) {
+                  setDrafts((previous) =>
+                    previous.map((entry) => (entry.id === policy.id ? saved : entry))
                   )
-                })}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Save ${policy.provider} pool`}
-                  disabled={disabled}
-                  style={poolStyles.action}
-                  onPress={() => void save(policy)}
-                >
-                  <Text style={poolStyles.actionText}>Save {policy.provider} pool</Text>
-                </Pressable>
-              </View>
-            </View>
+                }
+              }}
+              onChange={change}
+              onSave={() => void save(policy)}
+              onPick={(accountId) => {
+                if (!owns({ client, generation })) {
+                  return
+                }
+                setPicker({
+                  policyId: policy.id,
+                  accountId,
+                  value: accountId
+                    ? (policy.members.find((m) => m.accountId === accountId)?.state ?? 'excluded')
+                    : policy.strategy
+                })
+              }}
+            />
           ))
         : null}
       {saved ? (

@@ -12,6 +12,10 @@ const state = vi.hoisted<{
   connection: 'connected',
   push: vi.fn()
 }))
+vi.mock('../components/MobileSectionReveal', () => ({
+  MobileSectionReveal: ({ children }: { children: import('react').ReactNode }) => children
+}))
+
 vi.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
@@ -21,6 +25,11 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (v: unknown) => v }
 }))
 vi.mock('lucide-react-native', () => ({
+  Circle: 'Circle',
+  CircleCheck: 'CircleCheck',
+  CirclePlay: 'CirclePlay',
+  ClipboardCheck: 'ClipboardCheck',
+  TriangleAlert: 'TriangleAlert',
   ChevronLeft: 'ChevronLeft',
   ChevronRight: 'ChevronRight',
   RefreshCw: 'RefreshCw'

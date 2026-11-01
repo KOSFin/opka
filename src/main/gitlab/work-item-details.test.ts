@@ -60,6 +60,7 @@ describe('getWorkItemDetails', () => {
             id: 120,
             iid: 12,
             title: 'Bound detail payloads',
+            assignees: [{ username: 'owner' }, { username: null }],
             state: 'opened',
             web_url: 'https://gitlab.com/g/p/-/merge_requests/12',
             updated_at: '2026-05-31T12:00:00Z',
@@ -149,6 +150,7 @@ describe('getWorkItemDetails', () => {
       additions: 1,
       deletions: 1
     })
+    expect(details?.assignees).toEqual(['owner'])
     expect(details?.reviewers).toMatchObject([{ id: 1, username: 'alice' }])
     expect(details?.approvalState).toMatchObject({
       approvalsRequired: 1,
@@ -294,6 +296,7 @@ describe('getWorkItemDetails', () => {
     })
 
     const details = await getWorkItemDetails('/repo', 12, 'mr')
+    expect(details?.assignees).toBeUndefined()
     const names = (details?.pipelineJobs ?? []).map((job) => job.name).sort()
     expect(names).toEqual(['lint', 'semgrep-sast', 'trigger-ci', 'unit'])
     expect(details?.pipelineJobs?.find((job) => job.name === 'unit')).toMatchObject({

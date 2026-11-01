@@ -1,5 +1,13 @@
+import { useRef } from 'react'
+import {
+  gitLabMrDetailKey,
+  gitLabMrCacheEpoch,
+  readGitLabMrDetail,
+  saveGitLabMrDetail,
+  invalidateGitLabMrDetail
+} from './gitlab-mr-detail-cache'
+import type { DetailPayload, GitLabWorkItem } from './mobile-tasks-provider-detail-types'
 import type { ProviderCheckSummary } from '../../../src/shared/github/pull-request-types'
-import type { GitLabWorkItem } from './mobile-tasks-provider-detail-types'
 import type { ItemDetailMetadataEffectsModel } from './use-mobile-tasks-item-detail-metadata-effects'
 import { fetchJiraIssueDetail } from './mobile-jira-task-source'
 import { createJiraTask } from './mobile-tasks-item-mapping'
@@ -64,6 +72,10 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
     setItems,
     tasksSupported
   } = model
+  const lastRequest = useRef<{ client: typeof client; key: string | null; refresh: number } | null>(
+    null
+  )
+  const generation = client?.getGeneration?.() ?? 0
   useEffect(() => {
     if (!tasksSupported || !actionItem || !client) {
       setDetailPayload(null)
@@ -73,8 +85,24 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
     }
 
     let stale = false
-    setDetailPayload(null)
+    const isCurrent = () => !stale && (client.getGeneration?.() ?? 0) === generation
+    const cacheKey = gitLabMrDetailKey(actionItem)
+    const cached = cacheKey ? readGitLabMrDetail(client, cacheKey) : null
+    const explicitRefresh =
+      lastRequest.current?.client === client &&
+      lastRequest.current.key === cacheKey &&
+      lastRequest.current.refresh !== detailRefreshSeq
+    lastRequest.current = { client, key: cacheKey, refresh: detailRefreshSeq }
+    if (cacheKey && explicitRefresh) {
+      invalidateGitLabMrDetail(client, cacheKey)
+    }
+    const cacheEpoch = gitLabMrCacheEpoch(client)
+    setDetailPayload(cached)
     setDetailError('')
+    if (cached && !explicitRefresh) {
+      setDetailLoading(false)
+      return
+    }
     setDetailLoading(true)
 
     const loadDetails = async (): Promise<void> => {
@@ -92,7 +120,7 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
         if (!details) {
           throw new Error('Details not found')
         }
-        if (!stale) {
+        if (isCurrent()) {
           setDetailPayload({
             provider: 'github',
             body: details.body ?? '',
@@ -127,15 +155,24 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
         if (!details) {
           throw new Error('Details not found')
         }
-        if (!stale) {
-          setDetailPayload({
+        if (isCurrent()) {
+          const payload: Extract<DetailPayload, { provider: 'gitlab' }> = {
             provider: 'gitlab',
+            pipelineAvailable: details.pipelineJobs !== undefined,
+            assigneesAvailable: details.assignees !== undefined,
+            reviewers: details.reviewers,
+            files: details.files,
+            approvalState: details.approvalState,
             body: details.body ?? '',
             comments: details.comments ?? [],
             labels: details.item?.labels ?? actionItem.source.labels,
             assignees: details.assignees ?? [],
             pipelineJobs: details.pipelineJobs ?? []
-          })
+          }
+          if (cacheKey) {
+            saveGitLabMrDetail(client, cacheKey, payload, Date.now(), cacheEpoch)
+          }
+          setDetailPayload(payload)
           const checksSummary = buildGitLabCheckSummary(details.pipelineJobs ?? [])
           const reviewDecision: Exclude<HostedReviewDecision, null> | undefined =
             details.approvalState?.approvalsRequired && details.approvalState.approvalsLeft === 0
@@ -189,7 +226,7 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
           key: actionItem.source.key,
           siteId: actionItem.source.siteId
         })
-        if (!stale) {
+        if (isCurrent()) {
           setDetailPayload({
             provider: 'jira',
             description: issue.description ?? '',
@@ -248,7 +285,7 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
       if (!issue) {
         throw new Error('Details not found')
       }
-      if (!stale) {
+      if (isCurrent()) {
         setDetailPayload({
           provider: 'linear',
           description: issue.description ?? '',
@@ -277,12 +314,12 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
 
     void loadDetails()
       .catch((err) => {
-        if (!stale) {
+        if (isCurrent()) {
           setDetailError(err instanceof Error ? err.message : 'Failed to load details')
         }
       })
       .finally(() => {
-        if (!stale) {
+        if (isCurrent()) {
           setDetailLoading(false)
         }
       })
@@ -290,7 +327,7 @@ export function useMobileTasksItemDetailLoading<Model extends ItemDetailLoadingI
     return () => {
       stale = true
     }
-  }, [actionItem, client, detailRefreshSeq, tasksSupported])
+  }, [actionItem, client, detailRefreshSeq, tasksSupported, generation])
   return model
 }
 

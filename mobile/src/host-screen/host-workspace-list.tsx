@@ -189,7 +189,13 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
             return (
               <>
                 <Pressable
-                  style={styles.sectionHeader}
+                  style={[
+                    styles.sectionHeader,
+                    section.projectGroupHeader && styles.projectGroupHeader,
+                    section.headerDepth ? styles.nestedRepoHeader : null
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: !isCollapsed }}
                   onPress={() => settings.toggleCollapsed(section.key)}
                 >
                   {isCollapsed ? (
@@ -209,7 +215,14 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
                       />
                     </View>
                   ) : null}
-                  <Text style={styles.sectionTitle}>{section.title}</Text>
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      section.projectGroupHeader && styles.projectGroupTitle
+                    ]}
+                  >
+                    {section.title}
+                  </Text>
                   <Text style={styles.sectionCount}>{count}</Text>
                   {pendingCollapseKeys.has(section.key) && (
                     <ActivityIndicator

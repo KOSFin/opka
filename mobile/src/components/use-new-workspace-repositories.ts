@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { z } from 'zod'
+import { normalizeExecutionHostId, type ExecutionHostId } from '../../../src/shared/execution-host'
+import { sanitizeRepoIcon } from '../../../src/shared/repo-icon'
+import { hostRepoCatalogSchema } from '../host-screen/host-screen-reply-schema'
 import type { RpcClient } from '../transport/rpc-client'
-import { getCachedRepos, setCachedRepos } from '../cache/repo-cache'
+import { getRetainedRepos, setCachedRepos } from '../cache/repo-cache'
 import { listHostRepos } from '../worktree/server-repos'
 import { useServerRepos } from '../worktree/use-server-repos'
 import { useLastVisitedWorktreeRepoId } from '../worktree/use-last-visited-worktree-repo'
@@ -11,6 +14,45 @@ import {
   resolveMobileNewWorkspaceDialogRepoId
 } from '../worktree/new-workspace-dialog-repo-selection'
 import type { MobileWorkspaceRepo } from './new-worktree-modal-types'
+
+const cachedPickerMetadataSchema = z.object({
+  kind: z.enum(['git', 'folder']).optional().catch(undefined),
+  upstream: z
+    .object({ owner: z.string(), repo: z.string(), host: z.string().optional() })
+    .nullable()
+    .optional()
+    .catch(undefined),
+  gitRemoteIdentity: z
+    .object({ canonicalKey: z.string(), remoteName: z.string(), remoteUrl: z.string() })
+    .nullable()
+    .optional()
+    .catch(undefined)
+})
+
+function readRetainedPickerRepos(hostId: string | undefined): MobileWorkspaceRepo[] | null {
+  const retained = hostId ? getRetainedRepos(hostId) : null
+  if (!retained) {
+    return null
+  }
+  const parsed = hostRepoCatalogSchema.safeParse({ repos: retained })
+  if (!parsed.success) {
+    return null
+  }
+  return parsed.data.flatMap((repo) => {
+    if (typeof repo.path !== 'string') {
+      return []
+    }
+    return [
+      {
+        ...repo,
+        ...cachedPickerMetadataSchema.parse(repo),
+        path: repo.path,
+        executionHostId: normalizeExecutionHostId(repo.executionHostId),
+        repoIcon: sanitizeRepoIcon(repo.repoIcon)
+      }
+    ]
+  })
+}
 
 const NO_SERVER_CLIENTS: ReadonlyMap<ExecutionHostId, RpcClient> = new Map()
 
@@ -31,12 +73,21 @@ export function useNewWorkspaceRepositories(args: {
   loading: boolean
 } {
   const { client, serverClients = NO_SERVER_CLIENTS, hostId, visible } = args
-  const [initialRepos] = useState(() =>
-    hostId ? (getCachedRepos(hostId) as MobileWorkspaceRepo[] | null) : null
-  )
-  const [desktopRepos, setDesktopRepos] = useState<MobileWorkspaceRepo[]>(initialRepos ?? [])
+  const [initialRepos] = useState(() => readRetainedPickerRepos(hostId))
+  const [desktopSnapshot, setDesktopSnapshot] = useState({ hostId, repos: initialRepos ?? [] })
+  const desktopRepos = desktopSnapshot.hostId === hostId ? desktopSnapshot.repos : []
   const serverRepos = useServerRepos<MobileWorkspaceRepo>(serverClients, visible)
-  const [pickedRepo, setSelectedRepo] = useState<MobileWorkspaceRepo | null>(null)
+  const [selection, setSelection] = useState<{
+    hostId: string | undefined
+    repo: MobileWorkspaceRepo | null
+  } | null>(null)
+  const pickedRepo = selection?.hostId === hostId ? (selection?.repo ?? null) : null
+  const setSelectedRepo = useCallback(
+    (repo: MobileWorkspaceRepo | null) => {
+      setSelection({ hostId, repo })
+    },
+    [hostId]
+  )
   const [loading, setLoading] = useState(initialRepos == null)
   const lastVisitedRepo = useLastVisitedWorktreeRepoId(hostId, visible)
   const repos = useMemo(
@@ -65,7 +116,14 @@ export function useNewWorkspaceRepositories(args: {
     if (preferredRepo) {
       setSelectedRepo(preferredRepo)
     }
-  }, [lastVisitedRepo.loaded, lastVisitedRepo.repoId, repos, selectedRepo, visible])
+  }, [
+    lastVisitedRepo.loaded,
+    lastVisitedRepo.repoId,
+    repos,
+    selectedRepo,
+    setSelectedRepo,
+    visible
+  ])
 
   useEffect(() => {
     if (!visible || !client) {
@@ -78,7 +136,7 @@ export function useNewWorkspaceRepositories(args: {
         if (stale || !listed) {
           return
         }
-        setDesktopRepos(listed)
+        setDesktopSnapshot({ hostId, repos: listed })
         if (hostId) {
           setCachedRepos(hostId, listed)
         }

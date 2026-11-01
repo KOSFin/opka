@@ -1,3 +1,4 @@
+import { normalizeStatusBarAccountPins } from '../../../../../shared/status-bar-account-pins'
 import type { UISlice, UISliceGet, UISliceSet } from './ui-slice-contract'
 import type { AppState } from '../../types'
 import { normalizeRightSidebarRoute } from '../../right-sidebar-route'
@@ -175,6 +176,7 @@ export function createUiHydrationActions(set: UISliceSet, _get: UISliceGet): Par
           statusBarItems: statusBarItemsWithGrok,
           statusBarVisible: ui.statusBarVisible ?? true,
           usagePercentageDisplay: normalizeUsagePercentageDisplay(ui.usagePercentageDisplay),
+          statusBarAccountPins: normalizeStatusBarAccountPins(ui.statusBarAccountPins),
           statusBarUsageMode: normalizeStatusBarUsageMode(ui.statusBarUsageMode),
           // Why: default true so existing users see the pet on first enabling the flag; only an explicit Hide persists false.
           petVisible: ui.petVisible ?? ui.sidekickVisible ?? true,

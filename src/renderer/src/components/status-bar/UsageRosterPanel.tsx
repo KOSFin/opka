@@ -1,4 +1,6 @@
 import React from 'react'
+import { UsageAccountRows } from './UsageAccountRows'
+import { useUsageAccounts } from './UsageAccountsContext'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { SettingsSegmentedControl } from '@/components/settings/SettingsFormControls'
@@ -234,11 +236,18 @@ export function UsageRosterPanel({
   // default clickable row.
   renderRow?: (p: ProviderRateLimits, row: React.ReactNode) => React.ReactNode
 }): React.JSX.Element {
+  const accountsOwner = useUsageAccounts()
   // Why: one boundary-scheduled clock keeps every open row current without per-provider timers.
   const now = useResetCountdownClock(
-    providers.flatMap((provider) =>
-      usedSections(provider).map((section) => section.window.resetsAt)
-    )
+    [
+      ...providers,
+      ...(accountsOwner?.rateLimits.inactiveClaudeAccounts ?? []).flatMap((entry) =>
+        entry.rateLimits ? [entry.rateLimits] : []
+      ),
+      ...(accountsOwner?.rateLimits.inactiveCodexAccounts ?? []).flatMap((entry) =>
+        entry.rateLimits ? [entry.rateLimits] : []
+      )
+    ].flatMap((provider) => usedSections(provider).map((section) => section.window.resetsAt))
   )
   // Worst-first so the agent nearest a limit sits on top.
   const sorted = [...providers].sort(
@@ -253,7 +262,8 @@ export function UsageRosterPanel({
         </span>
         <div className="flex items-center gap-2 text-muted-foreground">
           <span className="text-[11px]">
-            {translate('auto.components.status.bar.UsageRosterPanel.allAgents', 'all agents')}
+            {accountsOwner?.ownerLabel ??
+              translate('auto.components.status.bar.UsageRosterPanel.allAgents', 'all agents')}
           </span>
           <DropdownMenuItem
             onSelect={(event) => {
@@ -316,31 +326,33 @@ export function UsageRosterPanel({
             mode={statusBarUsageMode}
           />
         )
-        if (showSignInAction) {
-          return (
-            <DropdownMenuItem
-              key={p.provider}
-              onSelect={() => onSignIn(p.provider)}
-              className="w-full cursor-pointer rounded-none px-3.5 py-2.5"
-            >
-              {rowNode}
-            </DropdownMenuItem>
-          )
-        }
-        const custom = renderRow?.(p, rowNode)
-        if (custom) {
-          return <React.Fragment key={p.provider}>{custom}</React.Fragment>
-        }
-        return (
+        const custom = showSignInAction ? null : renderRow?.(p, rowNode)
+        const item = custom ?? (
           <DropdownMenuItem
-            key={p.provider}
-            onSelect={() => onOpenProvider(p.provider)}
+            onSelect={() => (showSignInAction ? onSignIn(p.provider) : onOpenProvider(p.provider))}
             className="w-full cursor-pointer rounded-none px-3.5 py-2.5"
           >
             {rowNode}
           </DropdownMenuItem>
         )
+        return (
+          <React.Fragment key={p.provider}>
+            {item}
+            {p.provider === 'claude' || p.provider === 'codex' ? (
+              <UsageAccountRows provider={p.provider} now={now} display={display} />
+            ) : null}
+          </React.Fragment>
+        )
       })}
+      {accountsOwner &&
+      sorted.some((entry) => entry.provider === 'claude' || entry.provider === 'codex') ? (
+        <p className="border-t border-border/50 px-3.5 py-2 text-2xs text-muted-foreground">
+          {translate(
+            'usage.accounts.sharedBudgetHint',
+            'Profiles are separate sign-in contexts and may share provider limits.'
+          )}
+        </p>
+      ) : null}
       <div className="border-t border-border/70" />
       <DropdownMenuItem
         onSelect={onUsageDetails}

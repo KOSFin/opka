@@ -1,3 +1,4 @@
+import { invalidateGitLabMrItem } from './gitlab-mr-detail-cache'
 import type { GitlabGithubStatusActionsModel } from './use-mobile-tasks-gitlab-github-status-actions'
 import { useCallback } from './mobile-tasks-dependencies'
 import type { TaskItem } from './mobile-tasks-legacy-foundation'
@@ -145,6 +146,7 @@ export function useMobileTasksHostedMetadataActions(model: GitlabGithubStatusAct
         if (updated.ok === false) {
           throw new Error(updated.error ?? 'Failed to update GitLab item')
         }
+        invalidateGitLabMrItem(client, item)
         const nextLabels = [
           ...new Set([
             ...(detailPayload?.provider === 'gitlab'

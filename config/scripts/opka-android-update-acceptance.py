@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from opka_android_handoff_status import completion_action, handoff_ready, ui_snapshot
-from opka_android_published_update import open_published_update, verify_native_download, version_code
+from opka_android_published_update import open_published_update, verify_native_download, verify_cache_cleanup, version_code
 
 PACKAGE = 'com.kosfin.opka.mobile'
 
@@ -22,16 +22,20 @@ def command(*args, timeout=60):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--a', required=True)
+    parser.add_argument('--a-version', default='1.4.236-rc.5')
     parser.add_argument('--b')
     parser.add_argument('--expected-code', type=int)
     parser.add_argument('--handoff')
     parser.add_argument('--published-version', default='')
+    parser.add_argument('--surface', choices=('home', 'settings'), default='settings')
+    parser.add_argument('--fixture-manifest')
     parser.add_argument('--output', default='out/android-update-acceptance')
     args = parser.parse_args()
+    baseline_code = version_code(args.a_version)
     if args.published_version:
-        assert os.environ.get('RELEASE_SIGNER') == 'true', 'Published-channel acceptance requires the protected release signer'
+        assert os.environ.get('RELEASE_SIGNER') == 'true' or args.fixture_manifest, 'Published-channel acceptance requires the protected release signer'
         args.expected_code = version_code(args.published_version)
-        assert args.expected_code > 104236005, 'Published version must upgrade fixture A'
+        assert args.expected_code > baseline_code, 'Target must upgrade baseline A; downgrades are forbidden'
     else:
         assert args.b and args.handoff and args.expected_code, 'Fixture B, handoff and expected code are required'
     output = Path(args.output)
@@ -75,13 +79,16 @@ def main():
 
     try:
         assert adb('shell', 'getprop', 'sys.boot_completed') == '1', 'Android has not booted'
+        if args.fixture_manifest:
+            assert os.environ.get('OPKA_ANDROID_ISOLATED_FIXTURE') == '1', 'Fixture mode requires the isolated wrapper'
+            assert adb('get-serialno').startswith('emulator-') and shell('getprop', 'ro.kernel.qemu') == '1', 'Fixture is emulator-only'
         adb('root')
         adb('wait-for-device')
         assert 'Success' in adb('install', '--no-streaming', str(Path(args.a).resolve()), timeout=180)
         shell('input', 'keyevent', 'KEYCODE_WAKEUP')
         shell('wm', 'dismiss-keyguard')
         before = shell('dumpsys', 'package', PACKAGE)
-        assert re.search(r'versionCode=104236005\b', before), 'Fixture A version is incorrect'
+        assert re.search(rf'versionCode={baseline_code}\b', before), 'Baseline A version is incorrect'
         uid = re.search(r'userId=(\d+)', before)
         assert uid, 'Installed app UID was not found'
         owner = uid.group(1)
@@ -89,6 +96,8 @@ def main():
         marker = 'opka-update-retained-state-v1'
         shell('mkdir', '-p', f'{root}/files', f'{root}/cache/opka-updates')
         shell(f"echo {marker} > {root}/files/update-acceptance-marker")
+        shell('touch', f'{root}/cache/opka-updates/abandoned.part',
+              f'{root}/cache/opka-updates/update-104236004-{"0" * 64}.apk')
         shell('chown', '-R', f'{owner}:{owner}', f'{root}/files', f'{root}/cache/opka-updates')
         shell('cmd', 'appops', 'set', PACKAGE, 'REQUEST_INSTALL_PACKAGES', 'allow')
         if args.published_version:
@@ -97,6 +106,8 @@ def main():
             adb('push', str(Path(args.b).resolve()), f'{root}/cache/opka-updates/update.apk')
             shell('chown', f'{owner}:{owner}', f'{root}/cache/opka-updates/update.apk')
             shell('chmod', '600', f'{root}/cache/opka-updates/update.apk')
+            shell(f'echo {args.expected_code} > {root}/cache/opka-updates/version-code')
+            shell('chown', f'{owner}:{owner}', f'{root}/cache/opka-updates/version-code')
             shell('restorecon', '-RF', f'{root}/files', f'{root}/cache/opka-updates')
         launch = shell('am', 'start', '-W', '-n', f'{PACKAGE}/.MainActivity')
         (output / 'app-launch.txt').write_text(launch + '\n')
@@ -112,7 +123,7 @@ def main():
             raise AssertionError('Fixture A did not remain running as the resumed activity')
         screenshot('before-update')
         if args.published_version:
-            open_published_update(args.published_version, shell, screenshot, output)
+            open_published_update(args.published_version, shell, screenshot, output, args.surface)
         else:
             assert 'Success' in adb('install', '--no-streaming', str(Path(args.handoff).resolve()), timeout=60)
             digest = hashlib.sha256()
@@ -161,7 +172,7 @@ def main():
                 if bounds:
                     screenshot('os-confirmation')
                     if args.published_version:
-                        verify_native_download(args.published_version, root, adb, output)
+                        verify_native_download(args.published_version, root, adb, output, args.fixture_manifest)
                     x1, y1, x2, y2 = map(int, bounds.groups())
                     shell('input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
                     confirmed = True
@@ -212,12 +223,17 @@ def main():
         else:
             raise AssertionError('Updated app did not become stably resumed after instrumentation exit and OS install completion')
         assert shell('pidof', PACKAGE), 'Updated app did not restart'
+        verify_cache_cleanup(root, shell, output)
         screenshot('after-update')
         (output / 'receipt.json').write_text(json.dumps({
             'package': PACKAGE, 'installedCode': args.expected_code,
             'osConfirmation': True, 'appFileRetained': True, 'appRestarted': True,
-            'scope': 'public Settings feed/native download/hash/signer/OS confirmation' if args.published_version else 'OS FileProvider handoff; production HTTPS/feed download is a separate gate',
-            'publishedVersion': args.published_version or None
+            'updaterCacheCleaned': True,
+            'surface': args.surface if args.published_version else None,
+            'nativeModuleRecreation': False,
+            'scope': 'isolated HTTPS fixture/native downloader/UI/hash/signer/OS confirmation' if args.fixture_manifest else ('public Settings feed/native download/hash/signer/OS confirmation' if args.published_version else 'OS FileProvider handoff; production HTTPS/feed download is a separate gate'),
+            'publishedVersion': args.published_version or None,
+            'baselineVersion': args.a_version
         }, indent=2) + '\n')
     except Exception as error:
         (output / 'failure.txt').write_text(str(error) + '\n' + str(getattr(error, 'output', '')))

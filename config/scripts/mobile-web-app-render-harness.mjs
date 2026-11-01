@@ -278,6 +278,13 @@ export function installShellDouble({
   // Every request the page issued, whole and in order, so a check can say which verb a gesture
   // produced and with what geometry rather than only that something was sent.
   globalThis.__orcaRenderCheckRequests = []
+  // Tests can change a recorded response between gestures without replacing the bridge protocol.
+  globalThis.__orcaRenderCheckSetReply = (method, result) => {
+    if (!replies || !Object.hasOwn(replies, method)) {
+      throw new Error('No declared fixture reply')
+    }
+    replies[method] = result
+  }
   // The subscriptions the double accepted, with the `wantsBinary` each one asked for: the negative
   // case is "the page did not ask", which no assertion on the frames can see.
   globalThis.__orcaRenderCheckSubscribes = []

@@ -1,3 +1,4 @@
+import { resolveHydratedTaskViewState } from './mobile-tasks-hydrated-view-state'
 import type { ConnectionPresentationModel } from './use-mobile-tasks-connection-presentation'
 import {
   PickerModal,
@@ -34,6 +35,8 @@ export function renderMobileTasksProviderPicker(model: ConnectionPresentationMod
     setGithubKind,
     setGithubMode,
     setGithubPreset,
+    setGitlabView,
+    setGitlabFilter,
     setItems,
     setLinearFilter,
     setJiraFilter,
@@ -76,6 +79,17 @@ export function renderMobileTasksProviderPicker(model: ConnectionPresentationMod
           setGithubKind(nextKind)
           setQuery(nextQuery)
           setAppliedQuery(scopeGitHubTaskSearch(nextQuery, nextKind))
+        } else if (next === 'gitlab') {
+          const view = resolveHydratedTaskViewState({
+            settings: {},
+            resume,
+            requestedTaskSource: 'gitlab',
+            visibleProviders: ['gitlab']
+          })
+          setGitlabView(view.gitlabView)
+          setGitlabFilter(view.gitlabFilter)
+          setQuery(view.query)
+          setAppliedQuery(view.appliedQuery)
         } else if (next === 'linear') {
           const nextQuery = resume.linearQuery ?? ''
           setLinearFilter(normalizeLinearFilter(resume.linearPreset))

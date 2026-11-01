@@ -1,3 +1,5 @@
+import { useNow } from '../hooks/use-now'
+import { useAppUpdateInstallState } from '../app-update/app-update-install-state'
 import { useEffect, useState } from 'react'
 import {
   appUpdateChecker,
@@ -11,15 +13,11 @@ const CHECK_RESULT_VISIBLE_MS = 3000
 const RELATIVE_TIME_TICK_MS = 60_000
 
 export function SettingsAppUpdateSection() {
+  const install = useAppUpdateInstallState()
   const state = useAppUpdateState()
   const [result, setResult] = useState<'up-to-date' | 'failed' | null>(null)
   // A check newer than this reads as "just now", so the tick only has to age the label.
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), RELATIVE_TIME_TICK_MS)
-    return () => clearInterval(tick)
-  }, [])
+  const now = useNow(RELATIVE_TIME_TICK_MS)
 
   useEffect(() => {
     if (result === null) {
@@ -41,6 +39,8 @@ export function SettingsAppUpdateSection() {
   return (
     <AppUpdateSettingsRows
       installedVersion={installedAppVersion}
+      installBusy={install.busy}
+      installLabel={install.label}
       available={state.available}
       lastCheckedAt={state.lastCheckedAt}
       now={now}

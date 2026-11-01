@@ -3,9 +3,11 @@ import { act, create } from 'react-test-renderer'
 import { describe, expect, it, vi } from 'vitest'
 
 const request = vi.hoisted(() => vi.fn())
+const groupRequest = vi.hoisted(() => vi.fn().mockResolvedValue(null))
 
 vi.mock('../worktree/project-sections-operations', () => ({
   projectSectionsRead: { request },
+  hostProjectGroupsRead: { request: groupRequest },
   readServedProjectSections: (reply: { catalog?: unknown } | null) => ({
     kind: 'answered',
     value: reply?.catalog ?? null

@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from 'react-native'
 import { ChevronRight } from 'lucide-react-native'
+import { ProjectTaskPhaseIcon } from './ProjectTaskPhaseIcon'
 import { colors } from '../theme/mobile-theme'
 import type { MobileProjectTask } from './project-task-rpc'
 import {
@@ -72,8 +73,7 @@ export function ProjectTaskBoard({
     <>
       {!loading && tasks.length === 0 ? (
         <Text style={styles.meta}>
-          No tasks in this project. Add a task from Opka on your computer to track its plan and
-          result here.
+          No tasks in this project. Add a task to describe its goal and acceptance criteria.
         </Text>
       ) : null}
       {phases.map((phase) => {
@@ -82,9 +82,12 @@ export function ProjectTaskBoard({
         )
         return (
           <View style={styles.section} key={phase}>
-            <Text style={styles.sectionHeading}>
-              {phase === 'archived' ? 'Archived' : projectTaskPhaseLabel(phase)} · {items.length}
-            </Text>
+            <View style={styles.rowLine}>
+              <ProjectTaskPhaseIcon phase={phase} />
+              <Text style={styles.sectionHeading}>
+                {phase === 'archived' ? 'Archived' : projectTaskPhaseLabel(phase)} · {items.length}
+              </Text>
+            </View>
             <View style={styles.group}>
               {items.map((item) => (
                 <Pressable

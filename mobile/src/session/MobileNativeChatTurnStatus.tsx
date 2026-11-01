@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useNow } from '../hooks/use-now'
+import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ChevronRight } from 'lucide-react-native'
 import {
@@ -14,15 +15,7 @@ import { colors, spacing, typography } from '../theme/mobile-theme'
 function useElapsedSeconds(startedAt: number | null, counting: boolean): number {
   // Preserves the pre-stamp epoch for the frame before the turn's startedAt lands.
   const [mountedAt] = useState(() => Date.now())
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!counting) {
-      return
-    }
-    setNow(Date.now())
-    const timer = setInterval(() => setNow(Date.now()), 1_000)
-    return () => clearInterval(timer)
-  }, [counting])
+  const now = useNow(1_000, counting)
   return counting ? nativeChatElapsedSeconds(startedAt, mountedAt, now) : 0
 }
 

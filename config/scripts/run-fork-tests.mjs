@@ -4,6 +4,32 @@ import { isDirectInvocation } from './script-entry-detection.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 export const FORK_TEST_FILTERS = [
+  'src/shared/usage-account-provenance.test.ts',
+  'src/shared/status-bar-account-pins.test.ts',
+  'src/shared/agent-feature-install-commands.test.ts',
+  'src/cli/skills.test.ts',
+  'src/main/rate-limits/service-account-provenance.test.ts',
+  'src/main/rate-limits/service-account-target-selection.test.ts',
+  'src/main/rate-limits/service-refresh-orchestration.test.ts',
+  'src/main/rate-limits/service-live-claude-usage.test.ts',
+  'src/main/rate-limits/service-inactive-account-previews.test.ts',
+  'src/main/codex-accounts/runtime-home-per-account-homes.test.ts',
+  'src/main/codex-accounts/runtime-home-wsl-managed-accounts.test.ts',
+  'src/main/codex-accounts/runtime-home-wsl-system-default.test.ts',
+  'src/main/gitlab/work-item-details.test.ts',
+  'src/main/persistence-ui-state.test.ts',
+  'src/renderer/src/components/settings/AccountPoolSection.test.tsx',
+  'src/renderer/src/components/settings/AccountsPane',
+  'src/renderer/src/components/feature-wall/skill-owner-computer-permissions.test.ts',
+  'src/renderer/src/components/status-bar/Usage',
+  'src/renderer/src/components/status-bar/usage-account-',
+  'src/renderer/src/components/status-bar/usage-pinned-account-',
+  'src/renderer/src/components/status-bar/use-usage-account-pools.test.tsx',
+  'src/renderer/src/components/status-bar/use-owner-usage-rate-limits.test.tsx',
+  'src/renderer/src/components/status-bar/use-codex-switcher-runtime-owner.test.tsx',
+  'src/renderer/src/components/status-bar/codex-status-sign-in.test.tsx',
+  'src/renderer/src/components/status-bar/claude-status-sign-in.test.tsx',
+  'src/renderer/src/store/slices/ui-hydration-workspace-preferences.test.ts',
   'src/shared/account-pool-',
   'src/main/runtime/account-pool-',
   'src/main/runtime/pty-account-pool-',
@@ -112,6 +138,40 @@ export const FORK_TEST_FILTERS = [
   'tests/tools/project-task-'
 ]
 
+export const MOBILE_FORK_TEST_FILTERS = [
+  'mobile/src/accounts/',
+  'mobile/src/tasks/',
+  'mobile/src/worktree/',
+  'mobile/src/cache/',
+  'mobile/src/notifications/',
+  'mobile/src/app-update/',
+  'mobile/src/home/MobileHomeEmptyState.test.tsx',
+  'mobile/src/transport/host-store',
+  'mobile/src/components/accounts-snapshot.test.ts',
+  'mobile/src/components/account-usage-state.test.ts',
+  'mobile/src/components/provider-account-usage.test.ts',
+  'mobile/src/components/MobileSectionReveal.test.tsx',
+  'mobile/src/components/bottom-drawer-back-while-hiding.test.tsx',
+  'mobile/src/components/use-new-workspace-repositories.test.ts',
+  'mobile/src/host-screen/host-list-settings-sync.test.ts',
+  'mobile/src/host-screen/host-server-workspaces-wiring.test.ts',
+  'mobile/src/host-screen/host-sidebar-feed-sections.test.ts',
+  'mobile/src/host-screen/host-ssh-health-badge-wiring.test.ts',
+  'mobile/src/host-screen/host-view-changes-reconnect.test.ts',
+  'mobile/src/host-screen/use-host-project-sections.test.tsx',
+  'mobile/src/settings/native-notification-delivery-settings.test.tsx',
+  'mobile/src/settings/notification-display-test.test.tsx',
+  'mobile/src/settings/settings-screen-state.test.tsx',
+  'mobile/src/settings/voice-settings-poller-refresh.test.tsx',
+  'mobile/src/session/MobileNativeChatTurnStatus.test.ts',
+  'mobile/scripts/opka-app-config.test.ts'
+]
+
+export const MOBILE_RENDER_TEST_FILTERS = [
+  'config/scripts/mobile-web-app-project-tasks-render.test.mjs',
+  'config/scripts/mobile-web-app-stack-transition-render.test.mjs'
+]
+
 function run(program, args) {
   const result = runProcessSync({
     program,
@@ -121,16 +181,38 @@ function run(program, args) {
     stdio: 'inherit',
     timeoutMs: null
   })
-  if (result.code !== 0) {
-    process.exit(result.code ?? 1)
-  }
+  return result.code === 0
 }
 
 if (isDirectInvocation(import.meta.url, process.argv[1])) {
-  run('pnpm', ['test', ...FORK_TEST_FILTERS, '--maxWorkers=2'])
-  run(process.execPath, [
-    '--test',
-    'config/scripts/fork-acceptance-fixture.test.mjs',
-    'config/scripts/fork-acceptance-remote-config.test.mjs'
-  ])
+  const results = [run('pnpm', ['test', ...FORK_TEST_FILTERS, '--maxWorkers=2'])]
+  results.push(
+    run('pnpm', [
+      'exec',
+      'vitest',
+      'run',
+      '--config',
+      'mobile/vitest.config.ts',
+      ...MOBILE_FORK_TEST_FILTERS,
+      '--maxWorkers=2'
+    ])
+  )
+  results.push(
+    run(process.execPath, [
+      'node_modules/vitest/vitest.mjs',
+      'run',
+      '--config',
+      'config/vitest.config.ts',
+      ...MOBILE_RENDER_TEST_FILTERS,
+      '--maxWorkers=1'
+    ])
+  )
+  results.push(
+    run(process.execPath, [
+      '--test',
+      'config/scripts/fork-acceptance-fixture.test.mjs',
+      'config/scripts/fork-acceptance-remote-config.test.mjs'
+    ])
+  )
+  process.exitCode = results.every(Boolean) ? 0 : 1
 }

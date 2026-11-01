@@ -11,6 +11,7 @@ vi.mock('../transport/host-removal-lifecycle', () => ({ removeHostAndCloseClient
 vi.mock('../host-route-exit', () => ({ leaveHostRoute: () => {} }))
 vi.mock('../cache/worktree-cache', () => ({
   getCachedWorktrees: () => null,
+  getRetainedWorktrees: () => null,
   setCachedWorktrees: () => {}
 }))
 vi.mock('../storage/preferences', () => ({ savePinnedIds: async () => {} }))

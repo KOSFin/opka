@@ -267,7 +267,7 @@ export type GitLabWorkItemDetails = {
   reviewers?: GitLabAssignableUser[]
   approvalState?: GitLabMRApprovalState
   participants?: GitLabAssignableUser[]
-  /** Issue-only — usernames of current assignees. */
+  /** Usernames of current assignees; older MR detail providers may omit this. */
   assignees?: string[]
 }
 
