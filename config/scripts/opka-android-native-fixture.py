@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run both real updater UI paths against signed fixtures, on disposable CI AVD only."""
 import argparse
+from contextlib import contextmanager, ExitStack
 import hashlib
 import json
 import os
@@ -10,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 
 from opka_android_fixture_proxy import create_server
 from opka_android_baseline_artifact import verify as verify_published_baseline
@@ -35,18 +35,6 @@ def require_isolated_avd():
     return serial
 
 
-def wait_for_avd_boot(avd, timeout=120):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            remaining = max(1, min(10, deadline - time.monotonic()))
-            if avd('shell', 'getprop', 'sys.boot_completed', timeout=remaining) == '1':
-                return
-        except (RuntimeError, subprocess.TimeoutExpired):
-            pass
-        time.sleep(1)
-    raise RuntimeError('Disposable AVD did not finish booting before the deadline')
-
 
 def system_ca_store_writable(avd):
     probe = '/system/etc/security/cacerts/.opka-ci-write-probe'
@@ -54,12 +42,10 @@ def system_ca_store_writable(avd):
         return avd('shell', f': > {probe} && rm -f {probe} && echo OPKA_CA_WRITABLE',
                    check=False, timeout=10) == 'OPKA_CA_WRITABLE'
     finally:
-        try:
-            avd('shell', 'rm', '-f', probe, check=False, timeout=10)
-        except (OSError, RuntimeError, subprocess.TimeoutExpired):
-            pass
+        avd('shell', 'rm', '-f', probe, check=False, timeout=10)
 
 
+@contextmanager
 def prepare_writable_system_ca_store():
     serial = require_isolated_avd()
 
@@ -68,22 +54,34 @@ def prepare_writable_system_ca_store():
 
     avd('root', timeout=30)
     avd('wait-for-device', timeout=30)
-    avd('remount', check=False, timeout=30)
     if system_ca_store_writable(avd):
-        return serial
-    # AOSP's overlayfs sequence requires verity changes to take effect after a reboot.
-    avd('disable-verity', timeout=30)
-    avd('reboot', timeout=30)
-    avd('wait-for-disconnect', timeout=30)
-    avd('wait-for-device', timeout=60)
-    wait_for_avd_boot(avd)
-    assert require_isolated_avd() == serial, 'The disposable AVD identity changed during reboot'
-    avd('root', timeout=30)
-    avd('wait-for-device', timeout=30)
-    avd('remount', timeout=30)
-    if not system_ca_store_writable(avd):
-        raise RuntimeError('Disposable AVD system CA store is still read-only after verity/reboot/remount')
-    return serial
+        yield serial
+        return
+    assert avd('shell', 'getprop', 'ro.build.version.sdk') == '30', 'CA overlay supports only the disposable API30 fixture'
+    store = '/system/etc/security/cacerts'
+    overlay = f'/data/local/tmp/opka-ci-cacerts-{os.getpid()}'
+    context = avd('shell', 'ls', '-Zd', store).split()[0]
+    assert re.fullmatch(r'u:object_r:[a-zA-Z0-9_]+:s0', context), 'Unsupported CA store SELinux context'
+    mounted = False
+    created = False
+    try:
+        avd('shell', 'mkdir', '-m', '755', overlay)
+        created = True
+        avd('shell', 'cp', '-a', store + '/.', overlay)
+        avd('shell', 'chown', '-R', 'root:root', overlay)
+        avd('shell', f'chmod 755 {overlay} && chmod 644 {overlay}/*')
+        avd('shell', 'chcon', '-R', context, overlay)
+        avd('shell', 'mount', '--bind', overlay, store)
+        mounted = True
+        if not system_ca_store_writable(avd):
+            raise RuntimeError('Disposable AVD CA overlay is not writable')
+        yield serial
+    finally:
+        if mounted:
+            avd('shell', 'am', 'force-stop', PACKAGE, check=False, timeout=10)
+            avd('shell', 'umount', store, timeout=10)
+        if created:
+            avd('shell', 'rm', '-rf', overlay, timeout=10)
 
 
 def certificate(apksigner, apk):
@@ -139,6 +137,8 @@ def main():
 
     server = None
     ca_path = None
+    ca_owned = False
+    trust = ExitStack()
     with tempfile.TemporaryDirectory(prefix='opka-avd-tls-', dir=os.environ.get('RUNNER_TEMP')) as directory:
         temp = Path(directory)
         ca, ca_key = temp / 'ca.pem', temp / 'ca.key'
@@ -152,8 +152,10 @@ def main():
         assert re.fullmatch('[a-f0-9]{8}', subject_hash), 'Invalid temporary CA hash'
         ca_path = f'/system/etc/security/cacerts/{subject_hash}.0'
         try:
-            serial = prepare_writable_system_ca_store()
+            serial = trust.enter_context(prepare_writable_system_ca_store())
+            command('adb', '-s', serial, 'shell', 'test', '!', '-e', ca_path)
             command('adb', '-s', serial, 'push', str(ca), ca_path)
+            ca_owned = True
             command('adb', '-s', serial, 'shell', 'chmod', '644', ca_path)
             command('adb', '-s', serial, 'shell', 'restorecon', ca_path)
             server = create_server(('127.0.0.1', 8080), str(leaf), str(leaf_key), manifest, b, record)
@@ -178,6 +180,15 @@ def main():
                 'network': 'strict isolated HTTPS proxy; production URL and APK checks unchanged',
                 'realGithubCandidateCDN': False
             }, indent=2) + '\n')
+        except Exception as error:
+            diagnostics = {'failureType': type(error).__name__}
+            for name, prop in [('bootCompleted', 'sys.boot_completed'), ('adbdState', 'init.svc.adbd')]:
+                try:
+                    diagnostics[name] = command('adb', '-s', serial, 'shell', 'getprop', prop, timeout=5)[:80]
+                except Exception:
+                    diagnostics[name] = 'unavailable'
+            (output / 'trust-diagnostics.json').write_text(json.dumps(diagnostics, indent=2) + '\n')
+            raise
         finally:
             (output / 'proxy-events.json').write_text(json.dumps(events, indent=2) + '\n')
             (output / 'scenario-results.json').write_text(json.dumps({
@@ -186,7 +197,7 @@ def main():
                 'legacyFailureRecovery': 'If released updater cannot open the native installer, preserve failure evidence and require an explicit one-time manual APK update; do not re-sign baseline or mark migration passed.'
             }, indent=2) + '\n')
             cleanup = [('shell', 'settings', 'delete', 'global', 'http_proxy')]
-            if ca_path:
+            if ca_owned:
                 cleanup.append(('shell', 'rm', '-f', ca_path))
             for arguments in cleanup:
                 try:
@@ -196,6 +207,7 @@ def main():
             if server:
                 server.shutdown()
                 server.server_close()
+            trust.close()
 
 
 if __name__ == '__main__':

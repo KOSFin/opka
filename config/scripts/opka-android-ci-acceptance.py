@@ -174,12 +174,12 @@ def main():
     results = collect_stages([
         ('os-update', fresh(lambda: run('OS confirmation and retained state',
                                       [python, 'config/scripts/opka-android-update-acceptance-entry.py']))),
-        ('native-https', fresh(lambda: run('Production native updater before publication', native, timeout=1200))),
         ('baseline-idle', fresh(lambda: run('Published baseline and candidate idle measurements',
             [python, 'mobile/scripts/compare-android-idle-performance.py', '--serial', serial,
              '--baseline-apk', baseline, '--candidate-apk', candidate,
              '--output', 'out/android-idle-performance'], timeout=420))),
-        ('real-ui', fresh(lambda: run_ui(serial, candidate, evidence)))
+        ('real-ui', fresh(lambda: run_ui(serial, candidate, evidence))),
+        ('native-https', fresh(lambda: run('Production native updater before publication', native, timeout=1200)))
     ], evidence / 'stage-outcomes.json', lambda: device_available(serial))
     ui_passed = any(item['stage'] == 'real-ui' and item['status'] == 'passed' for item in results)
     (evidence / 'pipeline.json').write_text(json.dumps({
