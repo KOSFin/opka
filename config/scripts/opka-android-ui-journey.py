@@ -54,7 +54,7 @@ def label_matches(node, label, contains=False):
 
 def actionable_match(root, label, contains=False):
     parents = {child: parent for parent in root.iter() for child in parent}
-    for node in root.iter('node'):
+    for node in sorted(root.iter('node'), key=lambda item: item.get('clickable') != 'true'):
         if not label_matches(node, label, contains):
             continue
         candidate = None

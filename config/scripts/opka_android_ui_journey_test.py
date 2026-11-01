@@ -69,6 +69,15 @@ class HostListReadiness(unittest.TestCase):
 
 
 class NativeActionTargets(unittest.TestCase):
+    def test_captured_accounts_radio_tab_wins_over_clickable_whole_page_ancestor(self):
+        fixture = Path(__file__).with_name('fixtures') / 'android-webview-accessibility/accounts-pools.xml'
+        root = ET.parse(fixture).getroot()
+        tab = journey.actionable_match(root, 'Accounts')
+        self.assertIsNotNone(tab)
+        self.assertEqual(tab.get('class'), 'android.widget.RadioButton')
+        self.assertEqual(tab.get('bounds'), '[44,231][527,304]')
+        self.assertEqual(tab.get('text'), 'Accounts')
+
     def test_header_title_does_not_hide_clickable_accounts_tab(self):
         root = screen('Accounts')
         tab = ET.SubElement(root, 'node', {'clickable': 'true', 'enabled': 'true', 'bounds': '[1,2][3,4]'})
