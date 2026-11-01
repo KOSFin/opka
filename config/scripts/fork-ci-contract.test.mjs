@@ -66,7 +66,23 @@ describe('fork CI safety and required checks', () => {
     expect(restore.with.path).toBe('out/android-update-fixtures/*-unsigned.apk')
     expect(save.with).toEqual(restore.with)
     expect(restore.with['restore-keys']).toBeUndefined()
-    const fingerprint = steps.find((step) => step.id === 'fixture_key').run
+    const fingerprintStep = steps.find((step) => step.id === 'fixture_key')
+    expect(fingerprintStep.env).toEqual({
+      FIREBASE_CLIENT_SHA256: '${{ steps.firebase.outputs.client_sha256 }}',
+      ANDROID_BUILD_ENV_SHA256: '${{ steps.firebase.outputs.build_env_sha256 }}'
+    })
+    const fingerprint = fingerprintStep.run
+    expect(fingerprint).toContain('$FIREBASE_CLIENT_SHA256')
+    expect(fingerprint).toContain('$ANDROID_BUILD_ENV_SHA256')
+    expect(restore.if).toBeUndefined()
+    expect(save.if).not.toContain('firebase')
+    expect(
+      steps.find((step) => step.name === 'Test native update ownership, validation and cleanup').if
+    ).toBeUndefined()
+    expect(
+      steps.find((step) => step.name === 'Validate idle baseline and traffic measurement contracts')
+        .run
+    ).toContain('opka_android_ci_acceptance_test.py')
     for (const input of [
       'mobile',
       'src/shared',

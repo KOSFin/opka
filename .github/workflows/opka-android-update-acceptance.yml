@@ -83,6 +83,7 @@ jobs:
           python3 config/scripts/opka_android_baseline_artifact_test.py
           python3 mobile/scripts/android_batterystats_test.py
           python3 config/scripts/opka_android_fixture_proxy_test.py
+          python3 config/scripts/opka_android_ci_acceptance_test.py
       - uses: ./.github/actions/prepare-android-build-storage
       - uses: ./.github/actions/install-node-dependencies
         with:
@@ -136,14 +137,16 @@ jobs:
           test "$actual" = "$expected"
       - name: Fingerprint Android fixture inputs
         id: fixture_key
+        env:
+          FIREBASE_CLIENT_SHA256: ${{ steps.firebase.outputs.client_sha256 }}
+          ANDROID_BUILD_ENV_SHA256: ${{ steps.firebase.outputs.build_env_sha256 }}
         shell: bash
         run: |
           set -euo pipefail
           input_hash="$(git ls-tree HEAD -- mobile src/shared src/packages config/patches package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc .github/actions .github/workflows/opka-android-update-acceptance.yml | sha256sum | cut -d ' ' -f 1)"
-          echo "key=opka-android-fixtures-r5-candidate-v2-$CANDIDATE_VERSION-$RUNNER_OS-$RUNNER_ARCH-$input_hash" >> "$GITHUB_OUTPUT"
+          echo "key=opka-android-fixtures-r6-candidate-v2-$CANDIDATE_VERSION-$RUNNER_OS-$RUNNER_ARCH-$input_hash-$FIREBASE_CLIENT_SHA256-$ANDROID_BUILD_ENV_SHA256" >> "$GITHUB_OUTPUT"
       - name: Restore unsigned Android fixtures
         id: fixture_cache
-        if: steps.firebase.outputs.configured != 'true'
         uses: actions/cache/restore@v5
         with:
           path: out/android-update-fixtures/*-unsigned.apk
@@ -161,7 +164,7 @@ jobs:
             cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/android-update-fixtures/$artifact-unsigned.apk"
           done
       - name: Save unsigned Android fixtures
-        if: steps.fixture_cache.outputs.cache-hit != 'true' && steps.firebase.outputs.configured != 'true'
+        if: steps.fixture_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: out/android-update-fixtures/*-unsigned.apk

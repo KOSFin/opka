@@ -19,8 +19,8 @@ from opka_android_published_update import version_code
 PACKAGE = 'com.kosfin.opka.mobile'
 
 
-def command(*args, check=True):
-    result = subprocess.run(args, text=True, capture_output=True, timeout=180)
+def command(*args, check=True, timeout=180):
+    result = subprocess.run(args, text=True, capture_output=True, timeout=timeout)
     if check and result.returncode:
         raise RuntimeError(f'Command failed: {args[0]}: {result.stdout[-500:]} {result.stderr[-500:]}')
     return result.stdout.strip()
@@ -28,9 +28,62 @@ def command(*args, check=True):
 
 def require_isolated_avd():
     assert os.environ.get('GITHUB_ACTIONS') == 'true', 'Native fixture is restricted to disposable GitHub CI'
-    assert command('adb', 'get-serialno').startswith('emulator-'), 'Physical devices are forbidden'
-    assert command('adb', 'shell', 'getprop', 'ro.kernel.qemu') == '1', 'Physical devices are forbidden'
-    assert command('adb', 'shell', 'getprop', 'ro.debuggable') == '1', 'A rooted test AVD is required'
+    serial = command('adb', 'get-serialno')
+    assert serial.startswith('emulator-'), 'Physical devices are forbidden'
+    assert command('adb', '-s', serial, 'shell', 'getprop', 'ro.kernel.qemu') == '1', 'Physical devices are forbidden'
+    assert command('adb', '-s', serial, 'shell', 'getprop', 'ro.debuggable') == '1', 'A rooted test AVD is required'
+    return serial
+
+
+def wait_for_avd_boot(avd, timeout=120):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            remaining = max(1, min(10, deadline - time.monotonic()))
+            if avd('shell', 'getprop', 'sys.boot_completed', timeout=remaining) == '1':
+                return
+        except (RuntimeError, subprocess.TimeoutExpired):
+            pass
+        time.sleep(1)
+    raise RuntimeError('Disposable AVD did not finish booting before the deadline')
+
+
+def system_ca_store_writable(avd):
+    probe = '/system/etc/security/cacerts/.opka-ci-write-probe'
+    try:
+        return avd('shell', f': > {probe} && rm -f {probe} && echo OPKA_CA_WRITABLE',
+                   check=False, timeout=10) == 'OPKA_CA_WRITABLE'
+    finally:
+        try:
+            avd('shell', 'rm', '-f', probe, check=False, timeout=10)
+        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+            pass
+
+
+def prepare_writable_system_ca_store():
+    serial = require_isolated_avd()
+
+    def avd(*args, **kwargs):
+        return command('adb', '-s', serial, *args, **kwargs)
+
+    avd('root', timeout=30)
+    avd('wait-for-device', timeout=30)
+    avd('remount', check=False, timeout=30)
+    if system_ca_store_writable(avd):
+        return serial
+    # AOSP's overlayfs sequence requires verity changes to take effect after a reboot.
+    avd('disable-verity', timeout=30)
+    avd('reboot', timeout=30)
+    avd('wait-for-disconnect', timeout=30)
+    avd('wait-for-device', timeout=60)
+    wait_for_avd_boot(avd)
+    assert require_isolated_avd() == serial, 'The disposable AVD identity changed during reboot'
+    avd('root', timeout=30)
+    avd('wait-for-device', timeout=30)
+    avd('remount', timeout=30)
+    if not system_ca_store_writable(avd):
+        raise RuntimeError('Disposable AVD system CA store is still read-only after verity/reboot/remount')
+    return serial
 
 
 def certificate(apksigner, apk):
@@ -49,7 +102,7 @@ def main():
     parser.add_argument('--legacy-a')
     parser.add_argument('--output', default='out/android-native-update-acceptance')
     args = parser.parse_args()
-    require_isolated_avd()
+    serial = require_isolated_avd()
     a, b = Path(args.a).resolve(), Path(args.b).resolve()
     signer = certificate(args.apksigner, b)
     assert certificate(args.apksigner, a) == signer, 'A and B must use the same signer'
@@ -99,20 +152,17 @@ def main():
         assert re.fullmatch('[a-f0-9]{8}', subject_hash), 'Invalid temporary CA hash'
         ca_path = f'/system/etc/security/cacerts/{subject_hash}.0'
         try:
-            command('adb', 'root')
-            command('adb', 'wait-for-device')
-            command('adb', 'remount')
-            # A read-only/remount failure is a blocked native gate, never a TLS bypass.
-            command('adb', 'push', str(ca), ca_path)
-            command('adb', 'shell', 'chmod', '644', ca_path)
-            command('adb', 'shell', 'restorecon', ca_path)
+            serial = prepare_writable_system_ca_store()
+            command('adb', '-s', serial, 'push', str(ca), ca_path)
+            command('adb', '-s', serial, 'shell', 'chmod', '644', ca_path)
+            command('adb', '-s', serial, 'shell', 'restorecon', ca_path)
             server = create_server(('127.0.0.1', 8080), str(leaf), str(leaf_key), manifest, b, record)
             threading.Thread(target=server.serve_forever, daemon=True).start()
-            command('adb', 'shell', 'settings', 'put', 'global', 'http_proxy', '10.0.2.2:8080')
+            command('adb', '-s', serial, 'shell', 'settings', 'put', 'global', 'http_proxy', '10.0.2.2:8080')
             for name, baseline_apk, baseline_version, surface in scenarios:
-                command('adb', 'uninstall', PACKAGE, check=False)
+                command('adb', '-s', serial, 'uninstall', PACKAGE, check=False)
                 before = len(events)
-                environment = {**os.environ, 'OPKA_ANDROID_ISOLATED_FIXTURE': '1'}
+                environment = {**os.environ, 'OPKA_ANDROID_ISOLATED_FIXTURE': '1', 'ANDROID_SERIAL': serial}
                 subprocess.run([sys.executable, str(Path(__file__).with_name('opka-android-update-acceptance.py')),
                                 '--a', str(baseline_apk), '--a-version', baseline_version, '--published-version', manifest['version'],
                                 '--fixture-manifest', str(output / 'fixture-manifest.json'),
@@ -135,9 +185,14 @@ def main():
                 'allPassed': len(results) == len(scenarios),
                 'legacyFailureRecovery': 'If released updater cannot open the native installer, preserve failure evidence and require an explicit one-time manual APK update; do not re-sign baseline or mark migration passed.'
             }, indent=2) + '\n')
-            command('adb', 'shell', 'settings', 'delete', 'global', 'http_proxy', check=False)
+            cleanup = [('shell', 'settings', 'delete', 'global', 'http_proxy')]
             if ca_path:
-                command('adb', 'shell', 'rm', '-f', ca_path, check=False)
+                cleanup.append(('shell', 'rm', '-f', ca_path))
+            for arguments in cleanup:
+                try:
+                    command('adb', '-s', serial, *arguments, check=False, timeout=10)
+                except (OSError, RuntimeError, subprocess.TimeoutExpired):
+                    pass
             if server:
                 server.shutdown()
                 server.server_close()
