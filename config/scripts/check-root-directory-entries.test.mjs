@@ -246,24 +246,31 @@ describe('root directory guard', () => {
       (step) => step.name === 'Reject new root-level files and folders'
     )
 
-    // Only draft PRs skip the guard; verify skips with it, so no draft reports a result.
-    const runsFor = (expression, draft) =>
+    const runsFor = (expression, draft, scope = {}) =>
       runInNewContext(expression.replace(/^\$\{\{(.*)\}\}$/s, '$1'), {
         github: { event_name: 'pull_request', event: { pull_request: { draft } } },
+        needs: {
+          scope: { result: draft ? 'skipped' : 'success', outputs: { static: 'true' }, ...scope }
+        },
         cancelled: () => false
       })
+    expect(runsFor(workflow.jobs.scope.if, false)).toBe(true)
+    expect(runsFor(workflow.jobs.scope.if, true)).toBe(false)
     expect(runsFor(guardJob.if, false)).toBe(true)
     expect(runsFor(guardJob.if, true)).toBe(false)
+    expect(runsFor(guardJob.if, false, { result: 'failure' })).toBe(false)
+    expect(runsFor(guardJob.if, false, { outputs: { static: 'false' } })).toBe(false)
     expect(runsFor(workflow.jobs.verify.if, true)).toBe(false)
+    expect(guardJob.needs).toBe('scope')
     expect(guardStep.if).toBeUndefined()
-    // Why >= 2 rather than 0: the guard compares the merge commit's first parent against the
-    // merged tree, so it needs both parents present but no history beyond them. Depth 1 would
-    // leave HEAD^1 unreachable and the guard would fail closed on every run.
     expect(guardJob.steps[0].with['fetch-depth']).toBeGreaterThanOrEqual(2)
-    expect(guardStep.run).toContain('node .github/scripts/check-root-directory-entries.mjs')
-    // The base side must come from the merge ref, not the event payload, or a shallow checkout
-    // cannot resolve it.
-    expect(guardStep.run).toContain('git-pull-request-diff-base.mjs')
+    expect(guardStep.run).toContain(
+      'node .github/scripts/check-root-directory-entries.mjs "$OPKA_CI_DIFF_BASE" HEAD'
+    )
+    expect(guardStep.env.OPKA_CI_DIFF_BASE).toBe('${{ needs.scope.outputs.base }}')
+    const fetch = guardJob.steps.find((step) => step.name === 'Fetch the exact comparison base')
+    expect(fetch.env.OPKA_CI_DIFF_BASE).toBe('${{ needs.scope.outputs.base }}')
+    expect(fetch.run).toBe('git fetch --no-tags --depth=1 origin "$OPKA_CI_DIFF_BASE"')
     expect(workflow.jobs.verify.needs).toContain('static')
   })
 })

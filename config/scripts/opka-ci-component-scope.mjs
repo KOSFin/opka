@@ -21,7 +21,9 @@ export function classifyCiPaths(paths) {
     if (/^(?:docs\/|fork-docs\/)|^(?:README|AGENTS|CONTRIBUTING|LICENSE)(?:\.md)?$/.test(path)) {
       continue
     }
-    if (path.startsWith('mobile/')) {
+    if (/^(?:config\/scripts|\.github\/scripts)\/[^/]+\.test\.mjs$/.test(path)) {
+      enable('ci-contract-test', ['regression'])
+    } else if (path.startsWith('mobile/')) {
       enable('mobile', ['regression'])
       if (!/\.(?:test|spec)\.[^/]+$/.test(path)) {
         enable('mobile-runtime', ['android'])

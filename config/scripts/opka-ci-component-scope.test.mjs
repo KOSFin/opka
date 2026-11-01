@@ -65,6 +65,25 @@ describe('component CI routing', () => {
     }
     expect(classifyCiPaths(['src/renderer/src/App.tsx', 'pnpm-lock.yaml']).full).toBe(true)
   })
+  it('routes only exact CI contract test files without rebuilding native applications', () => {
+    for (const path of [
+      'config/scripts/build-orcad.test.mjs',
+      '.github/scripts/check-pr.test.mjs'
+    ]) {
+      const scope = classifyCiPaths([path])
+      expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static', 'regression'])
+      expect(scope.full).toBe(false)
+    }
+    for (const path of [
+      'config/scripts/build-orcad.mjs',
+      '.github/scripts/check-pr.mjs',
+      'config/scripts/nested/file.test.mjs',
+      'config/scripts/build-orcad.test.ts'
+    ]) {
+      expect(classifyCiPaths([path]).full).toBe(true)
+    }
+    expect(classifyCiPaths(['config/scripts/contract.test.mjs', 'pnpm-lock.yaml']).full).toBe(true)
+  })
   it('aggregates every requested lane and refuses unexplained skips and failures', () => {
     const scope = classifyCiPaths(['src/renderer/src/App.tsx'])
     expect(() => evaluateCiResults(scope, results(scope))).not.toThrow()
@@ -92,7 +111,7 @@ describe('valid comparison versus full fallback', () => {
     const git = vi.mocked(runProcessSync)
     git.mockImplementation(({ args }) => ({
       code: 0,
-      stdout: args[0] === 'diff' ? 'config/scripts/new-policy.test.mjs\0' : 'a'.repeat(40),
+      stdout: args[0] === 'diff' ? 'config/scripts/new-policy.mjs\0' : 'a'.repeat(40),
       stderr: '',
       signal: null,
       timedOut: false
@@ -104,7 +123,7 @@ describe('valid comparison versus full fallback', () => {
       })
       expect(scope.full).toBe(true)
       expect(scope.comparison_valid).toBe(true)
-      expect(scope.paths).toContain('config/scripts/new-policy.test.mjs')
+      expect(scope.paths).toContain('config/scripts/new-policy.mjs')
     } finally {
       rmSync(directory, { recursive: true, force: true })
       git.mockReset()
