@@ -28,11 +28,17 @@ def onboarding_action(root):
     return None
 
 
+def webview_provider_major(text):
+    match = re.search(r'Current WebView package[^\n]*?,\s*(\d+)\.', text[:8192])
+    return int(match[1]) if match else None
+
+
 def safe_failure_screen(root):
     # Pair confirmation/error may contain connection credentials; never capture that surface.
     labels = visible_labels(root)
     return ('Pair' not in labels and 'Pair with this desktop?' not in labels
-            and onboarding_action(root) is not None)
+            and (onboarding_action(root) is not None or
+                 "This device's WebView is too old to open the workspace safely." in labels))
 
 
 def label_matches(node, label, contains=False):
@@ -89,6 +95,14 @@ def main():
 
     if command('shell', 'getprop', 'ro.kernel.qemu').strip() != '1':
         raise AssertionError('Refusing to operate a physical device')
+    try:
+        provider_major = webview_provider_major(command('shell', 'dumpsys', 'webviewupdate', timeout=10))
+    except RuntimeError:
+        provider_major = None
+    (output / 'webview-provider.json').write_text(json.dumps({
+        'providerMajor': provider_major,
+        'diagnosis': 'available' if provider_major is not None else 'unavailable'
+    }, indent=2))
     fixture = json.loads(Path(args.ready_file).read_text())
     offer = urlsplit(fixture['pairingUrl'])
     if offer.scheme not in ('orca', 'opka') or not offer.query:

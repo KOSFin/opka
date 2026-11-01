@@ -146,6 +146,15 @@ class DisposableAvdTrust(unittest.TestCase):
         self.assertTrue(any('umount' in call for call in calls))
         self.assertEqual(probes, [False, True])
 
+    def test_api33_store_uses_the_same_guarded_overlay(self):
+        wrapper = load_native_fixture()
+        fake, calls, _ = self.fake_device([False, True], sdk='33')
+        with patch.dict(wrapper.os.environ, {'GITHUB_ACTIONS': 'true'}), patch.object(wrapper, 'command', side_effect=fake):
+            with wrapper.prepare_writable_system_ca_store():
+                pass
+        self.assertTrue(any('mount' in call and '/system/etc/security/cacerts' in call for call in calls))
+        self.assertTrue(any('umount' in call for call in calls))
+
     def test_existing_overlay_is_preserved_when_mkdir_refuses_collision(self):
         wrapper = load_native_fixture()
         fake, calls, _ = self.fake_device([False])

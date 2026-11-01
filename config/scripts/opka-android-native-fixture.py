@@ -57,7 +57,7 @@ def prepare_writable_system_ca_store():
     if system_ca_store_writable(avd):
         yield serial
         return
-    assert avd('shell', 'getprop', 'ro.build.version.sdk') == '30', 'CA overlay supports only the disposable API30 fixture'
+    assert avd('shell', 'getprop', 'ro.build.version.sdk') in ('30', '33'), 'CA overlay supports only disposable API30/API33 fixtures'
     store = '/system/etc/security/cacerts'
     overlay = f'/data/local/tmp/opka-ci-cacerts-{os.getpid()}'
     context = avd('shell', 'ls', '-Zd', store).split()[0]

@@ -24,6 +24,19 @@ class NormalOnboarding(unittest.TestCase):
             'Don’t miss when an agent needs you', 'Skip notifications for now')), 'Skip notifications for now')
         self.assertEqual(journey.onboarding_action(screen('Accounts')), 'ready')
 
+    def test_provider_diagnosis_keeps_only_the_major_version(self):
+        self.assertEqual(journey.webview_provider_major(
+            'Current WebView package (name, version): (com.android.webview, 101.0.4951.61)'), 101)
+        self.assertIsNone(journey.webview_provider_major('Current WebView package is null'))
+        self.assertIsNone(journey.webview_provider_major('private-token'))
+
+    def test_known_webview_refusal_is_captured_without_accepting_it_as_ready(self):
+        root = screen("This device's WebView is too old to open the workspace safely.")
+        self.assertTrue(journey.safe_failure_screen(root))
+        self.assertIsNone(journey.onboarding_action(root))
+        ET.SubElement(root, 'node', {'text': 'Pair'})
+        self.assertFalse(journey.safe_failure_screen(root))
+
     def test_connecting_and_disabled_choices_do_not_skip_to_host(self):
         self.assertIsNone(journey.onboarding_action(screen('Connecting…')))
         root = screen('How should sessions open?')

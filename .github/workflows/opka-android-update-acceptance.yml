@@ -211,7 +211,7 @@ jobs:
       - name: Exercise Android confirmation and data retention
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 33
           target: default
           arch: x86_64
           profile: pixel
