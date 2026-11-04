@@ -92,6 +92,34 @@ def offline_condition(airplane, wifi, mobile, connectivity):
     return result
 
 
+def adb_uid(adb):
+    try:
+        reply = subprocess.run([*adb, 'shell', 'id', '-u'], stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=5, check=False)
+        value = reply.stdout.strip()
+        return int(value) if reply.returncode == 0 and re.fullmatch(rb'\d{1,10}', value) else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def inspect_adb_access(adb, try_root):
+    result = {'requestedRoot': try_root, 'uidBefore': adb_uid(adb),
+              'rootCommandCompleted': False, 'waitCompleted': False}
+    if try_root:
+        try:
+            reply = subprocess.run([*adb, 'root'], stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=10, check=False)
+            result['rootCommandCompleted'] = reply.returncode == 0
+            reply = subprocess.run([*adb, 'wait-for-device'], stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=10, check=False)
+            result['waitCompleted'] = reply.returncode == 0
+        except (OSError, subprocess.TimeoutExpired) as error:
+            result['unavailableReason'] = type(error).__name__
+    result['uidAfter'] = adb_uid(adb)
+    result['rootConfirmed'] = result['uidAfter'] == 0
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
@@ -99,6 +127,8 @@ def main():
     parser.add_argument('--rc8-apk', type=Path, required=True)
     parser.add_argument('--system-image-properties', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--try-adb-root', action='store_true',
+                        help='Try bounded adb root on the verified disposable emulator for own smaps')
     args = parser.parse_args()
     if os.environ.get('GITHUB_ACTIONS') != 'true' or not args.serial.startswith('emulator-'):
         parser.error('Clean-install comparison requires a disposable GitHub CI emulator')
@@ -136,6 +166,7 @@ def main():
         for label in apks:
             evidence['inputs'][label] = verify_apk(apks[label], label)
         accepted = True
+        evidence['adbAccess'] = inspect_adb_access(adb, args.try_adb_root)
         command('shell', 'cmd', 'connectivity', 'airplane-mode', 'enable')
         command('shell', 'svc', 'wifi', 'disable')
         command('shell', 'svc', 'data', 'disable')

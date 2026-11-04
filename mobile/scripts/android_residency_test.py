@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -87,7 +88,7 @@ Pss: 5 kB
             image.write_text('Pkg.Revision=17\nAndroidVersion.ApiLevel=33\nSystemImage.TagId=google_apis\nSystemImage.Abi=x86_64')
             argv = ['compare', '--serial', 'emulator-5554', '--rc7-apk', str(root / 'a.apk'),
                     '--rc8-apk', str(root / 'b.apk'), '--system-image-properties', str(image),
-                    '--output', str(root / 'out')]
+                    '--output', str(root / 'out'), '--try-adb-root']
 
             def read(_adb, command, **_kwargs):
                 return {'ok': True, 'text': {'ro.kernel.qemu': '1',
@@ -101,6 +102,37 @@ Pss: 5 kB
                     residency.main()
                 mutate.assert_not_called()
             self.assertIn('"complete": false', (root / 'out' / 'residency-comparison.json').read_text())
+
+    def test_optional_root_records_actual_uid_not_adb_exit_status(self):
+        replies = [subprocess.CompletedProcess([], 0, b'2000\n'),
+                   subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 0),
+                   subprocess.CompletedProcess([], 0, b'2000\n')]
+        with patch.object(residency.subprocess, 'run', side_effect=replies) as run:
+            result = residency.inspect_adb_access(['adb', '-s', 'emulator-5554'], True)
+        self.assertFalse(result['rootConfirmed'])
+        self.assertTrue(result['rootCommandCompleted'])
+        self.assertEqual(result['uidAfter'], 2000)
+        self.assertEqual(run.call_args_list[1].args[0][-1], 'root')
+        self.assertEqual(run.call_args_list[2].args[0][-1], 'wait-for-device')
+        self.assertTrue(all(call.kwargs['timeout'] <= 10 for call in run.call_args_list))
+
+    def test_root_timeout_is_nonfatal_and_uid_is_still_verified(self):
+        with patch.object(residency, 'adb_uid', side_effect=[2000, 2000]), \
+                patch.object(residency.subprocess, 'run', side_effect=subprocess.TimeoutExpired('adb', 10)):
+            result = residency.inspect_adb_access(['adb'], True)
+        self.assertFalse(result['rootConfirmed'])
+        self.assertEqual(result['unavailableReason'], 'TimeoutExpired')
+
+    def test_root_opt_out_never_restarts_adbd(self):
+        with patch.object(residency, 'adb_uid', side_effect=[2000, 2000]), \
+                patch.object(residency.subprocess, 'run') as run:
+            self.assertFalse(residency.inspect_adb_access(['adb'], False)['rootConfirmed'])
+            run.assert_not_called()
+
+    def test_root_success_requires_uid_zero(self):
+        with patch.object(residency, 'adb_uid', side_effect=[2000, 0]), \
+                patch.object(residency.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            self.assertTrue(residency.inspect_adb_access(['adb'], True)['rootConfirmed'])
 
 
 if __name__ == '__main__':

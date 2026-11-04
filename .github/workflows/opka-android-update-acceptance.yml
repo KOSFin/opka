@@ -81,6 +81,9 @@ jobs:
       - name: Validate residency collector contracts
         run: python3 mobile/scripts/android_residency_test.py
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: 'false'
       - name: Fetch immutable published APKs
         shell: bash
         run: |
@@ -132,6 +135,7 @@ jobs:
           script: >-
             python3 mobile/scripts/compare-android-residency.py
             --serial emulator-5554
+            --try-adb-root
             --rc7-apk out/android-residency-inputs/rc7.apk
             --rc8-apk out/android-residency-inputs/rc8.apk
             --system-image-properties "$ANDROID_HOME/system-images/android-33/google_apis/x86_64/source.properties"
