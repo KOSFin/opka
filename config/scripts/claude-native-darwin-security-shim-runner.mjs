@@ -4,6 +4,7 @@ import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
+import { performance } from 'node:perf_hooks'
 
 export const SECURITY_TRACE_SLOTS = 16
 export const SECURITY_TRACE_SLOT_BYTES = 128
@@ -14,6 +15,34 @@ const OPERATIONS = new Map([
   ['delete-generic-password', 'delete'],
   ['show-keychain-info', 'info']
 ])
+const SIGNALS = new Map([
+  ['SIGTERM', 'term'],
+  ['SIGKILL', 'kill'],
+  ['SIGINT', 'int'],
+  ['SIGHUP', 'hup'],
+  ['SIGABRT', 'abrt'],
+  ['SIGPIPE', 'pipe'],
+  ['SIGQUIT', 'quit']
+])
+const ELAPSED = ['lt250ms', '250-1499ms', '1500-2499ms', '2500-9999ms', 'ge10000ms', 'pending']
+export function securityDiagnosticElapsedBucket(milliseconds) {
+  if (milliseconds < 250) {
+    return ELAPSED[0]
+  }
+  if (milliseconds < 1500) {
+    return ELAPSED[1]
+  }
+  if (milliseconds < 2500) {
+    return ELAPSED[2]
+  }
+  if (milliseconds < 10000) {
+    return ELAPSED[3]
+  }
+  return ELAPSED[4]
+}
+export function securityDiagnosticSignal(signal) {
+  return signal ? (SIGNALS.get(signal) ?? 'other') : 'none'
+}
 async function writeSlot(handle, record) {
   const text = JSON.stringify(record)
   if (Buffer.byteLength(text) > SECURITY_TRACE_SLOT_BYTES) {
@@ -27,7 +56,14 @@ async function startSlot(directory, operation) {
     let handle
     try {
       handle = await open(join(directory, `${slot}.json`), 'wx', 0o600)
-      await writeSlot(handle, { operation, started: true, finished: false, code: null })
+      await writeSlot(handle, {
+        operation,
+        started: true,
+        finished: false,
+        code: null,
+        signal: 'none',
+        elapsed: 'pending'
+      })
       return handle
     } catch (error) {
       await handle?.close().catch(() => {})
@@ -41,6 +77,7 @@ async function startSlot(directory, operation) {
 
 /** This diagnostic never reads or captures the forwarded command's byte streams or arguments. */
 export async function forwardSecurityDiagnostic({ program, args, traceDirectory }) {
+  const startedAt = performance.now()
   const operation = OPERATIONS.get(args[0]) ?? 'other'
   const slot = await startSlot(traceDirectory, operation)
   const signals = ['SIGTERM', 'SIGINT', 'SIGHUP']
@@ -77,7 +114,9 @@ export async function forwardSecurityDiagnostic({ program, args, traceDirectory 
           operation,
           started: true,
           finished: true,
-          code: result?.code ?? null
+          code: result?.code ?? null,
+          signal: securityDiagnosticSignal(result?.signal),
+          elapsed: securityDiagnosticElapsedBucket(performance.now() - startedAt)
         })
       } catch {}
       await slot.close().catch(() => {})
@@ -104,6 +143,8 @@ export async function readSecurityDiagnosticTrace(directory) {
         !['find', 'write', 'delete', 'info', 'other'].includes(value.operation) ||
         value.started !== true ||
         typeof value.finished !== 'boolean' ||
+        !['none', 'other', ...SIGNALS.values()].includes(value.signal) ||
+        !ELAPSED.includes(value.elapsed) ||
         !(
           value.code === null ||
           (Number.isInteger(value.code) && value.code >= 0 && value.code <= 255)
@@ -115,7 +156,9 @@ export async function readSecurityDiagnosticTrace(directory) {
         operation: value.operation,
         started: true,
         finished: value.finished,
-        code: value.code
+        code: value.code,
+        signal: value.signal,
+        elapsed: value.elapsed
       })
     } catch (error) {
       if (error.code !== 'ENOENT') {
@@ -128,6 +171,10 @@ export async function readSecurityDiagnosticTrace(directory) {
   return {
     records,
     capacityReached: records.length === SECURITY_TRACE_SLOTS,
-    unverifiable: unverifiable || records.length === 0
+    unverifiable:
+      unverifiable ||
+      records.length === 0 ||
+      records.length === SECURITY_TRACE_SLOTS ||
+      records.some((record) => !record.finished)
   }
 }

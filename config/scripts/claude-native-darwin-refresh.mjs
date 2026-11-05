@@ -14,6 +14,7 @@ import {
 import { createNativeRefreshConnectProxy } from './claude-native-refresh-connect-proxy.mjs'
 import { probeDarwinRefreshSecurity } from './claude-native-darwin-security-probe.mjs'
 import { prepareDarwinSecurityDiagnostic } from './claude-native-darwin-security-shim.mjs'
+import { probeDarwinSecurityWrites } from './claude-native-darwin-security-write-probe.mjs'
 import {
   createDarwinRefreshServer,
   EXPIRED_ACCESS,
@@ -118,6 +119,8 @@ export async function runDarwinNativeRefreshQualification({
   const debugObservations = []
   const commandObservations = []
   let securityPreflight = []
+  const securityWritePreflight = []
+  let securityWriteDefaultMatched = false
   const debugPath = join(home, 'native-refresh-debug.log')
   let stage = 'prepare'
   const closeFixture = async () => {
@@ -230,6 +233,27 @@ export async function runDarwinNativeRefreshQualification({
                       'Synthetic OS Security lookup preflight refused before native usage'
                     )
                   }
+                  stage = 'security-write-preflight'
+                  await probeDarwinSecurityWrites({
+                    sandbox: environment.sandbox,
+                    keychain: environment.keychain,
+                    env,
+                    onObservation: (value) => securityWritePreflight.push(value),
+                    onDefaultVerified: () => {
+                      securityWriteDefaultMatched = true
+                    }
+                  })
+                  if (
+                    securityWritePreflight.some(
+                      (value) =>
+                        value.write.code !== 0 ||
+                        value.write.timedOut ||
+                        !value.readMatched ||
+                        !value.cleanupVerified
+                    )
+                  ) {
+                    throw new Error('Synthetic Security write control refused before native usage')
+                  }
                 } catch (preflightError) {
                   options.onNotStarted?.()
                   try {
@@ -240,7 +264,7 @@ export async function runDarwinNativeRefreshQualification({
                       throw error
                     }
                   }
-                  cleanupVerified = true
+                  cleanupVerified = preflightError.nativeCleanupUnverifiable !== true
                   throw preflightError
                 }
                 stage = 'native-refresh'
@@ -344,6 +368,8 @@ export async function runDarwinNativeRefreshQualification({
       debugObservations,
       commandObservations,
       securityPreflight,
+      securityWritePreflight,
+      securityWriteDefaultMatched,
       securityDiagnostic: await securityDiagnostic.read(),
       diagnosticOnly: true,
       growth,
@@ -409,6 +435,8 @@ export async function runDarwinNativeRefreshQualification({
           debugObservations,
           commandObservations,
           securityPreflight,
+          securityWritePreflight,
+          securityWriteDefaultMatched,
           securityDiagnostic: await securityDiagnostic
             ?.read()
             .catch(() => ({ unverifiable: true })),

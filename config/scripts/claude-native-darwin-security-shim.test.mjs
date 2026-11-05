@@ -65,9 +65,19 @@ process.exitCode=result.code??127;`
     assert.deepEqual(result.stdoutBytes, Buffer.from(`${JSON.stringify(args.slice(1))}\n${input}`))
     assert.deepEqual(Buffer.concat(stderr), Buffer.from([255, 0, 128]))
     const trace = await readSecurityDiagnosticTrace(traceDirectory)
-    assert.deepEqual(trace.records, [
-      { operation: 'other', started: true, finished: true, code: 7 }
-    ])
+    assert.equal(trace.records.length, 1)
+    assert.deepEqual(
+      { ...trace.records[0], elapsed: undefined },
+      {
+        operation: 'other',
+        started: true,
+        finished: true,
+        code: 7,
+        signal: 'none',
+        elapsed: undefined
+      }
+    )
+    assert.notEqual(trace.records[0].elapsed, 'pending')
     assert.equal(JSON.stringify(trace).includes('synthetic'), false)
   } finally {
     await rm(root, { recursive: true, force: true })
@@ -97,7 +107,7 @@ test('concurrent diagnostic claims and overflow remain within sixteen fixed 128-
     assert.ok(total <= 2048)
     const trace = await readSecurityDiagnosticTrace(root)
     assert.equal(trace.capacityReached, true)
-    assert.equal(trace.unverifiable, false)
+    assert.equal(trace.unverifiable, true)
     assert.equal(
       trace.records.every((record) => record.finished && record.code === 0),
       true
@@ -117,3 +127,34 @@ test('malformed diagnostic data is reported unknown without publishing its conte
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test(
+  'signalled fake target records only a closed signal and coarse elapsed bucket',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), 'opka-security-signal-'))
+    try {
+      const result = await forwardSecurityDiagnostic({
+        program: process.execPath,
+        args: ['-e', "setTimeout(()=>process.kill(process.pid,'SIGTERM'),1600)"],
+        traceDirectory: root
+      })
+      assert.equal(result.code, null)
+      assert.equal(result.signal, 'SIGTERM')
+      const trace = await readSecurityDiagnosticTrace(root)
+      assert.deepEqual(trace.records, [
+        {
+          operation: 'other',
+          started: true,
+          finished: true,
+          code: null,
+          signal: 'term',
+          elapsed: '1500-2499ms'
+        }
+      ])
+      assert.equal(trace.unverifiable, false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+)
