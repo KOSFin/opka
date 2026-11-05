@@ -25,7 +25,6 @@ export function useAccountPoolSettings(target: RuntimeClientTarget) {
     setSaveError(null)
     setError(null)
     setBusy(false)
-    setViewOwner(environmentId)
     const controller = new AbortController()
     const requestTarget: RuntimeClientTarget =
       environmentId === null ? { kind: 'local' } : { kind: 'environment', environmentId }
@@ -39,10 +38,12 @@ export function useAccountPoolSettings(target: RuntimeClientTarget) {
         const next = AccountPoolViewSchema.parse(result)
         setView(next)
         setDrafts(accountPoolDrafts(next))
+        setViewOwner(environmentId)
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setError(String(cause instanceof Error ? cause.message : cause))
+          setViewOwner(environmentId)
         }
       })
     return () => controller.abort()

@@ -133,3 +133,21 @@ it('does not apply an old save after switching owners away and back', async () =
   await waitFor(() => expect(screen.queryByText('Codex pool saved on A.')).toBeNull())
   expect(rpc.mock.calls.filter((call) => call[1] === 'accountPool.list')).toHaveLength(3)
 })
+
+it('keeps the previous host hidden while loading and shows the new host error', async () => {
+  rpc.mockResolvedValue(snapshot)
+  const view = render(<AccountPoolSection target={{ kind: 'local' }} hostLabel="Local" />)
+  await screen.findByRole('button', { name: /Codex/ })
+  let fail = (_cause: Error) => {}
+  const failure = new Promise<never>((_resolve, reject) => {
+    fail = reject
+  })
+  rpc.mockReturnValueOnce(failure)
+  view.rerender(
+    <AccountPoolSection target={{ kind: 'environment', environmentId: 'b' }} hostLabel="B" />
+  )
+  expect(screen.queryByRole('button', { name: /Codex/ })).toBeNull()
+  expect(screen.getByRole('status').textContent).toContain('Loading account pools')
+  fail(new Error('New host unavailable'))
+  expect((await screen.findByRole('alert')).textContent).toContain('New host unavailable')
+})
