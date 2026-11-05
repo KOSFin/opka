@@ -21,6 +21,12 @@ import {
   qualifyDarwinRefreshCache,
   assertDarwinRefreshAccess
 } from './claude-native-darwin-refresh-cache.mjs'
+import {
+  prepareDarwinRefreshGlobalSentinels,
+  assertDarwinRefreshKeychainSelection,
+  assertDarwinRefreshFileUnchanged
+} from './claude-native-darwin-refresh-global.mjs'
+import { runDarwinRefreshSecurityCommand } from './claude-native-darwin-refresh-security-command.mjs'
 import { prepareDarwinSecurityDiagnostic } from './claude-native-darwin-security-shim.mjs'
 import {
   createDarwinRefreshServer,
@@ -47,6 +53,10 @@ export async function runDarwinNativeRefreshQualification({
       throw new Error('Native refresh environment must belong to the fake CI root')
     }
   }
+  if (!environment.nativeUserHome || !isAbsolute(environment.nativeUserHome)) {
+    throw new Error('Synthetic execution host HOME is unavailable')
+  }
+  const nativeUserHome = await realpath(environment.nativeUserHome)
   const home = join(canonical, 'refresh-home')
   const config = join(home, 'config')
   const writer = join(home, 'writer')
@@ -88,7 +98,8 @@ export async function runDarwinNativeRefreshQualification({
   for (const name of ['.claude.json', '.claude-custom-oauth.json']) {
     await writeFile(join(config, name), state, { mode: 0o600 })
   }
-  const credentials = JSON.stringify({
+  const fileRefresh = 'synthetic-adversarial-file-refresh'
+  const keychainCredentials = JSON.stringify({
     claudeAiOauth: {
       accessToken: EXPIRED_ACCESS,
       refreshToken: EXPIRED_REFRESH,
@@ -97,6 +108,9 @@ export async function runDarwinNativeRefreshQualification({
       subscriptionType: 'max'
     }
   })
+  const credentials = keychainCredentials
+    .replace(EXPIRED_REFRESH, fileRefresh)
+    .replace(EXPIRED_ACCESS, 'sk-ant-oat01-synthetic-adversarial-file')
   const service = api.claudeKeychainService(config)
   const absent = await runProcess({
     program: '/usr/bin/security',
@@ -115,6 +129,8 @@ export async function runDarwinNativeRefreshQualification({
   if (absent.code !== 44 || absent.timedOut || absent.outputTruncated) {
     throw new Error('Synthetic source must start without a manual scoped Keychain item')
   }
+  let globalSentinels
+  let sourceSeeded = false
   let proxy
   let server
   let securityDiagnostic
@@ -153,7 +169,50 @@ export async function runDarwinNativeRefreshQualification({
       throw error
     }
   }
+  const closeOwnedFixture = async () => {
+    await closeFixture()
+    if (cleanupVerified) {
+      await globalSentinels?.dispose()
+      if (sourceSeeded) {
+        const { result: deleted, terminationObserved } = await runDarwinRefreshSecurityCommand([
+          'delete-generic-password',
+          '-s',
+          service,
+          '-a',
+          userInfo().username,
+          environment.keychain
+        ])
+        if (
+          deleted.code !== 0 ||
+          deleted.timedOut ||
+          deleted.outputTruncated ||
+          !terminationObserved
+        ) {
+          throw new Error('Synthetic Keychain source cleanup is unverified')
+        }
+      }
+    }
+  }
   try {
+    globalSentinels = await prepareDarwinRefreshGlobalSentinels(nativeUserHome)
+    cleanupVerified = false
+    const { result: seed, terminationObserved } = await runDarwinRefreshSecurityCommand([
+      'add-generic-password',
+      '-U',
+      '-A',
+      '-s',
+      service,
+      '-a',
+      userInfo().username,
+      '-w',
+      keychainCredentials,
+      environment.keychain
+    ])
+    if (seed.code !== 0 || seed.timedOut || seed.outputTruncated || !terminationObserved) {
+      throw new Error('Synthetic scoped Keychain source seed failed')
+    }
+    sourceSeeded = true
+    cleanupVerified = true
     securityDiagnostic = await prepareDarwinSecurityDiagnostic(canonical)
     server = await createDarwinRefreshServer(canonical)
     proxy = await createNativeRefreshConnectProxy(server.port)
@@ -196,6 +255,7 @@ export async function runDarwinNativeRefreshQualification({
       const snapshot = await api.refreshClaudeNativeAccess(
         {
           configDir: config,
+          nativeUserHome,
           writerDirectory: writer,
           expectedIdentity: identity,
           qualifiedVersion: '2.1.318',
@@ -215,7 +275,6 @@ export async function runDarwinNativeRefreshQualification({
                 args: [...launch.args, '--debug-file', debugPath],
                 env: {
                   ...launch.env,
-                  HOME: home,
                   NODE_EXTRA_CA_CERTS: server.certificate,
                   HTTPS_PROXY: proxy.url,
                   https_proxy: proxy.url,
@@ -249,6 +308,11 @@ export async function runDarwinNativeRefreshQualification({
                       securityWriteDefaultControl = value
                     }
                   })
+                  if (preflight.domain.mode !== 'owned-default') {
+                    throw new Error(
+                      'Native host HOME does not share the owned fake Keychain default'
+                    )
+                  }
                   keychainDomain = preflight.domain
                   securityPreflight = preflight.lookups
                   securityWritePreflight.push(...preflight.writes)
@@ -340,15 +404,12 @@ export async function runDarwinNativeRefreshQualification({
         fileFreshAccessMatched: fileAccess?.accessToken === FRESH_ACCESS,
         fileRefreshRotated: fileAccess?.refreshToken === ROTATED_REFRESH
       })
-      if (
-        keychainDomain?.mode === 'isolated-no-keychain' &&
-        (selected.source !== 'credentials-file' ||
-          selected.nativeAccess?.accessToken !== FRESH_ACCESS ||
-          fileAccess?.accessToken !== FRESH_ACCESS ||
-          fileAccess?.refreshToken !== ROTATED_REFRESH)
-      ) {
-        throw new Error('Isolated no-keychain mode did not persist the strict native file fallback')
-      }
+      assertDarwinRefreshKeychainSelection(selected, fileAccess, {
+        freshAccess: FRESH_ACCESS,
+        fileRefresh
+      })
+      await assertDarwinRefreshFileUnchanged(join(config, '.credentials.json'), credentials)
+      await globalSentinels.assertUnchanged()
       growth.push(await api.measureOwnedNativeProbeDirectory(home))
     }
     stage = 'cached-access'
@@ -358,6 +419,7 @@ export async function runDarwinNativeRefreshQualification({
         api.refreshClaudeNativeAccess(
           {
             configDir: config,
+            nativeUserHome,
             writerDirectory: writer,
             expectedIdentity: identity,
             qualifiedVersion: '2.1.318',
@@ -377,9 +439,13 @@ export async function runDarwinNativeRefreshQualification({
           accessToken: FRESH_ACCESS,
           refreshToken: ROTATED_REFRESH
         }),
-      measure: () => api.measureOwnedNativeProbeDirectory(home)
+      measure: async () => {
+        await assertDarwinRefreshFileUnchanged(join(config, '.credentials.json'), credentials)
+        return api.measureOwnedNativeProbeDirectory(home)
+      }
     })
     growth.push(...cachedGrowth)
+    await globalSentinels.assertUnchanged()
     stage = 'whole-home-growth'
     if (
       proxy.counts.accepted === 0 ||
@@ -426,7 +492,11 @@ export async function runDarwinNativeRefreshQualification({
       loopbackOnlyNative: true,
       nativeDefaultAuthNamespace: keychainDomain?.mode === 'owned-default',
       keychainNamespaceMode: keychainDomain?.mode ?? 'unverifiable',
-      fileFallbackQualified: keychainDomain?.mode === 'isolated-no-keychain'
+      fileFallbackQualified: false,
+      keychainRefreshQualified: true,
+      adversarialFileBytesUnchanged: true,
+      globalSentinelsUnchanged: true,
+      growthScope: 'owned-source-home'
     }
     await writeFile(
       join(output, 'fresh-refresh-authority.json'),
@@ -514,6 +584,6 @@ export async function runDarwinNativeRefreshQualification({
     }
     throw error
   } finally {
-    await closeFixture()
+    await closeOwnedFixture()
   }
 }

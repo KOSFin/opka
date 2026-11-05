@@ -1,4 +1,4 @@
-import { dirname } from 'node:path'
+import { claudeNativeSourceEnvironment } from './claude-native-source-environment'
 import { createClaudeNativeRefreshMonitor } from './claude-native-refresh-monitor'
 import { QUALIFIED_NATIVE_CLAUDE_VERSION } from '../../shared/native-claude-capability'
 import { CLAUDE_MANAGED_OAUTH_ENV_VARS } from '../../shared/claude-auth-environment'
@@ -25,6 +25,7 @@ const lastAttempt = new Map<string, number>()
 export type ClaudeNativeRefreshSource = {
   /** Host-local canonical profile identity; never a client-provided path. */
   configDir: string
+  nativeUserHome?: string
   writerDirectory: string
   expectedIdentity: ClaudeNativeIdentity
   launch: Pick<ProviderProcessLaunch, 'command' | 'args' | 'cwd'>
@@ -64,6 +65,7 @@ export function refreshClaudeNativeAccess(
   source: ClaudeNativeRefreshSource,
   options: RefreshOptions = {}
 ): Promise<ClaudeNativeAccessSnapshot> {
+  const sourceEnvironment = claudeNativeSourceEnvironment(source.configDir, source.nativeUserHome)
   source.assertExclusive()
   if (!supportsClaudeNativeRefreshVersion(source.qualifiedVersion)) {
     return Promise.reject(new Error('Claude native refresh capability is not qualified.'))
@@ -150,8 +152,7 @@ export function refreshClaudeNativeAccess(
               '{"disableAllHooks":true,"autoMemoryEnabled":false}'
             ],
             env: {
-              HOME: dirname(source.configDir),
-              CLAUDE_CONFIG_DIR: source.configDir,
+              ...sourceEnvironment,
               CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
               DISABLE_AUTOUPDATER: '1',
               DISABLE_TELEMETRY: '1',

@@ -2,6 +2,7 @@ import { runProcess } from '@orca/process-host'
 import { randomUUID } from 'node:crypto'
 import { writeFile, mkdir, realpath } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { homedir } from 'node:os'
 import { isDarwinNativeProbeCi } from './claude-native-probe-cli.mjs'
 
 const FENCE = `(version 1)
@@ -75,7 +76,7 @@ export async function prepareDarwinNativeEnvironment(directory) {
     await security(['default-keychain', '-d', 'user', '-s', keychain])
     const sandbox = join(root, 'loopback-only.sb')
     await writeFile(sandbox, FENCE, { mode: 0o600 })
-    return { root, keychain, sandbox, restore }
+    return { root, keychain, sandbox, nativeUserHome: homedir(), restore }
   } catch (error) {
     await restore()
     throw error
