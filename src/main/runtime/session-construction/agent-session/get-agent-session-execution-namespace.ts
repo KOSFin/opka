@@ -23,6 +23,10 @@ import {
 } from '../../../../shared/tui-agent-launch-defaults'
 
 export abstract class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntimeWithResolveWorktreeRemovalTarget {
+  getNativeCliAgentSessionClaimKeyId(): string {
+    return this.agentSessionClaimSigner.keyId
+  }
+
   protected getAgentSessionExecutionNamespace(
     workspace: TerminalWorkspaceLaunchScope,
     agent: TuiAgent

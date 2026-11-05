@@ -4,6 +4,7 @@ import {
   type AgentWorkingMode,
   type ParsedAgentStatusPayload
 } from '../../agent-status-types'
+import { readClaudeBackgroundAgentTasks } from '../../claude-background-task-inventory'
 import { claudeRosterToSnapshots } from '../../claude-subagent-roster'
 import { resolvePrompt, resolveToolState } from '../prompt-fields'
 import { extractToolFields, isNewTurnEvent } from '../provider-event-routing'
@@ -38,7 +39,12 @@ export function buildClaudeStatusPayload(
   // work drops it; the record keeps the verdict for the eventual done.
   const mainAgentRecord = state.claudeLeadStateByPaneKey.get(paneKey)
   // Why: validate directly — the JSON stringify/parse round trip other normalizers use is pure overhead on this hot per-hook path.
+  const leadStop = (eventName === 'Stop' || eventName === 'StopFailure') && !hookPayload.agent_id
+  const inventory = leadStop ? readClaudeBackgroundAgentTasks(hookPayload) : null
   return normalizeAgentStatusPayload({
+    ...(inventory?.present && !inventory.truncated
+      ? { claudeNativeBoundaryInventory: 'complete' }
+      : {}),
     state: options.stateName,
     workingMode: options.workingMode,
     claudeTaskWakeupPending: options.claudeTaskWakeupPending,

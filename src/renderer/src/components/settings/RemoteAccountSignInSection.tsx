@@ -6,15 +6,18 @@ import type { AccountDeviceSignIn } from '../../../../shared/account-device-sign
 import { runAccountDeviceSignIn } from '../../../../shared/account-device-sign-in-client'
 import { Button } from '../ui/button'
 import { RemoteClaudeSignInSection } from './RemoteClaudeSignInSection'
+import type { CodexRoutingSignInTarget } from '../../../../shared/native-account-routing'
 
 export function RemoteAccountSignInSection({
   target,
   hostLabel,
-  onComplete
+  onComplete,
+  routingAccount
 }: {
   target: RuntimeClientTarget
   hostLabel: string
   onComplete: () => void
+  routingAccount?: CodexRoutingSignInTarget
 }): React.JSX.Element {
   const controller = useRef<AbortController | null>(null)
   const [state, setState] = useState<AccountDeviceSignIn | null>(null)
@@ -56,6 +59,7 @@ export function RemoteAccountSignInSection({
     setCopied(false)
     try {
       await runAccountDeviceSignIn({
+        routingAccount,
         request: (method, params) => callRuntimeRpc(target, method, params),
         signal: active.signal,
         onState: (next) => {
@@ -81,22 +85,33 @@ export function RemoteAccountSignInSection({
   }
 
   return (
-    <section className="space-y-3" aria-label="Server account sign-in">
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold">
-          {translate('settings.serverAccounts.title', 'Add accounts on this server')}
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {translate(
-            'settings.serverAccounts.scope',
-            'Sign in for {{host}} in your browser. The login stays on that server and appears in its account pools.',
-            { host: hostLabel }
-          )}
-        </p>
-      </div>
+    <section
+      className="space-y-3"
+      aria-label={routingAccount ? 'Native Codex CLI connection' : 'Server account sign-in'}
+    >
+      {!routingAccount ? (
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold">
+            {translate('settings.serverAccounts.title', 'Add accounts on this server')}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {translate(
+              'settings.serverAccounts.scope',
+              'Sign in for {{host}} in your browser. The login stays on that server and appears in its account pools.',
+              { host: hostLabel }
+            )}
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void start()}>
-          {busy ? 'Waiting for sign-in…' : 'Add Codex account'}
+          {busy
+            ? routingAccount
+              ? 'Connecting account…'
+              : 'Waiting for sign-in…'
+            : routingAccount
+              ? 'Connect for CLI switching'
+              : 'Add Codex account'}
         </Button>
         {busy ? (
           <Button variant="ghost" size="sm" onClick={cancel}>
@@ -123,7 +138,9 @@ export function RemoteAccountSignInSection({
       ) : null}
       {state?.status === 'complete' ? (
         <p role="status" className="text-sm">
-          Account added to {hostLabel}. Select it below or add it to a pool.
+          {routingAccount
+            ? `CLI switching connected on ${hostLabel}.`
+            : `Account added to ${hostLabel}. Select it below or add it to a pool.`}
         </p>
       ) : null}
       {error || state?.error ? (
@@ -131,7 +148,7 @@ export function RemoteAccountSignInSection({
           {error || state?.error}
         </p>
       ) : null}
-      <RemoteClaudeSignInSection target={target} />
+      {!routingAccount ? <RemoteClaudeSignInSection target={target} /> : null}
     </section>
   )
 }

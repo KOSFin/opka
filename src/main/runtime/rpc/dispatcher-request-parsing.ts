@@ -7,6 +7,7 @@ import {
   type RpcResponse
 } from './core'
 import { invalidArgumentResponse } from './dispatcher-error-response'
+import { isPrivateNativeCliRpc } from '../../../shared/native-cli-private-rpc'
 
 export function parseRpcRequestParams(
   request: RpcRequest,
@@ -19,7 +20,13 @@ export function parseRpcRequestParams(
   const result = getCompiledSchema(method.params).safeParse(request.params ?? {})
   if (!result.success) {
     return {
-      error: invalidArgumentResponse(request, meta, formatZodError(result.error))
+      error: invalidArgumentResponse(
+        request,
+        meta,
+        isPrivateNativeCliRpc(request.method)
+          ? 'Native account control input is unavailable.'
+          : formatZodError(result.error)
+      )
     }
   }
   return { value: result.data }

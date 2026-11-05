@@ -30,3 +30,22 @@ describe('mobile RPC method routing census', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get('status.get')).toBe('execution-host')
   })
 })
+
+it.each([
+  'accounts.codexRoutingState',
+  'accounts.beginCodexRoutingSignIn',
+  'accounts.codexRoutingSignIn',
+  'accounts.cancelCodexRoutingSignIn',
+  'accounts.nativeClaudeRefreshSources',
+  'accounts.beginNativeClaudeRefreshSignIn',
+  'accounts.getNativeClaudeRefreshSignInLink',
+  'accounts.submitNativeClaudeRefreshSignInCode',
+  'accounts.cancelNativeClaudeRefreshSignIn',
+  'accounts.installNativeCliIntegration',
+  'accounts.uninstallNativeCliIntegration'
+])('routes %s to its execution host', (method) => {
+  expect(MOBILE_RPC_METHOD_ROUTES.get(method)).toBe('execution-host')
+})
+it('does not expose full local installer paths to mobile', () => {
+  expect(MOBILE_RPC_METHOD_ROUTES.has('accounts.nativeCliIntegrationStatus')).toBe(false)
+})

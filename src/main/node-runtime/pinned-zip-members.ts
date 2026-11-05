@@ -12,15 +12,23 @@ export async function extractPinnedZipMembers(
   directory: string,
   members: readonly { path: string; bytes: number }[],
   label: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  ignoredMembers: readonly string[] = []
 ): Promise<void> {
   const expected = new Map(members.map((member) => [member.path, member.bytes]))
+  const ignored = new Set(ignoredMembers)
+  const seen = new Set<string>()
   const written = new Map<string, number>()
   const pending: { name: string; data: Uint8Array }[] = []
   const failures: string[] = []
   const unzip = new Unzip((file) => {
+    const duplicate = seen.has(file.name)
+    seen.add(file.name)
+    if (!duplicate && ignored.has(file.name) && !expected.has(file.name)) {
+      return
+    }
     const bytes = expected.get(file.name)
-    if (bytes === undefined || written.has(file.name)) {
+    if (bytes === undefined || duplicate) {
       failures.push(`has an unexpected entry ${JSON.stringify(file.name)}`)
       return
     }

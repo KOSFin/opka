@@ -1,4 +1,6 @@
 import { InvalidArgumentError, ZodError, formatZodError } from './core'
+import { isPrivateNativeCliRpc } from '../../../shared/native-cli-private-rpc'
+import { nativeCliControlErrorReply } from '../../../shared/native-cli-control-error'
 import type { RpcEnvelopeMeta, RpcRequest, RpcResponse } from './core'
 import {
   computerErrorData,
@@ -27,6 +29,18 @@ export function mapDispatcherError(
   meta: RpcEnvelopeMeta,
   error: unknown
 ): RpcResponse {
+  if (isPrivateNativeCliRpc(request.method)) {
+    const publicError = nativeCliControlErrorReply(error)
+    if (publicError) {
+      return errorResponse(request.id, meta, publicError.code, publicError.message)
+    }
+    return errorResponse(
+      request.id,
+      meta,
+      'invalid_argument',
+      'Native account control input is unavailable.'
+    )
+  }
   if (error instanceof ZodError) {
     return invalidArgumentResponse(request, meta, formatZodError(error))
   }

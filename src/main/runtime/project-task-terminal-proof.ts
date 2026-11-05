@@ -89,7 +89,7 @@ export function retireTerminalTaskCaller(ptyId: string, processIncarnation: stri
 }
 
 export function verifyProjectTaskTerminalProof(
-  runtime: OrcaRuntimeService,
+  runtime: Pick<OrcaRuntimeService, 'getOrchestrationDispatchAuthority'>,
   evidence: OrchestrationCompatibilityEvidence | undefined
 ): OrchestrationCompatibilityCallerAuthority | null {
   if (evidence?.host || !evidence?.terminalHandle || !evidence.terminalTaskProof) {

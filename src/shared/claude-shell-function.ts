@@ -12,6 +12,11 @@ export function getPosixClaudeShellFunction(): string {
   return `__orca_claude_binary="$(unalias claude 2>/dev/null || :; command -v claude 2>/dev/null || :)"
 if [[ -n "\${ORCA_CLAUDE_PROFILE_POINTER:-}" && -n "\${__orca_claude_binary:-}" && -x "\${__orca_claude_binary}" ]]; then
   function claude {
+    if [[ -n "\${ORCA_NATIVE_CLI_LAUNCHER:-}" ]]; then
+      local __orca_claude_executable="$(unset -f claude 2>/dev/null || :; unalias claude 2>/dev/null || :; command -v claude)"
+      "\${ORCA_NATIVE_CLI_LAUNCHER}" agent native-exec claude "$__orca_claude_executable" "$@"
+      return
+    fi
     local __orca_claude_home __orca_claude_pointer="\${ORCA_CLAUDE_PROFILE_POINTER:-}"
     # Why: a WSL pane's pointer is relative to the guest home, which the host cannot know at spawn.
     case "$__orca_claude_pointer" in '~/'*) __orca_claude_pointer="\${HOME:-}/\${__orca_claude_pointer#??}" ;; esac
@@ -43,6 +48,10 @@ export function getFishClaudeShellFunction(): string {
 set -l __orca_claude_type (type -t claude 2>/dev/null)
 if test -n "$ORCA_CLAUDE_PROFILE_POINTER"; and test "$__orca_claude_type" = file
   function claude
+    if test -n "$ORCA_NATIVE_CLI_LAUNCHER"
+      command "$ORCA_NATIVE_CLI_LAUNCHER" agent native-exec claude (command -s claude) $argv
+      return $status
+    end
     # Why: a WSL pane's pointer is relative to the guest home, which the host cannot know at spawn.
     set -l pointer (string replace -r '^~/' "$HOME/" -- "$ORCA_CLAUDE_PROFILE_POINTER")
     set -l profile (cat "$pointer" 2>/dev/null)
@@ -76,6 +85,14 @@ export function getPowerShellClaudeShellFunction(): string {
 if ($env:ORCA_CLAUDE_PROFILE_POINTER -and $orcaClaudeCommand -and
     $orcaClaudeCommand.CommandType -in @("Application", "ExternalScript")) {
 function Global:claude {
+    if ($env:ORCA_NATIVE_CLI_LAUNCHER) {
+        $binary = Get-Command claude -CommandType Application,ExternalScript -ErrorAction Stop | Select-Object -First 1
+        $orcaRoutedArgs = @(__OrcaEscapeNativeArgs $env:ORCA_NATIVE_CLI_LAUNCHER (@('agent', 'native-exec', 'claude', $binary.Source) + $args))
+        if ($MyInvocation.ExpectingInput) { $input | & $env:ORCA_NATIVE_CLI_LAUNCHER @orcaRoutedArgs }
+        else { & $env:ORCA_NATIVE_CLI_LAUNCHER @orcaRoutedArgs }
+        $global:LASTEXITCODE = $LASTEXITCODE
+        return
+    }
     $names = @('CLAUDE_CONFIG_DIR', 'ORCA_CLAUDE_INJECTED_CONFIG_DIR')
     $saved = @{}
     foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }

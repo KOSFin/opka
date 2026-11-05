@@ -95,12 +95,19 @@ const RECENT_VERSION_MS = 5 * 60_000
 const recentVersions = new Map<string, { at: number; value: Promise<string | null> }>()
 
 /** Why remembered: account folders refresh before every launch, and a hook plan needs only a recent version. */
-export function probeRecentClaudeCliVersion(executablePath: string): Promise<string | null> {
-  const recent = recentVersions.get(executablePath)
+export function probeRecentClaudeCliVersion(
+  executablePath: string,
+  cacheIdentity?: string
+): Promise<string | null> {
+  const key = cacheIdentity === undefined ? executablePath : `${executablePath}\0${cacheIdentity}`
+  const recent = recentVersions.get(key)
   if (recent && Date.now() - recent.at <= RECENT_VERSION_MS) {
     return recent.value
   }
   const value = probeClaudeCliVersion(executablePath)
-  recentVersions.set(executablePath, { at: Date.now(), value })
+  recentVersions.set(key, { at: Date.now(), value })
+  if (recentVersions.size > 128) {
+    recentVersions.delete(recentVersions.keys().next().value ?? key)
+  }
   return value
 }

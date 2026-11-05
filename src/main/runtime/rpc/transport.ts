@@ -14,6 +14,8 @@
 export type RpcMessageContext = {
   signal: AbortSignal
   startKeepalive: () => void
+  emit?: (response: string) => void
+  connectionId?: string
 }
 
 export type RpcTransport = {

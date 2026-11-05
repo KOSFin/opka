@@ -100,6 +100,37 @@ it('reports clipboard refusal without claiming the code was copied', async () =>
   expect(text()).not.toContain('Code copied')
 })
 
+it('connects an existing pool account and pauses status requests while the screen is hidden', async () => {
+  const client = clientWithWaiting()
+  const routingAccount = {
+    accountId: '10000000-0000-4000-8000-000000000001',
+    expectedRosterRevision: 'r1'
+  }
+  const props = { client, hostName: 'Server', onComplete: vi.fn(), routingAccount }
+  await act(async () => {
+    tree = create(createElement(MobileAccountSignInSection, { ...props, connected: true }))
+  })
+  await press('Connect for CLI switching')
+  expect(client.sendRequest).toHaveBeenCalledWith(
+    'accounts.beginCodexRoutingSignIn',
+    routingAccount
+  )
+  await act(async () => {
+    tree?.update(createElement(MobileAccountSignInSection, { ...props, connected: false }))
+  })
+  await act(async () => vi.advanceTimersByTimeAsync(10_000))
+  expect(client.sendRequest).toHaveBeenCalledTimes(1)
+  expect(text()).toContain(waiting.userCode)
+  await act(async () => {
+    tree?.update(createElement(MobileAccountSignInSection, { ...props, connected: true }))
+  })
+  expect(client.sendRequest).toHaveBeenCalledWith('accounts.codexRoutingSignIn', { id: waiting.id })
+  await press('Cancel sign-in')
+  expect(client.sendRequest).toHaveBeenCalledWith('accounts.cancelCodexRoutingSignIn', {
+    id: waiting.id
+  })
+})
+
 it('does not publish the previous host completion after its keyed view is replaced', async () => {
   const oldClient = clientWithWaiting()
   let finishPoll: (value: ReturnType<typeof rpcSuccess>) => void = () => {

@@ -38,6 +38,45 @@ function isAlive(pid: number): boolean {
 const NODE_ENV = { ELECTRON_RUN_AS_NODE: '1' }
 
 describe('the shared catalog probe runner', () => {
+  it('keeps native login stdin open for a single owner-supplied code without recording it', async () => {
+    let input: Promise<void> | undefined
+    const stdout = await runAgentModelCatalogListing(
+      {
+        ...node(
+          "process.stdin.once('data',()=>{process.stdout.write('accepted');process.exit(0)})"
+        ),
+        env: NODE_ENV,
+        keepStdinOpen: true
+      },
+      {
+        site: 'test-owned-code',
+        onStdinReady(write) {
+          input = write('synthetic-code#state\n')
+        }
+      }
+    )
+    await input
+    expect(stdout).toBe('accepted')
+  })
+  it('stops an output consumer failure without exposing its cause', async () => {
+    await expect(
+      runAgentModelCatalogListing(
+        {
+          ...node("process.stdout.write('ready');setInterval(()=>{},1000)"),
+          env: NODE_ENV
+        },
+        {
+          site: 'test-output-consumer',
+          onStdout() {
+            throw new Error('private auth cause')
+          }
+        }
+      )
+    ).rejects.toMatchObject({
+      reason: 'stopped',
+      message: 'Native command output admission failed'
+    })
+  })
   it('answers a listing’s stdout once it exits 0, with its request on stdin', async () => {
     const stdout = await runAgentModelCatalogListing(
       {

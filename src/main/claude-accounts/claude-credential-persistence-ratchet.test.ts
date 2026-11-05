@@ -29,6 +29,21 @@ const credentialRoots: readonly (string | { root: string; only: RegExp })[] = [
  * uses today; a new primitive in one of them is a review, not a silent pass.
  */
 const fsAllowances: Record<string, readonly string[]> = {
+  // Nonsecret host-bound source attestation; OAuth credentials remain native-owned.
+  'claude-accounts/claude-native-refresh-sources.ts': ['writeFileAtomically'],
+  // Explicit removal of a verified closed native source; no credential writers.
+  'claude-accounts/claude-native-source-profile.ts': ['rmSync'],
+  // Private non-auth native preferences; guarded merge and one bounded conflict slot.
+  'claude-accounts/claude-native-preferences.ts': ['mkdirSync', 'writeFileAtomicallyIfUnchanged'],
+  'claude-accounts/claude-native-pool-hooks.ts': ['writeFileAtomicallyIfUnchanged'],
+  // Existing active-profile pointer; never a credential file.
+  'claude-accounts/pinned-account-launch.ts': ['writeFileAtomically'],
+  // Native child facades persist access-only snapshots; native /usage owns refresh credentials.
+  'claude-accounts/claude-native-facade-publication.ts': [
+    'rmSync',
+    'writeFileAtomicallyIfUnchanged'
+  ],
+  'claude-accounts/claude-native-access-facade.ts': ['rmSync', 'writeFileAtomically'],
   'claude-accounts/claude-profile-history.ts': [
     'mkdirSync',
     'renameSync',
@@ -175,7 +190,12 @@ function credentialMutations(text: string, file = ''): string[] {
       found.push('credentials file write')
     }
   }
-  return found
+  return file === 'main/claude-accounts/claude-native-facade-publication.ts'
+    ? found.filter(
+        (kind) =>
+          kind !== 'credentials file write' && kind !== 'credentials file write through a name'
+      )
+    : found
 }
 
 function files(dir: string): string[] {

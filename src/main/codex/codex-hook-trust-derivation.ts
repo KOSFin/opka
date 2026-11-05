@@ -1,3 +1,4 @@
+import { assertNativeCodexPolicyScope } from '../codex-routing/native-codex-policy-scope'
 import { realpathSync, statSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -42,6 +43,12 @@ const SCRATCH_DUMMY_GROUP_INDEX = 1
 const SCRATCH_PREFIXES = ['orca-codex-hook-trust-', 'orca-codex-version-'] as const
 // Why an hour: no ask lives that long, so an older scratch home is one a quit left behind.
 const STALE_SCRATCH_MS = 60 * 60_000
+const SCRATCH_AUTH_ENV_KEYS = [
+  'CODEX_ACCESS_TOKEN',
+  'CODEX_API_KEY',
+  'OPENAI_API_KEY',
+  'CODEX_SQLITE_HOME'
+] as const
 
 type CodexHookScratchListing = {
   listings: CodexListedHook[]
@@ -113,15 +120,26 @@ export function buildScratchHooksJson(hookCommand: string, positionCopy: boolean
 export async function listCodexHooks(
   codexPath: string,
   codexHome: string | null,
-  cwd: string
+  cwd: string,
+  options: { scratch?: boolean } = {}
 ): Promise<CodexListedHook[]> {
+  if (options.scratch && !codexHome) {
+    throw new Error('Scratch hook listing requires an explicit isolated HOME')
+  }
+  if (options.scratch) {
+    await assertNativeCodexPolicyScope()
+  }
   const result = await runCodexAppServerSession(
     {
       command: codexPath,
       // Why the probe args: plugin startup can leave marketplace clones behind a short session.
-      args: [...CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS],
+      args: [
+        ...(options.scratch ? ['-C', cwd, '-c', 'cli_auth_credentials_store="file"'] : []),
+        ...CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS
+      ],
       cliPath: codexPath,
       ...(codexHome ? { env: { CODEX_HOME: codexHome } } : { envToDelete: ['CODEX_HOME'] }),
+      ...(options.scratch ? { envToDelete: SCRATCH_AUTH_ENV_KEYS } : {}),
       timeoutMs: DERIVE_TIMEOUT_MS
     },
     (rpc) => rpc.request('hooks/list', { cwds: [cwd] })
@@ -151,7 +169,7 @@ async function listScratchHomeHooks(
       upsertProjectTrustLevelInContent('', project, 'trusted')
     )
     return {
-      listings: await listCodexHooks(codexPath, scratchHome, project),
+      listings: await listCodexHooks(codexPath, scratchHome, project, { scratch: true }),
       homeHooksPath: join(scratchHome, 'hooks.json'),
       projectHooksPath: join(project, '.codex', 'hooks.json')
     }
@@ -239,13 +257,22 @@ export function fingerprintCodex(codexPath: string): string | null {
 
 /** `codex --version`'s output; null when it reports none. */
 export async function probeCodexVersion(codexCommand: string): Promise<string | null> {
+  await assertNativeCodexPolicyScope()
   // Why a throwaway home: even `--version` leaves a tmp/arg0 folder in its CODEX_HOME.
   const scratchHome = await mkdtemp(join(tmpdir(), SCRATCH_PREFIXES[1]))
   try {
+    const environment = withCliRuntimeOnPath(codexCommand, {
+      ...process.env,
+      CODEX_HOME: scratchHome
+    })
+    for (const key of SCRATCH_AUTH_ENV_KEYS) {
+      delete environment[key]
+    }
     const result = await runProcess({
       program: codexCommand,
-      args: ['--version'],
-      env: withCliRuntimeOnPath(codexCommand, { ...process.env, CODEX_HOME: scratchHome }),
+      args: ['-c', 'cli_auth_credentials_store="file"', '--version'],
+      env: environment,
+      cwd: scratchHome,
       timeoutMs: VERSION_TIMEOUT_MS,
       // Why the tree: a hung Windows wrapper's codex child would outlive a root-only kill.
       terminationBarrier: true

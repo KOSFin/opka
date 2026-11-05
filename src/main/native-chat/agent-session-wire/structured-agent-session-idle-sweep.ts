@@ -42,6 +42,7 @@ export type StructuredAgentSessionIdleSweepDeps = {
   stopStartingAgent: (sessionId: string) => Promise<void>
   closeConversation: (sessionId: string) => Promise<boolean>
   logger: StructuredAgentSessionLogger
+  afterSweep?: () => Promise<void>
   intervalMs?: number
   idleMs?: number
 }
@@ -99,6 +100,11 @@ export class StructuredAgentSessionIdleSweep {
     }
   }
 
+  hasOpenWork(sessionId: string): boolean {
+    const session = this.deps.sessions.get(sessionId)
+    return !session || this.owesWork(sessionId, session)
+  }
+
   /** One pass over every open conversation. Sessions run concurrently, so one waiting behind a
    *  locked start does not hold up the rest; a pass still running skips the next. */
   async tick(): Promise<void> {
@@ -120,6 +126,7 @@ export class StructuredAgentSessionIdleSweep {
             )
         )
       )
+      await this.deps.afterSweep?.()
     } finally {
       this.running = false
     }

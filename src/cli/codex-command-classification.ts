@@ -1,3 +1,5 @@
+import { CODEX_GLOBAL_FLAGS_WITH_VALUES } from '../shared/codex-global-options'
+export { CODEX_GLOBAL_FLAGS_WITH_VALUES } from '../shared/codex-global-options'
 const CODEX_NON_INTERACTIVE_SUBCOMMANDS = new Set([
   'exec',
   'e',
@@ -35,28 +37,6 @@ const CODEX_NON_INTERACTIVE_CLOUD_SUBCOMMANDS = new Set([
   'help'
 ])
 const CODEX_NON_INTERACTIVE_LOGIN_SUBCOMMANDS = new Set(['status', 'help'])
-const CODEX_GLOBAL_FLAGS_WITH_VALUES = new Set([
-  '--config',
-  '-c',
-  '--enable',
-  '--disable',
-  '--remote',
-  '--remote-auth-token-env',
-  '--image',
-  '-i',
-  '--model',
-  '-m',
-  '--local-provider',
-  '--profile',
-  '-p',
-  '--sandbox',
-  '-s',
-  '--cd',
-  '-C',
-  '--add-dir',
-  '--ask-for-approval',
-  '-a'
-])
 const CODEX_GLOBAL_BOOLEAN_FLAGS = new Set([
   '--oss',
   '--dangerously-bypass-approvals-and-sandbox',

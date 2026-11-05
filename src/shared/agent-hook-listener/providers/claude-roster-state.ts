@@ -132,6 +132,15 @@ export function setClaudeMainAgentTurnState(
   const previous = state.claudeLeadStateByPaneKey.get(paneKey)
   const { state: nextState, outcome, stateStartedAt, ...rest } = next
   const record: ClaudeLeadTurnState = {
+    ...(!Object.hasOwn(next, 'nativeStart')
+      ? {
+          nativeStart: previous?.nativeStart,
+          nativeCoverage: previous?.nativeCoverage,
+          nativePromptId: previous?.nativePromptId,
+          nativeFailure: previous?.nativeFailure,
+          nativeHook: previous?.nativeHook
+        }
+      : {}),
     ...rest,
     ...continueMainAgentStatus(previous, { state: nextState, outcome, stateStartedAt }, now)
   }

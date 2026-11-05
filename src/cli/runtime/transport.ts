@@ -17,7 +17,12 @@ export async function sendRequest<TResult>(
   timeoutMs: number,
   envelope?: RuntimeOrchestrationEnvelope,
   // Why separate from the envelope: federation forwards envelopes to other runtimes.
-  expectedRuntimeSource?: ExpectedRuntimeSource
+  expectedRuntimeSource?: ExpectedRuntimeSource,
+  stream?: {
+    onFrame(result: unknown): void | Promise<void>
+    signal?: AbortSignal
+    pauseTimeoutWhileConsuming?: boolean
+  }
 ): Promise<RuntimeRpcResponse<TResult>> {
   if (!isSafeTimerDelayMs(timeoutMs)) {
     throw new RuntimeClientError(
@@ -38,23 +43,31 @@ export async function sendRequest<TResult>(
     }
     const socket = createConnection(transport.endpoint)
     let lineSegments: string[] = []
+    let partialChars = 0
+    let waitingForConsumer = false
     let settled = false
     const requestId = randomUUID()
 
-    const timeout = setTimeout(() => {
-      if (settled) {
-        return
-      }
-      settled = true
-      lineSegments = []
-      socket.destroy()
-      reject(
-        new RuntimeClientError(
-          'runtime_timeout',
-          'Timed out waiting for the Orca runtime to respond.'
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const armTimeout = () => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => {
+        if (settled) {
+          return
+        }
+        settled = true
+        lineSegments = []
+        stream?.signal?.removeEventListener('abort', abort)
+        socket.destroy()
+        reject(
+          new RuntimeClientError(
+            'runtime_timeout',
+            'Timed out waiting for the Orca runtime to respond.'
+          )
         )
-      )
-    }, timeoutMs)
+      }, timeoutMs)
+    }
+    armTimeout()
 
     const finish = (
       result: { ok: true; response: RuntimeRpcResponse<TResult> } | { ok: false; error: Error }
@@ -65,6 +78,7 @@ export async function sendRequest<TResult>(
       settled = true
       lineSegments = []
       clearTimeout(timeout)
+      stream?.signal?.removeEventListener('abort', abort)
       socket.end()
       if (result.ok === false) {
         reject(result.error)
@@ -72,7 +86,13 @@ export async function sendRequest<TResult>(
         resolve(result.response)
       }
     }
-
+    const abort = (): void => {
+      socket.destroy()
+      finish({
+        ok: false,
+        error: new RuntimeClientError('runtime_stream_aborted', 'Runtime stream detached')
+      })
+    }
     socket.setEncoding('utf8')
     socket.once('error', (error) => {
       finish({
@@ -99,7 +119,7 @@ export async function sendRequest<TResult>(
         )
       })
     })
-    socket.on('data', (chunk: string) => {
+    const receive = (chunk: string): void => {
       // Why: the server may interleave `{"_keepalive":true}\n` frames with the
       // final success/failure frame to keep both idle timers alive during a
       // long-poll (see design doc §3.1). Read frames in a loop until we see a
@@ -110,6 +130,16 @@ export async function sendRequest<TResult>(
         const newlineIndex = chunk.indexOf('\n', cursor)
         if (newlineIndex === -1) {
           lineSegments.push(chunk.slice(cursor))
+          partialChars += chunk.length - cursor
+          if (stream && partialChars > 8 * 1024 * 1024) {
+            finish({
+              ok: false,
+              error: new RuntimeClientError(
+                'invalid_runtime_response',
+                'Runtime stream frame exceeded its limit'
+              )
+            })
+          }
           return
         }
         const segment = chunk.slice(cursor, newlineIndex)
@@ -118,6 +148,17 @@ export async function sendRequest<TResult>(
           lineSegments.push(segment)
           line = lineSegments.join('')
           lineSegments = []
+        }
+        partialChars = 0
+        if (stream && line.length > 8 * 1024 * 1024) {
+          finish({
+            ok: false,
+            error: new RuntimeClientError(
+              'invalid_runtime_response',
+              'Runtime stream frame exceeded its limit'
+            )
+          })
+          return
         }
         cursor = newlineIndex + 1
         if (line.trim().length === 0) {
@@ -143,7 +184,7 @@ export async function sendRequest<TResult>(
         // Node 20+ via Electron and the standalone CLI targets the same
         // major). See §7 risk #9.
         if (isKeepaliveFrame(raw)) {
-          timeout.refresh()
+          timeout?.refresh()
           continue
         }
 
@@ -168,7 +209,7 @@ export async function sendRequest<TResult>(
         // Success|Failure shape here.
         const frame = parsed.data
         if ('_keepalive' in frame) {
-          timeout.refresh()
+          timeout?.refresh()
           continue
         }
 
@@ -193,10 +234,69 @@ export async function sendRequest<TResult>(
           })
           return
         }
+        if (
+          stream &&
+          response.ok &&
+          typeof raw === 'object' &&
+          raw !== null &&
+          'streaming' in raw &&
+          raw.streaming === true
+        ) {
+          try {
+            const pending = stream.onFrame(response.result)
+            if (pending instanceof Promise) {
+              waitingForConsumer = true
+              if (stream.pauseTimeoutWhileConsuming) {
+                clearTimeout(timeout)
+                timeout = undefined
+              }
+              socket.pause()
+              void pending.then(
+                () => {
+                  if (settled) {
+                    return
+                  }
+                  waitingForConsumer = false
+                  if (stream.pauseTimeoutWhileConsuming) {
+                    armTimeout()
+                  }
+                  const rest = chunk.slice(cursor)
+                  if (rest) {
+                    receive(rest)
+                  }
+                  if (!waitingForConsumer && !settled) {
+                    socket.resume()
+                  }
+                },
+                () =>
+                  finish({
+                    ok: false,
+                    error: new RuntimeClientError(
+                      'invalid_runtime_response',
+                      'Runtime stream consumer failed'
+                    )
+                  })
+              )
+              return
+            }
+          } catch {
+            finish({
+              ok: false,
+              error: new RuntimeClientError(
+                'invalid_runtime_response',
+                'Invalid runtime stream payload'
+              )
+            })
+            return
+          }
+          timeout?.refresh()
+          continue
+        }
         finish({ ok: true, response })
         return
       }
-    })
+    }
+    socket.on('data', receive)
     socket.on('connect', () => {
       socket.write(
         `${JSON.stringify({
@@ -213,5 +313,10 @@ export async function sendRequest<TResult>(
         })}\n`
       )
     })
+    if (stream?.signal?.aborted) {
+      abort()
+    } else {
+      stream?.signal?.addEventListener('abort', abort, { once: true })
+    }
   })
 }

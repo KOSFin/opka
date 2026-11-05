@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { Check } from 'lucide-react-native'
 import { loadHosts } from '../transport/host-store'
 import { useHostClient } from '../transport/host-client-hooks'
 import { colors, spacing } from '../theme/mobile-theme'
 import { styles } from './mobile-accounts-screen-styles'
 import { useNow } from '../hooks/use-now'
+import { useScreenActive } from '../hooks/use-screen-active'
 import { ClaudeIcon, OpenAIIcon } from '../components/AgentIcons'
 import {
   type AccountsSnapshot,
@@ -51,7 +52,7 @@ export function MobileAccountsScreen() {
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
-  const [clockEnabled, setClockEnabled] = useState(false)
+  const screenActive = useScreenActive()
   const [notice, setNotice] = useState<AccountsNotice | null>(null)
   const [section, setSection] = useState<'accounts' | 'pools'>('accounts')
   const [enrollmentRevision, setEnrollmentRevision] = useState(0)
@@ -77,21 +78,15 @@ export function MobileAccountsScreen() {
     cancelReset: cancelCodexReset
   } = useCodexResetCreditAction({
     client,
-    connected: connState === 'connected',
+    connected: screenActive && connState === 'connected',
     snapshot,
     accountMutationBusy: busyAccountId !== null,
     onSnapshot: acceptSnapshot,
     onNotice: setNotice
   })
 
-  useFocusEffect(
-    useCallback(() => {
-      setClockEnabled(true)
-      return () => setClockEnabled(false)
-    }, [])
-  )
   // Why: snapshot pushes only arrive when the desktop's rate-limit poll completes.
-  const now = useNow(60_000, clockEnabled)
+  const now = useNow(60_000, screenActive)
 
   useEffect(() => {
     if (!hostId) {
@@ -119,7 +114,7 @@ export function MobileAccountsScreen() {
   // when the user switches accounts. Falls back to a one-shot accounts.list
   // if the subscription stream errors.
   useEffect(() => {
-    if (!client || connState !== 'connected') {
+    if (!screenActive || !client || connState !== 'connected') {
       return
     }
     const unsubscribe = client.subscribe('accounts.subscribe', null, (payload) => {
@@ -136,7 +131,7 @@ export function MobileAccountsScreen() {
       }
     })
     return unsubscribe
-  }, [acceptSnapshot, client, connState, rejectInvalidSnapshot])
+  }, [acceptSnapshot, client, connState, rejectInvalidSnapshot, screenActive])
 
   const refresh = useCallback(async () => {
     if (!client) {
@@ -382,7 +377,7 @@ export function MobileAccountsScreen() {
                   key={`sign-in:${hostId}`}
                   hostId={hostId}
                   client={client}
-                  connected={connState === 'connected'}
+                  connected={screenActive && section === 'accounts' && connState === 'connected'}
                   hostName={hostName}
                   onComplete={() => {
                     setEnrollmentRevision((revision) => revision + 1)
@@ -398,7 +393,7 @@ export function MobileAccountsScreen() {
                 key={hostId}
                 refreshKey={enrollmentRevision}
                 client={client}
-                connected={connState === 'connected'}
+                connected={screenActive && section === 'pools' && connState === 'connected'}
                 hostName={hostName}
               />
             }

@@ -33,7 +33,7 @@ async function openPools(app: ElectronApplication, page: Page, unsupported = fal
         allowReserve: false,
         members: [
           {
-            accountId: 'synthetic-account',
+            accountId: '10000000-0000-4000-8000-000000000001',
             priority: 7,
             weight: 1,
             maxConcurrent: 1,
@@ -46,6 +46,23 @@ async function openPools(app: ElectronApplication, page: Page, unsupported = fal
       ipcMain.handle(
         'runtime:call',
         async (event, request: { method: string; params?: unknown }) => {
+          if (request.method === 'accounts.codexRoutingState') {
+            return {
+              id: 'synthetic-routing',
+              ok: true,
+              result: {
+                capability: 'accounts.native-codex-routing.v1',
+                supported: true,
+                accounts: [
+                  {
+                    accountId: '10000000-0000-4000-8000-000000000001',
+                    rosterRevision: 'synthetic-revision',
+                    status: 'ready'
+                  }
+                ]
+              }
+            }
+          }
           if (request.method === 'accountPool.list') {
             if (unsupported) {
               return {
@@ -64,14 +81,16 @@ async function openPools(app: ElectronApplication, page: Page, unsupported = fal
                 accounts: {
                   claude: { accounts: [], activeAccountId: null },
                   codex: {
-                    accounts: [{ id: 'synthetic-account', email: 'pool@example.test' }],
-                    activeAccountId: 'synthetic-account'
+                    accounts: [
+                      { id: '10000000-0000-4000-8000-000000000001', email: 'pool@example.test' }
+                    ],
+                    activeAccountId: '10000000-0000-4000-8000-000000000001'
                   }
                 },
                 candidates: [
                   {
                     provider: 'codex',
-                    accountId: 'synthetic-account',
+                    accountId: '10000000-0000-4000-8000-000000000001',
                     auth: 'ready',
                     quota: 'unknown',
                     usedPercent: null
@@ -81,7 +100,7 @@ async function openPools(app: ElectronApplication, page: Page, unsupported = fal
                   {
                     ownerKey: 'synthetic-owner',
                     provider: 'codex',
-                    accountId: 'synthetic-account',
+                    accountId: '10000000-0000-4000-8000-000000000001',
                     poolId: 'codex-default',
                     state: 'ready'
                   }
@@ -161,8 +180,10 @@ test('pool operator edits real controls and reads the host-confirmed revision', 
     await expect(provider).toHaveAttribute('aria-expanded', 'false')
     await provider.click()
     await expect(provider).toHaveAttribute('aria-expanded', 'true')
-    await expect(section.getByText('pool@example.test · Default for new chats')).toBeVisible()
+    await expect(section.getByText('pool@example.test · Manual default')).toBeVisible()
     await expect(section.getByText(/Auth: ready · Quota: unknown/)).toBeVisible()
+    await expect(section.getByText('CLI switching ready', { exact: true })).toBeVisible()
+    await expect(section.getByRole('switch', { name: 'Use automatic pool' })).toBeChecked()
     await launched.page.screenshot({ path: info.outputPath('account-pool-settings-before.png') })
     await section.getByRole('combobox', { name: 'codex pool mode' }).click()
     await launched.page.getByRole('option', { name: 'Balanced', exact: true }).click()
@@ -232,7 +253,7 @@ test('server accounts show device sign-in, cancel safely and choose a Claude wor
     await expect(signIn.getByText(/Sign in for Synthetic server/)).toBeVisible()
     await launched.page.locator('#account-pools').getByRole('button', { name: /Codex/ }).click()
     await expect(
-      launched.page.locator('#account-pools').getByText('pool@example.test · Default for new chats')
+      launched.page.locator('#account-pools').getByText('pool@example.test · Manual default')
     ).toBeVisible()
     await expect(
       launched.page.getByText('Could not load provider accounts.', { exact: true })

@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  copyFileSync,
   existsSync,
   linkSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync
@@ -16,13 +18,21 @@ import {
   codexRolloutHardlinkIdentity,
   dedupeCodexRolloutFileAliases
 } from '../ai-vault/codex-session-root-dedup'
-import { prepareLegacySharedCodexSessionResume } from './codex-legacy-session-resume'
+import {
+  prepareCodexAccountRestartResume,
+  prepareLegacySharedCodexSessionResume
+} from './codex-legacy-session-resume'
+import { resolveCodexSessionBackfillPaths } from './codex-session-backfill'
 import { ManagedCodexHomeTemporarilyUnavailableError } from '../codex-accounts/host-codex-managed-home-ownership'
 
 const lstatFaults = vi.hoisted(() => ({
   path: null as string | null,
+  linkAttempts: 0,
+  copyAttempts: 0,
   reset(): void {
     lstatFaults.path = null
+    lstatFaults.linkAttempts = 0
+    lstatFaults.copyAttempts = 0
   }
 }))
 
@@ -30,6 +40,14 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFsPromises>()
   return {
     ...actual,
+    copyFile: async (...args: Parameters<typeof actual.copyFile>) => {
+      lstatFaults.copyAttempts += 1
+      return actual.copyFile(...args)
+    },
+    link: async (...args: Parameters<typeof actual.link>) => {
+      lstatFaults.linkAttempts += 1
+      return actual.link(...args)
+    },
     lstat: async (...args: Parameters<typeof actual.lstat>) => {
       if (args[0] === lstatFaults.path) {
         const error: NodeJS.ErrnoException = new Error(`EBUSY: locked '${args[0]}'`)
@@ -105,6 +123,53 @@ describe('prepareLegacySharedCodexSessionResume', () => {
     expect(first.useRealCodexHome).toBe(true)
     expect(second.useRealCodexHome).toBe(true)
     expect(readFileSync(targetRolloutPath(), 'utf-8')).toContain('session_meta')
+  })
+
+  it('keeps disk usage unchanged across exactly 1000 account switches of one conversation', async () => {
+    await prepare()
+    const auditPath = resolveCodexSessionBackfillPaths(systemHome).auditLogPath
+    const before = readFileSync(auditPath, 'utf8')
+    const sourceBefore = statSync(rolloutPath)
+
+    for (let change = 0; change < 1000; change++) {
+      const reverse = change % 2 === 0
+      await prepareCodexAccountRestartResume({
+        sourceHome: reverse ? systemHome : legacyHome,
+        targetHome: reverse ? legacyHome : systemHome,
+        transcriptPath: reverse ? targetRolloutPath() : rolloutPath,
+        systemCodexHomePath: systemHome
+      })
+    }
+
+    expect(readFileSync(auditPath, 'utf8')).toBe(before)
+    const files = [statSync(rolloutPath), statSync(targetRolloutPath())]
+    expect(new Set(files.map((file) => `${file.dev}:${file.ino}`)).size).toBe(1)
+    for (const file of files) {
+      expect(file.dev).toBe(sourceBefore.dev)
+      expect(file.ino).toBe(sourceBefore.ino)
+      expect(file.blocks).toBe(sourceBefore.blocks)
+      expect(file.size).toBe(sourceBefore.size)
+    }
+    expect(readdirSync(dirname(rolloutPath))).toEqual([basename(rolloutPath)])
+    expect(readdirSync(dirname(targetRolloutPath()))).toEqual([basename(targetRolloutPath())])
+    expect(lstatFaults.linkAttempts).toBe(1)
+    expect(lstatFaults.copyAttempts).toBe(0)
+  })
+
+  it('accepts an identical separate copy without appending audit records', async () => {
+    mkdirSync(dirname(targetRolloutPath()), { recursive: true })
+    copyFileSync(rolloutPath, targetRolloutPath())
+    const auditPath = resolveCodexSessionBackfillPaths(systemHome).auditLogPath
+    mkdirSync(dirname(auditPath), { recursive: true })
+    writeFileSync(auditPath, '{"action":"existing","target":"preserve-me"}\n')
+    const before = readFileSync(auditPath, 'utf8')
+
+    await prepare()
+    await prepare()
+
+    expect(readFileSync(auditPath, 'utf8')).toBe(before)
+    expect(readFileSync(targetRolloutPath(), 'utf8')).toBe(readFileSync(rolloutPath, 'utf8'))
+    expect(lstatFaults.linkAttempts).toBe(0)
   })
 
   it('fails clearly and retryably instead of approving a missing rollout', async () => {

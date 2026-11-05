@@ -4,20 +4,16 @@ import { dirname, join, resolve } from 'node:path'
 import { z } from 'zod'
 import { readNodeFileSyncWithinLimit } from './node-bounded-file-reader'
 import { TERMINAL_TASK_CALLER_FILE_ENV } from './terminal-task-caller-env'
+import {
+  TerminalTaskCallerIdentity,
+  TerminalTaskCallerProof
+} from './terminal-task-caller-identity'
 
 export const TerminalTaskCallerFile = z
   .object({
     schema: z.literal(1),
-    proof: z.string().regex(/^[a-f0-9]{64}$/),
-    identity: z
-      .object({
-        terminalHandle: z.string().min(1).max(512),
-        paneKey: z.string().min(1).max(1024),
-        worktreeId: z.string().min(1).max(4096),
-        processIncarnation: z.string().min(1).max(4096)
-      })
-      .strict()
-      .optional()
+    proof: TerminalTaskCallerProof,
+    identity: TerminalTaskCallerIdentity.optional()
   })
   .strict()
 

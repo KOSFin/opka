@@ -91,3 +91,13 @@ it('preserves selective scalar consumer errors and a number ending at EOF', () =
   )
   expect(() => throwing.write('"kept"')).toThrow(failure)
 })
+
+it.each(['{"abcdef":1}', '{"key":"abcdef"}'])('bounds retained keys and scalars %s', (value) => {
+  const reader = createJsonTokenReader(
+    () => {},
+    1,
+    () => true,
+    5
+  )
+  expect(() => reader.write(value)).toThrow(RangeError)
+})

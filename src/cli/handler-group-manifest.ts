@@ -1,3 +1,4 @@
+import { NATIVE_AGENT_HANDLER_GROUP } from './native-agent-handler-group'
 import type { CommandHandler } from './dispatch'
 import { BROWSER_HANDLER_GROUPS } from './browser-handler-groups'
 import { JIRA_HANDLER_GROUP } from './jira-handler-group'
@@ -15,6 +16,7 @@ export type HandlerGroup = {
 // Why: `keys` mirrors each group's exported record and is verified against the
 // real exports by handler-group-manifest.test.ts, so drift fails CI, not dispatch.
 export const HANDLER_GROUPS: readonly HandlerGroup[] = [
+  NATIVE_AGENT_HANDLER_GROUP,
   JIRA_HANDLER_GROUP,
   LINEAR_HANDLER_GROUP,
   REFERENCE_HANDLER_GROUP,

@@ -36,6 +36,11 @@ import { refreshInstalledOpenCodeStatusPlugins } from '../opencode/opencode-stat
 import { pruneDesktopOrcadArtifactCache } from '../orcad/orcad-artifact-cache-retention'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { repairDuplicatePtyPanesOnStart } from '../runtime/moved-pane-owner-rekey'
+import { ensureDevLauncher } from '../cli/cli-dev-launcher'
+import { prepareDesktopLinuxCliLauncher } from '../cli/desktop-cli-launcher-path'
+import { DEV_COMMAND_NAME } from '../cli/cli-install-constants'
+import { getCanonicalUserDataPath } from '../persistence/loading-store/user-data-path'
+import { join } from 'node:path'
 
 // Headless serve never opens a window, so the sweep still has to run off a timer there.
 const WORKTREE_TRASH_SWEEP_FALLBACK_MS = 15_000
@@ -49,6 +54,24 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
   await loadWorktreeRemovalRecordsForStore(store)
   initializeMainProcessObservers()
   initializeMainProcessAccountServices()
+  try {
+    if (!app.isPackaged) {
+      await ensureDevLauncher({
+        platform: process.platform,
+        userDataPath: getCanonicalUserDataPath(),
+        execPath: process.execPath,
+        cliEntryPath: join(app.getAppPath(), 'out', 'cli', 'index.js'),
+        commandName: DEV_COMMAND_NAME
+      })
+    } else if (process.platform === 'linux' && process.resourcesPath) {
+      prepareDesktopLinuxCliLauncher({
+        userDataPath: getCanonicalUserDataPath(),
+        resourcesPath: process.resourcesPath
+      })
+    }
+  } catch {
+    console.warn('[cli] This app’s private CLI launcher could not be prepared.')
+  }
   const runtime = initializeMainProcessRuntime()
   initializeMainProcessAutomations()
   configureRuntimeServices(runtime)

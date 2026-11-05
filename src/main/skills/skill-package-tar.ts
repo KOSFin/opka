@@ -107,7 +107,10 @@ export class TarByteReader {
   private currentOffset = 0
   private consumed = 0
 
-  constructor(stream: Readable) {
+  constructor(
+    stream: Readable,
+    private readonly expandedLimit = TAR_EXPANDED_LIMIT
+  ) {
     this.iterator = stream[Symbol.asyncIterator]() as AsyncIterator<Buffer>
   }
 
@@ -139,7 +142,7 @@ export class TarByteReader {
       this.currentOffset += available
       written += available
       this.consumed += available
-      if (this.consumed > TAR_EXPANDED_LIMIT) {
+      if (this.consumed > this.expandedLimit) {
         throw new Error('skill-package-expanded-size-limit')
       }
     }
@@ -175,7 +178,10 @@ function validateTarChecksum(header: Buffer): void {
   }
 }
 
-export function parseSkillTarHeader(header: Buffer): SkillTarReadEntry | null {
+export function parseSkillTarHeader(
+  header: Buffer,
+  allowGnuFormat = false
+): SkillTarReadEntry | null {
   if (header.length !== TAR_BLOCK_BYTES) {
     throw new Error('skill-package-tar-truncated')
   }
@@ -183,7 +189,9 @@ export function parseSkillTarHeader(header: Buffer): SkillTarReadEntry | null {
     return null
   }
   validateTarChecksum(header)
-  if (readString(header, 257, 6) !== 'ustar' || readString(header, 263, 2) !== '00') {
+  const gnu =
+    allowGnuFormat && readString(header, 257, 6) === 'ustar ' && readString(header, 263, 2) === ' '
+  if (!gnu && (readString(header, 257, 6) !== 'ustar' || readString(header, 263, 2) !== '00')) {
     throw new Error('skill-package-tar-format-invalid')
   }
   const type = header[156]
@@ -191,7 +199,7 @@ export function parseSkillTarHeader(header: Buffer): SkillTarReadEntry | null {
     throw new Error('skill-package-tar-entry-type')
   }
   const name = readString(header, 0, 100)
-  const prefix = readString(header, 345, 155)
+  const prefix = gnu ? '' : readString(header, 345, 155)
   const path = prefix ? `${prefix}/${name}` : name
   if (!path) {
     throw new Error('skill-package-tar-path-invalid')

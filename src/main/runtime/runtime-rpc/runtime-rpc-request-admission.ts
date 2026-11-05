@@ -2,7 +2,8 @@ import type { RuntimeMetadata } from '../../../shared/runtime-bootstrap'
 import { writeRuntimeMetadata } from '../runtime-metadata'
 import type { RpcMessageContext } from '../rpc/transport'
 import type { RpcRequest, RpcResponse } from '../rpc/core'
-import { errorResponse } from '../rpc/errors'
+import { errorResponse, successResponse } from '../rpc/errors'
+import { RuntimeRpcEnvelopeSchema } from '../../../shared/runtime-rpc-envelope'
 import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
 import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rpc-long-poll'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
@@ -36,6 +37,34 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
 
     try {
+      if (request.method === 'accounts.attachNativeCliTerminal' && context?.emit) {
+        let failure: RpcResponse | undefined
+        await this.dispatcher.dispatchStreaming(
+          request,
+          (serialized) => {
+            const frame = RuntimeRpcEnvelopeSchema.parse(JSON.parse(serialized))
+            if (!('_keepalive' in frame) && !frame.ok) {
+              failure = errorResponse(
+                frame.id,
+                { runtimeId: this.runtime.getRuntimeId() },
+                frame.error.code,
+                frame.error.message
+              )
+            } else {
+              context.emit?.(serialized)
+            }
+          },
+          { signal: context.signal, connectionId: context.connectionId, callerScope }
+        )
+        return (
+          failure ??
+          successResponse(
+            request.id,
+            { runtimeId: this.runtime.getRuntimeId() },
+            { completed: true }
+          )
+        )
+      }
       return await this.dispatcher.dispatch(request, {
         signal:
           longPoll ||

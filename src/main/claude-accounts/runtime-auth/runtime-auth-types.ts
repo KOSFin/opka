@@ -10,3 +10,8 @@ export type ClaudeRuntimeAuthPreparation = {
   /** Usage only: why the selected account cannot be read; usage polling must not throw for it. */
   usageError?: string
 }
+
+export type ClaudeNativeUsagePreparationResolver = (
+  accountId: string,
+  signal?: AbortSignal
+) => Promise<ClaudeRuntimeAuthPreparation | undefined>

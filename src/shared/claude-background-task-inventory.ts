@@ -1,7 +1,7 @@
 import { classifyClaudeBackgroundTaskKind } from './claude-background-task-kind'
 import { isAgentChildWorkKind } from './agent-status-child-work-liveness'
 
-const CLAUDE_TERMINAL_BACKGROUND_TASK_STATUSES = new Set([
+export const CLAUDE_TERMINAL_BACKGROUND_TASK_STATUSES: ReadonlySet<string> = new Set([
   'idle',
   'done',
   'success',

@@ -10,6 +10,8 @@ const beginSshShutdown = settled()
 const killAllPty = idle()
 /** Final-save calls seen by the first microtask after the SSH shutdown began. */
 let flushesByNextMicrotask = -1
+let hasClaudeNativeSources = false
+const shutdownClaudeNativeSources = settled()
 
 // Every teardown member settles except the profile store, so only the writer can hold quit.
 const dependencies: Record<string, Record<string, unknown>> = {
@@ -30,6 +32,19 @@ const dependencies: Record<string, Record<string, unknown>> = {
   },
   '../runtime/files/watch/file-watcher-leases': { awaitRuntimeFileWatcherUnsubscribes: settled() },
   '../runtime/runtime-metadata': { clearRuntimeMetadataIfOwned: idle() },
+  '../runtime/configure-native-cli-user-integration': {
+    getRuntimeNativeCliUserIntegration: () => null,
+    shutdownRuntimeNativeCliUserIntegration: settled()
+  },
+  '../runtime/runtime-codex-engine-host': {
+    peekRuntimeCodexEngineHost: () => null,
+    beginRuntimeCodexEngineShutdown: idle(),
+    stopRuntimeCodexEngineHost: settled()
+  },
+  '../runtime/runtime-claude-native-sources': {
+    getRuntimeClaudeNativeSources: () => (hasClaudeNativeSources ? {} : null),
+    shutdownRuntimeClaudeNativeSources: shutdownClaudeNativeSources
+  },
   '../browser/paired-runtime-browser-client-host-runtime': {
     shutdownPairedRuntimeBrowserClientHosts: settled()
   },
@@ -53,6 +68,8 @@ const dependencies: Record<string, Record<string, unknown>> = {
 }
 
 afterEach(() => {
+  hasClaudeNativeSources = false
+  shutdownClaudeNativeSources.mockReset()
   vi.doUnmock('electron')
   vi.doUnmock('./main-process-state')
   for (const moduleName of Object.keys(dependencies)) {
@@ -242,4 +259,34 @@ it('finishes a pending account registration before freezing the final profile sn
   await vi.advanceTimersByTimeAsync(0)
   expect(store.flushFinalOrThrowAsync).toHaveBeenCalledOnce()
   expect(store.freezeWritesAsync).toHaveBeenCalledOnce()
+})
+
+it('cancels legacy Claude login and waits for native source exit before releasing the profile', async () => {
+  hasClaudeNativeSources = true
+  const source = Promise.withResolvers<void>()
+  const cancelPendingLogin = idle()
+  shutdownClaudeNativeSources.mockImplementation(() => {
+    expect(cancelPendingLogin).toHaveBeenCalledOnce()
+    return source.promise
+  })
+  const { store, admission } = await startQuit(async () => {}, {
+    claudeAccounts: { cancelPendingLogin },
+    runtime: {
+      stopAccountDeviceSignIns: settled(),
+      getOffscreenBrowserBackend: () => null,
+      getAgentBrowserBridge: () => null,
+      getEmulatorBridge: () => null,
+      disposeSkillUploadSessions: settled(),
+      getRuntimeId: () => undefined,
+      closeNotificationDismissals: settled(),
+      flushPaneGrids: () => null
+    }
+  })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(store.freezeWritesAsync).not.toHaveBeenCalled()
+  expect(admission.release).not.toHaveBeenCalled()
+  source.resolve()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(store.freezeWritesAsync).toHaveBeenCalledOnce()
+  expect(admission.release).toHaveBeenCalledOnce()
 })

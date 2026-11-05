@@ -73,6 +73,7 @@ export type MobileWebShellBridgeView = {
 /** Everything one render of the screen hands the bridge. Named rather than inline because the host
  *  is built against the whole object, read back through one ref. */
 export type MobileWebShellBridgeArgs = {
+  active?: boolean
   hostId: string
   session: MobileWebShellSessionState
   /**
@@ -243,6 +244,7 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
       onPageBackClaim: (claimed) => argsRef.current.onPageBackClaim(claimed)
     })
     hostRef.current = { sessionId, host }
+    host.setActive(latest.active !== false)
     // The count belongs to this host, so a rebuild starts it over. Without this the screen keeps
     // the retired host's number and the next drop reports the new host's first, so the line falls —
     // which reads as frames coming back rather than as a fresh count.
@@ -255,6 +257,10 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
       host.dispose()
     }
   }, [buildId, client, sessionId, snapshot])
+
+  useLayoutEffect(() => {
+    hostRef.current?.host.setActive(args.active !== false)
+  }, [args.active, buildId, client, sessionId, snapshot])
 
   return {
     bridgeEnabled: ready !== null,

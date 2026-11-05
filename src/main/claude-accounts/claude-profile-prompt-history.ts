@@ -66,7 +66,7 @@ function appendHistory(destination: string, lines: string[]): void {
  * Keeps the renamed file and its cursor: a Claude that opened the old path just before the swap
  * appends there, and the next run drains it; a later run that finds nothing new deletes it.
  */
-function drainHistory(pending: string, destination: string, shared: Set<string>): void {
+function drainHistory(pending: string, destination: string, readShared: () => Set<string>): void {
   const content = readFileSync(pending)
   const cursor = `${pending}.offset`
   let offset = 0
@@ -88,6 +88,7 @@ function drainHistory(pending: string, destination: string, shared: Set<string>)
     unlinkSync(pending)
     return
   }
+  const shared = readShared()
   // Why: `claude purge` rewrites the shared file through the link; only lines it lacks are new.
   const lines = content
     .subarray(offset)
@@ -160,7 +161,9 @@ export function mergeClaudeProfilePromptHistory(
   if (!lstatIfPresent(destination)) {
     writeFileSync(destination, '', { flag: 'wx', mode: 0o600 })
   }
-  const shared = new Set(readFileSync(destination, 'utf8').split('\n'))
+  let shared: Set<string> | undefined
+  const readShared = (): Set<string> =>
+    (shared ??= new Set(readFileSync(destination, 'utf8').split('\n')))
   const pendings: { name: string; generation: number }[] = []
   for (const item of readdirSync(profile, { withFileTypes: true })) {
     const generation = pendingGeneration(item.name)
@@ -178,7 +181,7 @@ export function mergeClaudeProfilePromptHistory(
   }
   for (const { name } of pendings) {
     try {
-      drainHistory(join(profile, name), destination, shared)
+      drainHistory(join(profile, name), destination, readShared)
     } catch (error) {
       // Why: an old retained copy is bookkeeping; it must not keep the profile from being linked.
       warnClaudeProfile(report, HISTORY, error)
@@ -238,7 +241,7 @@ export function mergeClaudeProfilePromptHistory(
     const detail = `Shared prompt history was replaced; the old copy is kept at ${aside}`
     warnClaudeProfile(report, HISTORY, new ClaudeProfileSurfaceError('retained-conflict', detail))
   } else if (aside) {
-    drainHistory(aside, destination, shared)
+    drainHistory(aside, destination, readShared)
   }
   return 'linked'
 }

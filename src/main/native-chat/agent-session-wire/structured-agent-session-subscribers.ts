@@ -91,6 +91,10 @@ export class AgentSessionSubscribers {
 
   constructor(private readonly hooks: AgentSessionSubscribersHooks = {}) {}
 
+  hasReaders(sessionId: string): boolean {
+    return (this.bySession.get(sessionId)?.size ?? 0) > 0
+  }
+
   get retainedActivityCountForTests(): number {
     return this.activityBySession.size
   }

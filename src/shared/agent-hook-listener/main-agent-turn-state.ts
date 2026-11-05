@@ -1,8 +1,16 @@
+import type { NativeClaudeCanonicalHookReceipt } from '../native-claude-canonical-hook'
+import type { NativeClaudeCoverageState } from '../native-claude-coverage'
 import type { AgentStatusState } from '../agent-status-types'
 import type { AgentTurnOutcome } from '../agent-turn-outcome'
 
 /** The Claude main agent's own turn record, published on every row as `mainAgent`. */
 export type ClaudeLeadTurnState = {
+  nativeHook?: NativeClaudeCanonicalHookReceipt
+  nativeStart?: { sessionId: string; source: string; observedAt: number }
+  nativeCoverage?: NativeClaudeCoverageState
+  nativePromptId?: string
+  nativeFailure?: { sessionId: string; promptId: string; observedAt: number; turnId?: string }
+
   state: AgentStatusState
   /** A known background task opened this foreground finishing turn. */
   taskWakeupTurn?: true

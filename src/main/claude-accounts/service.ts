@@ -15,7 +15,29 @@ import { runClaudeLoginSession } from './claude-login-session'
 import type { ClaudeRuntimeAuthService } from './runtime-auth-service'
 import type { ClaudeAccountSelectionTarget } from './runtime-selection'
 
+export type NativeClaudeAccountRetirement = {
+  cancel: (accountId: string) => void
+  retire: (accountId: string) => Promise<void>
+}
+import type { ClaudeNativeUsagePreparationResolver } from './runtime-auth/runtime-auth-types'
 export class ClaudeAccountService {
+  setNativeUsagePreparationResolver(
+    resolver: ClaudeNativeUsagePreparationResolver
+  ): (() => void) | undefined {
+    return this.runtimeAuth.setNativeUsagePreparationResolver?.(resolver)
+  }
+  private nativeRetirement: NativeClaudeAccountRetirement | null = null
+  setNativeRoutingRetirement(hooks: NativeClaudeAccountRetirement): () => void {
+    if (this.nativeRetirement) {
+      throw new Error('Claude native retirement ownership is already configured.')
+    }
+    this.nativeRetirement = hooks
+    return () => {
+      if (this.nativeRetirement === hooks) {
+        this.nativeRetirement = null
+      }
+    }
+  }
   private mutationQueue: Promise<unknown> = Promise.resolve()
   private cancelPendingClaudeLogin: (() => boolean) | null = null
   private pendingSignInLink: Promise<string | null> | null = null
@@ -41,6 +63,10 @@ export class ClaudeAccountService {
 
   listAccounts(): ClaudeRateLimitAccountsState {
     return this.selection.list()
+  }
+
+  withNativeRoutingMutation<T>(operation: () => Promise<T>): Promise<T> {
+    return this.serializeMutation(operation)
   }
 
   /** A hidden `claude auth login` opens the browser and writes into the new account's folder. */
@@ -93,7 +119,11 @@ export class ClaudeAccountService {
 
   removeAccount(accountId: string): Promise<ClaudeRateLimitAccountsState> {
     this.supersedePendingLogin()
-    return this.serializeMutation(() => this.selection.remove(accountId))
+    this.nativeRetirement?.cancel(accountId)
+    return this.serializeMutation(async () => {
+      await this.nativeRetirement?.retire(accountId)
+      return this.selection.remove(accountId)
+    })
   }
 
   selectAccount(accountId: string | null): Promise<ClaudeRateLimitAccountsState> {

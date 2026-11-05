@@ -24,12 +24,18 @@ export function MobileAccountPoolLaunchSettings({
   return (
     <View style={poolStyles.content}>
       <View style={poolStyles.toggleRow}>
-        <Text style={[styles.rowTitle, styles.rowMain]}>Use pool for new chats and workers</Text>
+        <Text style={[styles.rowTitle, styles.rowMain]}>Use automatic pool</Text>
         <MobileSwitch
           accessibilityLabel={`${policy.provider} apply pool to new work`}
           disabled={disabled}
-          value={policy.applyToNewWork}
-          onValueChange={(applyToNewWork) => onChange({ ...policy, applyToNewWork })}
+          value={policy.applyToNewWork && policy.strategy !== 'manual'}
+          onValueChange={(applyToNewWork) =>
+            onChange({
+              ...policy,
+              applyToNewWork,
+              strategy: policy.strategy === 'manual' ? 'sequential' : policy.strategy
+            })
+          }
         />
       </View>
       <Pressable
@@ -44,9 +50,9 @@ export function MobileAccountPoolLaunchSettings({
         </Text>
       </Pressable>
       <Text style={styles.rowSubtitle}>
-        New built-in chats, managed terminal agents and workers use this host pool. Assigned
-        sessions switch after active work, tools and approvals finish. Existing unpooled chats and
-        external CLI sessions keep their own login.
+        The pool replaces the manual default for new chats, workers and connected CLI launches.
+        Saved changes apply at the next supported boundary. With the pool off, open CLI sessions
+        keep their current account. Previously opened unmanaged CLIs need one relaunch.
       </Text>
       <PickerModal
         visible={open && !disabled}

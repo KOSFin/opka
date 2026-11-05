@@ -27,6 +27,7 @@ import type { BridgeHostOptions } from './bridge-host-contract'
 export type { BridgeHostDiagnostic, BridgeHostOptions } from './bridge-host-contract'
 
 export type BridgeHost = {
+  setActive: (active: boolean) => void
   receive: (json: string) => void
   /**
    * Hands this session a rewritten route: same screen, different params (ruling 33.1).
@@ -97,6 +98,7 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
     ...(options.keyboardInset === undefined ? {} : { keyboardInset: options.keyboardInset })
   })
   let closed = false
+  let active = true
   // One document's turn at the bridge. `close` ends it and the next `ready` begins the next one;
   // between the two the view belongs to no document, so nothing is served and nothing is posted.
   // No epoch rides along: one native listener delivers page frames in order, so a straggler from
@@ -132,7 +134,7 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
   /** `state` is the event's own value: a listener can run before the getter it mirrors is updated. */
   function snapshot(state?: ConnectionState): BridgeConnectionSnapshot {
     return {
-      state: state ?? client.getState(),
+      state: active ? (state ?? client.getState()) : 'disconnected',
       reconnectAttempt: client.getReconnectAttempt(),
       lastConnectedAt: client.getLastConnectedAt(),
       lastInboundAt: client.getLastInboundAt?.() ?? null,
@@ -280,9 +282,17 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
     }
     switch (message.type) {
       case 'request':
+        if (!active) {
+          sendError(message.id, new Error('This page is inactive; retry when it is visible.'))
+          return
+        }
         requests.open(message)
         return
       case 'subscribe':
+        if (!active) {
+          sendError(message.id, new Error('This page is inactive; retry when it is visible.'))
+          return
+        }
         streamFrames.open(message)
         return
       case 'cancel': {
@@ -297,6 +307,9 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
         streamFrames.ack(message.id, message.seq)
         return
       case 'notify':
+        if (!active && (message.name === 'foreground' || message.name === 'terminalViewport')) {
+          return
+        }
         forwardNotify(message)
         return
       case 'close':
@@ -322,6 +335,18 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
   }
 
   return {
+    setActive(next): void {
+      if (closed || next === active) {
+        return
+      }
+      active = next
+      if (initSent) {
+        send({ v: BRIDGE_PROTOCOL_VERSION, type: 'state', connection: snapshot() })
+      }
+      if (!active) {
+        subscriptions.closeAll('closed')
+      }
+    },
     receive(json: string): void {
       if (closed) {
         // Only a disposed host reaches this, and it can neither answer the frame nor refuse it.

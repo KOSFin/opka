@@ -25,6 +25,33 @@ describe('shared agent-hook-listener', () => {
     vi.unstubAllEnvs()
   })
 
+  it('stamps only complete native lead Stop inventory and never infers it from a child or a new prompt', () => {
+    const post = (payload: Record<string, unknown>) =>
+      normalizeHookPayload(state, 'claude', { paneKey: PANE_KEY, payload }, 'production')?.payload
+    expect(
+      post({ hook_event_name: 'UserPromptSubmit', prompt: 'task' })?.claudeNativeBoundaryInventory
+    ).toBeUndefined()
+    expect(
+      post({ hook_event_name: 'Stop', background_tasks: [] })?.claudeNativeBoundaryInventory
+    ).toBe('complete')
+    expect(
+      post({ hook_event_name: 'UserPromptSubmit', prompt: 'new task' })
+        ?.claudeNativeBoundaryInventory
+    ).toBeUndefined()
+    expect(
+      post({ hook_event_name: 'StopFailure', error: 'rate_limit', background_tasks: [] })
+        ?.claudeNativeBoundaryInventory
+    ).toBe('complete')
+    expect(
+      post({ hook_event_name: 'SubagentStop', agent_id: 'child', background_tasks: [] })
+        ?.claudeNativeBoundaryInventory
+    ).toBeUndefined()
+    expect(post({ hook_event_name: 'Stop' })?.claudeNativeBoundaryInventory).toBeUndefined()
+    expect(
+      post({ hook_event_name: 'Stop', background_tasks: [null] })?.claudeNativeBoundaryInventory
+    ).toBeUndefined()
+  })
+
   it('normalizes a Claude-compatible StopFailure to done without copying provider error text', () => {
     normalizeHookPayload(
       state,

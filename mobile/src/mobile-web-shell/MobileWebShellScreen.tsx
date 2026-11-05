@@ -41,6 +41,7 @@ import { ShellDownloadProgress } from './ShellDownloadProgress'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
 import { hostProfileUnreadableLine, pageFaultLine } from './shell-lifecycle-log'
 import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
+import { useScreenActive } from '../hooks/use-screen-active'
 
 function failureMessage(reason: MobileWebShellFailureCause): string {
   switch (reason) {
@@ -223,7 +224,9 @@ export function MobileWebShellScreen({
     })
   }
 
+  const screenActive = useScreenActive()
   const bridge = useMobileWebShellBridge({
+    active: screenActive,
     hostId,
     route,
     safeAreaInsets: pageInsets,

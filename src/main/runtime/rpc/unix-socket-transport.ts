@@ -7,6 +7,7 @@
 // away. See design doc §3.1.
 import { createServer, type Server, type Socket } from 'node:net'
 import { chmodSync, existsSync, rmSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import type { RpcMessageContext, RpcTransport } from './transport'
 
 const MAX_RUNTIME_RPC_MESSAGE_BYTES = 1024 * 1024
@@ -230,7 +231,9 @@ export class UnixSocketTransport implements RpcTransport {
           cleanupDispatch(socket.destroyed || !socket.writable)
           return
         }
-        socket.write('{"_keepalive":true}\n')
+        if (!socket.writableNeedDrain && socket.writableLength === 0) {
+          socket.write('{"_keepalive":true}\n')
+        }
       }, this.keepaliveIntervalMs)
       // Why: don't hold the process open solely on the keepalive interval.
       if (typeof keepaliveTimer.unref === 'function') {
@@ -240,7 +243,18 @@ export class UnixSocketTransport implements RpcTransport {
 
     this.messageHandler?.(rawMessage, reply, {
       signal: abortController.signal,
-      startKeepalive
+      startKeepalive,
+      connectionId: randomUUID(),
+      emit: (response) => {
+        if (replied || socket.destroyed || !socket.writable) {
+          return
+        }
+        if (socket.writableLength + Buffer.byteLength(response, 'utf8') > 8 * 1024 * 1024) {
+          socket.destroy()
+          return
+        }
+        socket.write(`${response}\n`)
+      }
     })
   }
 }

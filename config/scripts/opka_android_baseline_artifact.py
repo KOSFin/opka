@@ -6,7 +6,7 @@ import re
 import sys
 import zipfile
 
-VERSION = '1.4.236-rc.7'
+VERSION = '1.4.236-rc.8'
 PACKAGE = 'com.kosfin.opka.mobile'
 
 

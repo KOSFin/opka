@@ -50,6 +50,7 @@ import {
 import type { AgentSessionStoreState } from './agent-session-store-state'
 import { agentSessionRecordIdentityFields } from './agent-session-record-founding'
 import { agentSessionAccountHomesEqual } from '../../shared/agent-session-account-home'
+import { assertNativeStdioRecordCapacity } from './agent-session-native-stdio-admission'
 
 export type AgentSessionReserveRequest = {
   /** Host-resolved floating directory committed with the first owner reservation. */
@@ -365,6 +366,7 @@ function reserveWithOperationRow(
   row: AgentSessionOperationRow,
   leaseTtlMs: number
 ): AgentSessionReserveResult {
+  assertNativeStdioRecordCapacity(state, request)
   const result = applyAgentSessionReservation(state, request, leaseTtlMs)
   state.operations.set(agentSessionOperationKey(row.callerKey, row.operationId), row)
   state.records.set(result.record.sessionId, result.record)

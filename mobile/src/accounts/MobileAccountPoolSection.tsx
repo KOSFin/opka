@@ -233,6 +233,7 @@ export function MobileAccountPoolSection({
             <MobileAccountPoolCard
               key={policy.id}
               policy={policy}
+              routingTarget={{ client, connected, hostName }}
               view={view}
               disabled={disabled}
               dirty={dirty.current.has(policy.id)}
@@ -259,7 +260,9 @@ export function MobileAccountPoolSection({
                   accountId,
                   value: accountId
                     ? (policy.members.find((m) => m.accountId === accountId)?.state ?? 'excluded')
-                    : policy.strategy
+                    : policy.strategy === 'manual'
+                      ? 'sequential'
+                      : policy.strategy
                 })
               }}
             />
@@ -283,7 +286,6 @@ export function MobileAccountPoolSection({
                 { value: 'disabled', label: 'Disabled' }
               ]
             : [
-                { value: 'manual', label: 'Manual' },
                 { value: 'sequential', label: 'Sequential' },
                 { value: 'balanced', label: 'Balanced' }
               ]

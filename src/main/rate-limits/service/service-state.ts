@@ -1,3 +1,4 @@
+import type { CodexProviderFailureAccountResolver } from '../codex-provider-failure'
 import type { BrowserWindow } from 'electron'
 import type {
   InactiveAccountUsage,
@@ -112,6 +113,7 @@ export abstract class RateLimitServiceState {
   protected inactiveCodexAccountsResolver: (() => InactiveCodexAccountInfo[]) | null = null
   protected networkProxySettingsResolver: (() => NetworkProxySettings) | null = null
   protected inactiveClaudeCache = new Map<string, ProviderRateLimits>()
+  protected codexProviderFailureAccountResolver: CodexProviderFailureAccountResolver | null = null
   protected inactiveCodexCache = new Map<string, ProviderRateLimits>()
   protected inactiveClaudeFetching = new Set<string>()
   protected inactiveCodexFetching = new Set<string>()

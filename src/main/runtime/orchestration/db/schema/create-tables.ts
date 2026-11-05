@@ -1,3 +1,4 @@
+import { NATIVE_ACCOUNT_POOL_FENCES_SQL } from '../account-pool-native-fences'
 import { ACCOUNT_POOL_ASSIGNMENTS_SQL } from '../account-pool-assignments'
 import type { OrchestrationDb } from '../orchestration-db'
 import { createCoreTablesSql } from './create-core-tables-sql'
@@ -9,6 +10,7 @@ export function createTables(this: OrchestrationDb): void {
   this.createMailboxDeliveryIndexesIfPossible()
   this.db.exec(DERIVED_DELIVERY_SCHEMA_SQL)
   this.db.exec(ACCOUNT_POOL_ASSIGNMENTS_SQL)
+  this.db.exec(NATIVE_ACCOUNT_POOL_FENCES_SQL)
 }
 
 export type CreateTablesMethods = {

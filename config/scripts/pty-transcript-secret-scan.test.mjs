@@ -78,6 +78,30 @@ describe('redaction', () => {
     expect(redactTranscript(redacted).redacted).toBe(0)
   })
 
+  it.each([
+    'Abcdefghi._-'.repeat(3).slice(0, 32),
+    '26dc1986-9eec-456a-a534-d93e5c1076c2',
+    '0123456789abcdef'.repeat(4),
+    'Abcdef0123456789._-'.repeat(32).slice(0, 512)
+  ])(
+    'scrubs native routing nonce in URLs and config overrides without reflow or preview disclosure',
+    (nonce) => {
+      const path = `/native/${nonce}/v1`
+      const text = `error URL http://127.0.0.1:19876${path}/responses\n-c openai_base_url="http://127.0.0.1:19876${path}"`
+      const findings = scanTranscriptForSecrets(text)
+      expect(findings).toHaveLength(2)
+      expect(findings.every((finding) => finding.kind === 'native-routing-path')).toBe(true)
+      const result = redactTranscript(text)
+      expect(result.text.length).toBe(text.length)
+      expect(result.text).not.toContain(nonce)
+      expect(result.text).toContain(`/native/${'X'.repeat(nonce.length)}/v1`)
+      expect(scanTranscriptForSecrets(result.text)).toEqual([])
+      expect(redactTranscript(result.text).redacted).toBe(0)
+      expect(formatFindings('fixture', findings)).not.toContain(nonce.slice(0, 8))
+      expect(formatFindings('fixture', findings)).toContain('[local routing nonce]')
+    }
+  )
+
   it('keeps a redacted email shaped like an email', () => {
     expect(placeholderFor('email', 'a@b.example.com'.length)).toMatch(/^u+@example\.com$/)
   })

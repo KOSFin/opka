@@ -12,7 +12,11 @@ import {
   installClaudeWslProfileRouter
 } from './claude-profile-installed-router'
 import type { ClaudeAccountSelectionTarget } from './runtime-selection'
-import type { ClaudeRuntimeAuthPreparation } from './runtime-auth/runtime-auth-types'
+import { getSelectedClaudeAccountIdForTarget } from './runtime-selection'
+import type {
+  ClaudeNativeUsagePreparationResolver,
+  ClaudeRuntimeAuthPreparation
+} from './runtime-auth/runtime-auth-types'
 
 export type { ClaudeRuntimeAuthPreparation } from './runtime-auth/runtime-auth-types'
 
@@ -25,6 +29,24 @@ export class ClaudeRuntimeAuthService {
   private readonly wslRouter?: ClaudeWslProfileRouter
   private readonly dataRoot = getAppEnvironment().getPath('userData')
   private mutationQueue: Promise<unknown> = Promise.resolve()
+  private nativeUsagePreparation?: ClaudeNativeUsagePreparationResolver
+  setNativeUsagePreparationResolver(resolver: ClaudeNativeUsagePreparationResolver): () => void {
+    this.nativeUsagePreparation = resolver
+    return () => {
+      if (this.nativeUsagePreparation === resolver) {
+        this.nativeUsagePreparation = undefined
+      }
+    }
+  }
+  async prepareForAccountUsage(
+    accountId: string,
+    signal?: AbortSignal
+  ): Promise<ClaudeRuntimeAuthPreparation> {
+    return (
+      (await this.nativeUsagePreparation?.(accountId, signal)) ??
+      this.router.accountUsagePreparation(accountId)
+    )
+  }
 
   constructor(
     private readonly store: Pick<Store, 'getSettings'>,
@@ -61,6 +83,13 @@ export class ClaudeRuntimeAuthService {
       }
     }
     try {
+      const accountId = !wsl
+        ? getSelectedClaudeAccountIdForTarget(this.store.getSettings(), { runtime: 'host' })
+        : null
+      const native = accountId ? await this.nativeUsagePreparation?.(accountId) : undefined
+      if (native) {
+        return native
+      }
       return await (wsl ? wsl.router.preparation(wsl.distro) : this.router.preparation())
     } catch (error) {
       // Why not thrown: one usage cycle polls every provider, so one account must not stop it.

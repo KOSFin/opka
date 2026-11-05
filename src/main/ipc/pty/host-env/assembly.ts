@@ -297,9 +297,14 @@ export function buildPtyHostEnv(
     userDataPath: opts.userDataPath,
     resourcesPath: opts.resourcesPath
   })
+  delete baseEnv.ORCA_NATIVE_CLI_LAUNCHER
   if (!opts.isWsl && cliLauncher) {
     // Login shells can reorder PATH behind a different installed app.
     baseEnv.ORCA_CLI_COMMAND = cliLauncher
+    baseEnv.ORCA_NATIVE_CLI_LAUNCHER = cliLauncher
+    if (opts.launchAgent === 'codex' && baseEnv.ORCA_WORKER_CODEX_ACCOUNT_ID) {
+      baseEnv.ORCA_NATIVE_CLI_ACCOUNT_PIN = `codex:${baseEnv.ORCA_WORKER_CODEX_ACCOUNT_ID}`
+    }
   }
   delete baseEnv[TERMINAL_TASK_CALLER_FILE_ENV]
   if (!opts.isWsl && cliLauncher) {

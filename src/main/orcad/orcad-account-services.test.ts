@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,6 +27,18 @@ beforeEach(() => {
   // managed homes from these, and a test must never touch the developer's own.
   const home = tempDirectory()
   const userData = tempDirectory()
+  writeFileSync(
+    join(userData, 'orcad.lock'),
+    JSON.stringify({
+      pid: process.pid,
+      startedAtMs: null,
+      identity: 'synthetic-test-user',
+      version: 'test',
+      acquiredAt: new Date().toISOString(),
+      nonce: 'synthetic-instance-owner'
+    }),
+    { mode: 0o600 }
+  )
   vi.stubEnv('HOME', home)
   vi.stubEnv('USERPROFILE', home)
   // Why: the Codex runtime home reads this (as the host seeds it); otherwise XDG_CONFIG_HOME wins on CI.

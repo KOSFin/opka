@@ -1,11 +1,12 @@
 import { AccountDeviceSignInSchema, type AccountDeviceSignIn } from './account-device-sign-in'
+import type { CodexRoutingSignInTarget } from './native-account-routing'
 
-type SignInRequest = (
+export type AccountDeviceSignInRequest = (
   method: string,
-  params: { provider: 'codex' } | { id: string }
+  params: { provider: 'codex' } | { id: string } | CodexRoutingSignInTarget
 ) => Promise<unknown>
 
-function waitForPoll(signal: AbortSignal): Promise<void> {
+export function waitForAccountSignInPoll(signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) {
       return resolve()
@@ -24,33 +25,49 @@ function waitForPoll(signal: AbortSignal): Promise<void> {
 export async function runAccountDeviceSignIn({
   request,
   signal,
-  onState
+  onState,
+  routingAccount,
+  waitUntilActive
 }: {
-  request: SignInRequest
+  request: AccountDeviceSignInRequest
   signal: AbortSignal
   onState: (state: AccountDeviceSignIn) => void
+  routingAccount?: CodexRoutingSignInTarget
+  waitUntilActive?: (signal: AbortSignal) => Promise<void>
 }): Promise<void> {
   let state: AccountDeviceSignIn | undefined
   try {
     state = AccountDeviceSignInSchema.parse(
-      await request('accounts.beginDeviceSignIn', { provider: 'codex' })
+      await request(
+        routingAccount ? 'accounts.beginCodexRoutingSignIn' : 'accounts.beginDeviceSignIn',
+        routingAccount ?? { provider: 'codex' }
+      )
     )
     while (!signal.aborted) {
       onState(state)
       if (state.status !== 'starting' && state.status !== 'waiting') {
         return
       }
-      await waitForPoll(signal)
+      await waitForAccountSignInPoll(signal)
+      if (signal.aborted) {
+        return
+      }
+      await waitUntilActive?.(signal)
       if (signal.aborted) {
         return
       }
       state = AccountDeviceSignInSchema.parse(
-        await request('accounts.deviceSignIn', { id: state.id })
+        await request(routingAccount ? 'accounts.codexRoutingSignIn' : 'accounts.deviceSignIn', {
+          id: state.id
+        })
       )
     }
   } finally {
     if (signal.aborted && state && (state.status === 'starting' || state.status === 'waiting')) {
-      await request('accounts.cancelDeviceSignIn', { id: state.id }).catch(() => undefined)
+      await request(
+        routingAccount ? 'accounts.cancelCodexRoutingSignIn' : 'accounts.cancelDeviceSignIn',
+        { id: state.id }
+      ).catch(() => undefined)
     }
   }
 }

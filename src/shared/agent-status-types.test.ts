@@ -801,3 +801,21 @@ describe('the main agent field on a status payload', () => {
     expect(mainAgentStatusEqual(mainAgent, undefined)).toBe(false)
   })
 })
+
+it('preserves optional native Claude inventory evidence while old peers and other providers omit it', () => {
+  const input = { state: 'done', agentType: 'claude', claudeNativeBoundaryInventory: 'complete' }
+  const parsed = normalizeAgentStatusPayload(input)
+  if (!parsed) {
+    throw new Error('Missing normalized native inventory')
+  }
+  expect(pickParsedAgentStatusPayload(parsed)).toMatchObject({
+    claudeNativeBoundaryInventory: 'complete'
+  })
+  expect(
+    normalizeAgentStatusPayload({ ...input, agentType: 'codex' })?.claudeNativeBoundaryInventory
+  ).toBeUndefined()
+  expect(
+    normalizeAgentStatusPayload({ state: 'done', agentType: 'claude' })
+      ?.claudeNativeBoundaryInventory
+  ).toBeUndefined()
+})

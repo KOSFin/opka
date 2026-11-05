@@ -14,7 +14,10 @@ import {
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import { isMissingProviderExecutable } from './provider-executable-missing'
 import { supervisedProviderSpawnFailure } from './provider-spawn-failure-report'
-import { guardSupervisedProviderGroup } from './provider-group-orphan-guard'
+import {
+  guardSupervisedProviderGroup,
+  type ProviderGroupIdentity
+} from './provider-group-orphan-guard'
 import {
   acceptProviderRootExit,
   closeProviderProcess,
@@ -49,6 +52,16 @@ type ManagedProviderProcessOptions = {
   onStderrLine?: (line: string, cut: boolean) => boolean
   /** How much of one stderr line is kept to classify; the retained tail stays at its own size. */
   stderrLineMaxChars?: number
+  /** Drain both output pipes without parsing or retaining untrusted provider content. */
+  discardOutput?: boolean
+  /** Byte-preserving transport; neither output pipe is decoded or retained. */
+  rawOutput?: {
+    stdout: (chunk: Buffer) => void
+    stderr: (chunk: Buffer) => void
+    onInputError?: (error: Error) => void
+    onOutputError?: (channel: 'stdout' | 'stderr', error: Error) => void
+  }
+  onGroupProven?: (identity: ProviderGroupIdentity) => void
 }
 
 export type ManagedProviderProcess = {
@@ -56,6 +69,8 @@ export type ManagedProviderProcess = {
   supervised: boolean
   /** The spawn failed before a process existed: absence is proven, but no exit was observed. */
   readonly processless: boolean
+  /** Root close plus private supervisor proof that its provider was never spawned. */
+  readonly providerNotStarted?: boolean
   /** `exited` covers a processless child too; use `rootExitObserved` for "a real process exited". */
   readonly rootVerdict: DescendantTreeVerdict
   /** A process that existed was seen to exit; never true for a processless child. */
@@ -99,10 +114,16 @@ export function spawnManagedProviderProcess(
     detached: spec.detached,
     stdio: ['pipe', 'pipe', 'pipe', ...spec.groupReportStdio]
   })
-  guardSupervisedProviderGroup(child, { site: options.site, supervised: spec.supervised })
+  guardSupervisedProviderGroup(child, {
+    site: options.site,
+    supervised: spec.supervised,
+    onProven: options.onGroupProven
+  })
   const listeners = new Set<(exit: ProviderProcessExit) => void>()
   let observed: ProviderProcessExit | null = null
   let spawnFailed = false
+  let noProviderStartReport = false
+  let providerGroupReported = false
   let spawnError: unknown = null
   let lastCloseResult: ProviderProcessCloseResult | null = null
   const exitProof = new RetryableProcessExitProof(options.acceptClose ?? acceptProviderRootExit)
@@ -117,23 +138,42 @@ export function spawnManagedProviderProcess(
       stderrTail = `${stderrTail}${line}\n`.slice(-STDERR_TAIL_MAX_CHARS)
     }
   }
-  // An undrained stderr pipe blocks the child once it fills.
-  child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
-    if (options.onStderrLine) {
-      const lines = (stderrLine + chunk).split('\n')
-      const pending = lines.pop() ?? ''
-      // Keep the prompt prefix until the complete line can be classified.
-      lines.forEach((line, index) => retainLine(line, index === 0 && lineCut))
-      lineCut = (lines.length === 0 && lineCut) || pending.length > lineMaxChars
-      stderrLine = pending.slice(0, lineMaxChars)
-    } else {
-      stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL_MAX_CHARS)
+  if (options.rawOutput) {
+    const onInputError = (error: Error) => options.rawOutput?.onInputError?.(error)
+    const onStdoutError = (error: Error) => options.rawOutput?.onOutputError?.('stdout', error)
+    const onStderrError = (error: Error) => options.rawOutput?.onOutputError?.('stderr', error)
+    child.stdin.on('error', onInputError)
+    child.stdout.on('error', onStdoutError)
+    child.stderr.on('error', onStderrError)
+    child.once('close', () => {
+      child.stdin.removeListener('error', onInputError)
+      child.stdout.removeListener('error', onStdoutError)
+      child.stderr.removeListener('error', onStderrError)
+    })
+    child.stdout.on('data', options.rawOutput.stdout)
+    child.stderr.on('data', options.rawOutput.stderr)
+  } else if (options.discardOutput) {
+    child.stdout.resume()
+    child.stderr.resume()
+  } else {
+    // An undrained stderr pipe blocks the child once it fills.
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+      if (options.onStderrLine) {
+        const lines = (stderrLine + chunk).split('\n')
+        const pending = lines.pop() ?? ''
+        // Keep the prompt prefix until the complete line can be classified.
+        lines.forEach((line, index) => retainLine(line, index === 0 && lineCut))
+        lineCut = (lines.length === 0 && lineCut) || pending.length > lineMaxChars
+        stderrLine = pending.slice(0, lineMaxChars)
+      } else {
+        stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL_MAX_CHARS)
+      }
+      options.onOutput?.()
+    })
+    child.stderr.once('end', () => retainLine(stderrLine, lineCut))
+    if (options.onOutput) {
+      observeReaderOutput(child.stdout, options.onOutput)
     }
-    options.onOutput?.()
-  })
-  child.stderr.once('end', () => retainLine(stderrLine, lineCut))
-  if (options.onOutput) {
-    observeReaderOutput(child.stdout, options.onOutput)
   }
   let resolveExit = (): void => {}
   const exitPromise = new Promise<void>((resolve) => {
@@ -155,6 +195,21 @@ export function spawnManagedProviderProcess(
     spawnFailed ||= child.pid === undefined
     spawnError ??= error
   })
+  child.on('message', (message: unknown) => {
+    if (!spec.supervised || !message || typeof message !== 'object' || Array.isArray(message)) {
+      return
+    }
+    if ('pgid' in message) {
+      providerGroupReported = true
+    }
+    if (
+      Object.keys(message).length === 1 &&
+      'providerNotStarted' in message &&
+      message.providerNotStarted === true
+    ) {
+      noProviderStartReport = true
+    }
+  })
   child.on('close', (code, signal) => {
     const processless = spawnFailed && child.pid === undefined
     if (processless) {
@@ -172,6 +227,11 @@ export function spawnManagedProviderProcess(
     exitPromise,
     get processless() {
       return observed?.processless ?? false
+    },
+    get providerNotStarted() {
+      return Boolean(
+        observed && (observed.processless || (noProviderStartReport && !providerGroupReported))
+      )
     },
     get rootVerdict() {
       return rootVerdict()

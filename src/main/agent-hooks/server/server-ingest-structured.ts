@@ -1,5 +1,9 @@
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
-import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
+import type {
+  AgentStatusIpcPayload,
+  ParsedAgentStatusPayload,
+  AgentMainAgentStatus
+} from '../../../shared/agent-status-types'
 import {
   parseAgentStatusSubject,
   serializeAgentStatusSubject,
@@ -22,10 +26,16 @@ import {
 import { structuredStatusLegacyEvent } from './server-structured-status-row'
 import { AgentHookServerIngestTerminal } from './server-ingest-terminal'
 
+export type NativeStructuredStatusProjection = Pick<
+  ParsedAgentStatusPayload,
+  'state' | 'workingMode' | 'sessionBoundary'
+> & { mainAgent: AgentMainAgentStatus }
+
 export abstract class AgentHookServerIngestStructured extends AgentHookServerIngestTerminal {
   ingestStructuredStatus(
     summary: AgentSessionStatusSummary,
-    subject: AgentStatusStructuredSessionSubject
+    subject: AgentStatusStructuredSessionSubject,
+    nativeProjection?: NativeStructuredStatusProjection
   ): void {
     const parsed = parseAgentStatusSubject(subject)
     if (
@@ -46,18 +56,21 @@ export abstract class AgentHookServerIngestStructured extends AgentHookServerIng
     const priorStatus = previous?.status
     // The host's own child records, not the summary's lossy task list: the summary is derived
     // from these records, and reading them here keeps the row and every view of it on one source.
-    const agentStatus = structuredAgentSessionAgentStatus({
-      status: summary.status,
-      childWork: this.canonicalStatusStore.getChildren(parsed),
-      turnOutcome: summary.turnOutcome,
-      ...(summary.stopping ? { stopping: summary.stopping } : {})
-    })
+    const agentStatus =
+      nativeProjection ??
+      structuredAgentSessionAgentStatus({
+        status: summary.status,
+        childWork: this.canonicalStatusStore.getChildren(parsed),
+        turnOutcome: summary.turnOutcome,
+        ...(summary.stopping ? { stopping: summary.stopping } : {})
+      })
     const { state, workingMode } = agentStatus
     // The main agent's own clock keeps continuity the same way the combined row's does below, dated
     // by the journal: a restart's republish is not a new main agent state either.
     const mainAgent = continueMainAgentStatus(
       priorStatus?.mainAgent,
-      structuredAgentSessionDatedMainAgent(agentStatus.mainAgent, summary),
+      nativeProjection?.mainAgent ??
+        structuredAgentSessionDatedMainAgent(agentStatus.mainAgent, summary),
       summary.updatedAt
     )
     const tabId = structuredAgentSessionTabId(parsed.sessionId)
@@ -77,6 +90,7 @@ export abstract class AgentHookServerIngestStructured extends AgentHookServerIng
       state,
       ...(workingMode ? { workingMode } : {}),
       mainAgent,
+      ...(nativeProjection?.sessionBoundary ? { sessionBoundary: true } : {}),
       // Readers that predate `mainAgent` read a cancellation off this flag, as the hook lanes publish it.
       interrupted: mainAgentTurnInterrupted(mainAgent),
       prompt: summary.latestPrompt,

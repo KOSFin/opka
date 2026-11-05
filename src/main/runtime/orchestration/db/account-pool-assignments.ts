@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import {
+  validateNativeAccountPoolOwner,
+  compactReleasedNativeAccountPoolRows
+} from './account-pool-native-fences'
 import type Database from '../../../sqlite/sync-database'
 import type { OrchestrationDb } from './orchestration-db'
 import { selectAccountPoolMember, type AccountPoolAdmission } from '../account-pool-admission'
@@ -19,8 +23,30 @@ CREATE TABLE IF NOT EXISTS account_pool_pty_bindings (
   pty_id TEXT NOT NULL,
   incarnation_id TEXT
 );
+CREATE TABLE IF NOT EXISTS account_pool_replacement_claims (
+  owner_key TEXT PRIMARY KEY REFERENCES account_pool_assignments(owner_key),
+  replaces_owner_key TEXT NOT NULL UNIQUE REFERENCES account_pool_assignments(owner_key)
+);
+CREATE TRIGGER IF NOT EXISTS remove_released_account_pool_replacement
+AFTER UPDATE OF released_at ON account_pool_assignments
+WHEN NEW.released_at IS NOT NULL
+BEGIN
+  DELETE FROM account_pool_replacement_claims
+  WHERE owner_key=NEW.owner_key OR replaces_owner_key=NEW.owner_key;
+END;
 CREATE INDEX IF NOT EXISTS account_pool_assignments_active ON account_pool_assignments(provider, quota_identity) WHERE released_at IS NULL;
 CREATE INDEX IF NOT EXISTS account_pool_assignments_recency ON account_pool_assignments(provider, quota_identity, sequence DESC);
+CREATE TRIGGER IF NOT EXISTS remove_released_account_pool_binding
+AFTER UPDATE OF released_at ON account_pool_assignments
+WHEN NEW.released_at IS NOT NULL
+BEGIN
+  DELETE FROM account_pool_pty_bindings WHERE owner_key=NEW.owner_key;
+END;
+DELETE FROM account_pool_pty_bindings WHERE owner_key IN (
+  SELECT b.owner_key FROM account_pool_pty_bindings b
+  JOIN account_pool_assignments a ON a.owner_key=b.owner_key
+  WHERE a.released_at IS NOT NULL LIMIT 256
+);
 CREATE TRIGGER IF NOT EXISTS release_worker_account_pool_assignment
 AFTER UPDATE OF state ON worker_dispatches
 WHEN NEW.state IN ('failed','stopped','succeeded','abandoned')
@@ -63,6 +89,7 @@ export function acquireAccountPoolAssignmentInTransaction(
   db: Database.Database,
   args: AcquireAccountPoolAssignment
 ): AccountPoolAssignment {
+  validateNativeAccountPoolOwner(db, args.ownerKey, args.policy.provider)
   const existing = db
     .prepare('SELECT * FROM account_pool_assignments WHERE owner_key=?')
     .get(args.ownerKey)
@@ -87,6 +114,14 @@ export function acquireAccountPoolAssignmentInTransaction(
     selected.id,
     selected.quotaIdentity
   )
+  if (args.replacesOwnerKey) {
+    db.prepare(
+      'INSERT INTO account_pool_replacement_claims(owner_key,replaces_owner_key) VALUES (?,?)'
+    ).run(args.ownerKey, args.replacesOwnerKey)
+  }
+  if (args.ownerKey.startsWith('native-scope-v2:')) {
+    compactReleasedNativeAccountPoolRows(db)
+  }
   return decodeAssignment(
     db.prepare('SELECT * FROM account_pool_assignments WHERE owner_key=?').get(args.ownerKey)
   )

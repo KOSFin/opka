@@ -8,6 +8,15 @@ import { SCREEN_SNAPSHOT, type ScreenDependencies } from './mobile-web-shell-scr
 export function screenModuleMocks(dependencies: ScreenDependencies) {
   return {
     'react-native': () => ({
+      AppState: {
+        get currentState() {
+          return dependencies.appState
+        },
+        addEventListener: (_name: string, listener: (state: string) => void) => {
+          dependencies.appStateListeners.add(listener)
+          return { remove: () => dependencies.appStateListeners.delete(listener) }
+        }
+      },
       ActivityIndicator: 'ActivityIndicator',
       Easing: { in: (fn: unknown) => fn, quad: 'quad' },
       // Enough of it for the cover to mount, fade and unmount. What the fade looks like is not this
@@ -108,7 +117,11 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
       usePathname: () => dependencies.pathname,
       // The screen's own place on the stack, which is where the iOS swipe-back is taken away.
       useNavigation: () => ({ setOptions: dependencies.setScreenOptions }),
-      useFocusEffect: (effect: () => undefined | (() => void)) => React.useEffect(effect, [effect])
+      useFocusEffect: (effect: () => undefined | (() => void)) =>
+        React.useEffect(
+          () => (dependencies.focused ? effect() : undefined),
+          [effect, dependencies.focused]
+        )
     }),
     // A component rather than a host string: the React key is what makes a retry a rebuilt WebView,
     // and a mount/unmount log is the only thing that can tell a remount from a prop update.

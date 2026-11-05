@@ -29,9 +29,13 @@ function isAppActive(): boolean {
   return (appStateSubscription ? currentAppState : AppState.currentState) === 'active'
 }
 
+export function useAppActive(): boolean {
+  return useSyncExternalStore(subscribeToAppState, isAppActive, isAppActive)
+}
+
 // A list-level caller's single tick drives every visible relative-time label.
 export function useNow(intervalMs = 30_000, enabled = true): number {
-  const appActive = useSyncExternalStore(subscribeToAppState, isAppActive, isAppActive)
+  const appActive = useAppActive()
   const running = appActive && enabled
   const [now, setNow] = useState(() => Date.now())
   const wasRunningRef = useRef(running)

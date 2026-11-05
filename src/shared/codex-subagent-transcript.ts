@@ -1,19 +1,25 @@
+import {
+  codexTranscriptChildComplete,
+  readCodexTranscriptTurnEnd,
+  reconcileCodexTranscriptTurn,
+  type CodexTranscriptTurn
+} from './codex-turn-transcript'
+import { observeCodexNativeInventoryRecords } from './codex-native-child-inventory'
 import { basename, dirname, extname, isAbsolute, join } from 'node:path'
 
 import {
   readJsonlCursor,
+  verifyJsonlCursorHistory,
+  jsonlCursorAtEnd,
   readTranscriptDirectory,
   record,
   type JsonlCursor,
   type JsonRecord
 } from './codex-rollout-jsonl-cursor'
 
-import { reconcileCodexTranscriptTurn, type CodexTranscriptTurn } from './codex-turn-transcript'
-
 import { isCodexStatusTranscriptLine } from './codex-status-transcript-line'
 
-import { readApprovalsReviewer } from './codex-subagent-reviewer'
-import type { CodexApprovalsReviewer } from './codex-subagent-reviewer'
+import { readApprovalsReviewer, type CodexApprovalsReviewer } from './codex-subagent-reviewer'
 
 import {
   finishCodexSubagent,
@@ -24,7 +30,8 @@ import {
 
 // Why: retire a child whose rollout stays unreadable this long, else a deleted/never-written file pins a phantom row forever.
 const CHILD_UNREADABLE_GRACE_MS = 60_000
-const MAX_TRACKED_TURN_ENDS = 16
+// Covers the bounded native affinity window without growing with transcript length.
+const MAX_TRACKED_TURN_ENDS = 128
 const SAFE_THREAD_ID = /^[A-Za-z0-9-]{1,64}$/
 
 type TrackedTranscriptSubagent = JsonlCursor & {
@@ -35,6 +42,7 @@ type TrackedTranscriptSubagent = JsonlCursor & {
   model?: string
   startedAt: number
   unresolvedSince?: number
+  complete?: boolean
 }
 
 export type CodexSubagentTranscriptState = {
@@ -48,6 +56,10 @@ export type CodexSubagentTranscriptState = {
   reviewersByPath: Map<string, CodexApprovalsReviewer>
   /** Who resolves this turn's approvals in the parent rollout. */
   approvalsReviewer?: CodexApprovalsReviewer
+  childSettlementUnverifiable?: true
+  providerSessionId?: string
+  pendingNativeTools?: Map<string, 'function_call' | 'custom_tool_call'>
+  toolSettlementUnverifiable?: true
 }
 
 // Why: Codex files each rollout under its OWN local start date, so a session running past midnight spawns children into a sibling day directory.
@@ -163,36 +175,6 @@ function normalizedTranscriptPath(transcriptPath: string | undefined): string | 
     : undefined
 }
 
-function readTurnEnd(
-  recordValue: JsonRecord
-): { turnId: string; end: 'completed' | 'failed' } | undefined {
-  if (recordValue.type !== 'event_msg') {
-    return undefined
-  }
-  const payload = record(recordValue.payload)
-  const turnId = typeof payload?.turn_id === 'string' ? payload.turn_id.trim() : ''
-  if ((payload?.type !== 'task_complete' && payload?.type !== 'turn_complete') || !turnId) {
-    return undefined
-  }
-  return { turnId, end: payload.error == null ? 'completed' : 'failed' }
-}
-
-function childIsComplete(records: JsonRecord[]): boolean {
-  let complete = false
-  for (const recordValue of records) {
-    if (recordValue.type !== 'event_msg') {
-      continue
-    }
-    const payload = record(recordValue.payload)
-    if (payload?.type === 'task_started') {
-      complete = false
-    } else if (payload?.type === 'task_complete') {
-      complete = true
-    }
-  }
-  return complete
-}
-
 export function createCodexSubagentTranscriptState(): CodexSubagentTranscriptState {
   return {
     parent: { offset: 0, carry: '' },
@@ -220,7 +202,8 @@ export function hasTrackedCodexTranscriptSubagents(
 export function reconcileCodexSubagentTranscript(
   state: CodexSubagentTranscriptState,
   roster: CodexSubagentRoster,
-  transcriptPath: string | undefined
+  transcriptPath: string | undefined,
+  budget?: { remainingBytes: number }
 ): boolean {
   const normalizedPath = normalizedTranscriptPath(transcriptPath)
   if (!normalizedPath) {
@@ -240,8 +223,16 @@ export function reconcileCodexSubagentTranscript(
     state.reviewersByPath.clear()
     // Why: a different rollout is a different session, so its predecessor's reviewer is void.
     state.approvalsReviewer = undefined
+    state.childSettlementUnverifiable = undefined
+    state.providerSessionId = undefined
+    state.pendingNativeTools = undefined
+    state.toolSettlementUnverifiable = undefined
   }
-  const parentRecords = readJsonlCursor(state.parent, isCodexStatusTranscriptLine)
+  const parentRecords = readJsonlCursor(state.parent, isCodexStatusTranscriptLine, {
+    incrementalHistory: true,
+    budget
+  })
+  observeCodexNativeInventoryRecords(state, parentRecords ?? [])
   changed ||=
     Boolean(parentRecords?.length) ||
     (parentRecords === undefined && state.approvalsReviewer !== undefined)
@@ -252,7 +243,7 @@ export function reconcileCodexSubagentTranscript(
       ? undefined
       : (readApprovalsReviewer(parentRecords) ?? state.approvalsReviewer)
   for (const recordValue of parentRecords ?? []) {
-    const turnEnd = readTurnEnd(recordValue)
+    const turnEnd = readCodexTranscriptTurnEnd(recordValue)
     if (turnEnd) {
       state.turnEnds.delete(turnEnd.turnId)
       state.turnEnds.set(turnEnd.turnId, turnEnd.end)
@@ -296,7 +287,10 @@ export function reconcileCodexSubagentTranscript(
         entriesByDirectory
       )
     }
-    const records = readJsonlCursor(tracked, isCodexStatusTranscriptLine)
+    const records = readJsonlCursor(tracked, isCodexStatusTranscriptLine, {
+      incrementalHistory: true,
+      budget
+    })
     changed ||= Boolean(records?.length)
     if (!records) {
       // Why: a rollout that never appears (or is deleted) has no completion event, so time-box it instead of leaking a working row.
@@ -305,15 +299,18 @@ export function reconcileCodexSubagentTranscript(
       if (now - tracked.unresolvedSince <= CHILD_UNREADABLE_GRACE_MS) {
         continue
       }
+      state.childSettlementUnverifiable = true
     } else {
       tracked.unresolvedSince = undefined
       tracked.model = readChildModel(records) ?? tracked.model
-      // Why: re-applied every reconcile, not just on discovery — the parent's
-      // own activity upsert can rebuild this child's roster entry, which would
-      // otherwise drop a model found on an earlier poll.
+      // Parent activity can rebuild the roster and lose a previously discovered model.
       setCodexSubagentModel(roster, id, tracked.model)
-      if (!childIsComplete(records)) {
+      tracked.complete = codexTranscriptChildComplete(records, tracked.complete)
+      if (!tracked.complete || !jsonlCursorAtEnd(tracked)) {
         continue
+      }
+      if (!verifyJsonlCursorHistory(tracked)) {
+        state.childSettlementUnverifiable = true
       }
     }
     changed = true

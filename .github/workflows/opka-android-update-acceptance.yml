@@ -163,7 +163,7 @@ jobs:
       PUBLISHED_VERSION: ${{ inputs.published_version || '' }}
       RELEASE_SIGNER: ${{ github.event_name != 'pull_request' && inputs.release_signer || false }}
       UPDATE_SURFACE: ${{ inputs.update_surface || 'settings' }}
-      CANDIDATE_VERSION: ${{ inputs.release_signer && (inputs.candidate_version || '1.4.236-rc.8') || '1.4.236-rc.6' }}
+      CANDIDATE_VERSION: ${{ inputs.release_signer && (inputs.candidate_version || '1.4.236-rc.9') || '1.4.236-rc.6' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -252,7 +252,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release download v1.4.236-rc.7 --repo KOSFin/opka --pattern latest-android.json --pattern opka-android.apk --dir out/android-idle-baseline
+          gh release download v1.4.236-rc.8 --repo KOSFin/opka --pattern latest-android.json --pattern opka-android.apk --dir out/android-idle-baseline
           expected="$(python3 config/scripts/opka_android_baseline_artifact.py out/android-idle-baseline)"
           actual="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs out/android-idle-baseline/opka-android.apk | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
           test "$actual" = "$expected"

@@ -1,3 +1,4 @@
+import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth/runtime-auth-types'
 import type { ProviderRateLimits } from '../../shared/rate-limit-types'
 import {
   getClaudeProfileRouter,
@@ -12,6 +13,7 @@ import { filterPathsToRunningWslDistrosAsync } from '../wsl-running-path-filter'
 /** Usage reads the account's own folder; a host account's comes from its id, never a stored path. */
 export type InactiveClaudeAccount = {
   id: string
+  prepareAuth?: (signal?: AbortSignal) => Promise<ClaudeRuntimeAuthPreparation>
   managedAuthRuntime?: 'host' | 'wsl'
   wslDistro?: string | null
   wslLinuxAuthPath?: string | null
@@ -23,7 +25,9 @@ export async function fetchInactiveClaudeAccountUsage(
 ): Promise<ProviderRateLimits> {
   if (account.managedAuthRuntime !== 'wsl') {
     // Why the router: a covered account's usage is System default's, as its launches are.
-    const authPreparation = getClaudeProfileRouter()?.accountUsagePreparation(account.id)
+    const authPreparation =
+      (await account.prepareAuth?.(options.signal)) ??
+      getClaudeProfileRouter()?.accountUsagePreparation(account.id)
     return authPreparation
       ? fetchActiveClaudeRateLimits({ signal: options.signal, authPreparation })
       : signInAgain()

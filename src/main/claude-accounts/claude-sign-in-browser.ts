@@ -5,6 +5,10 @@ import {
   CLAUDE_SIGN_IN_FAILED_MESSAGE,
   canCopyClaudeSignInLink
 } from '../../shared/claude-sign-in-link'
+import {
+  CLAUDE_NATIVE_AUTHORIZE_HOSTS,
+  isClaudeHostedNativeSignInLink
+} from '../../shared/claude-native-sign-in-link'
 import type { ClaudeCommandConfig } from './claude-command-process'
 
 const HELPER_NAME = '.orca-sign-in-browser'
@@ -14,7 +18,6 @@ const POLL_INTERVAL_MS = 250
 const LINK_WAIT_MS = 60_000
 // Why a file: Claude discards BROWSER's output, and the link it prints itself needs a pasted code.
 const HELPER_SCRIPT = `#!/bin/sh\nprintf '%s' "$1" > "$0.tmp" && mv "$0.tmp" "$0${LINK_SUFFIX}"\n`
-const CLAUDE_AUTHORIZE_HOSTS = new Set(['claude.com', 'claude.ai'])
 const LOCAL_CALLBACK_HOSTS = new Set(['localhost', '127.0.0.1'])
 
 export type ClaudeSignInBrowser = {
@@ -32,13 +35,17 @@ export function isClaudeLocalSignInLink(signInLink: string): boolean {
     const redirect = new URL(url.searchParams.get('redirect_uri') ?? '')
     return (
       url.protocol === 'https:' &&
-      CLAUDE_AUTHORIZE_HOSTS.has(url.hostname) &&
+      CLAUDE_NATIVE_AUTHORIZE_HOSTS.has(url.hostname) &&
       redirect.protocol === 'http:' &&
       LOCAL_CALLBACK_HOSTS.has(redirect.hostname)
     )
   } catch {
     return false
   }
+}
+
+export function isClaudeManualSignInLink(signInLink: string): boolean {
+  return isClaudeHostedNativeSignInLink(signInLink)
 }
 
 /** A BROWSER stand-in in the account's folder that hands Claude's sign-in link to Orca instead of

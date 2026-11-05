@@ -1,3 +1,4 @@
+import { isPrivateNativeCliRpc } from '../../../shared/native-cli-private-rpc'
 import type { FeatureInteractionId } from '../../../shared/feature-interactions'
 import { isBrowserPaneUiRuntimeRpcParams } from '../../../shared/runtime-rpc-feature-interaction-source'
 import type { OrcaRuntimeService } from '../orca-runtime'
@@ -7,6 +8,9 @@ export function getRuntimeFeatureInteractionId(
   result: unknown,
   rawParams?: unknown
 ): FeatureInteractionId | null {
+  if (isPrivateNativeCliRpc(method)) {
+    return null
+  }
   if (method === 'browser.profileImportFromBrowser') {
     return hasBooleanResult(result, 'ok') ? 'cookie-import' : null
   }

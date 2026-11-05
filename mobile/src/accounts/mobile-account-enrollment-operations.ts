@@ -10,6 +10,11 @@ import {
 } from '../../../src/shared/account-sign-in-terminal'
 import { AccountSignInWorkspacesSchema } from '../../../src/shared/account-sign-in-workspaces'
 import { AccountPoolViewSchema } from '../../../src/shared/account-pool-view'
+import {
+  BeginCodexRoutingSignInParams,
+  NativeCodexRoutingStateSchema
+} from '../../../src/shared/native-account-routing'
+import type { AccountDeviceSignInRequest } from '../../../src/shared/account-device-sign-in-client'
 import type { RpcClient } from '../transport/rpc-client'
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
@@ -41,10 +46,58 @@ const cancelSignIn = bindDeferredRpcOperation(
     read: rpcResultVariant('sign-in', AccountDeviceSignInSchema)
   })
 )
+const beginRoutingSignIn = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'accounts.begin-routing-sign-in',
+    method: 'accounts.beginCodexRoutingSignIn',
+    acceptance: 'require-result-or-throw-message',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant('sign-in', AccountDeviceSignInSchema)
+  })
+)
+const readRoutingSignIn = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'accounts.routing-sign-in',
+    method: 'accounts.codexRoutingSignIn',
+    acceptance: 'require-result-or-throw-message',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant('sign-in', AccountDeviceSignInSchema)
+  })
+)
+const cancelRoutingSignIn = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'accounts.cancel-routing-sign-in',
+    method: 'accounts.cancelCodexRoutingSignIn',
+    acceptance: 'require-result-or-throw-message',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant('sign-in', AccountDeviceSignInSchema)
+  })
+)
+export const codexRoutingStateRead = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'accounts.native-routing-state',
+    method: 'accounts.codexRoutingState',
+    acceptance: 'require-result-or-throw-message',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant('routing', NativeCodexRoutingStateSchema)
+  })
+)
 
-export function mobileAccountDeviceSignInRequest(client: RpcClient) {
-  return async (method: string, params: { provider: 'codex' } | { id: string }) => {
+export function mobileAccountDeviceSignInRequest(client: RpcClient): AccountDeviceSignInRequest {
+  return async (method, params) => {
     switch (method) {
+      case 'accounts.beginCodexRoutingSignIn':
+        return beginRoutingSignIn.interpret(
+          await beginRoutingSignIn.request(client, BeginCodexRoutingSignInParams.parse(params))
+        )
+      case 'accounts.codexRoutingSignIn':
+        return readRoutingSignIn.interpret(
+          await readRoutingSignIn.request(client, AccountDeviceSignInParams.parse(params))
+        )
+      case 'accounts.cancelCodexRoutingSignIn':
+        return cancelRoutingSignIn.interpret(
+          await cancelRoutingSignIn.request(client, AccountDeviceSignInParams.parse(params))
+        )
       case 'accounts.beginDeviceSignIn':
         return beginSignIn.interpret(
           await beginSignIn.request(client, BeginAccountDeviceSignInParams.parse(params))

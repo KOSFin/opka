@@ -6,7 +6,8 @@ import { none } from 'stream-chain/defs.js'
 export function createJsonTokenReader(
   consume: (token: Token) => void,
   batchCodeUnits = 64 * 1024,
-  retainScalar?: () => boolean
+  retainScalar?: () => boolean,
+  maxRetainedCodeUnits = Infinity
 ): {
   write: (text: string) => void
   end: () => void
@@ -17,29 +18,39 @@ export function createJsonTokenReader(
   const parse = exec(
     parser({
       streamValues: false,
-      packStrings: retainScalar === undefined,
-      packNumbers: retainScalar === undefined,
-      streamStrings: retainScalar !== undefined,
-      streamNumbers: retainScalar !== undefined
+      packKeys: maxRetainedCodeUnits === Infinity,
+      streamKeys: maxRetainedCodeUnits !== Infinity,
+      packStrings: retainScalar === undefined && maxRetainedCodeUnits === Infinity,
+      packNumbers: retainScalar === undefined && maxRetainedCodeUnits === Infinity,
+      streamStrings: retainScalar !== undefined || maxRetainedCodeUnits !== Infinity,
+      streamNumbers: retainScalar !== undefined || maxRetainedCodeUnits !== Infinity
     })
   )
-  let scalar: 'string' | 'number' | null = null
+  let scalar: 'string' | 'number' | 'key' | null = null
   let retained = false
   let value = ''
   const consumeToken = (token: Token): void => {
-    if (token.name === 'startString' || token.name === 'startNumber') {
-      scalar = token.name === 'startString' ? 'string' : 'number'
-      retained = retainScalar?.() ?? true
+    if (token.name === 'startString' || token.name === 'startNumber' || token.name === 'startKey') {
+      scalar =
+        token.name === 'startKey' ? 'key' : token.name === 'startString' ? 'string' : 'number'
+      retained = scalar === 'key' || (retainScalar?.() ?? true)
       value = ''
     } else if (token.name === 'stringChunk' || token.name === 'numberChunk') {
       if (retained) {
+        if (value.length + token.value.length > maxRetainedCodeUnits) {
+          throw new RangeError('Retained JSON scalar exceeds its bounded projection')
+        }
         value += token.value
       }
-    } else if (token.name === 'endString' || token.name === 'endNumber') {
+    } else if (
+      token.name === 'endString' ||
+      token.name === 'endNumber' ||
+      token.name === 'endKey'
+    ) {
       const packed = value
       value = ''
       consume({
-        name: scalar === 'number' ? 'numberValue' : 'stringValue',
+        name: scalar === 'key' ? 'keyValue' : scalar === 'number' ? 'numberValue' : 'stringValue',
         value: retained ? packed : scalar === 'number' ? '0' : ''
       })
       scalar = null

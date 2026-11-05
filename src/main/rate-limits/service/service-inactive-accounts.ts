@@ -142,6 +142,7 @@ export abstract class RateLimitServiceInactiveAccounts extends RateLimitServiceP
         this.pushToRenderer()
         try {
           // Why: point fetchCodexRateLimits at the managed home directly, avoiding materializing credentials into the shared runtime location.
+          const beforeProof = this.codexProviderFailureAccountResolver?.(account.id)
           const fresh = await fetchCodexRateLimits({
             codexHomePath: home.managedHomePath,
             networkProxySettings: this.networkProxySettingsResolver?.(),
@@ -159,8 +160,28 @@ export abstract class RateLimitServiceInactiveAccounts extends RateLimitServiceP
             this.pushToRenderer()
             continue
           }
+          const afterProof = this.codexProviderFailureAccountResolver?.(account.id)
+          if (
+            beforeProof &&
+            (beforeProof.quotaIdentity !== afterProof?.quotaIdentity ||
+              beforeProof.authProvenance !== afterProof?.authProvenance)
+          ) {
+            this.inactiveCodexFetching.delete(account.id)
+            this.pushToRenderer()
+            continue
+          }
+          const scoped =
+            beforeProof?.identityVerified && afterProof?.identityVerified
+              ? {
+                  ...fresh,
+                  usageMetadata: {
+                    ...fresh.usageMetadata,
+                    authProvenance: afterProof.authProvenance
+                  }
+                }
+              : fresh
           const cached = this.inactiveCodexCache.get(account.id) ?? null
-          this.inactiveCodexCache.set(account.id, this.applyStalePolicy(fresh, cached))
+          this.inactiveCodexCache.set(account.id, this.applyStalePolicy(scoped, cached))
         } catch {
           // Why: per-account try/catch prevents one failure from aborting the batch.
           if (
@@ -224,7 +245,21 @@ export abstract class RateLimitServiceInactiveAccounts extends RateLimitServiceP
       (this.inactiveCodexAccountsResolver?.() ?? []).map((account) => account.id)
     )
     for (const accountId of this.inactiveCodexCache.keys()) {
-      if (!currentIds.has(accountId)) {
+      const sample = this.inactiveCodexCache.get(accountId)
+      const failure = sample?.usageMetadata?.confirmedProviderFailure
+      let verifiedFailure = false
+      if (failure && this.codexProviderFailureAccountResolver) {
+        try {
+          const proof = this.codexProviderFailureAccountResolver(accountId)
+          verifiedFailure =
+            proof?.identityVerified === true &&
+            proof.quotaIdentity === failure.quotaIdentity &&
+            proof.authProvenance === sample?.usageMetadata?.authProvenance
+        } catch {
+          verifiedFailure = true
+        }
+      }
+      if (!currentIds.has(accountId) && !verifiedFailure) {
         this.inactiveCodexCache.delete(accountId)
       }
     }

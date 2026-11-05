@@ -1,4 +1,5 @@
 import type { CodexDeviceAuthorization } from '../../shared/account-device-sign-in'
+import { removeCodexAccountWithRouting, type CodexRoutingRemoval } from './codex-routing-removal'
 import { execFileSync, spawn } from 'node:child_process'
 import type { WindowsHostInteractiveLoginSpawn } from '../../shared/windows-interactive-login-spawn'
 import type {
@@ -80,6 +81,10 @@ function killLoginProcessTree(
 }
 
 export class CodexAccountService {
+  private routingRemoval: CodexRoutingRemoval | undefined
+  setRoutingRemoval(hooks: CodexRoutingRemoval): void {
+    this.routingRemoval = hooks
+  }
   // Why: serialize the read-modify-write of settings; overlapping calls (e.g. double-click Add) would lose updates.
   private mutationQueue: Promise<unknown> = Promise.resolve()
   private stoppingSignIn = false
@@ -161,6 +166,11 @@ export class CodexAccountService {
     const next = this.mutationQueue.then(fn, fn)
     this.mutationQueue = next.catch(() => {})
     return next
+  }
+
+  /** Engine grant activation must share the native account mutation boundary. */
+  withRoutingMutation<T>(operation: () => Promise<T>): Promise<T> {
+    return this.serializeMutation(operation)
   }
 
   listAccounts(): CodexRateLimitAccountsState {
@@ -259,8 +269,14 @@ export class CodexAccountService {
   }
 
   async removeAccount(accountId: string): Promise<CodexRateLimitAccountsState> {
-    this.supersedePendingLogin()
-    return this.serializeMutation(() => this.selection.remove(accountId))
+    return removeCodexAccountWithRouting({
+      accountId,
+      routing: this.routingRemoval,
+      requireAccount: (id) => this.selection.requireAccount(id),
+      removeNative: (id) => this.selection.remove(id),
+      beforeRemoval: () => this.supersedePendingLogin(),
+      serialize: (commit) => this.serializeMutation(commit)
+    })
   }
 
   async selectAccount(accountId: string | null): Promise<CodexRateLimitAccountsState> {

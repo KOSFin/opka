@@ -78,6 +78,50 @@ beforeEach(() => {
 })
 
 describe('the hybrid shell screen', () => {
+  it('retains its WebView on blur/background while retiring remote streams', async () => {
+    const client = createFakeRpcClient()
+    dependencies.client = client
+    const state = readyState('session-retained')
+    const tree = await renderScreen(state)
+    const send = async (fields: Record<string, unknown>) =>
+      act(async () => {
+        byName(tree, 'ShellViewProbe')[0].props.onBridgeMessage({
+          nativeEvent: { json: clientFrame(fields) }
+        })
+      })
+    await send({ type: 'ready' })
+    await send({
+      type: 'subscribe',
+      id: bridgeId(1),
+      method: 'terminal.subscribe',
+      params: { terminal: 't' }
+    })
+    dependencies.focused = false
+    await updateScreen(tree, state)
+    expect(client.streams[0].unsubscribes).toBe(1)
+    dependencies.focused = true
+    await updateScreen(tree, state)
+    await send({
+      type: 'subscribe',
+      id: bridgeId(2),
+      method: 'terminal.subscribe',
+      params: { terminal: 't' }
+    })
+    await act(async () => {
+      dependencies.appState = 'background'
+      dependencies.appStateListeners.forEach((listener) => listener('background'))
+    })
+    expect(client.streams[1].unsubscribes).toBe(1)
+    await send({ type: 'request', id: bridgeId(3), method: 'status.get' })
+    expect(client.requests).toHaveLength(0)
+    await act(async () => {
+      dependencies.appState = 'active'
+      dependencies.appStateListeners.forEach((listener) => listener('active'))
+    })
+    expect(dependencies.lifecycle).toEqual(['mount:session-retained'])
+    expect(byName(tree, 'ShellViewProbe')[0].props.sessionId).toBe('session-retained')
+    expect(client.streams).toHaveLength(2)
+  })
   it('renders the update wall for a bundle verdict, with no shell view', async () => {
     const tree = await renderScreen({
       kind: 'wall',

@@ -29,6 +29,8 @@ import { OrcaRuntimeRpcServer } from '../runtime-rpc'
 import { sendRequest } from '../runtime-rpc-test-harness'
 import { makeStore } from '../runtime-rpc-worktree-store-fixtures'
 import type { MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
+import { ALL_RPC_METHODS } from '../rpc/methods'
+import { defineMethod } from '../rpc/core'
 import type * as PassthroughSocketModule from '../../../shared/remote-runtime-passthrough-socket'
 
 const passthroughOpens = vi.hoisted(() => {
@@ -86,6 +88,19 @@ class SeatObservableRuntime extends OrcaRuntimeService {
 
 const WORKTREE = 'id:repo-1::/tmp/worktree-a'
 const TARGET = 'runtime:env-1'
+const NATIVE_ACCOUNT_METHODS = [
+  'accounts.codexRoutingState',
+  'accounts.beginCodexRoutingSignIn',
+  'accounts.codexRoutingSignIn',
+  'accounts.cancelCodexRoutingSignIn',
+  'accounts.nativeClaudeRefreshSources',
+  'accounts.beginNativeClaudeRefreshSignIn',
+  'accounts.getNativeClaudeRefreshSignInLink',
+  'accounts.submitNativeClaudeRefreshSignInCode',
+  'accounts.cancelNativeClaudeRefreshSignIn',
+  'accounts.installNativeCliIntegration',
+  'accounts.uninstallNativeCliIntegration'
+] as const
 type Frame = Record<string, unknown>
 
 describe('mobile desktop relay: phone -> desktop -> server', () => {
@@ -96,7 +111,7 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
     }
   })
 
-  async function startRuntime(spawnedOnThisHost: string[] = []) {
+  async function startRuntime(spawnedOnThisHost: string[] = [], nativeCalls?: string[]) {
     const writes: string[] = []
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store carries the surface these RPCs read, as in the sibling streaming tests.
     const runtime = new SeatObservableRuntime(makeStore() as never)
@@ -115,7 +130,36 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
       getSize: () => ({ cols: 80, rows: 24 })
     })
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-relay-'))
+    const nativeMethods = nativeCalls
+      ? NATIVE_ACCOUNT_METHODS.map((name) => {
+          const actual = ALL_RPC_METHODS.find((method) => method.name === name)
+          if (!actual) {
+            throw new Error(`Missing native account RPC ${name}`)
+          }
+          return defineMethod({
+            name,
+            permission: actual.permission,
+            params: null,
+            handler: async (_params, context) => {
+              nativeCalls.push(name)
+              return {
+                host: context.runtime.getRuntimeId(),
+                kind: context.clientKind,
+                caller: context.caller?.kind
+              }
+            }
+          })
+        })
+      : undefined
     const server = new OrcaRuntimeRpcServer({
+      methods: nativeMethods
+        ? [
+            ...ALL_RPC_METHODS.filter(
+              (method) => !NATIVE_ACCOUNT_METHODS.some((name) => name === method.name)
+            ),
+            ...nativeMethods
+          ]
+        : undefined,
       runtime,
       userDataPath,
       enableWebSocket: true,
@@ -139,10 +183,10 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
   }
 
   /** A server, and a desktop whose only configured server is it, as `env-1`. */
-  async function startTopology() {
-    const host = await startRuntime()
+  async function startTopology(nativeCalls?: { host: string[]; desktop: string[] }) {
+    const host = await startRuntime([], nativeCalls?.host)
     const desktopSpawns: string[] = []
-    const desktop = await startRuntime(desktopSpawns)
+    const desktop = await startRuntime(desktopSpawns, nativeCalls?.desktop)
     const desktopOnHost = pair(host.server, 'runtime', 'MacBook')
     const registry = host.server.getDeviceRegistry()!
     const children = () => registry.listDelegatedMobileDevices(desktopOnHost.pairedDeviceId!)
@@ -445,6 +489,36 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
     state.retire('env-1')
     phone.send('after-sync', 'terminal.list', {})
     expect(isOk(await phone.next('after-sync'))).toBe(true)
+  })
+
+  it('routes native account and explicit shell setup actions through authenticated phone admission to the selected host', async () => {
+    const calls: { host: string[]; desktop: string[] } = { host: [], desktop: [] }
+    const { host, desktop } = await startTopology(calls)
+    const phone = await connectPhone(desktop.server, 'Phone')
+    for (const [index, method] of NATIVE_ACCOUNT_METHODS.entries()) {
+      const id = `native:${index}`
+      phone.send(id, method, undefined)
+      const response = await phone.next(id)
+      expect(isOk(response)).toBe(true)
+      expect(response.result).toEqual({
+        host: host.runtime.getRuntimeId(),
+        kind: 'mobile',
+        caller: 'paired-device'
+      })
+    }
+    expect(calls.host).toEqual([...NATIVE_ACCOUNT_METHODS])
+    expect(calls.desktop).toEqual([])
+    phone.send('native:local', 'accounts.installNativeCliIntegration', undefined, null)
+    expect((await phone.next('native:local')).result).toEqual({
+      host: desktop.runtime.getRuntimeId(),
+      kind: 'mobile',
+      caller: 'paired-device'
+    })
+    expect(calls.desktop).toEqual(['accounts.installNativeCliIntegration'])
+    phone.send('native:paths', 'accounts.nativeCliIntegrationStatus', undefined)
+    expect(errorCode(await phone.next('native:paths'))).toBe('forbidden')
+    phone.send('native:unknown', 'accounts.installNativeCliIntegrationAnywhere', undefined)
+    expect(errorCode(await phone.next('native:unknown'))).toBe('forbidden')
   })
 
   it('answers a targeted desktop-owned call on the desktop, exactly as the untargeted one', async () => {

@@ -9,22 +9,27 @@ import { poolStyles } from './mobile-account-pool-styles'
 import { styles } from './mobile-accounts-screen-styles'
 import { MobileClaudeSignInSection } from './MobileClaudeSignInSection'
 import { mobileAccountDeviceSignInRequest } from './mobile-account-enrollment-operations'
+import type { CodexRoutingSignInTarget } from '../../../src/shared/native-account-routing'
+import { useMobileSignInActivity } from './use-mobile-sign-in-activity'
 
 export function MobileAccountSignInSection({
   client,
   connected,
   hostName,
-  hostId,
-  onComplete
+  hostId = '',
+  onComplete,
+  routingAccount
 }: {
   client: RpcClient | null
   connected: boolean
   hostName: string
-  hostId: string
+  hostId?: string
   onComplete: () => void
+  routingAccount?: CodexRoutingSignInTarget
 }) {
   const controller = useRef<AbortController | null>(null)
   const clipboard = useClipboardWriter()
+  const waitUntilActive = useMobileSignInActivity(connected)
   const [state, setState] = useState<AccountDeviceSignIn | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -53,6 +58,8 @@ export function MobileAccountSignInSection({
     setCopied(false)
     try {
       await runAccountDeviceSignIn({
+        routingAccount,
+        waitUntilActive,
         signal: active.signal,
         request: mobileAccountDeviceSignInRequest(client),
         onState: (next) => {
@@ -90,13 +97,15 @@ export function MobileAccountSignInSection({
   }
 
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionHeading}>Add an account</Text>
-      <View style={[styles.card, poolStyles.content]}>
-        <Text style={styles.rowSubtitle}>
-          Sign in for {hostName || 'this host'}. The account stays on this host and can be used in
-          its pools.
-        </Text>
+    <View style={routingAccount ? poolStyles.memberSettings : styles.section}>
+      {!routingAccount ? <Text style={styles.sectionHeading}>Add an account</Text> : null}
+      <View style={routingAccount ? poolStyles.memberSettings : [styles.card, poolStyles.content]}>
+        {!routingAccount ? (
+          <Text style={styles.rowSubtitle}>
+            Sign in for {hostName || 'this host'}. The account stays on this host and can be used in
+            its pools.
+          </Text>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           disabled={busy || !connected}
@@ -105,7 +114,13 @@ export function MobileAccountSignInSection({
           onPress={() => void start()}
         >
           <Text style={poolStyles.actionText}>
-            {busy ? 'Waiting for sign-in…' : 'Add Codex account'}
+            {busy
+              ? routingAccount
+                ? 'Connecting account…'
+                : 'Waiting for sign-in…'
+              : routingAccount
+                ? 'Connect for CLI switching'
+                : 'Add Codex account'}
           </Text>
         </Pressable>
         {state?.status === 'waiting' && state.userCode && state.verificationUrl ? (
@@ -136,7 +151,9 @@ export function MobileAccountSignInSection({
         ) : null}
         {state?.status === 'complete' ? (
           <Text accessibilityRole="alert" style={styles.rowSubtitle}>
-            Account added. Select it below, then include it in a pool if needed.
+            {routingAccount
+              ? 'CLI switching connected on this host.'
+              : 'Account added. Select it below, then include it in a pool if needed.'}
           </Text>
         ) : null}
         {error || state?.error ? (
@@ -144,7 +161,9 @@ export function MobileAccountSignInSection({
             {error || state?.error}
           </Text>
         ) : null}
-        <MobileClaudeSignInSection client={client} connected={connected} hostId={hostId} />
+        {!routingAccount ? (
+          <MobileClaudeSignInSection client={client} connected={connected} hostId={hostId} />
+        ) : null}
       </View>
     </View>
   )

@@ -1,3 +1,8 @@
+import {
+  readClaudeNativeFailureReceipt,
+  readClaudeNativeStartDuplicate
+} from './claude-native-hook-duplicates'
+import { normalizeClaudePromptId } from '../listener-limits'
 import type { ParsedAgentStatusPayload } from '../../agent-status-types'
 import { isAgentStatusHeldOpenByChildWork } from '../../agent-lead-status-fold'
 import { isAskUserQuestionTool } from '../../agent-question-answered-intent'
@@ -65,6 +70,10 @@ export function normalizeClaudeEvent(
       // live turn to an idle row.
       return null
     }
+    const duplicate = readClaudeNativeStartDuplicate(state, paneKey, promptText, hookPayload)
+    if (duplicate) {
+      return duplicate
+    }
     // Why: a new process owns the pane; stale children/tasks/crons must not gate the
     // fresh session's idle row back up to 'working' (same reset Codex does on SessionStart).
     state.claudeSubagentRosterByPaneKey.delete(paneKey)
@@ -72,7 +81,14 @@ export function normalizeClaudeEvent(
     state.claudeActiveSessionCronPaneKeys.delete(paneKey)
     state.claudeLaunchedBackgroundTasksByPaneKey.delete(paneKey)
     // Why: a new session's main agent starts its own clock, not the old session's last Stop.
-    setClaudeMainAgentTurnState(state, paneKey, { state: 'done', stateStartedAt: Date.now() })
+    const sessionId = readString(hookPayload, 'session_id')
+    setClaudeMainAgentTurnState(state, paneKey, {
+      state: 'done',
+      stateStartedAt: Date.now(),
+      nativeStart: sessionId
+        ? { sessionId, source: sessionStartSource, observedAt: Date.now() }
+        : undefined
+    })
     return buildClaudeStatusPayload(state, eventName, promptText, paneKey, hookPayload, {
       stateName: 'done',
       updateToolSnapshot: true,
@@ -80,6 +96,7 @@ export function normalizeClaudeEvent(
     })
   }
   const previousLead = state.claudeLeadStateByPaneKey.get(paneKey)
+  const nativePromptId = normalizeClaudePromptId(hookPayload.prompt_id)
   // Why: only a turn boundary may declare a verdict or carry a prior cancellation forward; any
   // other event starts a fresh turn and drops it. The verdict is a fact about the main agent's turn and
   // nothing else: a cancel never touches the shell, cron or subagent the turn left running.
@@ -301,6 +318,19 @@ export function normalizeClaudeEvent(
 
   setClaudeMainAgentTurnState(state, paneKey, {
     state: reportedStateName,
+    ...(eventName === 'UserPromptSubmit' && eventAgentId === undefined
+      ? {
+          nativePromptId
+        }
+      : {}),
+    ...((eventName === 'Stop' || eventName === 'StopFailure') && eventAgentId === undefined
+      ? {
+          nativeFailure:
+            eventName === 'StopFailure'
+              ? readClaudeNativeFailureReceipt(hookPayload, nativePromptId, previousLead)
+              : undefined
+        }
+      : {}),
     ...(taskWakeupTurn ? { taskWakeupTurn: true as const } : {}),
     ...(outcome ? { outcome } : {}),
     ...(isWaitingInducing && eventAgentId ? { waitingAgentId: eventAgentId } : {}),
