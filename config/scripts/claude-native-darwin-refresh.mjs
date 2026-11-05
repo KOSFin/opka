@@ -113,6 +113,7 @@ export async function runDarwinNativeRefreshQualification({
   const sourceObservations = []
   const debugObservations = []
   const commandObservations = []
+  let securityPreflight = []
   const debugPath = join(home, 'native-refresh-debug.log')
   let stage = 'prepare'
   const closeFixture = async () => {
@@ -179,51 +180,84 @@ export async function runDarwinNativeRefreshQualification({
           run: async (launch, options) => {
             cleanupVerified = false
             try {
-              const stdout = await api.runAgentModelCatalogListing(
-                {
-                  ...launch,
-                  args: [...launch.args, '--debug-file', debugPath],
-                  env: {
-                    ...launch.env,
-                    HOME: home,
-                    NODE_EXTRA_CA_CERTS: server.certificate,
-                    HTTPS_PROXY: proxy.url,
-                    https_proxy: proxy.url,
-                    HTTP_PROXY: proxy.url,
-                    http_proxy: proxy.url,
-                    ALL_PROXY: proxy.url,
-                    all_proxy: proxy.url,
-                    NO_PROXY: '',
-                    no_proxy: ''
-                  },
-                  envToDelete: launch.envToDelete
+              const fixtureLaunch = {
+                ...launch,
+                args: [...launch.args, '--debug-file', debugPath],
+                env: {
+                  ...launch.env,
+                  HOME: home,
+                  NODE_EXTRA_CA_CERTS: server.certificate,
+                  HTTPS_PROXY: proxy.url,
+                  https_proxy: proxy.url,
+                  HTTP_PROXY: proxy.url,
+                  http_proxy: proxy.url,
+                  ALL_PROXY: proxy.url,
+                  all_proxy: proxy.url,
+                  NO_PROXY: '',
+                  no_proxy: ''
                 },
-                {
-                  ...options,
-                  inheritedEnv: {
-                    PATH: process.env.PATH,
-                    USER: userInfo().username,
-                    LANG: 'en_US.UTF-8',
-                    TMPDIR: home
-                  },
-                  onGroupProven(value) {
-                    group = value
-                    options.onGroupProven?.(value)
-                  },
-                  onClosed(value) {
-                    closed = value
-                    options.onClosed?.(value)
-                  },
-                  onNotStarted() {
-                    options.onNotStarted?.()
-                  }
+                envToDelete: launch.envToDelete
+              }
+              const inheritedEnv = {
+                PATH: process.env.PATH,
+                USER: userInfo().username,
+                LANG: 'en_US.UTF-8',
+                TMPDIR: home
+              }
+              if (securityPreflight.length === 0) {
+                stage = 'security-preflight'
+                const env = { ...inheritedEnv, ...fixtureLaunch.env }
+                for (const name of fixtureLaunch.envToDelete ?? []) {
+                  delete env[name]
                 }
-              )
+                securityPreflight = await probeDarwinRefreshSecurity({
+                  sandbox: environment.sandbox,
+                  keychain: environment.keychain,
+                  env
+                })
+                if (
+                  securityPreflight.some(
+                    (value) => value.code !== 44 || value.timedOut || value.outputTruncated
+                  )
+                ) {
+                  options.onNotStarted?.()
+                  try {
+                    await readFile(join(writer, 'writer-owner.json'))
+                    throw new Error('Unverified unstarted native writer')
+                  } catch (error) {
+                    if (error.code !== 'ENOENT') {
+                      throw error
+                    }
+                  }
+                  cleanupVerified = true
+                  throw new Error(
+                    'Synthetic OS Security lookup preflight refused before native usage'
+                  )
+                }
+                stage = 'native-refresh'
+              }
+              const stdout = await api.runAgentModelCatalogListing(fixtureLaunch, {
+                ...options,
+                inheritedEnv,
+                onGroupProven(value) {
+                  group = value
+                  options.onGroupProven?.(value)
+                },
+                onClosed(value) {
+                  closed = value
+                  options.onClosed?.(value)
+                },
+                onNotStarted() {
+                  options.onNotStarted?.()
+                }
+              })
               commandObservations.push(summarizeNativeRefreshCommand(stdout))
               return stdout
             } finally {
               try {
-                await verifyClosed()
+                if (!cleanupVerified) {
+                  await verifyClosed()
+                }
               } finally {
                 debugObservations.push(await readNativeRefreshDiagnosticSummary(debugPath))
                 if (cleanupVerified) {
@@ -300,6 +334,7 @@ export async function runDarwinNativeRefreshQualification({
       sourceObservations,
       debugObservations,
       commandObservations,
+      securityPreflight,
       growth,
       accessOnlyProjection: true,
       isolatedKeychain: true,
@@ -362,6 +397,7 @@ export async function runDarwinNativeRefreshQualification({
           fileObservation,
           debugObservations,
           commandObservations,
+          securityPreflight,
           profileObservation,
           completed: groups.length,
           requests: server?.counts ?? null,
