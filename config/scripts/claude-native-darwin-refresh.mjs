@@ -83,24 +83,30 @@ export async function runDarwinNativeRefreshQualification({
     }
   })
   const service = api.claudeKeychainService(config)
-  const security = async (args) => {
-    const result = await runProcess({
-      program: '/usr/bin/security',
-      args,
-      timeoutMs: 3000,
-      maxOutputBytes: 1024
-    })
-    if (result.code !== 0 || result.timedOut || result.outputTruncated) {
-      throw new Error('Synthetic refresh keychain operation failed')
-    }
+  const absent = await runProcess({
+    program: '/usr/bin/security',
+    args: [
+      'find-generic-password',
+      '-s',
+      service,
+      '-a',
+      userInfo().username,
+      '-w',
+      environment.keychain
+    ],
+    timeoutMs: 3000,
+    maxOutputBytes: 65536
+  })
+  if (absent.code !== 44 || absent.timedOut || absent.outputTruncated) {
+    throw new Error('Synthetic source must start without a manual scoped Keychain item')
   }
   let proxy
   let server
   let cleanupVerified = true
-  let keychainSeeded = false
   const groups = []
   const growth = []
   const closureProofs = []
+  const sourceObservations = []
   let stage = 'prepare'
   const closeFixture = async () => {
     try {
@@ -118,19 +124,6 @@ export async function runDarwinNativeRefreshQualification({
     proxy = await createNativeRefreshConnectProxy(server.port)
     for (let index = 0; index < 5; index++) {
       await writeFile(join(config, '.credentials.json'), credentials, { mode: 0o600 })
-      await security([
-        'add-generic-password',
-        '-U',
-        '-A',
-        '-s',
-        service,
-        '-a',
-        userInfo().username,
-        '-w',
-        credentials,
-        environment.keychain
-      ])
-      keychainSeeded = true
       let group
       let closed
       const verifyClosed = async () => {
@@ -243,6 +236,20 @@ export async function runDarwinNativeRefreshQualification({
         groupExited: true,
         writerReceiptAbsent: true
       })
+      const selected = await api.readClaudeOAuthCredentials({
+        credentialsFileConfigDir: config,
+        keychainConfigDir: config,
+        includeNativeAccess: true
+      })
+      const fileAccess = api.readBoundedClaudeProfileJson(
+        join(config, '.credentials.json')
+      ).claudeAiOauth
+      sourceObservations.push({
+        source: selected.source,
+        freshAccessMatched: selected.nativeAccess?.accessToken === FRESH_ACCESS,
+        fileFreshAccessMatched: fileAccess?.accessToken === FRESH_ACCESS,
+        fileRefreshRotated: fileAccess?.refreshToken === ROTATED_REFRESH
+      })
       growth.push(await api.measureOwnedNativeProbeDirectory(home))
     }
     stage = 'whole-home-growth'
@@ -273,6 +280,7 @@ export async function runDarwinNativeRefreshQualification({
       proxyClosure,
       groups,
       closureProofs,
+      sourceObservations,
       growth,
       accessOnlyProjection: true,
       isolatedKeychain: true,
@@ -338,17 +346,5 @@ export async function runDarwinNativeRefreshQualification({
     throw error
   } finally {
     await closeFixture()
-    if (cleanupVerified) {
-      if (keychainSeeded) {
-        await security([
-          'delete-generic-password',
-          '-s',
-          service,
-          '-a',
-          userInfo().username,
-          environment.keychain
-        ])
-      }
-    }
   }
 }
