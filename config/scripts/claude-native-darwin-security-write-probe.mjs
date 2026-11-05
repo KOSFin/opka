@@ -94,7 +94,8 @@ export async function probeDarwinSecurityWrites({
   keychain,
   env,
   onObservation,
-  onDefaultVerified
+  onDefaultVerified,
+  onDefaultObservation
 }) {
   if (!isDarwinNativeProbeCi()) {
     throw new Error('Security write controls require isolated Darwin CI')
@@ -122,17 +123,43 @@ export async function probeDarwinSecurityWrites({
       terminationObserved
     }
   }
-  const defaultKeychain = await invoke(false, ['default-keychain', '-d', 'user'])
-  let defaultMatched = false
+  let defaultKeychain
   try {
-    defaultMatched =
-      defaultKeychain.code === 0 &&
-      !defaultKeychain.timedOut &&
-      defaultKeychain.terminationObserved &&
-      !defaultKeychain.outputTruncated &&
-      (await realpath(JSON.parse(defaultKeychain.stdout.trim()))) === (await realpath(keychain))
+    defaultKeychain = await invoke(false, ['default-keychain', '-d', 'user'])
+  } catch {
+    onDefaultObservation?.({ invokeRejected: true })
+    throw unverified()
+  }
+  let pathJSONKnown = false
+  let canonicalExists = false
+  let ownedMatch = false
+  try {
+    const path = JSON.parse(defaultKeychain.stdout.trim())
+    pathJSONKnown = typeof path === 'string' && isAbsolute(path)
+    if (pathJSONKnown) {
+      const actual = await realpath(path)
+      const expected = await realpath(keychain)
+      canonicalExists = true
+      ownedMatch = actual === expected
+    }
   } catch {}
-  if (!defaultMatched) {
+  onDefaultObservation?.({
+    invokeRejected: false,
+    control: summary(defaultKeychain),
+    outputTruncated: defaultKeychain.outputTruncated === true,
+    pathJSONKnown,
+    canonicalExists,
+    ownedMatch
+  })
+  if (
+    defaultKeychain.code !== 0 ||
+    defaultKeychain.timedOut ||
+    !defaultKeychain.terminationObserved ||
+    defaultKeychain.outputTruncated ||
+    !pathJSONKnown ||
+    !canonicalExists ||
+    !ownedMatch
+  ) {
     throw unverified()
   }
   onDefaultVerified?.()

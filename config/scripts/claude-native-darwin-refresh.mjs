@@ -121,6 +121,7 @@ export async function runDarwinNativeRefreshQualification({
   let securityPreflight = []
   const securityWritePreflight = []
   let securityWriteDefaultMatched = false
+  let securityWriteDefaultControl = null
   const debugPath = join(home, 'native-refresh-debug.log')
   let stage = 'prepare'
   const closeFixture = async () => {
@@ -239,6 +240,9 @@ export async function runDarwinNativeRefreshQualification({
                     keychain: environment.keychain,
                     env,
                     onObservation: (value) => securityWritePreflight.push(value),
+                    onDefaultObservation: (value) => {
+                      securityWriteDefaultControl = value
+                    },
                     onDefaultVerified: () => {
                       securityWriteDefaultMatched = true
                     }
@@ -370,6 +374,7 @@ export async function runDarwinNativeRefreshQualification({
       securityPreflight,
       securityWritePreflight,
       securityWriteDefaultMatched,
+      securityWriteDefaultControl,
       securityDiagnostic: await securityDiagnostic.read(),
       diagnosticOnly: true,
       growth,
@@ -437,6 +442,7 @@ export async function runDarwinNativeRefreshQualification({
           securityPreflight,
           securityWritePreflight,
           securityWriteDefaultMatched,
+          securityWriteDefaultControl,
           securityDiagnostic: await securityDiagnostic
             ?.read()
             .catch(() => ({ unverifiable: true })),
