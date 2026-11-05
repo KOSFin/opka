@@ -1,4 +1,5 @@
 import { build } from 'esbuild'
+import process from 'node:process'
 import { runProcess } from '@orca/process-host'
 import { mkdir, readFile, writeFile, realpath, rm } from 'node:fs/promises'
 import { join, relative, isAbsolute } from 'node:path'
@@ -11,6 +12,7 @@ import {
   summarizeNativeRefreshCommand
 } from './claude-native-refresh-diagnostics.mjs'
 import { createNativeRefreshConnectProxy } from './claude-native-refresh-connect-proxy.mjs'
+import { probeDarwinRefreshSecurity } from './claude-native-darwin-security-probe.mjs'
 import {
   createDarwinRefreshServer,
   EXPIRED_ACCESS,
@@ -210,16 +212,22 @@ export async function runDarwinNativeRefreshQualification({
                 for (const name of fixtureLaunch.envToDelete ?? []) {
                   delete env[name]
                 }
-                securityPreflight = await probeDarwinRefreshSecurity({
-                  sandbox: environment.sandbox,
-                  keychain: environment.keychain,
-                  env
-                })
-                if (
-                  securityPreflight.some(
-                    (value) => value.code !== 44 || value.timedOut || value.outputTruncated
-                  )
-                ) {
+                try {
+                  securityPreflight = await probeDarwinRefreshSecurity({
+                    sandbox: environment.sandbox,
+                    keychain: environment.keychain,
+                    env
+                  })
+                  if (
+                    securityPreflight.some(
+                      (value) => value.code !== 44 || value.timedOut || value.outputTruncated
+                    )
+                  ) {
+                    throw new Error(
+                      'Synthetic OS Security lookup preflight refused before native usage'
+                    )
+                  }
+                } catch (preflightError) {
                   options.onNotStarted?.()
                   try {
                     await readFile(join(writer, 'writer-owner.json'))
@@ -230,9 +238,7 @@ export async function runDarwinNativeRefreshQualification({
                     }
                   }
                   cleanupVerified = true
-                  throw new Error(
-                    'Synthetic OS Security lookup preflight refused before native usage'
-                  )
+                  throw preflightError
                 }
                 stage = 'native-refresh'
               }
