@@ -186,3 +186,130 @@ describe('valid comparison versus full fallback', () => {
     }
   })
 })
+
+function followupProof() {
+  const names = [
+    'Types and changed-code quality',
+    ...[1, 2, 3, 4].map((index) => `Fork regression tests (${index}/4)`),
+    'Desktop assets (macos-15)',
+    'Desktop assets (ubuntu-24.04)',
+    'Desktop assets (windows-2022)',
+    'Hidden Electron journeys and Swift',
+    'Beta installer qualification / Installer qualification passed',
+    'Android component acceptance / Opka Android installer confirmation and retained state'
+  ]
+  return {
+    schemaVersion: 1,
+    kind: 'test-only-followup',
+    repository: 'KOSFin/opka',
+    prNumber: 16,
+    head: 'a'.repeat(40),
+    sourceHead: 'c'.repeat(40),
+    sourceTree: 'd'.repeat(40),
+    base: 'b'.repeat(40),
+    runId: 17,
+    attempt: 2,
+    reusedLanes: ['desktop', 'electron', 'installers', 'android'],
+    paths: ['config/scripts/mobile-web-app-project-work-fixtures.mjs'],
+    jobs: names.map((name, index) => ({
+      id: index + 1,
+      name,
+      runId: 17,
+      head: 'b'.repeat(40),
+      status: 'completed',
+      conclusion: 'success'
+    }))
+  }
+}
+
+function followupScope(proof = followupProof()) {
+  return {
+    ...classifyCiPaths(proof.paths),
+    ...Object.fromEntries(proof.reusedLanes.map((lane) => [lane, false])),
+    reused: false,
+    head: proof.head,
+    tree: proof.sourceTree,
+    base: proof.base,
+    followupProof: proof
+  }
+}
+
+describe('verified test-only follow-up qualification', () => {
+  it('keeps current static and regression checks mandatory and reused platform jobs skipped', () => {
+    const scope = followupScope()
+    expect(() => evaluateCiResults(scope, results(scope))).not.toThrow()
+    for (const lane of ['static', 'regression']) {
+      for (const result of ['failure', 'cancelled', 'skipped']) {
+        expect(() => evaluateCiResults(scope, { ...results(scope), [lane]: { result } })).toThrow()
+      }
+      expect(() => evaluateCiResults({ ...scope, [lane]: false }, results(scope))).toThrow()
+    }
+    for (const lane of scope.followupProof.reusedLanes) {
+      expect(() =>
+        evaluateCiResults(scope, { ...results(scope), [lane]: { result: 'success' } })
+      ).toThrow()
+    }
+  })
+
+  it('rejects incomplete, stale or broadened component evidence', () => {
+    const scope = followupScope()
+    for (const altered of [
+      { ...scope, tree: 'e'.repeat(40) },
+      { ...scope, head: 'e'.repeat(40) },
+      { ...scope, base: 'e'.repeat(40) },
+      { ...scope, reused: true },
+      followupScope({ ...followupProof(), jobs: [] }),
+      followupScope({ ...followupProof(), paths: ['src/main/runtime/x.ts'] }),
+      followupScope({ ...followupProof(), reusedLanes: ['static', 'regression'] })
+    ]) {
+      expect(() => evaluateCiResults(altered, results(altered))).toThrow()
+    }
+  })
+
+  it('uses the verified preceding source for incremental tests and rejects a foreign or stale proof', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'opka-ci-followup-scope-'))
+    const event = join(directory, 'event.json')
+    writeFileSync(event, JSON.stringify({ number: 16 }))
+    const git = vi.mocked(runProcessSync)
+    git.mockImplementation(({ args }) => ({
+      code: 0,
+      stdout:
+        args[0] === 'diff'
+          ? 'src/main/runtime/x.ts\0'
+          : args[1]?.endsWith('^{tree}')
+            ? 'd'.repeat(40)
+            : 'a'.repeat(40),
+      stderr: '',
+      signal: null,
+      timedOut: false
+    }))
+    const env = {
+      GITHUB_EVENT_PATH: event,
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_REPOSITORY: 'KOSFin/opka'
+    }
+    try {
+      const proof = followupProof()
+      const scope = await detectCiScope(env, async () => proof)
+      expect(scope.base).toBe(proof.base)
+      expect(scope.comparison_valid).toBe(true)
+      expect(scope.paths).toEqual(proof.paths)
+      expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static', 'regression'])
+      expect(() => evaluateCiResults(scope, results(scope))).not.toThrow()
+      for (const invalid of [
+        { ...proof, repository: 'foreign/repo' },
+        { ...proof, prNumber: 42 },
+        { ...proof, head: 'e'.repeat(40) },
+        { ...proof, sourceTree: 'e'.repeat(40) },
+        null
+      ]) {
+        const fallback = await detectCiScope(env, async () => invalid)
+        expect(fallback.followupProof).toBeUndefined()
+        expect(CI_LANES.every((lane) => fallback[lane])).toBe(true)
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+      git.mockReset()
+    }
+  })
+})
