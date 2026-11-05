@@ -3,6 +3,7 @@ import { build } from 'esbuild'
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { isDarwinNativeProbeCi } from './claude-native-probe-cli.mjs'
 import { prepareDarwinNativeEnvironment } from './claude-native-darwin-environment.mjs'
 import { redactTranscript } from './pty-transcript-secret-scan.mjs'
@@ -19,7 +20,9 @@ let nativeCleanupVerified = true
 async function checked(program, args, options = {}) {
   const result = await runProcess({ program, args, timeoutMs: 120000, ...options })
   if (result.code !== 0 || result.timedOut || result.outputTruncated) {
-    throw new Error('Isolated native qualification command failed')
+    throw new Error(
+      `Isolated native qualification command failed (${result.code}): ${redactTranscript(result.stderr.slice(-4096)).text}`
+    )
   }
   return result
 }
@@ -71,13 +74,38 @@ try {
     platform: 'node',
     format: 'esm',
     banner: {
-      js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+      js: "import { createRequire as opkaFixtureCreateRequire } from 'node:module'; import {fileURLToPath as opkaFixtureFileURLToPath} from 'node:url'; import {dirname as opkaFixtureDirname} from 'node:path'; const __filename=opkaFixtureFileURLToPath(import.meta.url); const __dirname=opkaFixtureDirname(__filename); const require = opkaFixtureCreateRequire(import.meta.url);"
     },
     external: ['electron'],
     conditions: ['orca-source'],
     logLevel: 'silent'
   })
+  const projection = await import(pathToFileURL(production).href)
+  if (
+    typeof projection.readNativeAccessSnapshot !== 'function' ||
+    typeof projection.claudeKeychainService !== 'function'
+  ) {
+    throw new Error('Production access projection could not be loaded')
+  }
   environment = await prepareDarwinNativeEnvironment(join(root, 'environment'))
+  await checked(
+    '/usr/bin/sandbox-exec',
+    [
+      '-f',
+      environment.sandbox,
+      process.execPath,
+      '--input-type=module',
+      '-e',
+      `import net from 'node:net';
+const server=net.createServer(socket=>socket.end());
+await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)});
+await new Promise((resolve,reject)=>{const socket=net.connect(server.address().port,'127.0.0.1');socket.once('error',reject);socket.once('end',resolve)});
+await new Promise((resolve,reject)=>{const socket=net.connect(443,'203.0.113.1');socket.setTimeout(1000,()=>{socket.destroy();reject(new Error('Egress denial not proven'))});socket.once('error',error=>{socket.destroy();['EPERM','EACCES'].includes(error.code)?resolve():reject(error)});socket.once('connect',()=>{socket.destroy();reject(new Error('Egress allowed'))})});
+await new Promise(resolve=>server.close(resolve));
+console.log('Loopback allowed; external connect denied by sandbox');`
+    ],
+    { timeoutMs: 5000 }
+  )
   for (const mode of ['absent', 'present']) {
     const temporary = join(root, `temporary-${mode}`)
     await mkdir(temporary, { mode: 0o700 })
