@@ -137,14 +137,17 @@ async function runCapture(options, command) {
   const outPath = options.out ? resolve(options.out) : join(FIXTURE_DIR, `${name}.txt`)
   mkdirSync(dirname(outPath), { recursive: true })
 
-  const pty = await import('node-pty').catch((error) => {
-    console.error(
-      `node-pty failed to load. Build it for plain node first:
+  const nativeModule = process.env.ORCA_CAPTURE_NODE_PTY_MODULE
+  const pty = await import(nativeModule ? pathToFileURL(nativeModule).href : 'node-pty').catch(
+    (error) => {
+      console.error(
+        `node-pty failed to load. Build it for plain node first:
   node config/scripts/ensure-native-runtime.mjs --runtime=node
 ${String(error)}`
-    )
-    return null
-  })
+      )
+      return null
+    }
+  )
   if (pty === null) {
     return 2
   }
@@ -160,6 +163,13 @@ ${String(error)}`
     env: { ...process.env, TERM: 'xterm-256color' },
     encoding: null
   })
+  const processReceipt = process.env.ORCA_CAPTURE_PROCESS_RECEIPT
+  if (processReceipt) {
+    writeFileSync(processReceipt, JSON.stringify({ pid: term.pid, exited: false }), {
+      mode: 0o600,
+      flag: 'wx'
+    })
+  }
 
   const sink = createWriteStream(outPath)
   let recording = true
@@ -205,7 +215,14 @@ ${String(error)}`
   const durationTimer = options.duration === null ? null : setTimeout(stop, options.duration * 1000)
 
   const exitCode = await new Promise((resolveExit) => {
-    term.onExit(({ exitCode: code }) => resolveExit(code ?? 0))
+    term.onExit(({ exitCode: code }) => {
+      if (processReceipt) {
+        writeFileSync(processReceipt, JSON.stringify({ pid: term.pid, exited: true }), {
+          mode: 0o600
+        })
+      }
+      resolveExit(code ?? 0)
+    })
   })
   for (const timer of sendTimers) {
     clearTimeout(timer)
