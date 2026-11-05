@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, writeFile, rename, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rename, readFile, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve, isAbsolute } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -53,7 +53,7 @@ let swapped = false
 if (!cli || !isAbsolute(cli)) {
   throw new Error('An explicit pinned native Claude CLI file is required')
 }
-const root = await mkdtemp(join(tmpdir(), 'opka-claude-oauth-'))
+const root = await realpath(await mkdtemp(join(tmpdir(), 'opka-claude-oauth-')))
 const config = join(root, 'config')
 const cwd = join(root, 'project')
 await Promise.all([mkdir(config), mkdir(cwd)])
