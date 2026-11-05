@@ -12,6 +12,7 @@ import { OrchestrationDb } from '../../orchestration/db'
 import type { RpcFailure, RpcRequest, RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { ORCHESTRATION_METHODS } from './orchestration'
+import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
 
 const COORDINATOR_HANDLE = 'term_codes_coordinator'
 const COORDINATOR_PANE = 'tab_coord:cccccccc-cccc-4ccc-8ccc-cccccccccccc'
@@ -191,6 +192,25 @@ function expectFailure(response: RpcResponse): RpcFailure {
 function createHarness(): Harness {
   const db = new OrchestrationDb(':memory:')
   const runtime = new OrcaRuntimeService()
+  vi.spyOn(runtime, 'requireStore').mockReturnValue({
+    getRepos: () => [],
+    getRepo: () => undefined,
+    addRepo: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    updateRepo: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    getAllWorktreeMeta: () => ({}),
+    getWorktreeMeta: () => undefined,
+    setWorktreeMeta: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    removeWorktreeMeta: () => {},
+    getGitHubCache: () => ({ pr: {}, issue: {} }),
+    getSettings: () =>
+      createGlobalSettingsFixture({ accountPools: [], experimentalNativeChat: false })
+  })
   runtime.setOrchestrationDb(db)
   vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) =>
     handle === COORDINATOR_HANDLE ? COORDINATOR_PANE : handle === WORKER_HANDLE ? WORKER_PANE : null

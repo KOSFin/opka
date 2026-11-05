@@ -2,6 +2,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { ALL_RPC_METHODS } from './rpc/methods'
+import { denyRpcMethodForCaller } from './rpc/rpc-caller-scope'
+import { MOBILE_RPC_METHOD_ROUTES } from './runtime-rpc/runtime-rpc-mobile-method-routing'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc/runtime-rpc-mobile-method-allowlist'
 
 const MOBILE_DYNAMIC_RPC_METHODS = [
@@ -119,6 +121,16 @@ function registeredRuntimeMethods(): Set<string> {
 }
 
 describe('mobile RPC allowlist', () => {
+  it('admits sign-in workspace reads on the selected execution host with workspace permission', () => {
+    const method = ALL_RPC_METHODS.find((entry) => entry.name === 'worktree.list')
+    expect(method?.permission).toBe('workspace')
+    expect(MOBILE_RPC_METHOD_ROUTES.get('worktree.list')).toBe('execution-host')
+    expect(denyRpcMethodForCaller({ kind: 'mobile' }, 'worktree.list', 'workspace')).toBeNull()
+    expect(
+      denyRpcMethodForCaller({ kind: 'mobile', delegated: true }, 'worktree.list', 'workspace')
+    ).toBeNull()
+  })
+
   it('grants Jira reads while keeping credentials, writes, and desktop site selection private', () => {
     const allowed = mobileRpcAllowlist()
     for (const method of [

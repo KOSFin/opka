@@ -237,7 +237,25 @@ describe('registerPtyHandlers', () => {
       expectedToken: null
     }
   ])('binds only $label from renderer pty:spawn to runtime authority', async (testCase) => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService({
+      getSettings: () => ({
+        workspaceDir: '/tmp/workspaces',
+        nestWorkspaces: false,
+        refreshLocalBaseRefOnWorktreeCreate: false,
+        branchPrefix: 'none',
+        branchPrefixCustom: '',
+        accountPools: []
+      }),
+      getRepo: vi.fn(),
+      getRepos: () => [],
+      addRepo: vi.fn(),
+      updateRepo: vi.fn(),
+      getAllWorktreeMeta: () => ({}),
+      getWorktreeMeta: vi.fn(),
+      setWorktreeMeta: vi.fn(),
+      removeWorktreeMeta: vi.fn(),
+      getGitHubCache: vi.fn()
+    })
     registerPtyHandlers(mainWindow as never, runtime)
     const worktreeId = 'repo-1::/tmp/renderer-authority'
     const tabId = 'tab-renderer-authority'

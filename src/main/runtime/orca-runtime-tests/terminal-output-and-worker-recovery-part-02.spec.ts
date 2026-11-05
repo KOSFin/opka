@@ -466,6 +466,7 @@ describe('OrcaRuntimeService', () => {
       }
     )
     runtime.setOrchestrationDb({
+      releaseAccountPoolPtyGeneration: vi.fn(),
       getActiveDispatchForTerminal: () => undefined,
       listLegacyWorkerTerminalRecoveryRows: () => [
         {

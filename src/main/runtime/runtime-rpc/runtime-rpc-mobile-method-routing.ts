@@ -223,6 +223,7 @@ export const EXECUTION_HOST_METHODS = [
   'worktree.activate',
   'worktree.create',
   'worktree.forceDeleteBranch',
+  'worktree.list',
   'worktree.listRetiredNames',
   'worktree.prefetchCreateBase',
   'worktree.ps',
