@@ -2,7 +2,7 @@ import { build } from 'esbuild'
 import process from 'node:process'
 import { runProcess } from '@orca/process-host'
 import { mkdir, readFile, writeFile, realpath, rm } from 'node:fs/promises'
-import { join, relative, isAbsolute } from 'node:path'
+import { join, relative, isAbsolute, delimiter } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { userInfo } from 'node:os'
@@ -13,6 +13,7 @@ import {
 } from './claude-native-refresh-diagnostics.mjs'
 import { createNativeRefreshConnectProxy } from './claude-native-refresh-connect-proxy.mjs'
 import { probeDarwinRefreshSecurity } from './claude-native-darwin-security-probe.mjs'
+import { prepareDarwinSecurityDiagnostic } from './claude-native-darwin-security-shim.mjs'
 import {
   createDarwinRefreshServer,
   EXPIRED_ACCESS,
@@ -108,6 +109,7 @@ export async function runDarwinNativeRefreshQualification({
   }
   let proxy
   let server
+  let securityDiagnostic
   let cleanupVerified = true
   const groups = []
   const growth = []
@@ -130,6 +132,7 @@ export async function runDarwinNativeRefreshQualification({
     }
   }
   try {
+    securityDiagnostic = await prepareDarwinSecurityDiagnostic(canonical)
     server = await createDarwinRefreshServer(canonical)
     proxy = await createNativeRefreshConnectProxy(server.port)
     for (let index = 0; index < 5; index++) {
@@ -201,7 +204,7 @@ export async function runDarwinNativeRefreshQualification({
                 envToDelete: launch.envToDelete
               }
               const inheritedEnv = {
-                PATH: process.env.PATH,
+                PATH: [securityDiagnostic.directory, process.env.PATH ?? ''].join(delimiter),
                 USER: userInfo().username,
                 LANG: 'en_US.UTF-8',
                 TMPDIR: home
@@ -341,6 +344,8 @@ export async function runDarwinNativeRefreshQualification({
       debugObservations,
       commandObservations,
       securityPreflight,
+      securityDiagnostic: await securityDiagnostic.read(),
+      diagnosticOnly: true,
       growth,
       accessOnlyProjection: true,
       isolatedKeychain: true,
@@ -404,6 +409,10 @@ export async function runDarwinNativeRefreshQualification({
           debugObservations,
           commandObservations,
           securityPreflight,
+          securityDiagnostic: await securityDiagnostic
+            ?.read()
+            .catch(() => ({ unverifiable: true })),
+          diagnosticOnly: true,
           profileObservation,
           completed: groups.length,
           requests: server?.counts ?? null,
