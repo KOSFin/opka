@@ -70,7 +70,9 @@ export abstract class RateLimitServiceAccountRefresh extends RateLimitServiceIna
     // dropped their snapshot and left the switcher's inline bars empty.
     if (
       outgoingAccountId &&
-      (this.state.codex?.session || this.state.codex?.weekly) &&
+      (this.state.codex?.session ||
+        this.state.codex?.weekly ||
+        this.state.codex?.usageMetadata?.confirmedProviderFailure) &&
       this.isSameCodexTarget(this.codexFetchTarget, nextTarget) &&
       (!this.state.codex?.usageMetadata?.authProvenance ||
         usageMatchesAccount(

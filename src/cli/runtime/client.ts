@@ -57,9 +57,7 @@ export class RuntimeClient {
   private readonly originalArgs: readonly string[] | undefined
   private readonly remoteCompat: RemoteRuntimeCompatGate
   private orchestrationContractCheck: Promise<void> | null = null
-  private readonly orchestrationCompatibility = createOrchestrationCompatibilityEnvelope(
-    process.env
-  )
+  private readonly compatibility = createOrchestrationCompatibilityEnvelope(process.env)
   private readonly runtimeSourceFence: RuntimeSourceFence
 
   // Why: browser commands trigger first-time session init (agent-browser connect +
@@ -92,6 +90,7 @@ export class RuntimeClient {
     params?: unknown,
     options?: {
       timeoutMs?: number
+      signal?: AbortSignal
       legacyTerminalPrompt?: true
       terminalPromptPreflight?: { runtimeId: string | null }
     } & RuntimeOrchestrationEnvelope
@@ -133,11 +132,7 @@ export class RuntimeClient {
         ? ORCHESTRATION_CONTRACT_VERSION
         : undefined,
       orchestrationRequestId,
-      ...orchestrationCompatibilityForMethod(
-        method,
-        this.orchestrationCompatibility,
-        orchestrationRequestId
-      )
+      ...orchestrationCompatibilityForMethod(method, this.compatibility, orchestrationRequestId)
     }
     if (this.remote) {
       const transport = await loadWebSocketTransport()
@@ -175,7 +170,8 @@ export class RuntimeClient {
         params,
         effectiveTimeoutMs,
         envelope,
-        expectedRuntimeSource
+        expectedRuntimeSource,
+        options?.signal ? { onFrame: () => {}, signal: options.signal } : undefined
       )
     } catch (error) {
       throw recover(error, metadata.runtimeId ?? null)
@@ -186,11 +182,7 @@ export class RuntimeClient {
     return response
   }
 
-  // Why: centralises the per-method timeout policy. Long-poll inner waiter
-  // budgets live in `params.timeoutMs`; widen the client-side socket timeout
-  // to `timeoutMs + grace` so it doesn't fire before the server has a chance
-  // to resolve. Without this, a 5 min wait would still die at the 60 s default.
-  // See design doc §3.1.
+  // Long-poll transport deadlines include grace beyond the host waiter budget.
   private resolveMethodTimeoutMs(method: string, params?: unknown): number {
     if (method === 'orchestration.workerStart') {
       const requestedValue = getTimeoutMsParam(params)

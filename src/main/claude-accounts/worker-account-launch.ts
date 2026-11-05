@@ -1,6 +1,7 @@
 import { applyClaudeEnvPatch, CLAUDE_AUTH_ENV_VARS } from './environment'
 import { preparePinnedClaudeAccountLaunch } from './pinned-account-launch'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { NATIVE_CLI_ACCOUNT_PIN_ENV } from '../../shared/native-cli-account-launch'
 export const WORKER_CLAUDE_ACCOUNT_ENV = 'ORCA_WORKER_CLAUDE_ACCOUNT_ID'
 export const PINNED_CLAUDE_AUTH_DELETIONS = [
   ...CLAUDE_AUTH_ENV_VARS,
@@ -25,5 +26,6 @@ export async function prepareWorkerClaudeLaunchEnv(
   })
   const result = applyClaudeEnvPatch({ ...env }, prepared.envPatch, { stripAuthEnv: true })
   delete result[WORKER_CLAUDE_ACCOUNT_ENV]
+  result[NATIVE_CLI_ACCOUNT_PIN_ENV] = `claude:${accountId}`
   return result
 }

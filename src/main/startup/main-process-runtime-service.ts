@@ -44,6 +44,9 @@ import {
 import { startAgentStateRulesLiveUpdates } from '../runtime/agent-state-rules/agent-state-rules-live-update'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { configureNativeCodexRouting } from '../runtime/configure-native-codex-routing'
+import { configureNativeClaudeRouting } from '../runtime/configure-native-claude-routing'
+import { configureNativeCliUserIntegration } from '../runtime/configure-native-cli-user-integration'
 
 export function getDesktopWindowStatus(): RuntimeDesktopWindowStatus {
   const activation = state.desktopActivationGate
@@ -185,6 +188,24 @@ export function configureRuntimeServices(runtime: OrcaRuntimeService): void {
   )
   runtime.setSkillCloudService(new SkillCloudService(app.getPath('userData')))
   runtime.setAccountServices({ claudeAccounts, codexAccounts, rateLimits })
+  configureNativeCliUserIntegration(runtime, { store, dataRoot: getCanonicalUserDataPath() })
+  configureNativeClaudeRouting(runtime, {
+    store,
+    claudeAccounts,
+    dataRoot: getCanonicalUserDataPath()
+  })
+  configureNativeCodexRouting(runtime, {
+    resolveSourceHome: () => {
+      if (!state.codexRuntimeHome) {
+        throw new Error('Codex runtime home service is not initialized')
+      }
+      return state.codexRuntimeHome.resolveHostCodexHomePathForLaunchReadOnly()
+    },
+    store,
+    codexAccounts,
+    rateLimits,
+    dataRoot: getCanonicalUserDataPath()
+  })
   installWslOrcadAccountShim(store)
   runtime.setCommitMessageAgentEnvironmentResolvers({
     // Why: Codex hooks/auth live in Orca's managed runtime home even for the default path, so every launch must resolve CODEX_HOME via runtime-home.

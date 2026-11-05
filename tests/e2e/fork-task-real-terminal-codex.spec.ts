@@ -179,6 +179,8 @@ test(`${scripted ? 'scripted local binary contract' : 'one real Codex exec'} tak
       })
     )
     await rpc(page, 'projectTask.approve', { ...task, worktree, expectedExecutionHostId: 'local' })
+    // A completed task RPC proves boot is ready before restoring the sandbox's Node launcher.
+    await prepareForkProfileNodeCli(session.userDataDir)
     const board = runProcessSync({
       program: '/usr/bin/sandbox-exec',
       args: ['-f', profile, cli, 'project-task', 'board', '--json'],
@@ -187,7 +189,16 @@ test(`${scripted ? 'scripted local binary contract' : 'one real Codex exec'} tak
       maxOutputBytes: 16384,
       timeoutMs: 10000
     })
-    expect(board.code).toBe(0)
+    expect(
+      board.code,
+      JSON.stringify({
+        signal: board.signal,
+        timedOut: board.timedOut,
+        outputTruncated: board.outputTruncated,
+        stdoutBytes: board.stdout.length,
+        stderrBytes: board.stderr.length
+      })
+    ).toBe(0)
     expect(board.stdout).toContain('Исправить сложение')
     await probeForkCodexStartup(wrapper, root, probeEnv, 'opka-tasks')
     const deniedWrite = runProcessSync({

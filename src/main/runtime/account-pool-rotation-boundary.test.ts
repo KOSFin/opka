@@ -55,6 +55,10 @@ describe('account pool automatic rotation boundary', () => {
   it('admits a fresh completed owning-host turn with settled inventory', () => {
     expect(accountPoolRotationBoundary(fixture())).toBe(2000)
   })
+  it('preserves a draft already typed after completion before rotation begins', () => {
+    expect(accountPoolRotationBoundary({ ...fixture(), lastInputAt: 2100 })).toBeNull()
+    expect(accountPoolRotationBoundary({ ...fixture(), lastInputAt: 1800 })).toBe(2000)
+  })
   it.each(['isReplay', 'restoredUnconfirmed', 'sessionBoundary', 'interrupted'] as const)(
     'rejects %s',
     (field) => {

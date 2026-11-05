@@ -87,7 +87,33 @@ class NativeActionTargets(unittest.TestCase):
         self.assertIsNotNone(tab)
         self.assertEqual(tab.get('class'), 'android.widget.RadioButton')
         self.assertEqual(tab.get('bounds'), '[44,231][527,304]')
+        self.assertEqual(journey.visible_bounds(root, tab), [44, 231, 527, 304])
         self.assertEqual(tab.get('text'), 'Accounts')
+
+    def test_captured_accounts_tab_behind_header_is_not_a_visible_target(self):
+        fixture = Path(__file__).with_name('fixtures') / 'android-webview-accessibility/accounts-tab-occluded.xml'
+        root = ET.parse(fixture).getroot()
+        tab = journey.actionable_match(root, 'Accounts')
+        self.assertEqual(tab.get('bounds'), '[44,141][527,215]')
+        self.assertIsNone(journey.visible_bounds(root, tab, for_tap=True))
+
+    def test_return_to_accounts_reveals_upward_content_before_accepting_tab(self):
+        directory = Path(__file__).with_name('fixtures') / 'android-webview-accessibility'
+        screens = [ET.parse(directory / name).getroot() for name in
+                   ['accounts-tab-occluded.xml', 'accounts-pools.xml']]
+        observed, gestures, clock = [0], [], [0]
+        def snapshot():
+            root = screens[min(observed[0], 1)]
+            observed[0] += 1
+            return root
+        def pause(seconds):
+            clock[0] += seconds
+        tab = journey.find_visible(snapshot, lambda root: journey.actionable_match(root, 'Accounts'),
+                                   'Accounts', 2, lambda *gesture: gestures.append(gesture),
+                                   now=lambda: clock[0], pause=pause, reveal_forward=False, actionable=True)
+        self.assertEqual(tab.get('bounds'), '[44,231][527,304]')
+        self.assertEqual(len(gestures), 1)
+        self.assertLess(int(gestures[0][1]), int(gestures[0][3]))
 
     def test_header_title_does_not_hide_clickable_accounts_tab(self):
         root = screen('Accounts')

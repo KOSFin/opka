@@ -11,6 +11,18 @@ export function resolveWorkerCodexAccountHome(
   accounts: readonly CodexManagedAccount[] | undefined,
   accountId: string
 ): string {
+  const home = resolveWorkerCodexHistoryHome(accounts, accountId)
+  if (readStoredCodexCredentialState(join(home, 'auth.json')) !== 'present') {
+    throw new Error('The requested Codex account needs sign-in; no account was substituted')
+  }
+  return home
+}
+
+/** History recovery does not require the previous account to remain signed in. */
+export function resolveWorkerCodexHistoryHome(
+  accounts: readonly CodexManagedAccount[] | undefined,
+  accountId: string
+): string {
   const account = accounts?.find((candidate) => candidate.id === accountId)
   if (!account || account.managedHomeRuntime === 'wsl') {
     throw new Error('The requested Codex account is not registered on this execution host')
@@ -25,9 +37,6 @@ export function resolveWorkerCodexAccountHome(
     throw new Error(
       'The requested Codex account home is unavailable or untrusted; no account was substituted'
     )
-  }
-  if (readStoredCodexCredentialState(join(account.managedHomePath, 'auth.json')) !== 'present') {
-    throw new Error('The requested Codex account needs sign-in; no account was substituted')
   }
   return account.managedHomePath
 }

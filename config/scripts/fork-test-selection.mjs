@@ -1,9 +1,10 @@
-import { globSync, mkdirSync, writeFileSync } from 'node:fs'
+import { globSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
 import { collectUnitDependencyGraph } from './ci-unit-dependency-graph.mjs'
 import { selectUnitFiles } from './ci-unit-selection.mjs'
 import { discoverUnitFiles } from './ci-unit-files.mjs'
+import ts from 'typescript-api'
 
 export function parseForkSelectionArgs(args) {
   if (args[0] === '--') {
@@ -54,23 +55,36 @@ export function forkGraphFailureReason(error) {
   return 'Dependency graph unavailable (UnknownError)'
 }
 
-export function splitForkTestLanes(files) {
-  return {
-    root: files.filter((file) => !file.startsWith('mobile/') && !file.endsWith('-render.test.mjs')),
-    mobile: files.filter((file) => file.startsWith('mobile/')),
-    render: files.filter((file) => !file.startsWith('mobile/') && file.endsWith('-render.test.mjs'))
+export function splitForkTestLanes(files, readSource = (file) => readFileSync(file, 'utf8')) {
+  const lanes = { root: [], mobile: [], render: [], node: [] }
+  for (const file of new Set(files)) {
+    const imports = file.endsWith('.mjs')
+      ? ts.preProcessFile(readSource(file), true, true).importedFiles.map((entry) => entry.fileName)
+      : []
+    if (imports.includes('node:test')) {
+      if (imports.includes('vitest')) {
+        throw new Error(`A test cannot mix Node and Vitest runners: ${file}`)
+      }
+      lanes.node.push(file)
+    } else if (file.startsWith('mobile/')) {
+      lanes.mobile.push(file)
+    } else if (file.endsWith('-render.test.mjs')) {
+      lanes.render.push(file)
+    } else {
+      lanes.root.push(file)
+    }
   }
+  return lanes
 }
 
-export function prepareForkTestSelection(
-  { base, head },
-  root = process.cwd(),
-  baselineFilters = []
-) {
-  const checkout = runProcessSync({ program: 'git', args: ['rev-parse', 'HEAD'], cwd: root })
-  if (checkout.code !== 0 || checkout.stdout.trim() !== head) {
-    throw new Error('Changed test plan HEAD must match the tested checkout')
-  }
+function saveForkTestSelection(plan, root) {
+  const directory = join(root, 'out', 'opka-ci')
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(join(directory, 'fork-test-selection.json'), JSON.stringify(plan, null, 2))
+  return plan
+}
+
+export function prepareForkTestSelection(request, root = process.cwd(), baselineFilters = []) {
   const files = [
     ...discoverUnitFiles(root),
     ...globSync(
@@ -83,6 +97,27 @@ export function prepareForkTestSelection(
   )
   if (!fallbackFiles.length) {
     throw new Error('Approved fork fallback inventory is empty')
+  }
+  const split = (selected) =>
+    splitForkTestLanes(selected, (file) => readFileSync(join(root, file), 'utf8'))
+  if (!request) {
+    return saveForkTestSelection(
+      {
+        schema: 1,
+        discoveredCount: files.length,
+        fallbackCount: fallbackFiles.length,
+        files: fallbackFiles,
+        full: true,
+        reason: 'Approved fork qualification',
+        lanes: split(fallbackFiles)
+      },
+      root
+    )
+  }
+  const { base, head } = request
+  const checkout = runProcessSync({ program: 'git', args: ['rev-parse', 'HEAD'], cwd: root })
+  if (checkout.code !== 0 || checkout.stdout.trim() !== head) {
+    throw new Error('Changed test plan HEAD must match the tested checkout')
   }
   const diff = runProcessSync({
     program: 'git',
@@ -116,10 +151,7 @@ export function prepareForkTestSelection(
     head,
     changed,
     ...selection,
-    lanes: splitForkTestLanes(selection.files)
+    lanes: split(selection.files)
   }
-  const directory = join(root, 'out', 'opka-ci')
-  mkdirSync(directory, { recursive: true })
-  writeFileSync(join(directory, 'fork-test-selection.json'), JSON.stringify(plan, null, 2))
-  return plan
+  return saveForkTestSelection(plan, root)
 }

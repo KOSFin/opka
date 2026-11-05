@@ -39,3 +39,11 @@ export const AccountPoolUpdateParams = z.object({
   expectedRevision: z.number().int().nonnegative()
 })
 export const ACCOUNT_POOL_CAPABILITY = 'orchestration.account-pools.v1' as const
+
+/** One identity rule for native profiles, pool capacity and verified routing failure evidence. */
+export function codexAccountQuotaIdentity(account: {
+  providerAccountId?: string | null
+  email: string
+}): string {
+  return account.providerAccountId ?? account.email
+}

@@ -63,8 +63,11 @@ export abstract class AgentHookServerPersistence extends AgentHookServerHydratio
         : this.hydratedLaunchTokenHashByPaneKey.get(paneKey)
       // `payload.mainAgent` rides inside the payload; the legacy `claudeLeadBoundaryChildOnly` flag it
       // replaced is read at hydrate and never written again.
-      const { claudeTaskWakeupPending: _pendingWakeup, ...persistedStatus } =
-        persistedPayload.payload
+      const {
+        claudeTaskWakeupPending: _pendingWakeup,
+        claudeNativeBoundaryInventory: _nativeInventory,
+        ...persistedStatus
+      } = persistedPayload.payload
       entries[paneKey] = {
         ...persistedPayload,
         payload: persistedStatus,

@@ -226,7 +226,7 @@ export function forgetStoppedClaudeShellTask(
   }
 }
 
-function claudeOwedTaskNotificationKinds(tasks: ClaudeLaunchedBackgroundTasks | undefined): {
+export function claudeOwedTaskNotificationKinds(tasks: ClaudeLaunchedBackgroundTasks | undefined): {
   agent: boolean
   shell: boolean
 } {

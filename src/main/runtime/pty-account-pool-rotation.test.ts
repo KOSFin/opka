@@ -1,9 +1,21 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { CodexManagedAccount } from '../../shared/managed-account-types'
 import type { OrcaRuntimeService } from './orca-runtime'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 import type { AccountPoolPolicy } from '../../shared/account-pool-policy'
 import { PtyAccountPoolRotation } from './pty-account-pool-rotation'
-const hooks = vi.hoisted(() => ({ snapshot: vi.fn(), resume: vi.fn(), policy: vi.fn() }))
+const hooks = vi.hoisted(() => ({
+  snapshot: vi.fn(),
+  resume: vi.fn(),
+  policy: vi.fn(),
+  userData: ''
+}))
+vi.mock('../../shared/app-environment', () => ({
+  getAppEnvironment: () => ({ getPath: () => hooks.userData })
+}))
 vi.mock('../agent-hooks/server', () => ({
   agentHookServer: { getCanonicalStatusSnapshot: hooks.snapshot }
 }))
@@ -22,9 +34,26 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(10_000)
   vi.resetAllMocks()
+  hooks.userData = realpathSync(mkdtempSync(join(tmpdir(), 'orca-pool-rotation-')))
 })
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  rmSync(hooks.userData, { recursive: true, force: true })
+})
 function fixture() {
+  const sourceHome = join(hooks.userData, 'codex-accounts', 'a', 'home')
+  mkdirSync(sourceHome, { recursive: true })
+  writeFileSync(join(sourceHome, '.orca-managed-home'), 'a')
+  const accounts: CodexManagedAccount[] = [
+    {
+      id: 'a',
+      email: 'synthetic@example.invalid',
+      managedHomePath: sourceHome,
+      createdAt: 0,
+      updatedAt: 0,
+      lastAuthenticatedAt: 0
+    }
+  ]
   const policy: AccountPoolPolicy = {
     id: 'pool',
     provider: 'codex',
@@ -109,12 +138,16 @@ function fixture() {
       readLastInputAt: () => lastInputAt
     },
     requireStore: () => ({
-      getSettings: () => ({ agentCmdOverrides: {}, accountPools: [policy] })
+      getSettings: () => ({
+        agentCmdOverrides: {},
+        accountPools: [policy],
+        codexManagedAccounts: accounts
+      })
     }),
-    getWorkerCodexAccountEnv: (id: string) => ({
+    getWorkerCodexAccountEnv: vi.fn((id: string) => ({
       CODEX_HOME: `/synthetic/${id}`,
       ORCA_WORKER_CODEX_ACCOUNT_ID: id
-    }),
+    })),
     stopExactTerminalsForWorktree: vi.fn(async (_workspace, _ids, options) => {
       options.beforeStop()
       return { postStopVerified: true }
@@ -139,8 +172,10 @@ function fixture() {
     db,
     row,
     policy,
-    input: () => {
-      lastInputAt++
+    accounts,
+    sourceHome,
+    input: (at = lastInputAt + 1) => {
+      lastInputAt = at
     }
   }
 }
@@ -184,6 +219,52 @@ it('keeps the previous process when history preparation fails', async () => {
   expect(f.db.releaseAccountPoolAssignment).toHaveBeenCalledWith('next')
   expect(f.db.releaseAccountPoolAssignment).not.toHaveBeenCalledWith('previous')
 })
+it('recovers trusted source history without requiring the previous account login', async () => {
+  const f = fixture()
+  f.host.getWorkerCodexAccountEnv.mockImplementation((id) => {
+    if (id === 'a') {
+      throw new Error('Previous account needs sign-in')
+    }
+    return { CODEX_HOME: '/synthetic/b', ORCA_WORKER_CODEX_ACCOUNT_ID: id }
+  })
+  await finish(f)
+  expect(f.host.getWorkerCodexAccountEnv).toHaveBeenCalledExactlyOnceWith('b')
+  expect(hooks.resume).toHaveBeenCalledWith(expect.objectContaining({ sourceHome: f.sourceHome }))
+  expect(f.host.createTerminal).toHaveBeenCalledOnce()
+})
+it.each(['unregistered', 'wsl', 'deleted-home', 'wrong-owner'] as const)(
+  'refuses %s source history before stopping the previous process',
+  async (reason) => {
+    const f = fixture()
+    if (reason === 'unregistered') {
+      f.accounts.splice(0)
+    }
+    if (reason === 'wsl') {
+      f.accounts[0]!.managedHomeRuntime = 'wsl'
+    }
+    if (reason === 'deleted-home') {
+      rmSync(f.sourceHome, { recursive: true })
+    }
+    if (reason === 'wrong-owner') {
+      writeFileSync(join(f.sourceHome, '.orca-managed-home'), 'other')
+    }
+    await finish(f)
+    expect(hooks.resume).not.toHaveBeenCalled()
+    expect(f.host.stopExactTerminalsForWorktree).not.toHaveBeenCalled()
+    expect(f.db.releaseAccountPoolAssignment).toHaveBeenCalledWith('next')
+    expect(f.db.releaseAccountPoolAssignment).not.toHaveBeenCalledWith('previous')
+  }
+)
+it('still requires a ready target account before preparing history or stopping', async () => {
+  const f = fixture()
+  f.host.getWorkerCodexAccountEnv.mockImplementation(() => {
+    throw new Error('Target needs sign-in')
+  })
+  await finish(f)
+  expect(hooks.resume).not.toHaveBeenCalled()
+  expect(f.host.stopExactTerminalsForWorktree).not.toHaveBeenCalled()
+  expect(f.db.releaseAccountPoolAssignment).toHaveBeenCalledWith('next')
+})
 it('cancels before stopping when input arrived during preparation', async () => {
   const f = fixture()
   hooks.resume.mockImplementation(async (args) => {
@@ -193,6 +274,13 @@ it('cancels before stopping when input arrived during preparation', async () => 
   await finish(f)
   expect(f.host.stopExactTerminalsForWorktree).not.toHaveBeenCalled()
   expect(f.host.createTerminal).not.toHaveBeenCalled()
+})
+it('keeps a draft typed after Stop before the quiet timer fired', async () => {
+  const f = fixture()
+  f.input(9500)
+  await finish(f)
+  expect(f.host.stopExactTerminalsForWorktree).not.toHaveBeenCalled()
+  expect(f.db.acquireAccountPoolAssignment).not.toHaveBeenCalled()
 })
 it('retains an ambiguous replacement allocation and never resubmits the prompt', async () => {
   const f = fixture()

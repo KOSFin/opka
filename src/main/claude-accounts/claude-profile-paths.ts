@@ -146,7 +146,7 @@ export function prepareClaudeProfileDirectory(
   }
 }
 
-function assertClaudeProfileDescendant(root: string, destination: string): void {
+export function assertClaudeProfileDescendant(root: string, destination: string): void {
   const suffix = relative(resolve(root), resolve(destination))
   if (!suffix || suffix === '..' || suffix.startsWith(`..${sep}`) || isAbsolute(suffix)) {
     throw new ClaudeProfileSurfaceError(

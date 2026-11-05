@@ -11,6 +11,7 @@ import type { StructuredAgentSessionTurnCompletionSubscriber } from './structure
 export function installStructuredAccountRestingRotation(deps: {
   subscribe: (subscriber: StructuredAgentSessionTurnCompletionSubscriber) => () => void
   subscribeState?: (listener: () => void) => void
+  residentSessionIds?: () => Iterable<string>
   readRecord: (sessionId: string) => AgentSessionRecord | null
   readBoundary: (sessionId: string) => NativeAccountRotationBoundary
   shouldRest?: (
@@ -21,7 +22,7 @@ export function installStructuredAccountRestingRotation(deps: {
   stop: (sessionId: string) => Promise<unknown>
   track: (task: Promise<void>) => Promise<void>
   failed: (error: unknown) => void
-}): void {
+}) {
   if (!deps.shouldRest) {
     return
   }
@@ -47,7 +48,13 @@ export function installStructuredAccountRestingRotation(deps: {
             pending.delete(sessionId)
             return
           }
-          if (!boundary.canRest || !(await deps.shouldRest?.(record, boundary))) {
+          if (!boundary.canRest) {
+            return
+          }
+          if (!(await deps.shouldRest?.(record, boundary))) {
+            if (!changedWhileChecking.has(sessionId)) {
+              pending.delete(sessionId)
+            }
             return
           }
           const current = deps.readRecord(sessionId)
@@ -73,6 +80,20 @@ export function installStructuredAccountRestingRotation(deps: {
       })
   }
   deps.subscribeState?.(() => {
+    if (deps.residentSessionIds) {
+      const residents = new Set(deps.residentSessionIds())
+      for (const id of pending.keys()) {
+        if (!residents.has(id)) {
+          pending.delete(id)
+        }
+      }
+      for (const id of residents) {
+        const turn = deps.readBoundary(id).lastCompletedTurn
+        if (turn) {
+          pending.set(id, turn.id)
+        }
+      }
+    }
     for (const id of pending.keys()) {
       check(id)
     }
@@ -84,10 +105,14 @@ export function installStructuredAccountRestingRotation(deps: {
         return
       }
       const { sessionId, turnId } = event.completion
+      if (deps.residentSessionIds && !new Set(deps.residentSessionIds()).has(sessionId)) {
+        return
+      }
       pending.set(sessionId, turnId)
       check(sessionId)
     }
   })
+  return { pendingCountForTests: () => pending.size }
 }
 
 export function installHostAccountRotation(
@@ -100,6 +125,8 @@ export function installHostAccountRotation(
     subscribeState: (listener) => {
       delivery.subscribeStatus({ id: 'account-pool-resting-rotation', emit: listener })
     },
+    residentSessionIds: () =>
+      [...context.sessions].flatMap(([id, session]) => (session.child ? [id] : [])),
     readRecord: context.deps.store.getRecord,
     readBoundary: delivery.readAccountRotationBoundary,
     shouldRest: context.deps.shouldRestForAccountRotation,

@@ -25,10 +25,10 @@ describe('fork CI safety and required checks', () => {
       expect(readFileSync(filter, 'utf8')).toContain('playwright-core')
     }
     const runner = readFileSync('config/scripts/run-fork-tests.mjs', 'utf8')
-    expect(runner).toContain('run(process.execPath, [')
-    expect(runner).toContain('render: MOBILE_RENDER_TEST_FILTERS')
-    expect(runner).toContain('...lanes.render')
-    expect(runner).toContain('results.every(Boolean) ? 0 : 1')
+    expect(runner).toContain('execute(process.execPath, [')
+    expect(runner).toContain('...MOBILE_RENDER_TEST_FILTERS')
+    expect(runner).toContain("for (const lane of ['root', 'mobile', 'render'])")
+    expect(runner).toContain('return results.every(Boolean)')
   })
   it('blocks beta publication until Android confirms a same-signer update', () => {
     const release = parse(readFileSync('.github/workflows/opka-release.yml', 'utf8'))

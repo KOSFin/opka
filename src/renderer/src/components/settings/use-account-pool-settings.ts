@@ -13,6 +13,7 @@ export function useAccountPoolSettings(target: RuntimeClientTarget) {
   const [saved, setSaved] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<{ provider: string; message: string } | null>(null)
   const environmentId = target.kind === 'environment' ? target.environmentId : null
+  const [viewOwner, setViewOwner] = useState(environmentId)
   const ownerRef = useRef({ id: environmentId, revision: 0 })
   if (ownerRef.current.id !== environmentId) {
     ownerRef.current = { id: environmentId, revision: ownerRef.current.revision + 1 }
@@ -25,9 +26,8 @@ export function useAccountPoolSettings(target: RuntimeClientTarget) {
     setError(null)
     setBusy(false)
     const controller = new AbortController()
-    const requestTarget: RuntimeClientTarget = environmentId
-      ? { kind: 'environment', environmentId }
-      : { kind: 'local' }
+    const requestTarget: RuntimeClientTarget =
+      environmentId === null ? { kind: 'local' } : { kind: 'environment', environmentId }
     void callRuntimeRpc<unknown>(requestTarget, 'accountPool.list', undefined, {
       signal: controller.signal
     })
@@ -38,10 +38,12 @@ export function useAccountPoolSettings(target: RuntimeClientTarget) {
         const next = AccountPoolViewSchema.parse(result)
         setView(next)
         setDrafts(accountPoolDrafts(next))
+        setViewOwner(environmentId)
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setError(String(cause instanceof Error ? cause.message : cause))
+          setViewOwner(environmentId)
         }
       })
     return () => controller.abort()
@@ -116,5 +118,16 @@ export function useAccountPoolSettings(target: RuntimeClientTarget) {
       }
     }
   }
-  return { view, drafts, busy, error, saved, saveError, change, refresh, save }
+  const current = viewOwner === environmentId
+  return {
+    view: current ? view : null,
+    drafts: current ? drafts : [],
+    busy: current && busy,
+    error: current ? error : null,
+    saved: current ? saved : null,
+    saveError: current ? saveError : null,
+    change,
+    refresh,
+    save
+  }
 }

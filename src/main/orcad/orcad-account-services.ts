@@ -23,6 +23,10 @@ import { resolveHostCodexSessionSourceHome } from '../codex/codex-session-source
 import { resolveHostAgentBaseEnvironment } from '../runtime/structured-agent-shell-environment'
 import { isWslHostOrcadProcess } from '../ipc/wsl-guest-windows-drive-path'
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
+import { getAppEnvironment } from '../../shared/app-environment'
+import { configureNativeCodexRouting } from '../runtime/configure-native-codex-routing'
+import { configureNativeClaudeRouting } from '../runtime/configure-native-claude-routing'
+import { configureNativeCliUserIntegration } from '../runtime/configure-native-cli-user-integration'
 
 type StructuredLaunchInput = { launchEnv: NodeJS.ProcessEnv }
 
@@ -48,6 +52,9 @@ export type OrcadAccountServices = {
       | 'setAccountServices'
       | 'setCommitMessageAgentEnvironmentResolvers'
       | 'stopAccountDeviceSignIns'
+      | 'requireStore'
+      | 'getAccountsSnapshot'
+      | 'getOrchestrationDb'
     >
   ) => void
 }
@@ -128,6 +135,25 @@ export function createOrcadAccountServices(args: {
         claudeAccounts: services.claudeAccounts,
         codexAccounts: services.codexAccounts,
         rateLimits: services.rateLimits
+      })
+      configureNativeCliUserIntegration(runtime, {
+        store,
+        dataRoot: getAppEnvironment().getPath('userData'),
+        registerCleanup: (cleanup) => args.registerCleanup(async () => cleanup())
+      })
+      configureNativeClaudeRouting(runtime, {
+        store,
+        claudeAccounts: services.claudeAccounts,
+        dataRoot: getAppEnvironment().getPath('userData'),
+        registerCleanup: (cleanup) => args.registerCleanup(async () => cleanup())
+      })
+      configureNativeCodexRouting(runtime, {
+        resolveSourceHome: () => codexRuntimeHome.resolveHostCodexHomePathForLaunchReadOnly(),
+        store,
+        codexAccounts: services.codexAccounts,
+        rateLimits: services.rateLimits,
+        dataRoot: getAppEnvironment().getPath('userData'),
+        registerCleanup: (cleanup) => args.registerCleanup(async () => cleanup())
       })
       runtime.setCommitMessageAgentEnvironmentResolvers({
         prepareForCodexLaunch: prepareCodexHome,

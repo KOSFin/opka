@@ -205,6 +205,8 @@ export type AgentStatusPayload = {
   mainAgent?: AgentMainAgentStatus
   /** The execution host awaits a launched Claude task’s wake-up or its finishing turn. */
   claudeTaskWakeupPending?: 'notification' | 'finishing-turn'
+  /** Exact lead Stop inventory, never inferred from an empty tracked roster. */
+  claudeNativeBoundaryInventory?: 'complete'
 }
 
 /**
@@ -244,6 +246,9 @@ export function pickParsedAgentStatusPayload(
     ...(row.turnCompletedAt !== undefined ? { turnCompletedAt: row.turnCompletedAt } : {}),
     ...(row.subagents !== undefined ? { subagents: row.subagents } : {}),
     ...(row.mainAgent !== undefined ? { mainAgent: row.mainAgent } : {}),
+    ...(row.claudeNativeBoundaryInventory === 'complete'
+      ? { claudeNativeBoundaryInventory: 'complete' as const }
+      : {}),
     ...(row.claudeTaskWakeupPending !== undefined
       ? { claudeTaskWakeupPending: row.claudeTaskWakeupPending }
       : {})
@@ -356,6 +361,9 @@ function normalizeAgentStatusObject(parsed: unknown): ParsedAgentStatusPayload |
     turnCompletedAt: normalizeTurnCompletedAtField(obj.turnCompletedAt, state),
     subagents: normalizeAgentSubagentsField(obj.subagents),
     mainAgent: normalizeMainAgentStatusField(obj.mainAgent),
+    ...(obj.agentType === 'claude' && obj.claudeNativeBoundaryInventory === 'complete'
+      ? { claudeNativeBoundaryInventory: 'complete' as const }
+      : {}),
     ...(obj.agentType === 'claude' &&
     state !== 'done' &&
     (obj.claudeTaskWakeupPending === 'notification' ||

@@ -7,6 +7,7 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { RateLimitService } from '../rate-limits/service'
 import { claudeStateFile, readClaudeFolderLogin } from './claude-account-folder'
 import { savedWslClaudeAccountHome } from './claude-profile-wsl-paths'
+import type { ClaudeNativeUsagePreparationResolver } from './runtime-auth/runtime-auth-types'
 import type { ClaudeRuntimeAuthService } from './runtime-auth-service'
 import {
   getClaudeSelectionTargetForAccount,
@@ -40,15 +41,17 @@ export type ClaudeAccountStore = {
   ) => unknown
 }
 
-export type ClaudeAccountRuntime = Pick<
+export type ClaudeAccountRuntime = {
+  setNativeUsagePreparationResolver?: (resolver: ClaudeNativeUsagePreparationResolver) => () => void
+} & Pick<
   ClaudeRuntimeAuthService,
   'syncForCurrentSelection' | 'publishAll' | 'removeAccountFolder' | 'prepareAccountFolder'
 > & {
-  router: Pick<
-    ClaudeRuntimeAuthService['router'],
-    'accountHome' | 'userConfigDir' | 'copiedLoginIntoSystemDefault' | 'coveredBySystemDefault'
-  >
-}
+    router: Pick<
+      ClaudeRuntimeAuthService['router'],
+      'accountHome' | 'userConfigDir' | 'copiedLoginIntoSystemDefault' | 'coveredBySystemDefault'
+    >
+  }
 
 export type ClaudeAccountUsage = Pick<
   RateLimitService,

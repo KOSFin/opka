@@ -73,6 +73,11 @@ ${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `      [[ -z "\${${key}:-}" || "\
     if [[ "$__orca_codex_isolate" != 0 ]]; then
       case "$(command codex --help 2>/dev/null </dev/null)" in *--no-daemon*) set -- --no-daemon "$@" ;; esac
     fi
+    if [[ -n "\${ORCA_NATIVE_CLI_LAUNCHER:-}" ]]; then
+      local __orca_codex_executable="$(unset -f codex 2>/dev/null || :; unalias codex 2>/dev/null || :; command -v codex)"
+      "\${ORCA_NATIVE_CLI_LAUNCHER}" agent native-exec codex "$__orca_codex_executable" "$@"
+      return
+    fi
     command codex "$@"
   }
 fi
@@ -109,6 +114,10 @@ ${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `      test -n "$${key}"; and not
     set argv $__orca_codex_args
     if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_NO_DAEMON_SKIP_ARG_PATTERN}' $argv; and command codex --help 2>/dev/null </dev/null | string match -q -- '*--no-daemon*'
       set argv --no-daemon $argv
+    end
+    if test -n "$ORCA_NATIVE_CLI_LAUNCHER"
+      command "$ORCA_NATIVE_CLI_LAUNCHER" agent native-exec codex (command -s codex) $argv
+      return $status
     end
     command codex $argv
   end
@@ -159,6 +168,16 @@ if ($orcaCodexCommand -and
             $orcaCodexOrdered += $arg
         }
         if (-not $orcaCodexInserted) { $orcaCodexOrdered += $orcaCodexIdentity }
+        if ($env:ORCA_NATIVE_CLI_LAUNCHER) {
+            $orcaRoutedArgs = @(__OrcaEscapeNativeArgs $env:ORCA_NATIVE_CLI_LAUNCHER (@('agent', 'native-exec', 'codex', $orcaCodexExecutable.Source) + $orcaCodexFlags + $orcaCodexOrdered))
+            if ($MyInvocation.ExpectingInput) {
+                $input | & $env:ORCA_NATIVE_CLI_LAUNCHER @orcaRoutedArgs
+            } else {
+                & $env:ORCA_NATIVE_CLI_LAUNCHER @orcaRoutedArgs
+            }
+            $global:LASTEXITCODE = $LASTEXITCODE
+            return
+        }
         $orcaCodexArgs = @(__OrcaEscapeNativeArgs $orcaCodexExecutable.Source $orcaCodexOrdered)
         # Why: a native command inside a function never sees the function's pipeline input on its own.
         if ($MyInvocation.ExpectingInput) {

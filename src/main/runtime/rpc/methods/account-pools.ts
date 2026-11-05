@@ -4,6 +4,7 @@ import {
   AccountPoolPolicySchema,
   AccountPoolUpdateParams
 } from '../../../../shared/account-pool-policy'
+import { applyNativeClaudeIdlePolicies } from '../../native-claude-routing-ownership'
 import { accountPoolCandidates } from '../../account-pool-candidates'
 
 export const ACCOUNT_POOL_METHODS = [
@@ -28,7 +29,7 @@ export const ACCOUNT_POOL_METHODS = [
     name: 'accountPool.update',
     permission: 'accounts-admin',
     params: AccountPoolUpdateParams,
-    handler: async ({ policy, expectedRevision }, { runtime }) => {
+    handler: async ({ policy, expectedRevision }, { runtime, signal }) => {
       const store = runtime.requireStore()
       if (!store.runDurableMutation || !store.updateSettings) {
         throw new Error('Durable account policies are unavailable on this host')
@@ -72,6 +73,9 @@ export const ACCOUNT_POOL_METHODS = [
           rollback: () => applySettings({ accountPools: before }, { notifyListeners: true })
         }
       })
+      if (policy.provider === 'claude') {
+        await applyNativeClaudeIdlePolicies(runtime, signal)
+      }
       return committed
     }
   })

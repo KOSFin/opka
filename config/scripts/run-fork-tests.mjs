@@ -196,78 +196,54 @@ function run(program, args, environment = {}) {
   return result.code === 0
 }
 
-if (isDirectInvocation(import.meta.url, process.argv[1])) {
-  const request = parseForkSelectionArgs(process.argv.slice(2))
-  const plan = request
-    ? prepareForkTestSelection(request, root, [
-        ...FORK_TEST_FILTERS,
-        ...MOBILE_FORK_TEST_FILTERS,
-        ...MOBILE_RENDER_TEST_FILTERS
-      ])
-    : null
-  if (plan) {
-    console.log(`Fork test selection: ${plan.reason}; ${plan.files.length} files`)
-  }
-  const lanes = plan?.lanes ?? {
-    root: FORK_TEST_FILTERS,
-    mobile: MOBILE_FORK_TEST_FILTERS,
-    render: MOBILE_RENDER_TEST_FILTERS
-  }
+export const NODE_FORK_TESTS = [
+  'config/scripts/fork-acceptance-fixture.test.mjs',
+  'config/scripts/fork-acceptance-remote-config.test.mjs'
+]
+
+export function runForkTestPlan(plan, execute = run) {
+  const { lanes } = plan
   const results = []
-  if (plan) {
-    const prepared =
-      !lanes.root.length ||
-      (run('pnpm', ['run', 'build:packages']) &&
-        run(process.execPath, ['config/scripts/ensure-native-runtime.mjs', '--runtime=node']))
-    results.push(prepared)
-    for (const lane of ['root', 'mobile', 'render']) {
-      if (!lanes[lane].length || (lane === 'root' && !prepared)) {
-        continue
-      }
-      results.push(
-        run(
-          process.execPath,
-          [
-            'node_modules/vitest/vitest.mjs',
-            'run',
-            '--config',
-            'config/vitest.fork-selected.config.mjs',
-            '--maxWorkers=1'
-          ],
-          { OPKA_FORK_TEST_LANE: lane }
-        )
-      )
+  const prepared =
+    (!lanes.root.length && !lanes.node.length) ||
+    (execute('pnpm', ['run', 'build:packages']) &&
+      execute(process.execPath, ['config/scripts/ensure-native-runtime.mjs', '--runtime=node']))
+  results.push(prepared)
+  for (const lane of ['root', 'mobile', 'render']) {
+    if (!lanes[lane].length || (lane === 'root' && !prepared)) {
+      continue
     }
-  } else {
-    results.push(run('pnpm', ['test', ...lanes.root, '--maxWorkers=2']))
     results.push(
-      run('pnpm', [
-        'exec',
-        'vitest',
-        'run',
-        '--config',
-        'mobile/vitest.config.ts',
-        ...lanes.mobile,
-        '--maxWorkers=2'
-      ])
-    )
-    results.push(
-      run(process.execPath, [
-        'node_modules/vitest/vitest.mjs',
-        'run',
-        '--config',
-        'config/vitest.config.ts',
-        ...lanes.render,
-        '--maxWorkers=1'
-      ])
+      execute(
+        process.execPath,
+        [
+          'node_modules/vitest/vitest.mjs',
+          'run',
+          '--config',
+          'config/vitest.fork-selected.config.mjs',
+          '--maxWorkers=1'
+        ],
+        { OPKA_FORK_TEST_LANE: lane }
+      )
     )
   }
   results.push(
-    run(process.execPath, [
+    execute(process.execPath, [
       '--test',
-      'config/scripts/fork-acceptance-fixture.test.mjs',
-      'config/scripts/fork-acceptance-remote-config.test.mjs'
+      '--test-concurrency=1',
+      ...new Set([...lanes.node, ...NODE_FORK_TESTS])
     ])
   )
-  process.exitCode = results.every(Boolean) ? 0 : 1
+  return results.every(Boolean)
+}
+
+if (isDirectInvocation(import.meta.url, process.argv[1])) {
+  const request = parseForkSelectionArgs(process.argv.slice(2))
+  const plan = prepareForkTestSelection(request, root, [
+    ...FORK_TEST_FILTERS,
+    ...MOBILE_FORK_TEST_FILTERS,
+    ...MOBILE_RENDER_TEST_FILTERS
+  ])
+  console.log(`Fork test selection: ${plan.reason}; ${plan.files.length} files`)
+  process.exitCode = runForkTestPlan(plan) ? 0 : 1
 }

@@ -4,6 +4,13 @@ import type { AccountPoolCandidate, AccountPoolPolicy } from '../../../shared/ac
 import { OrchestrationError } from './orchestration-error'
 
 const AllocationSequence = z.object({ sequence: z.number() })
+const PoolSlot = z.object({
+  ownerKey: z.string(),
+  poolId: z.string(),
+  provider: z.enum(['claude', 'codex']),
+  quotaIdentity: z.string(),
+  accountId: z.string()
+})
 const StoredAccount = z.object({
   account: z.object({
     provider: z.enum(['claude', 'codex']),
@@ -45,6 +52,8 @@ export type AccountPoolAdmission = {
   policy: AccountPoolPolicy
   candidates: AccountPoolCandidate[]
   preferredAccountId?: string
+  /** Internal handoff only: keep the old lease until the new identity is published. */
+  replacesOwnerKey?: string
 }
 
 // Called inside the dispatch transaction: an unverifiable launch retains its slot until settled.
@@ -53,14 +62,30 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
   if (policy.strategy === 'manual') {
     throw new OrchestrationError('account_pool_manual', 'Choose a fixed account for a manual pool.')
   }
-  const assignments = [
-    ...db
-      .prepare(
-        'SELECT provider, quota_identity AS quotaIdentity, account_id AS accountId FROM account_pool_assignments WHERE released_at IS NULL'
-      )
-      .all(),
-    ...readAccountAssignments(db).filter((entry) => !entry.poolId)
-  ]
+  const pooled = db
+    .prepare(
+      'SELECT owner_key AS ownerKey, pool_id AS poolId, provider, quota_identity AS quotaIdentity, account_id AS accountId FROM account_pool_assignments WHERE released_at IS NULL'
+    )
+    .all()
+    .map((row) => PoolSlot.parse(row))
+  const replacement = admission.replacesOwnerKey
+    ? pooled.find((entry) => entry.ownerKey === admission.replacesOwnerKey)
+    : undefined
+  if (
+    admission.replacesOwnerKey &&
+    (!replacement ||
+      replacement.provider !== policy.provider ||
+      replacement.poolId !== policy.id ||
+      db
+        .prepare('SELECT owner_key FROM account_pool_replacement_claims WHERE replaces_owner_key=?')
+        .get(admission.replacesOwnerKey))
+  ) {
+    throw new OrchestrationError(
+      'account_pool_replacement_invalid',
+      'The previous account lease cannot be replaced.'
+    )
+  }
+  const assignments = [...pooled, ...readAccountAssignments(db).filter((entry) => !entry.poolId)]
   const lastAllocation =
     policy.strategy === 'balanced'
       ? db.prepare(
@@ -81,16 +106,16 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
     ) {
       return []
     }
-    const active = assignments.filter(
-      (entry) =>
-        entry.provider === policy.provider &&
-        (entry.quotaIdentity === candidate.quotaIdentity ||
-          candidates.some(
-            (known) =>
-              known.accountId === entry.accountId && known.quotaIdentity === candidate.quotaIdentity
-          ))
-    ).length
-    if (member.maxConcurrent !== undefined && active >= member.maxConcurrent) {
+    const usesQuota = (entry: { provider: unknown; quotaIdentity: unknown; accountId: unknown }) =>
+      entry.provider === policy.provider &&
+      (entry.quotaIdentity === candidate.quotaIdentity ||
+        candidates.some(
+          (known) =>
+            known.accountId === entry.accountId && known.quotaIdentity === candidate.quotaIdentity
+        ))
+    const active = assignments.filter(usesQuota).length
+    const retainedOwnSlot = replacement && usesQuota(replacement) ? 1 : 0
+    if (member.maxConcurrent !== undefined && active - retainedOwnSlot >= member.maxConcurrent) {
       return []
     }
     const last = lastAllocation?.get(policy.provider, candidate.quotaIdentity)

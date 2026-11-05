@@ -29,9 +29,9 @@ it('reads and writes only the chosen execution host with revision fencing', asyn
   const target = { kind: 'environment', environmentId: 'owner' } as const
   render(<AccountPoolSection target={target} hostLabel="Server" />)
   fireEvent.click(await screen.findByRole('button', { name: /Codex/ }))
-  await screen.findByText('test@example.test · Default for new chats')
+  await screen.findByText('test@example.test · Manual default')
   expect(screen.getByText(/Auth: ready · Quota: unknown/)).toBeTruthy()
-  const activation = screen.getByRole('switch', { name: 'Apply to new chats and workers' })
+  const activation = screen.getByRole('switch', { name: 'Use automatic pool' })
   expect(activation.getAttribute('aria-checked')).toBe('false')
   fireEvent.click(activation)
   fireEvent.click(screen.getByRole('button', { name: 'Save codex pool' }))
@@ -42,7 +42,7 @@ it('reads and writes only the chosen execution host with revision fencing', asyn
         id: 'codex-default',
         provider: 'codex',
         revision: 0,
-        strategy: 'manual',
+        strategy: 'sequential',
         applyToNewWork: true,
         rotation: 'off',
         unknownQuota: 'exclude',
@@ -60,9 +60,11 @@ it('fails closed on an older host without exposing editable policies', async () 
   expect(screen.queryByRole('button', { name: 'Save codex pool' })).toBeNull()
 })
 it('retains the draft and reports a concurrent-edit rejection', async () => {
-  rpc
-    .mockResolvedValueOnce(snapshot)
-    .mockRejectedValueOnce(new Error('Account pool changed; reload before saving'))
+  rpc.mockImplementation((_target, method) =>
+    method === 'accountPool.update'
+      ? Promise.reject(new Error('Account pool changed; reload before saving'))
+      : Promise.resolve(snapshot)
+  )
   render(<AccountPoolSection target={{ kind: 'local' }} hostLabel="Local" />)
   fireEvent.click(await screen.findByRole('button', { name: /Codex/ }))
   await screen.findByRole('button', { name: 'Save codex pool' })
@@ -78,15 +80,17 @@ it('collapses providers without saving or discarding their draft', async () => {
   expect(codex.getAttribute('aria-expanded')).toBe('false')
   expect(screen.queryByRole('button', { name: 'Save codex pool' })).toBeNull()
   fireEvent.click(codex)
-  fireEvent.click(screen.getByRole('switch', { name: 'Apply to new chats and workers' }))
+  fireEvent.click(screen.getByRole('switch', { name: 'Use automatic pool' }))
   fireEvent.click(codex)
   fireEvent.click(codex)
   expect(
-    screen
-      .getByRole('switch', { name: 'Apply to new chats and workers' })
-      .getAttribute('aria-checked')
+    screen.getByRole('switch', { name: 'Use automatic pool' }).getAttribute('aria-checked')
   ).toBe('true')
-  expect(rpc.mock.calls.every((call) => call[1] === 'accountPool.list')).toBe(true)
+  expect(
+    rpc.mock.calls.every((call) =>
+      ['accountPool.list', 'accounts.codexRoutingState'].includes(call[1])
+    )
+  ).toBe(true)
 })
 
 it('keeps save feedback inside its provider and clears it only when that draft changes', async () => {
@@ -96,7 +100,7 @@ it('keeps save feedback inside its provider and clears it only when that draft c
   fireEvent.click(screen.getByRole('button', { name: 'Save codex pool' }))
   expect(await screen.findByText('Codex pool saved on Local.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: /Claude/ }))
-  const switches = screen.getAllByRole('switch', { name: 'Apply to new chats and workers' })
+  const switches = screen.getAllByRole('switch', { name: 'Use automatic pool' })
   fireEvent.click(switches[0])
   expect(screen.getByText('Codex pool saved on Local.')).toBeTruthy()
   fireEvent.click(switches[1])
@@ -128,4 +132,22 @@ it('does not apply an old save after switching owners away and back', async () =
   finish?.()
   await waitFor(() => expect(screen.queryByText('Codex pool saved on A.')).toBeNull())
   expect(rpc.mock.calls.filter((call) => call[1] === 'accountPool.list')).toHaveLength(3)
+})
+
+it('keeps the previous host hidden while loading and shows the new host error', async () => {
+  rpc.mockResolvedValue(snapshot)
+  const view = render(<AccountPoolSection target={{ kind: 'local' }} hostLabel="Local" />)
+  await screen.findByRole('button', { name: /Codex/ })
+  let fail = (_cause: Error) => {}
+  const failure = new Promise<never>((_resolve, reject) => {
+    fail = reject
+  })
+  rpc.mockReturnValueOnce(failure)
+  view.rerender(
+    <AccountPoolSection target={{ kind: 'environment', environmentId: 'b' }} hostLabel="B" />
+  )
+  expect(screen.queryByRole('button', { name: /Codex/ })).toBeNull()
+  expect(screen.getByRole('status').textContent).toContain('Loading account pools')
+  fail(new Error('New host unavailable'))
+  expect((await screen.findByRole('alert')).textContent).toContain('New host unavailable')
 })

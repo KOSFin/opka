@@ -85,6 +85,25 @@ export async function main(
     await runClaudeTeams(argv.slice(1), cwd)
     return
   }
+  if (
+    argv[0] === 'agent' &&
+    ['native-exec', 'native-attach', 'native-pool-hook', 'native-pool-observe'].includes(argv[1])
+  ) {
+    try {
+      const client = new (await loadRuntimeClientClass())(undefined, undefined, null, null)
+      await dispatch(['agent', argv[1]], {
+        flags: new Map(),
+        client,
+        cwd,
+        json: false,
+        rawArgs: argv.slice(2)
+      })
+    } catch (error) {
+      reportCliError(error, false, { commandPath: ['agent', argv[1]] })
+      process.exitCode = 1
+    }
+    return
+  }
   const parsed = normalizeCommandPositionals(
     COMMAND_SPECS,
     parseArgs(argv, COMMAND_PATHS, COMMAND_SPECS)

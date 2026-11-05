@@ -72,6 +72,14 @@ export type OwnerNotSetUpPlaceholder =
   | { kind: 'claude-unknown'; ownerLabel: string }
 
 export type UsageRateLimitMetadata = {
+  /** Host-confirmed provider rejection; no synthetic usage percentage or window. */
+  confirmedProviderFailure?: {
+    kind: 'quota-exhausted'
+    code: 'usage_limit_reached'
+    observedAt: number
+    quotaIdentity: string
+    resetsAt?: number
+  }
   source?: UsageRateLimitSource
   attemptedSources?: UsageRateLimitSource[]
   failureKind?: UsageRateLimitFailureKind

@@ -140,8 +140,10 @@ export async function readClaudeFolderLoginAsync(
  */
 export async function removeClaudeAccountFolder(
   dataRoot: string,
-  accountId: string
+  accountId: string,
+  assertExclusive?: () => void
 ): Promise<void> {
+  assertExclusive?.()
   const { home } = describeClaudeProfile(dataRoot, accountId, {
     executionHostId: 'local',
     runtime: 'host'
@@ -150,6 +152,7 @@ export async function removeClaudeAccountFolder(
     for (const spelling of claudeConfigDirSpellings(home, homedir())) {
       // Why a loop: items are filed per Keychain account name, and each delete removes one.
       for (let attempt = 0; attempt < 4; attempt += 1) {
+        assertExclusive?.()
         const deleted = await execSecurityCommand([
           'delete-generic-password',
           '-s',
@@ -158,12 +161,14 @@ export async function removeClaudeAccountFolder(
           () => true,
           () => false
         )
+        assertExclusive?.()
         if (!deleted) {
           break
         }
       }
     }
   }
+  assertExclusive?.()
   const folder = dirname(home)
   unlinkLinks(folder)
   rmSync(folder, { recursive: true, force: true })

@@ -8,6 +8,18 @@ export type MobileRpcMethodRoute = 'execution-host' | 'paired-desktop'
 export const EXECUTION_HOST_METHODS = [
   'accountPool.list',
   'accountPool.update',
+  // Pool connections and ordinary CLI setup belong to the selected execution host.
+  'accounts.codexRoutingState',
+  'accounts.beginCodexRoutingSignIn',
+  'accounts.codexRoutingSignIn',
+  'accounts.cancelCodexRoutingSignIn',
+  'accounts.nativeClaudeRefreshSources',
+  'accounts.beginNativeClaudeRefreshSignIn',
+  'accounts.getNativeClaudeRefreshSignInLink',
+  'accounts.submitNativeClaudeRefreshSignInCode',
+  'accounts.cancelNativeClaudeRefreshSignIn',
+  'accounts.installNativeCliIntegration',
+  'accounts.uninstallNativeCliIntegration',
   'ui.getJiraQuickFilters',
   'ui.setJiraQuickFilters',
   'ui.getJiraSavedFilters',

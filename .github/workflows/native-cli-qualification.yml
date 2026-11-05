@@ -1,0 +1,33 @@
+name: Native CLI qualification
+on:
+  push:
+    branches: [codex/iteration010-native-qualification]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-cli-qualification-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  claude-darwin:
+    name: Native Claude macOS credential routing
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_TELEMETRY_DISABLED: '1'
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: node
+      - name: Qualify isolated native credentials
+        run: node config/scripts/qualify-claude-native-darwin.mjs native-darwin-receipts
+      - name: Keep only synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-darwin-receipts
+          path: native-darwin-receipts/
+          retention-days: 7

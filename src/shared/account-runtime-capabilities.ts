@@ -1,5 +1,6 @@
 import { ACCOUNT_SIGN_IN_TERMINAL_RUNTIME_CAPABILITY } from './account-sign-in-terminal'
 import { ACCOUNT_DEVICE_SIGN_IN_RUNTIME_CAPABILITY } from './account-device-sign-in'
+import { NATIVE_CODEX_ROUTING_CAPABILITY } from './native-account-routing'
 export const CODEX_RESET_CREDIT_RUNTIME_CAPABILITY = 'accounts.codex-reset-credit.v1' as const
 export const ACCOUNT_IMPORT_RUNTIME_CAPABILITY = 'accounts.import-host-credentials.v1' as const
 // Why: `orca account add claude` signs in to an account folder the host creates first.
@@ -15,6 +16,7 @@ export const USAGE_CREDENTIALS_RUNTIME_CAPABILITY = 'accounts.usage-credentials.
 export const ACCOUNT_RUNTIME_CAPABILITIES = [
   ACCOUNT_SIGN_IN_TERMINAL_RUNTIME_CAPABILITY,
   ACCOUNT_DEVICE_SIGN_IN_RUNTIME_CAPABILITY,
+  NATIVE_CODEX_ROUTING_CAPABILITY,
   ACCOUNT_IMPORT_RUNTIME_CAPABILITY,
   CLAUDE_SIGN_IN_RUNTIME_CAPABILITY,
   ANTIGRAVITY_ACCOUNTS_RUNTIME_CAPABILITY,

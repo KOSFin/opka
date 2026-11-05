@@ -1,0 +1,9 @@
+# Native account pool and ordinary CLI Setup render probe
+
+Run with `ORCA_BACKGROUND_LAUNCH=1 node tests/tools/native-pool-setup-rendered/run.mjs` on an isolated display/CI. Linux needs Xvfb and Electron's runtime libraries; this script installs neither. It rebuilds the existing hidden Electron main and current background activation policy, then builds the production desktop AccountPoolSection and mobile MobileAccountPoolSection through React Native Web.
+
+Both platforms check explicit setup, modified-file refusal and a private host error. The successful case toggles/saves the automatic pool. Assertions cover selected host request counts, one refresh after setup, disabled pending action, safe error text, no horizontal overflow, and all windows hidden/unfocused. CDP screenshots and a JSON report are written under the private `.bench-fixtures/native-pool-setup-*` directory. `*-not-installed.png` shows the successful result after starting from not-installed and explicitly installing; no real shell transaction runs.
+
+RPCs use only the synthetic host/roster in this fixture. Unexpected RPCs fail. Browser network requests are denied except file/data/about. Use an OS network namespace as well on Linux. No provider login, model call, native CLI, user shell or production profile is used.
+
+The mobile proof covers these production cards/controls/styles in RN-web, not the full Expo navigation shell or an Android APK. Unopened native drawer, navigation, clipboard and external-link bridges use fixture seams. The three Lucide icons use their real individual modules because the cached native package's ESM barrel exposes a missing export under Vite. Native drawer gestures, OAuth links, native fonts and phone battery/keyboard behavior are outside this probe. Real authenticated mobile RPC routing is covered separately by the relay integration test.

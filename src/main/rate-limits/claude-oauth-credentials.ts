@@ -19,32 +19,60 @@ export type ClaudeOAuthCredentialReadResult = {
   source: ClaudeOAuthCredentialSource
   keychainUnavailable?: boolean
   unavailable?: boolean
+  nativeAccess?: ClaudeNativeAccess
+}
+export type ClaudeNativeAccess = {
+  accessToken: string
+  expiresAt: number
+  scopes: string[]
+  subscriptionType?: string
+  rateLimitTier?: string
 }
 type ClaudeOAuthCredentialReadOptions = {
   credentialsFileConfigDir?: string
   keychainConfigDir?: string
   /** System Default only: a managed profile never reads another login's item. */
   unsuffixedKeychainFallback?: boolean
+  includeNativeAccess?: boolean
 }
+const nativeAccessSchema = z.object({
+  accessToken: z.string().min(1).max(32768),
+  expiresAt: z.number().finite().positive(),
+  scopes: z.array(z.string().max(256)).max(64),
+  subscriptionType: z
+    .string()
+    .max(256)
+    .nullish()
+    .transform((value) => value ?? undefined),
+  rateLimitTier: z
+    .string()
+    .max(256)
+    .nullish()
+    .transform((value) => value ?? undefined)
+})
 const schema = z.object({
   claudeAiOauth: z
     .object({
       accessToken: z.string().optional(),
       refreshToken: z.string().optional()
     })
+    .passthrough()
     .optional()
 })
 export function parseClaudeOAuthCredentialsJson(
   raw: string,
-  source: ClaudeOAuthCredentialSource
+  source: ClaudeOAuthCredentialSource,
+  includeNativeAccess = false
 ): ClaudeOAuthCredentialReadResult {
   try {
     const oauth = schema.parse(JSON.parse(raw)).claudeAiOauth
     // Why: expiresAt is not authoritative for the usage endpoint; let the server decide.
+    const nativeAccess = includeNativeAccess ? nativeAccessSchema.safeParse(oauth) : null
     return {
       token: oauth?.accessToken || null,
       hasRefreshableCredentials: Boolean(oauth?.refreshToken),
-      source
+      source,
+      ...(nativeAccess?.success ? { nativeAccess: nativeAccess.data } : {})
     }
   } catch {
     return { ...emptyClaudeOAuthCredentialReadResult(), unavailable: true }
@@ -55,12 +83,13 @@ export function emptyClaudeOAuthCredentialReadResult(): ClaudeOAuthCredentialRea
 }
 export async function readClaudeCredentialsFromStrictKeychain(
   configDir: string | undefined,
-  source: ClaudeOAuthCredentialSource
+  source: ClaudeOAuthCredentialSource,
+  includeNativeAccess = false
 ): Promise<ClaudeOAuthCredentialReadResult> {
   try {
     const contents = await readActiveClaudeKeychainCredentialsStrict(configDir)
     return contents
-      ? parseClaudeOAuthCredentialsJson(contents, source)
+      ? parseClaudeOAuthCredentialsJson(contents, source, includeNativeAccess)
       : emptyClaudeOAuthCredentialReadResult()
   } catch {
     return {
@@ -74,16 +103,25 @@ async function readClaudeKeychainCredentials(
   options?: ClaudeOAuthCredentialReadOptions
 ): Promise<ClaudeOAuthCredentialReadResult> {
   if (!options?.keychainConfigDir) {
-    return readClaudeCredentialsFromStrictKeychain(undefined, 'legacy-keychain')
+    return readClaudeCredentialsFromStrictKeychain(
+      undefined,
+      'legacy-keychain',
+      options?.includeNativeAccess
+    )
   }
   const scoped = await readClaudeCredentialsFromStrictKeychain(
     options.keychainConfigDir,
-    'scoped-keychain'
+    'scoped-keychain',
+    options.includeNativeAccess
   )
   if (scoped.token || !options.unsuffixedKeychainFallback) {
     return scoped
   }
-  const legacy = await readClaudeCredentialsFromStrictKeychain(undefined, 'legacy-keychain')
+  const legacy = await readClaudeCredentialsFromStrictKeychain(
+    undefined,
+    'legacy-keychain',
+    options.includeNativeAccess
+  )
   // Why: as before profiles, a token wins over an unreadable item.
   const candidates = [scoped, legacy]
   return (
@@ -102,6 +140,9 @@ export async function readClaudeOAuthCredentials(
   if (keychain.token) {
     return keychain
   }
+  if (options?.includeNativeAccess && keychain.unavailable) {
+    return keychain
+  }
   try {
     return parseClaudeOAuthCredentialsJson(
       await readFile(
@@ -111,7 +152,8 @@ export async function readClaudeOAuthCredentials(
         ),
         'utf8'
       ),
-      'credentials-file'
+      'credentials-file',
+      options?.includeNativeAccess
     )
   } catch (error) {
     return isDefinitiveAbsence(error) ? keychain : { ...keychain, unavailable: true }

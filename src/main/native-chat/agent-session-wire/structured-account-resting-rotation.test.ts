@@ -14,9 +14,11 @@ function fixture() {
     canRest: true
   }
   const record = agentSessionRecordFixture()
+  const records = new Map([[record.sessionId, record]])
+  const residents = new Set([record.sessionId])
   const stop = vi.fn(async () => {})
   const shouldRest = vi.fn(async () => true)
-  installStructuredAccountRestingRotation({
+  const installed = installStructuredAccountRestingRotation({
     subscribeState: (listener) => {
       stateChanged = listener
     },
@@ -24,7 +26,8 @@ function fixture() {
       subscriber = next
       return () => {}
     },
-    readRecord: () => record,
+    residentSessionIds: () => residents,
+    readRecord: (id) => records.get(id) ?? null,
     readBoundary: () => boundary,
     shouldRest,
     stop,
@@ -45,13 +48,16 @@ function fixture() {
     },
     boundary,
     record,
+    records,
+    residents,
+    pending: () => installed?.pendingCountForTests() ?? 0,
     stop,
     shouldRest,
-    emit: async () => {
+    emit: async (id = record.sessionId) => {
       subscriber?.emit({
         type: 'completion',
         completion: {
-          sessionId: record.sessionId,
+          sessionId: id,
           scope: record.location,
           turnId: 'turn',
           outcome: 'success',
@@ -98,4 +104,38 @@ describe('native pool resting rotation', () => {
     await f.emit()
     expect(f.stop).not.toHaveBeenCalled()
   })
+})
+
+it('does not retain a thousand permanently unneeded historic completion pairs', async () => {
+  const f = fixture()
+  f.shouldRest.mockResolvedValue(false)
+  for (let i = 0; i < 1000; i++) {
+    const record = agentSessionRecordFixture()
+    record.sessionId = `resident-${i}`
+    f.records.set(record.sessionId, record)
+    f.residents.add(record.sessionId)
+    await f.emit(record.sessionId)
+    f.residents.delete(record.sessionId)
+  }
+  expect(f.pending()).toBe(0)
+  expect(f.stop).not.toHaveBeenCalled()
+})
+it('reseeds the current resident on policy enablement after clearing an unneeded completion', async () => {
+  const f = fixture()
+  f.shouldRest.mockResolvedValue(false)
+  await f.emit()
+  expect(f.pending()).toBe(0)
+  f.shouldRest.mockResolvedValue(true)
+  await f.stateChanged()
+  expect(f.stop).toHaveBeenCalledOnce()
+})
+it('retains transient child-settlement work and prunes it once the resident closes', async () => {
+  const f = fixture()
+  f.boundary.canRest = false
+  await f.emit()
+  expect(f.pending()).toBe(1)
+  f.residents.clear()
+  await f.stateChanged()
+  expect(f.pending()).toBe(0)
+  expect(f.stop).not.toHaveBeenCalled()
 })

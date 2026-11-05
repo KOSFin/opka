@@ -168,6 +168,11 @@ if [[ -n "${__orca_codex_binary:-}" && -x "${__orca_codex_binary}" ]]; then
     if [[ "$__orca_codex_isolate" != 0 ]]; then
       case "$(command codex --help 2>/dev/null </dev/null)" in *--no-daemon*) set -- --no-daemon "$@" ;; esac
     fi
+    if [[ -n "${ORCA_NATIVE_CLI_LAUNCHER:-}" ]]; then
+      local __orca_codex_executable="$(unset -f codex 2>/dev/null || :; unalias codex 2>/dev/null || :; command -v codex)"
+      "${ORCA_NATIVE_CLI_LAUNCHER}" agent native-exec codex "$__orca_codex_executable" "$@"
+      return
+    fi
     command codex "$@"
   }
 fi
@@ -175,6 +180,11 @@ unset __orca_codex_binary
 __orca_claude_binary="$(unalias claude 2>/dev/null || :; command -v claude 2>/dev/null || :)"
 if [[ -n "${ORCA_CLAUDE_PROFILE_POINTER:-}" && -n "${__orca_claude_binary:-}" && -x "${__orca_claude_binary}" ]]; then
   function claude {
+    if [[ -n "${ORCA_NATIVE_CLI_LAUNCHER:-}" ]]; then
+      local __orca_claude_executable="$(unset -f claude 2>/dev/null || :; unalias claude 2>/dev/null || :; command -v claude)"
+      "${ORCA_NATIVE_CLI_LAUNCHER}" agent native-exec claude "$__orca_claude_executable" "$@"
+      return
+    fi
     local __orca_claude_home __orca_claude_pointer="${ORCA_CLAUDE_PROFILE_POINTER:-}"
     # Why: a WSL pane's pointer is relative to the guest home, which the host cannot know at spawn.
     case "$__orca_claude_pointer" in '~/'*) __orca_claude_pointer="${HOME:-}/${__orca_claude_pointer#??}" ;; esac

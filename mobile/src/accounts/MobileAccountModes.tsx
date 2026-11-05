@@ -28,8 +28,8 @@ export function MobileAccountModes({
         ]}
       />
       <Text style={styles.rowSubtitle}>
-        Defaults apply to new manual chats on this host. Pools choose accounts separately; existing
-        chats keep their assigned account.
+        With the pool off, new chats use your manual default. With it on, the pool chooses the
+        account instead. Both use the same saved accounts on this host.
       </Text>
       <View
         testID="account-management-panel"

@@ -1,3 +1,4 @@
+import { applyNativeClaudeIdlePolicies } from '../../native-claude-routing-ownership'
 import { defineMethod, defineStreamingMethod } from '../core'
 import {
   AddDataAccountParams,
@@ -132,7 +133,11 @@ export const ACCOUNT_METHODS = [
     name: 'accounts.selectClaude',
     permission: 'accounts-admin',
     params: SelectAccountParams,
-    handler: async (params, { runtime }) => runtime.selectClaudeAccount(params.accountId)
+    handler: async (params, { runtime, signal }) => {
+      const selected = await runtime.selectClaudeAccount(params.accountId)
+      await applyNativeClaudeIdlePolicies(runtime, signal)
+      return selected
+    }
   }),
   defineMethod({
     name: 'accounts.selectCodex',

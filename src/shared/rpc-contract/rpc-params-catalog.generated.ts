@@ -37,6 +37,29 @@ import {
 } from '../mobile-relay-credential-contract'
 import { MobileRelayHostWorktreesParamsSchema } from '../mobile-relay-hosts-contract'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
+import { BeginCodexRoutingSignInParams } from '../native-account-routing'
+import { NativeClaudeCoverageParams } from '../native-claude-coverage'
+import { NativeClaudeHookParams } from '../native-claude-hook'
+import {
+  NativeClaudeRefreshSignInCodeParams,
+  NativeClaudeRefreshSignInReference,
+  NativeClaudeRefreshSourceAccountParams
+} from '../native-claude-refresh-source'
+import {
+  NativeCliAccountLaunchParams,
+  NativeCliAccountReleaseParams
+} from '../native-cli-account-launch'
+import {
+  NativeCliStdioAttach,
+  NativeCliStdioControl,
+  NativeCliStdioStart
+} from '../native-cli-stdio'
+import {
+  NativeCliTerminalCreate,
+  NativeCliTerminalInput,
+  NativeCliTerminalReference,
+  NativeCliTerminalResize
+} from '../native-cli-terminal'
 import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration/orcad-migration-blob-transfer'
 import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration/orcad-migration-scrollback'
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
@@ -699,14 +722,26 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.antigravityList': AntigravityAccountTargetParams,
   'accounts.antigravityRemove': AntigravityAccountMutationParams,
   'accounts.antigravitySelect': AntigravityAccountMutationParams,
+  'accounts.attachNativeCliStdio': NativeCliStdioAttach,
+  'accounts.attachNativeCliTerminal': NativeCliTerminalResize,
   'accounts.beginClaudeSignIn': BeginClaudeSignInParams,
+  'accounts.beginCodexRoutingSignIn': BeginCodexRoutingSignInParams,
   'accounts.beginDeviceSignIn': BeginAccountDeviceSignInParams,
+  'accounts.beginNativeClaudeRefreshSignIn': NativeClaudeRefreshSourceAccountParams,
   'accounts.cancelClaudeSignIn': FinishClaudeSignInParams,
+  'accounts.cancelCodexRoutingSignIn': AccountDeviceSignInParams,
   'accounts.cancelDeviceSignIn': AccountDeviceSignInParams,
+  'accounts.cancelNativeClaudeRefreshSignIn': NativeClaudeRefreshSignInReference,
   'accounts.claudeSignInReady': FinishClaudeSignInParams,
+  'accounts.codexRoutingSignIn': AccountDeviceSignInParams,
+  'accounts.codexRoutingState': null,
   'accounts.consumeCodexResetCredit': ConsumeCodexResetCreditParams,
+  'accounts.controlNativeCliStdio': NativeCliStdioControl,
+  'accounts.createNativeCliTerminal': NativeCliTerminalCreate,
   'accounts.deviceSignIn': AccountDeviceSignInParams,
   'accounts.finishClaudeSignIn': FinishClaudeSignInParams,
+  'accounts.getNativeClaudeRefreshSignInLink': NativeClaudeRefreshSignInReference,
+  'accounts.installNativeCliIntegration': null,
   'accounts.list': ListAccountsParams,
   'accounts.listData': null,
   'accounts.minimaxClearApiKey': null,
@@ -714,17 +749,29 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.minimaxCredentialsStatus': null,
   'accounts.minimaxSaveApiKey': UsageCredentialApiKeyParams,
   'accounts.minimaxSaveSessionCookie': UsageCredentialSessionCookieParams,
+  'accounts.nativeClaudeCoverage': NativeClaudeCoverageParams,
+  'accounts.nativeClaudeHook': NativeClaudeHookParams,
+  'accounts.nativeClaudeRefreshSources': null,
+  'accounts.nativeCliIntegrationStatus': null,
   'accounts.openSignInTerminal': OpenAccountSignInTerminalParams,
+  'accounts.prepareNativeCliLaunch': NativeCliAccountLaunchParams,
+  'accounts.releaseNativeCliLaunch': NativeCliAccountReleaseParams,
   'accounts.removeClaude': RemoveAccountParams,
   'accounts.removeCodex': RemoveAccountParams,
   'accounts.removeData': RemoveDataAccountParams,
+  'accounts.resizeNativeCliTerminal': NativeCliTerminalResize,
   'accounts.selectClaude': SelectAccountParams,
   'accounts.selectCodex': SelectAccountParams,
   'accounts.selectCodexForTarget': SelectCodexAccountForTargetParams,
   'accounts.selectData': SelectDataAccountParams,
   'accounts.setHostLaunchEnv': HostAccountLaunchEnvParams,
+  'accounts.startNativeCliStdio': NativeCliStdioStart,
+  'accounts.stopNativeCliTerminal': NativeCliTerminalReference,
+  'accounts.submitNativeClaudeRefreshSignInCode': NativeClaudeRefreshSignInCodeParams,
   'accounts.subscribe': null,
+  'accounts.uninstallNativeCliIntegration': null,
   'accounts.unsubscribe': AccountsUnsubscribeParams,
+  'accounts.writeNativeCliTerminal': NativeCliTerminalInput,
   'accounts.zcodePlanClearApiKey': null,
   'accounts.zcodePlanCredentialsStatus': null,
   'accounts.zcodePlanSaveApiKey': UsageCredentialApiKeyParams,

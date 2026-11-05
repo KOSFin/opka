@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { reconcileCodexTranscriptTurn, type CodexTranscriptTurn } from './codex-turn-transcript'
+import {
+  reconcileCodexTranscriptTurn,
+  readCodexTranscriptTurnEnd,
+  type CodexTranscriptTurn
+} from './codex-turn-transcript'
 
 const event = (payload: unknown): Record<string, unknown> => ({ type: 'event_msg', payload })
 
@@ -29,4 +33,18 @@ describe('Codex root turn evidence', () => {
     reconcileCodexTranscriptTurn(turn, [event({ type: 'turn_complete' })])
     expect(turn.interrupted).toBe(false)
   })
+})
+
+it('retains only explicitly identified native interrupted turns as failed terminal evidence', () => {
+  expect(
+    readCodexTranscriptTurnEnd(
+      event({ type: 'turn_aborted', turn_id: 'old', reason: 'interrupted' })
+    )
+  ).toEqual({ turnId: 'old', end: 'failed' })
+  expect(
+    readCodexTranscriptTurnEnd(event({ type: 'turn_aborted', turn_id: 'old', reason: 'unknown' }))
+  ).toBeUndefined()
+  expect(
+    readCodexTranscriptTurnEnd(event({ type: 'turn_aborted', reason: 'interrupted' }))
+  ).toBeUndefined()
 })

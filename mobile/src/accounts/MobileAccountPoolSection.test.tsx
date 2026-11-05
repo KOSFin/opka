@@ -14,6 +14,12 @@ vi.mock('../components/PickerModal', () => ({
   PickerModal: (props: Record<string, unknown>) => createElement('Picker', props)
 }))
 vi.mock('../components/AgentIcons', () => ({ ClaudeIcon: 'ClaudeIcon', OpenAIIcon: 'OpenAIIcon' }))
+vi.mock('./MobileNativeClaudeConnection', () => ({
+  MobileNativeClaudeConnection: 'MobileNativeClaudeConnection'
+}))
+vi.mock('./MobileAccountSignInSection', () => ({
+  MobileAccountSignInSection: 'MobileAccountSignInSection'
+}))
 vi.mock('lucide-react-native', () => ({ ChevronDown: 'ChevronDown', ChevronRight: 'ChevronRight' }))
 import { MobileAccountPoolSection } from './MobileAccountPoolSection'
 vi.mock('../components/MobileSwitch', () => ({ MobileSwitch: 'MobileSwitch' }))

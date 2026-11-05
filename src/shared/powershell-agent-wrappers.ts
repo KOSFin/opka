@@ -4,9 +4,12 @@ import { getPowerShellEscapeNativeArgsFunction } from './powershell-native-argum
 
 /** Orca's PowerShell `codex` and `claude` wrappers, after the argument escaping both call. */
 export function getPowerShellAgentWrappers(): string {
+  // Keep line boundaries while leaving room for startup commands in Windows' argv budget.
   return [
     getPowerShellEscapeNativeArgsFunction(),
     getPowerShellCodexShellLaunchPreflight(),
     getPowerShellClaudeShellFunction()
-  ].join('\n')
+  ]
+    .join('\n')
+    .replace(/^[ \t]+/gm, '')
 }

@@ -12,6 +12,8 @@ import { stopStructuredAgentSessionRuntime } from '../runtime/structured-agent-s
 import { setStructuredAgentSessionTeardownTrigger } from '../runtime/structured-agent-session-runtime-teardown'
 import { awaitRuntimeFileWatcherUnsubscribes } from '../runtime/files/watch/file-watcher-leases'
 import { clearRuntimeMetadataIfOwned } from '../runtime/runtime-metadata'
+import { beginNativeAccountRoutingShutdown } from '../runtime/native-account-routing-shutdown'
+
 import { shutdownPairedRuntimeBrowserClientHosts } from '../browser/paired-runtime-browser-client-host-runtime'
 import { disposeDesktopBrowserBridge } from '../ipc/desktop-browser-bridge-wiring'
 import { browserManager } from '../browser/browser-manager'
@@ -210,7 +212,8 @@ function installWillQuitHandler(): void {
     browserManager.setBrowserGuestStateChangedListener(null)
     const emulatorShutdown =
       state.runtime?.getEmulatorBridge()?.destroyAllSessions() ?? Promise.resolve()
-    const accountSignInShutdown = state.runtime?.stopAccountDeviceSignIns() ?? null
+    state.claudeAccounts?.cancelPendingLogin()
+    const accountSignInShutdown = beginNativeAccountRoutingShutdown(state.runtime)
     const finalStore = state.store
     const beginSshShutdownAndFinalSave = () => {
       // Why immediately before the final store flush with no await in between: beginSshShutdown() marks every

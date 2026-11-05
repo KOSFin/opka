@@ -1,6 +1,12 @@
 import { ACCOUNT_SIGN_IN_TERMINAL_METHODS } from './account-sign-in-terminal'
 import { ACCOUNT_DEVICE_SIGN_IN_METHODS } from './account-device-sign-in'
+import { NATIVE_ACCOUNT_ROUTING_METHODS } from './native-account-routing'
 import { ACCOUNT_POOL_METHODS } from './account-pools'
+import { NATIVE_CLI_ACCOUNT_METHODS } from './native-cli-accounts'
+import { NATIVE_CLI_USER_INTEGRATION_METHODS } from './native-cli-user-integration'
+import { NATIVE_CLAUDE_REFRESH_SOURCE_METHODS } from './native-claude-refresh-sources'
+import { NATIVE_CLI_TERMINAL_METHODS } from './native-cli-terminals'
+import { NATIVE_CLI_STDIO_METHODS } from './native-cli-stdio'
 import { STATUS_METHODS } from './status'
 import { SIDEBAR_INPUT_METHODS } from './sidebar-inputs'
 import { ORCAD_TERMINAL_CENSUS_METHODS } from './orcad-terminal-census'
@@ -113,8 +119,14 @@ export const ALL_RPC_METHODS = [
   ...TERMINAL_DAEMON_METHODS,
   ...ACCOUNT_METHODS,
   ...ACCOUNT_DEVICE_SIGN_IN_METHODS,
+  ...NATIVE_ACCOUNT_ROUTING_METHODS,
   ...ACCOUNT_SIGN_IN_TERMINAL_METHODS,
   ...ACCOUNT_POOL_METHODS,
+  ...NATIVE_CLI_ACCOUNT_METHODS,
+  ...NATIVE_CLI_USER_INTEGRATION_METHODS,
+  ...NATIVE_CLAUDE_REFRESH_SOURCE_METHODS,
+  ...NATIVE_CLI_TERMINAL_METHODS,
+  ...NATIVE_CLI_STDIO_METHODS,
   ...ANTIGRAVITY_ACCOUNT_METHODS,
   ...USAGE_CREDENTIAL_METHODS,
   ...PREFLIGHT_METHODS,

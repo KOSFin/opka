@@ -1,3 +1,4 @@
+import { clearCodexProviderFailure, preserveCodexProviderFailure } from '../codex-provider-failure'
 import { RateLimitServiceFetchControl } from './service-fetch-control'
 import {
   MAX_ACTIVE_FAILURE_STREAK,
@@ -12,6 +13,27 @@ export abstract class RateLimitServiceResultPolicy extends RateLimitServiceFetch
     fresh: ProviderRateLimits,
     previous: ProviderRateLimits | null
   ): ProviderRateLimits {
+    const provenance = fresh.usageMetadata?.authProvenance
+    if (
+      fresh.provider === 'codex' &&
+      fresh.status === 'ok' &&
+      (fresh.session || fresh.weekly || fresh.buckets?.length) &&
+      provenance?.startsWith('profile:')
+    ) {
+      const proof = this.codexProviderFailureAccountResolver?.(provenance.slice('profile:'.length))
+      if (proof?.identityVerified && proof.authProvenance === provenance) {
+        for (const [id, sample] of this.inactiveCodexCache) {
+          const failure = sample.usageMetadata?.confirmedProviderFailure
+          if (
+            failure?.quotaIdentity === proof.quotaIdentity &&
+            fresh.updatedAt > failure.observedAt
+          ) {
+            this.inactiveCodexCache.set(id, clearCodexProviderFailure(sample))
+          }
+        }
+      }
+    }
+    fresh = preserveCodexProviderFailure(fresh, previous)
     // Fresh data is fine — use it
     if (fresh.status === 'ok') {
       return {

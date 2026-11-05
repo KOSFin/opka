@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   runProcess: vi.fn()
 }))
 
+vi.mock('../codex-routing/native-codex-policy-scope', () => ({
+  assertNativeCodexPolicyScope: async () => {}
+}))
 vi.mock('./codex-app-server-session', async (importOriginal) => ({
   ...(await importOriginal<typeof AppServerSession>()),
   runCodexAppServerSession: mocks.runCodexAppServerSession

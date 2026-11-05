@@ -143,6 +143,10 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     return this._orchestrationDb
   }
 
+  openedOrchestrationDb(): OrchestrationDb | null {
+    return this.getOrchestrationDbIfAvailable()
+  }
+
   getWorkerCodexAccountEnv(accountId: string): Record<string, string> {
     const home = resolveWorkerCodexAccountHome(
       this.store?.getSettings?.()?.codexManagedAccounts,

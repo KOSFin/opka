@@ -152,7 +152,9 @@ export function createProviderAccountServices(
         id: account.id,
         managedAuthRuntime: account.managedAuthRuntime,
         wslDistro: account.wslDistro,
-        wslLinuxAuthPath: account.wslLinuxAuthPath
+        wslLinuxAuthPath: account.wslLinuxAuthPath,
+        prepareAuth: (signal?: AbortSignal) =>
+          claudeRuntimeAuth.prepareForAccountUsage(account.id, signal)
       }))
   })
   rateLimits.setInactiveCodexAccountsResolver(() => {

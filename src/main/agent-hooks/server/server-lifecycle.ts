@@ -15,7 +15,7 @@ import { HOOK_REQUEST_SLOWLORIS_MS } from '../../../shared/agent-hook-listener/l
 import { isHookRequestTruncatedError } from '../../../shared/agent-hook-transport-interference'
 import { clearAllListenerCaches } from '../../../shared/agent-hook-listener/listener-state'
 import { trackEmptyPaneKeyHook } from './server-transport-rules'
-import { AgentHookServerStatusHookLifecycle } from './server-status-hook-lifecycle'
+import { AgentHookServerNativeClaudeBoundary } from './server-native-claude-boundary'
 import { OPENCODE_STARTUP_PROMPT_CLAIM_PATH } from '../../../shared/opencode-startup-prompt'
 
 type HookServerStartOptions = {
@@ -25,7 +25,7 @@ type HookServerStartOptions = {
   statusHooksEnabled?: boolean
 }
 
-export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHookLifecycle {
+export abstract class AgentHookServerLifecycle extends AgentHookServerNativeClaudeBoundary {
   private readonly startup = new AgentHookStartup()
 
   /** Start the loopback listener after hydration and spool replay have settled. */

@@ -14,6 +14,9 @@ import type { ShellPageFrame } from './shell-page-frame'
  * while nothing else here has to, and the file was over `max-lines` with both.
  */
 export type ScreenDependencies = {
+  appState: 'active' | 'background'
+  appStateListeners: Set<(state: string) => void>
+  focused: boolean
   retry: Mock
   reportShellFailure: Mock
   reportDocumentStarted: Mock
@@ -84,6 +87,9 @@ export const SCREEN_DIRECTORY =
 export function createScreenDependencies(): ScreenDependencies {
   Object.assign(globalThis, { __DEV__: true })
   return {
+    appState: 'active',
+    appStateListeners: new Set(),
+    focused: true,
     retry: vi.fn(),
     reportShellFailure: vi.fn(),
     reportDocumentStarted: vi.fn(),
@@ -125,6 +131,9 @@ export function createScreenDependencies(): ScreenDependencies {
  * the screencast lane would otherwise hand it to every case that follows.
  */
 export function resetScreenDependencies(dependencies: ScreenDependencies): void {
+  dependencies.appState = 'active'
+  dependencies.appStateListeners.clear()
+  dependencies.focused = true
   dependencies.retry.mockReset()
   dependencies.reportShellFailure.mockReset()
   dependencies.reportDocumentStarted.mockReset()

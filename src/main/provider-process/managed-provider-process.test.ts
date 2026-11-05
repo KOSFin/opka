@@ -95,6 +95,34 @@ describe('managed provider process', () => {
     expect(managed.rootVerdict).toBe('live')
   })
 
+  it('discards both output pipes without retaining or classifying provider content', async () => {
+    const fixture = fakeChild()
+    const classify = vi.fn(() => false)
+    const managed = spawnManagedProviderProcess(
+      { command: 'fixture-provider', args: [] },
+      {
+        spawnImpl: fixture.spawn,
+        platform: 'win32',
+        site: 'discard-output',
+        discardOutput: true,
+        onStderrLine: classify
+      }
+    )
+    fixture.child.stdout.write('private-response-content')
+    fixture.child.stderr.write('private-upstream-error-content\n')
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(managed.stderrTail()).toBe('')
+    expect(classify).not.toHaveBeenCalled()
+    expect(fixture.child.stdout.listenerCount('data')).toBe(0)
+    expect(fixture.child.stderr.listenerCount('data')).toBe(0)
+    expect(fixture.child.stdout.readableFlowing).toBe(true)
+    expect(fixture.child.stderr.readableFlowing).toBe(true)
+    expect(fixture.child.stdout.readableLength).toBe(0)
+    expect(fixture.child.stderr.readableLength).toBe(0)
+    fixture.child.emit('exit', 0, null)
+    await expect(managed.close()).resolves.toEqual({ root: 'exited', tree: null })
+  })
+
   it('observes exit once across exit and close, including a late subscriber', async () => {
     const fixture = fakeChild()
     const managed = launch(fixture)

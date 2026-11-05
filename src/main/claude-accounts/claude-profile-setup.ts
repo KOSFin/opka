@@ -13,6 +13,25 @@ import {
 /** `refused`: the profile failed its ownership gate and no surface was touched. */
 export type ClaudeProfileSetupReport = ClaudeProfileReport & { outcome: 'refused' | 'prepared' }
 
+export async function provisionClaudeProfileSurfaces(args: {
+  profileHome: string
+  userHome: string
+  userConfigDir?: string
+  platform?: NodeJS.Platform
+}): Promise<ClaudeProfileReport> {
+  const report = createClaudeProfileReport()
+  for (const step of [() => shareClaudeProfileHistory(args), () => provisionClaudeProfile(args)]) {
+    try {
+      const part = await step()
+      Object.assign(report.surfaces, part.surfaces)
+      report.warnings.push(...part.warnings)
+    } catch (error) {
+      warnClaudeProfile(report, 'profile', error)
+    }
+  }
+  return report
+}
+
 /**
  * The one entry for setting up a managed Claude profile. Runs on the execution host that owns the
  * profile; for WSL that is inside the guest, never across a UNC path.
@@ -47,18 +66,9 @@ export async function provisionClaudeAccountProfile(args: {
   }
   const home = args.profile.home
   const shared = { profileHome: home, userHome: args.userHome, userConfigDir: args.userConfigDir }
-  for (const step of [
-    () => shareClaudeProfileHistory({ ...shared, platform }),
-    () => provisionClaudeProfile({ ...shared, platform })
-  ]) {
-    try {
-      const part = await step()
-      Object.assign(report.surfaces, part.surfaces)
-      report.warnings.push(...part.warnings)
-    } catch (error) {
-      warnClaudeProfile(report, 'profile', error)
-    }
-  }
+  const surfaces = await provisionClaudeProfileSurfaces({ ...shared, platform })
+  Object.assign(report.surfaces, surfaces.surfaces)
+  report.warnings.push(...surfaces.warnings)
   const installHooks = args.installHooks
   await runClaudeProfileSurface(report, 'hooks', () => {
     if (!installHooks) {

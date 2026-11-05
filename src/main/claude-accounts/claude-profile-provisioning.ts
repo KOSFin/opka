@@ -161,6 +161,12 @@ function isAccountBoundState(key: string): boolean {
   )
 }
 
+export function claudeProfilePreferenceState(
+  value: Record<string, unknown>
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !isAccountBoundState(key)))
+}
+
 // Why without Orca's hooks: the profile's own hook install owns those, so differing there alone
 // would recopy, and the install rewrite, the file on every launch.
 function settingsWithoutOrcaHooks(value: Record<string, unknown>): string {
@@ -223,7 +229,7 @@ async function copyState(source: string, target: string): Promise<ClaudeProfileS
   if (input.kind === 'absent') {
     return 'absent'
   }
-  const shared = Object.entries(input.value).filter(([key]) => !isAccountBoundState(key))
+  const shared = Object.entries(claudeProfilePreferenceState(input.value))
   if (!lstatIfPresent(target)) {
     const staged = `${target}.${process.pid}.${randomUUID()}.tmp`
     try {

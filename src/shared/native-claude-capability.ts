@@ -1,0 +1,1 @@
+export const QUALIFIED_NATIVE_CLAUDE_VERSION = '2.1.318'

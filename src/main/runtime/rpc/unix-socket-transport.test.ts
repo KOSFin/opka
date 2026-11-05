@@ -7,6 +7,8 @@ import { UnixSocketTransport } from './unix-socket-transport'
 class FakeSocket extends EventEmitter {
   destroyed = false
   writable = true
+  writableNeedDrain = false
+  writableLength = 0
   readonly writes: string[] = []
   private idleMs = 0
   private idleHandler: (() => void) | null = null
@@ -78,19 +80,38 @@ describe('UnixSocketTransport', () => {
     vi.useRealTimers()
   })
 
-  function createReceiver() {
+  function createReceiver(handler?: Parameters<UnixSocketTransport['onMessage']>[0]) {
     const transport = new UnixSocketTransport({ endpoint: 'test-pipe', kind: 'named-pipe' })
     const socket = new FakeSocket()
     const received: string[] = []
-    transport.onMessage((message, reply) => {
-      received.push(message)
-      reply('ok')
-    })
+    transport.onMessage(
+      handler ??
+        ((message, reply) => {
+          received.push(message)
+          reply('ok')
+        })
+    )
     ;(transport as unknown as UnixSocketTransportInternals).handleConnection(
       socket as unknown as Socket
     )
     return { socket, received }
   }
+
+  it('does not enqueue redundant heartbeat bytes behind a backpressured consumer', () => {
+    const { socket } = createReceiver((_request, _reply, context) => context?.startKeepalive())
+    socket.writableNeedDrain = true
+    socket.emit('data', '{"id":"paused","method":"wait"}\n')
+    vi.advanceTimersByTime(60_000)
+    expect(socket.writes).toHaveLength(0)
+    socket.writableNeedDrain = false
+    socket.writableLength = 4096
+    vi.advanceTimersByTime(10_000)
+    expect(socket.writes).toHaveLength(0)
+    socket.writableLength = 0
+    vi.advanceTimersByTime(10_000)
+    expect(socket.writes).toEqual(['{"_keepalive":true}\n'])
+    socket.destroy()
+  })
 
   it.each([false, true])('preserves the UTF-8 byte boundary with oversized=%s', (oversized) => {
     const { socket, received } = createReceiver()

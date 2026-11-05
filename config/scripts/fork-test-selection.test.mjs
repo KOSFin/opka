@@ -59,7 +59,10 @@ describe('fork changed-component selection', () => {
       ['unknown/new.ts']
     ].map((changed) => ({ changed }))
   )('falls back conservatively for $changed', ({ changed }) => {
-    expect(selectForkTests(files, changed, graph)).toMatchObject({ full: true, files: [...files].sort() })
+    expect(selectForkTests(files, changed, graph)).toMatchObject({
+      full: true,
+      files: [...files].sort()
+    })
   })
   it('falls back for code with no proven consumer rather than claiming zero tests passed', () => {
     expect(
@@ -70,7 +73,7 @@ describe('fork changed-component selection', () => {
     ).toBe(true)
   })
   it('keeps root, mobile and real-browser lanes disjoint and complete', () => {
-    const lanes = splitForkTestLanes(files)
+    const lanes = splitForkTestLanes(files, (file) => sources.get(file) ?? '')
     expect(Object.values(lanes).flat().sort()).toEqual([...files].sort())
     expect(new Set(Object.values(lanes).flat()).size).toBe(files.length)
     expect(lanes.render).toEqual(['config/scripts/actual-render.test.mjs'])
@@ -119,4 +122,49 @@ describe('fork changed-component selection', () => {
     })
     expect(() => parseForkSelectionArgs(['--changed', 'HEAD~1', 'HEAD'])).toThrow('immutable')
   })
+})
+
+it('classifies actual Node imports rather than mjs extensions, comments or fixture strings', () => {
+  const sources = new Map([
+    ['config/scripts/node.test.mjs', "import { test } from 'node:test'"],
+    ['config/scripts/commonjs.test.mjs', "const test = require('node:test')"],
+    [
+      'config/scripts/vitest.test.mjs',
+      "import { it } from 'vitest'; // import test from 'node:test'"
+    ],
+    ['config/scripts/fixture.test.mjs', 'const fixture = `import test from "node:test"`'],
+    ['config/scripts/browser-render.test.mjs', "import { it } from 'vitest'"],
+    ['mobile/src/ordinary.test.ts', "import { it } from 'vitest'"]
+  ])
+  const lanes = splitForkTestLanes([...sources.keys()], (file) => sources.get(file))
+  expect(lanes.node).toEqual(['config/scripts/node.test.mjs', 'config/scripts/commonjs.test.mjs'])
+  expect(lanes.root).toEqual(['config/scripts/vitest.test.mjs', 'config/scripts/fixture.test.mjs'])
+  expect(lanes.render).toEqual(['config/scripts/browser-render.test.mjs'])
+  expect(lanes.mobile).toEqual(['mobile/src/ordinary.test.ts'])
+  expect(new Set(Object.values(lanes).flat()).size).toBe(sources.size)
+  expect(() =>
+    splitForkTestLanes(['mixed.test.mjs'], () => "import 'node:test'; import 'vitest'")
+  ).toThrow('cannot mix')
+})
+
+it('keeps changed Node tests and transitive consumers selected in their own lane', () => {
+  const input = new Map([
+    ['src/shared/input.ts', 'export const value = 1'],
+    ['config/scripts/native.test.mjs', "import 'node:test'; import '../../src/shared/input'"],
+    ['src/main/other.test.ts', "import 'vitest'"]
+  ])
+  const inventory = [...input.keys()].filter((file) => file.includes('.test.'))
+  const graph = { ...buildUnitDependencyGraph(input), files: new Set(input.keys()) }
+  const selected = selectForkTests(inventory, ['src/shared/input.ts'], graph, [])
+  expect(selected.files).toEqual(['config/scripts/native.test.mjs'])
+  expect(splitForkTestLanes(selected.files, (file) => input.get(file)).node).toEqual(selected.files)
+  const fallback = selectForkTests(
+    inventory,
+    ['pnpm-lock.yaml', 'config/scripts/native.test.mjs'],
+    graph,
+    ['src/main/other.test.ts']
+  )
+  const lanes = splitForkTestLanes(fallback.files, (file) => input.get(file))
+  expect(lanes.node).toEqual(['config/scripts/native.test.mjs'])
+  expect(lanes.root).toEqual(['src/main/other.test.ts'])
 })

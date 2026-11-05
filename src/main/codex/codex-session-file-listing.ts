@@ -7,6 +7,8 @@ export type CodexSessionBridgeIncrementalOptions = {
   batchSize?: number
   /** Delay after each processed batch; zero still yields on a timer turn. */
   yieldMs?: number
+  signal?: AbortSignal
+  maxEntries?: number
 }
 
 const INCREMENTAL_BRIDGE_BATCH_SIZE = 64
@@ -91,8 +93,16 @@ async function* listCodexSessionFilesIncrementally(
   const yieldMs = Math.max(0, options.yieldMs ?? INCREMENTAL_BRIDGE_YIELD_MS)
   const pendingDirectories = [rootPath]
   let entriesSinceYield = 0
+  let visited = 0
+  if (
+    options.maxEntries !== undefined &&
+    (!Number.isSafeInteger(options.maxEntries) || options.maxEntries < 1)
+  ) {
+    throw new Error('Codex session listing entry budget is invalid')
+  }
 
   while (pendingDirectories.length > 0) {
+    options.signal?.throwIfAborted()
     const currentDirectory = pendingDirectories.pop()
     if (!currentDirectory) {
       continue
@@ -100,6 +110,10 @@ async function* listCodexSessionFilesIncrementally(
     try {
       const directory = await opendir(currentDirectory)
       for await (const entry of directory) {
+        options.signal?.throwIfAborted()
+        if (options.maxEntries !== undefined && ++visited > options.maxEntries) {
+          return
+        }
         const childPath = join(currentDirectory, entry.name)
         if (entry.isDirectory()) {
           pendingDirectories.push(childPath)
@@ -113,6 +127,9 @@ async function* listCodexSessionFilesIncrementally(
         }
       }
     } catch (error) {
+      if (options.signal?.aborted) {
+        throw error
+      }
       await onDirectoryError?.(currentDirectory, error)
       console.warn('[codex-session-bridge] Failed to list system Codex sessions:', error)
     }

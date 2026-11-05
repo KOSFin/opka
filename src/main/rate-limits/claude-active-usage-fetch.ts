@@ -10,7 +10,7 @@ import type { ClaudeRateLimitFetchOptions } from './claude-usage-fetch-options'
 import { abortedClaudeRateLimitResult, makeClaudeUsageResult } from './claude-usage-result'
 import { CLAUDE_PROFILE_MISSING_MESSAGE } from '../../shared/claude-profile-routing'
 
-/** Usage observes the account; only a user-started Claude process may refresh its login. */
+/** Read access credentials only; native login refresh belongs to the owning authority. */
 export async function fetchActiveClaudeRateLimits(
   options?: ClaudeRateLimitFetchOptions
 ): Promise<ProviderRateLimits> {

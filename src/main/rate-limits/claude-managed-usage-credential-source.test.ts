@@ -91,3 +91,33 @@ it.each([
     expect(fixture.wslPreparation).not.toHaveBeenCalled()
   }
 })
+
+it('refreshes a dedicated inactive source before the read-only quota request, retaining its identity', async () => {
+  const signal = new AbortController().signal
+  const prepareAuth = vi.fn(async () => ({
+    configDir,
+    envPatch: { CLAUDE_CONFIG_DIR: configDir },
+    provenance: 'profile:A'
+  }))
+  const result = await fetchInactiveClaudeAccountUsage({ id: 'A', prepareAuth }, { signal })
+  expect(prepareAuth).toHaveBeenCalledWith(signal)
+  expect(fixture.hostPreparation).not.toHaveBeenCalled()
+  expect(fixture.fetchUsage).toHaveBeenCalledWith('synthetic-token', signal)
+  expect(result.usageMetadata?.authProvenance).toBe('profile:A')
+})
+
+it('keeps an unavailable dedicated source from borrowing legacy credentials or making a quota request', async () => {
+  const result = await fetchInactiveClaudeAccountUsage({
+    id: 'A',
+    prepareAuth: async () => ({
+      configDir: '',
+      envPatch: {},
+      provenance: 'profile:A',
+      usageError: 'Reconnect this source.'
+    })
+  })
+  expect(result.status).toBe('error')
+  expect(fixture.hostPreparation).not.toHaveBeenCalled()
+  expect(fixture.readCredentials).not.toHaveBeenCalled()
+  expect(fixture.fetchUsage).not.toHaveBeenCalled()
+})

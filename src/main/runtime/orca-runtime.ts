@@ -1,4 +1,4 @@
-import { installPtyAccountPoolRotation } from './pty-account-pool-rotation'
+import { installPtyAccountPoolRotation } from './install-pty-account-pool-rotation'
 import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'

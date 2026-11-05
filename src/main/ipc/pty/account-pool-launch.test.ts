@@ -1,6 +1,10 @@
 import { expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { preparePtyAccountPoolLaunch } from './account-pool-launch'
+import {
+  isNativeClaudeHookEnvironment,
+  registerNativeClaudeHookSession
+} from '../../runtime/native-claude-hook-sessions'
 const hooks = vi.hoisted(() => ({
   policy: vi.fn(() => ({
     id: 'pool',
@@ -47,7 +51,11 @@ it('pins a fresh managed launch and retains its lease until an owning-host exit'
     resume: false,
     wsl: false
   })
-  expect(await launch?.prepareEnv()).toEqual({ ORCA_WORKER_CODEX_ACCOUNT_ID: 'a' })
+  expect(await launch?.prepareEnv()).toEqual({
+    ORCA_WORKER_CODEX_ACCOUNT_ID: 'a',
+    ORCA_NATIVE_CLI_INITIAL_ASSIGNMENT: launch?.assignment.ownerKey,
+    ORCA_NATIVE_CLI_ACCOUNT_PIN: 'codex:a'
+  })
   launch?.bind('pty', false, false)
   expect(f.release).not.toHaveBeenCalled()
   f.subscribe.mock.calls[0][1]()
@@ -84,7 +92,11 @@ it('uses pinned Claude preparation and releases an unstarted or adopted lease', 
     resume: false,
     wsl: false
   })
-  expect(await launch?.prepareEnv()).toEqual({ CLAUDE_CONFIG_DIR: '/synthetic/exact' })
+  expect(await launch?.prepareEnv()).toEqual({
+    CLAUDE_CONFIG_DIR: '/synthetic/exact',
+    ORCA_NATIVE_CLI_INITIAL_ASSIGNMENT: launch?.assignment.ownerKey,
+    ORCA_NATIVE_CLI_ACCOUNT_PIN: 'claude:a'
+  })
   launch?.bind('existing', false, true)
   expect(f.release).toHaveBeenCalledOnce()
   expect(f.subscribe).not.toHaveBeenCalled()
@@ -125,7 +137,12 @@ it('strips inherited Claude credentials and asks the spawn provider to remove ho
       KEEP: 'yes'
     }
   })
-  expect(await launch?.prepareEnv()).toEqual({ KEEP: 'yes', CLAUDE_CONFIG_DIR: '/synthetic/exact' })
+  expect(await launch?.prepareEnv()).toEqual({
+    KEEP: 'yes',
+    CLAUDE_CONFIG_DIR: '/synthetic/exact',
+    ORCA_NATIVE_CLI_INITIAL_ASSIGNMENT: launch?.assignment.ownerKey,
+    ORCA_NATIVE_CLI_ACCOUNT_PIN: 'claude:a'
+  })
   expect(launch?.envToDelete).toContain('ANTHROPIC_API_KEY')
   expect(launch?.envToDelete).toContain('ANTHROPIC_CUSTOM_HEADERS')
   launch?.release()
@@ -187,4 +204,42 @@ it('keeps the native selected-account path for an automatically applied manual p
     })
   ).toBeUndefined()
   expect(f.acquire).not.toHaveBeenCalled()
+})
+
+it('skips duplicate Claude admission only for a live capability registered on this exact host', () => {
+  const f = fixture(),
+    another = fixture()
+  const capability = 'a'.repeat(64)
+  const env = { OPKA_CLAUDE_ROUTING_KEY: capability }
+  const unregister = registerNativeClaudeHookSession(f.runtime, 'synthetic-launch', {
+    capability,
+    handle: async () => ({ action: 'none' })
+  })
+  const prepare = (runtime: OrcaRuntimeService) =>
+    preparePtyAccountPoolLaunch({
+      runtime,
+      agent: 'claude',
+      adopted: false,
+      resume: false,
+      wsl: false,
+      env
+    })
+  try {
+    expect(prepare(f.runtime)).toBeUndefined()
+    expect(f.acquire).not.toHaveBeenCalled()
+    expect(
+      isNativeClaudeHookEnvironment(f.runtime, { OPKA_CLAUDE_ROUTING_KEY: 'é'.repeat(64) })
+    ).toBe(false)
+    expect(
+      isNativeClaudeHookEnvironment(f.runtime, { OPKA_CLAUDE_ROUTING_KEY: 'a'.repeat(1024) })
+    ).toBe(false)
+    const unrelated = prepare(another.runtime)
+    expect(unrelated).toBeDefined()
+    unrelated?.release()
+  } finally {
+    unregister()
+  }
+  const revoked = prepare(f.runtime)
+  expect(revoked).toBeDefined()
+  revoked?.release()
 })

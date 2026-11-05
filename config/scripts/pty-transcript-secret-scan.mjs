@@ -11,6 +11,10 @@ function buildPatterns() {
   const username = os.userInfo().username
   const hostname = os.hostname()
   const patterns = [
+    {
+      kind: 'native-routing-path',
+      re: /\/native\/[A-Za-z0-9._-]{32,512}\/v1(?=$|[^A-Za-z0-9._-])/g
+    },
     { kind: 'jwt', re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g },
     { kind: 'google-api-key', re: /\bAIza[0-9A-Za-z_-]{20,}/g },
     { kind: 'google-refresh-token', re: /\b1\/\/[0-9A-Za-z_-]{20,}/g },
@@ -65,6 +69,9 @@ export function scanTranscriptForSecrets(text) {
 const PLACEHOLDER_DOMAIN_RE = /@(?:example\.(?:com|org|net)|localhost)$/i
 
 function isAlreadyScrubbed(kind, match) {
+  if (kind === 'native-routing-path') {
+    return /^\/native\/X{32,512}\/v1$/.test(match)
+  }
   if (kind === 'email') {
     return PLACEHOLDER_DOMAIN_RE.test(match)
   }
@@ -88,6 +95,9 @@ function locate(text, index) {
 
 /** Same-length stand-in so redaction cannot reflow the captured screen. */
 export function placeholderFor(kind, length) {
+  if (kind === 'native-routing-path') {
+    return `/native/${'X'.repeat(length - 11)}/v1`
+  }
   if (kind === 'uuid' && length === PLACEHOLDER_UUID.length) {
     return PLACEHOLDER_UUID
   }
@@ -117,7 +127,8 @@ export function formatFindings(label, findings) {
     return `${label}: clean — no account identifier or credential shapes found.`
   }
   const rows = findings.map(
-    (finding) => `  ${finding.line}:${finding.column}  ${finding.kind}  ${preview(finding.match)}`
+    (finding) =>
+      `  ${finding.line}:${finding.column}  ${finding.kind}  ${finding.kind === 'native-routing-path' ? '[local routing nonce]' : preview(finding.match)}`
   )
   return [`${label}: ${findings.length} finding(s) — scrub before committing.`, ...rows].join('\n')
 }

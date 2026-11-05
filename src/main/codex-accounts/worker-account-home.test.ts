@@ -7,6 +7,7 @@ import { createGlobalSettingsFixture } from '../../shared/global-settings-test-f
 import type { CodexManagedAccount } from '../../shared/managed-account-types'
 import {
   resolveWorkerCodexAccountHome,
+  resolveWorkerCodexHistoryHome,
   resolveWorkerCodexLaunchHome,
   WORKER_CODEX_ACCOUNT_ENV
 } from './worker-account-home'
@@ -80,8 +81,10 @@ describe('explicit worker account home', () => {
   })
   it('rejects unknown accounts, WSL profiles and wrong adapters', () => {
     expect(() => resolveWorkerCodexAccountHome(accounts, 'unknown')).toThrow('not registered')
+    expect(() => resolveWorkerCodexHistoryHome(accounts, 'unknown')).toThrow('not registered')
     accounts[1].managedHomeRuntime = 'wsl'
     expect(() => resolveWorkerCodexAccountHome(accounts, 'second')).toThrow('not registered')
+    expect(() => resolveWorkerCodexHistoryHome(accounts, 'second')).toThrow('not registered')
     expect(() =>
       resolveWorkerCodexLaunchHome({
         accounts,
@@ -93,6 +96,7 @@ describe('explicit worker account home', () => {
   })
   it('refuses missing credentials and forged home associations without fallback', () => {
     rmSync(join(accounts[1].managedHomePath, 'auth.json'))
+    expect(resolveWorkerCodexHistoryHome(accounts, 'second')).toBe(accounts[1].managedHomePath)
     expect(() => resolveWorkerCodexAccountHome(accounts, 'second')).toThrow('needs sign-in')
     expect(() =>
       resolveWorkerCodexLaunchHome({

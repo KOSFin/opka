@@ -8,6 +8,12 @@ import { getDefaultAccountPool } from '../../runtime/runtime-account-pool-policy
 import { accountPoolCandidates } from '../../runtime/account-pool-candidates'
 import { WORKER_CODEX_ACCOUNT_ENV } from '../../codex-accounts/worker-account-home'
 import { preparePinnedClaudeAccountLaunch } from '../../claude-accounts/pinned-account-launch'
+import {
+  NATIVE_CLI_ACCOUNT_PIN_ENV,
+  NATIVE_CLI_INITIAL_ASSIGNMENT_ENV
+} from '../../../shared/native-cli-account-launch'
+import { isNativeCodexRoutingEnvironment } from '../../runtime/native-codex-routing-ownership'
+import { isNativeClaudeHookEnvironment } from '../../runtime/native-claude-hook-sessions'
 
 export type PtyAccountPoolLaunch = ReturnType<typeof preparePtyAccountPoolLaunch>
 export function preparePtyAccountPoolLaunch(args: {
@@ -28,6 +34,8 @@ export function preparePtyAccountPoolLaunch(args: {
     args.resume ||
     args.connectionId ||
     args.wsl ||
+    (agent === 'codex' && args.env && isNativeCodexRoutingEnvironment(runtime, args.env)) ||
+    (agent === 'claude' && args.env && isNativeClaudeHookEnvironment(runtime, args.env)) ||
     args.env?.[WORKER_CLAUDE_ACCOUNT_ENV] ||
     args.env?.[WORKER_CODEX_ACCOUNT_ENV]
   ) {
@@ -81,13 +89,22 @@ export function preparePtyAccountPoolLaunch(args: {
     },
     async prepareEnv(): Promise<Record<string, string>> {
       if (agent === 'codex') {
-        return { ...args.env, ...runtime.getWorkerCodexAccountEnv(assignment.accountId) }
+        return {
+          ...args.env,
+          ...runtime.getWorkerCodexAccountEnv(assignment.accountId),
+          [NATIVE_CLI_ACCOUNT_PIN_ENV]: `${agent}:${assignment.accountId}`,
+          [NATIVE_CLI_INITIAL_ASSIGNMENT_ENV]: assignment.ownerKey
+        }
       }
       const prepared = await preparePinnedClaudeAccountLaunch({
         accountId: assignment.accountId,
         getAccounts: () => runtime.requireStore().getSettings().claudeManagedAccounts ?? []
       })
-      return applyClaudeEnvPatch({ ...args.env }, prepared.envPatch, { stripAuthEnv: true })
+      return {
+        ...applyClaudeEnvPatch({ ...args.env }, prepared.envPatch, { stripAuthEnv: true }),
+        [NATIVE_CLI_ACCOUNT_PIN_ENV]: `${agent}:${assignment.accountId}`,
+        [NATIVE_CLI_INITIAL_ASSIGNMENT_ENV]: assignment.ownerKey
+      }
     },
     bind(ptyId: string, exited: boolean, adopted: boolean, incarnationId?: string): void {
       if (exited || adopted) {

@@ -1,0 +1,33 @@
+name: Native CLI authority qualification
+on:
+  push:
+    branches: [codex/iteration010-native-authority]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-cli-authority-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  claude-darwin-authority:
+    name: Native Claude macOS refresh authority
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_TELEMETRY_DISABLED: '1'
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: node
+      - name: Qualify isolated native refresh authority
+        run: node config/scripts/qualify-claude-native-darwin.mjs native-darwin-authority --refresh-only
+      - name: Keep only synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-darwin-authority
+          path: native-darwin-authority/
+          retention-days: 7

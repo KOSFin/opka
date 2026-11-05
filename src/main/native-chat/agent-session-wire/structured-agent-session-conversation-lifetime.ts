@@ -1,3 +1,4 @@
+import * as residentBudgetHost from './structured-agent-session-resident-budget-host'
 // How a conversation is reached, closed and swept — the host's lifetime rules in one place.
 //
 // A conversation is reached only through `conversation`, which opens it at rest and starts no
@@ -45,19 +46,21 @@ export type StructuredAgentSessionConversationLifetime = ReturnType<
   typeof createStructuredAgentSessionConversationLifetime
 >
 
-export function createStructuredAgentSessionConversationLifetime(host: {
-  /** Resolved per call: the host's collaborators are assigned after this is built. */
-  context: () => StructuredAgentSessionLifetimeContext
-  sessions: StructuredAgentSessionConversations
-  serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
-  /** PR 1's one open function, for a caller inside the session's serialize. */
-  open: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
-  deliveryActive: (sessionId: string) => boolean
-  /** The handle closed: `listed` keeps the chat's row in the agent-status store for its tab. */
-  closeStatus: (sessionId: string, options: { listed: boolean }) => void
-  /** Child work the provider reported running and not over, recorded or not. */
-  childWorkOpen: (sessionId: string) => boolean
-}) {
+export function createStructuredAgentSessionConversationLifetime(
+  host: {
+    /** Resolved per call: the host's collaborators are assigned after this is built. */
+    context: () => StructuredAgentSessionLifetimeContext
+    sessions: StructuredAgentSessionConversations
+    serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
+    /** PR 1's one open function, for a caller inside the session's serialize. */
+    open: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
+    deliveryActive: (sessionId: string) => boolean
+    /** The handle closed: `listed` keeps the chat's row in the agent-status store for its tab. */
+    closeStatus: (sessionId: string, options: { listed: boolean }) => void
+    /** Child work the provider reported running and not over, recorded or not. */
+    childWorkOpen: (sessionId: string) => boolean
+  } & residentBudgetHost.StructuredResidentViews
+) {
   let disposed = false
   const { sessions, serialize } = host
   const deps = () => host.context().deps
@@ -197,9 +200,16 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       }),
     closeConversation: (sessionId) => closeConversation(sessionId, true),
     logger: deps().logger,
-    ...deps().idleSweep
+    ...deps().idleSweep,
+    afterSweep: () => residentBudget.tick()
   })
 
+  const residentBudget = residentBudgetHost.installStructuredResidentBudget({
+    ...host,
+    hasOpenWork: (id) => idleSweep.hasOpenWork(id),
+    rest: (id) => stopAgent(id, { cause: 'evict', resting: true }),
+    isDisposed: () => disposed
+  })
   const stopStartingChild = (
     sessionId: string,
     expired: StructuredAgentSessionProviderChildIdentity | null
@@ -282,6 +292,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     dispose: (): void => {
       disposed = true
       idleSweep.dispose()
+      residentBudget.dispose()
       host.context().runtimeState.startupAttempts.dispose()
     },
     /**

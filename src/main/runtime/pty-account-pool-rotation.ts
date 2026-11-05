@@ -3,29 +3,38 @@ import { selectAccountPoolRotationMember } from './account-pool-rotation-policy'
 import { applyClaudeEnvPatch } from '../claude-accounts/environment'
 import { readPtyAccountPoolChildren } from './pty-account-pool-child-inventory'
 import { randomUUID } from 'node:crypto'
+import { resolveWorkerCodexHistoryHome } from '../codex-accounts/worker-account-home'
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import { AGENT_DONE_QUIET_MS } from '../../shared/agent-transitions'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { buildAgentResumeStartupPlan } from '../../shared/tui-agent-resume-startup'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import type { OrcaRuntimeService } from './orca-runtime'
-import { accountPoolRotationBoundary } from './account-pool-rotation-boundary'
+import {
+  accountPoolRotationBoundary,
+  rememberAccountPoolRotationTurn
+} from './account-pool-rotation-boundary'
+import {
+  noteNativeCliTerminalRotation,
+  nativeCliTerminalEnvironment,
+  nativeCliTerminalCommand
+} from './native-cli-terminal-bindings'
 import { accountPoolCandidates } from './account-pool-candidates'
 import { getAccountPoolPolicy } from './runtime-account-pool-policy'
 import { prepareAccountPoolResume } from './account-pool-resume'
 import { preparePinnedClaudeAccountLaunch } from '../claude-accounts/pinned-account-launch'
 import { WORKER_CLAUDE_ACCOUNT_ENV } from '../claude-accounts/worker-account-launch'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
+import { isNativeCliRoutingPty } from './native-cli-routing-pty'
 
+type PoolRotationPty = Pick<RuntimePtyWorktreeRecord, 'isWsl' | 'wslDistro' | 'launchConfig'>
 export class PtyAccountPoolRotation {
   private readonly pending = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly running = new Set<string>()
   private readonly completed = new Map<string, number>()
   constructor(
     private readonly runtime: OrcaRuntimeService,
-    private readonly readPty: (
-      id: string
-    ) => Pick<RuntimePtyWorktreeRecord, 'isWsl' | 'wslDistro' | 'launchConfig'> | undefined
+    private readonly readPty: (id: string) => PoolRotationPty | undefined
   ) {}
   observe(change: AgentPaneChange): void {
     const prior = this.pending.get(change.paneKey)
@@ -87,6 +96,9 @@ export class PtyAccountPoolRotation {
     if (!terminal.ptyId || !terminal.incarnationId || terminal.executionHostId !== 'local') {
       return
     }
+    if (isNativeCliRoutingPty(runtime, terminal.ptyId, terminal.incarnationId)) {
+      return
+    }
     const pty = this.readPty(terminal.ptyId)
     if (!pty || pty.isWsl !== false || pty.wslDistro || !pty.launchConfig) {
       return
@@ -112,6 +124,8 @@ export class PtyAccountPoolRotation {
     if (started === null || started === undefined) {
       return
     }
+    const ptyId = terminal.ptyId
+    const inputAt = runtime.terminalRunFacts?.readLastInputAt(ptyId)
     const token = accountPoolRotationBoundary({
       policy,
       row,
@@ -120,14 +134,13 @@ export class PtyAccountPoolRotation {
       candidate: candidates.find((entry) => entry.accountId === previous.accountId),
       executionId: row.executionId,
       launchStartedAt: started,
+      lastInputAt: inputAt,
       now: Date.now(),
       lastRotatedTurn: this.completed.get(previous.ownerKey)
     })
     if (token === null || !row.providerSession) {
       return
     }
-    const ptyId = terminal.ptyId
-    const inputAt = runtime.terminalRunFacts?.readLastInputAt(ptyId)
     let inputChanged = false
     const assertCurrent = (): void => {
       const current = runtime.agentTransitions.latestRow(paneKey)
@@ -191,7 +204,7 @@ export class PtyAccountPoolRotation {
       const settings = runtime.requireStore().getSettings()
       const sourceHome =
         policy.provider === 'codex'
-          ? runtime.getWorkerCodexAccountEnv(previous.accountId).CODEX_HOME
+          ? resolveWorkerCodexHistoryHome(settings.codexManagedAccounts, previous.accountId)
           : getClaudeProfileRouter()?.accountHome(previous.accountId)
       const targetEnv: Record<string, string> =
         policy.provider === 'codex'
@@ -243,6 +256,7 @@ export class PtyAccountPoolRotation {
           expectedIncarnationId: terminal.incarnationId,
           beforeStop: () => {
             assertCurrent()
+            noteNativeCliTerminalRotation(runtime, paneKey, true)
             stopping = true
           }
         }
@@ -251,16 +265,12 @@ export class PtyAccountPoolRotation {
         throw new Error('The previous execution exit is unverifiable')
       }
       db.releaseAccountPoolAssignment(previous.ownerKey)
-      this.completed.set(previous.ownerKey, token)
-      const oldest = this.completed.keys().next().value
-      if (this.completed.size > 1024 && oldest !== undefined) {
-        this.completed.delete(oldest)
-      }
+      rememberAccountPoolRotationTurn(this.completed, previous.ownerKey, token)
       const result = await runtime.createTerminal(`id:${row.worktreeId}`, {
-        command: startup.launchCommand,
+        command: nativeCliTerminalCommand(runtime, paneKey, startup.launchCommand),
         launchAgent: policy.provider,
         startupCommandDelivery: 'shell-ready',
-        env: { ...startup.env, ...targetEnv },
+        env: { ...nativeCliTerminalEnvironment(runtime, paneKey), ...startup.env, ...targetEnv },
         launchConfig: startup.launchConfig,
         resumeProviderSession: session,
         tabId: pane.tabId,
@@ -285,17 +295,8 @@ export class PtyAccountPoolRotation {
       }
       if (stopping) {
         this.completed.set(previous.ownerKey, token)
+        noteNativeCliTerminalRotation(runtime, paneKey, false)
       }
     }
   }
-}
-
-export function installPtyAccountPoolRotation(
-  runtime: OrcaRuntimeService,
-  readPty: (
-    id: string
-  ) => Pick<RuntimePtyWorktreeRecord, 'isWsl' | 'wslDistro' | 'launchConfig'> | undefined
-): void {
-  const rotation = new PtyAccountPoolRotation(runtime, readPty)
-  runtime.agentTransitions.subscribe((change) => rotation.observe(change))
 }

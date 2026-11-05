@@ -19,6 +19,7 @@ import {
   isAtomicNoReplaceUnsupportedError
 } from './codex-session-backfill-copy'
 import { resolveCodexSessionBackfillPaths } from './codex-session-backfill'
+import { cleanupExitedCodexSessionStages } from './codex-session-staging'
 import { ManagedCodexHomeTemporarilyUnavailableError } from '../codex-accounts/host-codex-managed-home-ownership'
 
 const RETRYABLE_RESUME_ERROR =
@@ -58,24 +59,7 @@ export async function prepareLegacySharedCodexSessionResume(
     throw new Error(RETRYABLE_RESUME_ERROR)
   }
   const targetPath = join(paths.systemSessionsRoot, relativePath)
-  const key = `${normalizeRuntimePathForComparison(sourcePath)}\0${normalizeRuntimePathForComparison(targetPath)}`
-  let task = materializations.get(key)
-  if (!task) {
-    task = materializeLegacyRollout(sourcePath, targetPath, paths.auditLogPath)
-    materializations.set(key, task)
-    void task.then(
-      () => {
-        if (materializations.get(key) === task) {
-          materializations.delete(key)
-        }
-      },
-      () => {
-        if (materializations.get(key) === task) {
-          materializations.delete(key)
-        }
-      }
-    )
-  }
+  const task = materializeRolloutOnce(sourcePath, targetPath, paths.auditLogPath)
 
   try {
     await task
@@ -104,7 +88,7 @@ export async function prepareCodexAccountRestartResume(args: {
     throw new Error(RETRYABLE_RESUME_ERROR)
   }
   const paths = resolveCodexSessionBackfillPaths(args.systemCodexHomePath)
-  await materializeLegacyRollout(
+  await materializeRolloutOnce(
     args.transcriptPath,
     join(args.targetHome, 'sessions', relativePath),
     paths.auditLogPath
@@ -162,6 +146,27 @@ async function resolveSelectedAccountCodexHomeForResume(
   }
 }
 
+function materializeRolloutOnce(
+  sourcePath: string,
+  targetPath: string,
+  auditLogPath: string
+): Promise<void> {
+  const key = `${normalizeRuntimePathForComparison(sourcePath)}\0${normalizeRuntimePathForComparison(targetPath)}`
+  const pending = materializations.get(key)
+  if (pending) {
+    return pending
+  }
+  const task = materializeLegacyRollout(sourcePath, targetPath, auditLogPath)
+  materializations.set(key, task)
+  const release = (): void => {
+    if (materializations.get(key) === task) {
+      materializations.delete(key)
+    }
+  }
+  void task.then(release, release)
+  return task
+}
+
 async function materializeLegacyRollout(
   sourcePath: string,
   targetPath: string,
@@ -171,27 +176,42 @@ async function materializeLegacyRollout(
   if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
     throw new Error('Legacy rollout source is not a regular file.')
   }
+  // Avoid staging another cross-volume copy when the rollout is already present.
+  try {
+    await lstat(targetPath)
+    await assertMatchingExistingTarget(sourcePath, targetPath)
+    await cleanupExitedCodexSessionStages(dirname(targetPath))
+    return
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !('code' in error) ||
+      (error.code !== 'ENOENT' && error.code !== 'ENOTDIR')
+    ) {
+      throw error
+    }
+  }
   await mkdir(dirname(targetPath), { recursive: true })
   try {
     await link(sourcePath, targetPath)
   } catch (linkError) {
     if (isExistsError(linkError)) {
       await assertMatchingExistingTarget(sourcePath, targetPath)
-    } else {
-      try {
-        await copySessionFileWithoutOverwrite(sourcePath, targetPath)
-      } catch (copyError) {
-        if (isExistsError(copyError)) {
-          await assertMatchingExistingTarget(sourcePath, targetPath)
-        } else {
-          if (isAtomicNoReplaceUnsupportedError(copyError)) {
-            throw new Error('The target filesystem cannot safely install this rollout.', {
-              cause: copyError
-            })
-          }
-          throw copyError
-        }
+      return
+    }
+    try {
+      await copySessionFileWithoutOverwrite(sourcePath, targetPath)
+    } catch (copyError) {
+      if (isExistsError(copyError)) {
+        await assertMatchingExistingTarget(sourcePath, targetPath)
+        return
       }
+      if (isAtomicNoReplaceUnsupportedError(copyError)) {
+        throw new Error('The target filesystem cannot safely install this rollout.', {
+          cause: copyError
+        })
+      }
+      throw copyError
     }
   }
 

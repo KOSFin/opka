@@ -73,6 +73,7 @@ import type { JournalHostDatabase } from '../native-chat/agent-session-journal/j
 import type { JournalOperationReceipt } from '../native-chat/agent-session-journal/journal-row-writer'
 import { agentSessionOperationOutcomeReceipt } from './agent-session-operation-receipt'
 import { loadAgentSessionStoreRows } from './agent-session-record-rows'
+import { createAgentSessionNativeStdioRecords } from './agent-session-native-stdio-records'
 import { AgentSessionStoreTransactions } from './agent-session-store-transactions'
 import { createAgentSessionFoundingStore } from './agent-session-founding-store'
 import {
@@ -87,14 +88,14 @@ export const AGENT_SESSION_LEASE_TTL_MS = 30_000,
 export class AgentSessionRecordStore {
   private readonly deathEvidenceListeners = new Set<(sessionId: string) => void>()
   private readonly firstRecordListeners = new Set<() => void>()
-  readonly conversationReceipts: ReturnType<typeof createAgentSessionConversationReceipts>
 
   private constructor(
     private readonly transactions: AgentSessionStoreTransactions,
-    readonly hostId: string
+    readonly hostId: string,
+    readonly nativeStdioRecords = createAgentSessionNativeStdioRecords(transactions, hostId),
+    readonly conversationReceipts = createAgentSessionConversationReceipts(transactions)
   ) {
     this.founding = createAgentSessionFoundingStore(transactions, this.firstRecordListeners)
-    this.conversationReceipts = createAgentSessionConversationReceipts(transactions)
   }
 
   /** Reads every structurally valid row, independently of which agents this host can start. */
@@ -130,7 +131,7 @@ export class AgentSessionRecordStore {
   /** Every chat this host holds a row for, readable or not. */
   listHeldSessionIds = (): string[] => heldAgentSessionIds(this.state)
 
-  /** Whether this host has recorded a chat, readable or not. Nothing removes a record row. */
+  /** Whether this host has any chat or retained operational lease record, readable or not. */
   holdsRecords = (): boolean => this.state.records.size > 0 || this.state.unreadableRecords.size > 0
 
   listVisibleSessionIds = (): string[] => listVisibleAgentSessionIds(this.state)

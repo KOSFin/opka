@@ -1,19 +1,45 @@
-import { randomUUID } from 'node:crypto'
-import { copyFile, link, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { copyFile, link, rm, writeFile, open, stat } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { dirname } from 'node:path'
+import {
+  cleanupExitedCodexSessionStages,
+  createCodexSessionStagingPath
+} from './codex-session-staging'
 
 const ATOMIC_NO_REPLACE_UNSUPPORTED_CODE = 'ORCA_ATOMIC_NO_REPLACE_UNSUPPORTED'
 
 export async function copySessionFileWithoutOverwrite(
   sourcePath: string,
-  targetPath: string
+  targetPath: string,
+  options?: { cloneOnly?: boolean; maximumBytes?: number; recoverStages?: boolean }
 ): Promise<void> {
-  const temporaryPath = join(dirname(targetPath), `.orca-backfill-${randomUUID()}.tmp`)
+  if (options?.recoverStages !== false) {
+    await cleanupExitedCodexSessionStages(dirname(targetPath))
+  }
+  const temporaryPath = createCodexSessionStagingPath(dirname(targetPath))
   // Why: stage cross-volume copies away from the rollout filename so a failed
   // copy cannot strand a truncated session that a later retry would skip.
   await writeFile(temporaryPath, '', { encoding: 'utf-8', flag: 'wx', mode: 0o600 })
   try {
-    await copyFile(sourcePath, temporaryPath)
+    if (
+      options?.maximumBytes !== undefined &&
+      (!Number.isSafeInteger(options.maximumBytes) || options.maximumBytes < 0)
+    ) {
+      throw new Error('Exclusive copy requires a nonnegative bounded size.')
+    }
+    if (options?.maximumBytes !== undefined && !options.cloneOnly) {
+      await boundedCopy(sourcePath, temporaryPath, options.maximumBytes)
+    } else {
+      await (options?.cloneOnly
+        ? copyFile(sourcePath, temporaryPath, constants.COPYFILE_FICLONE_FORCE)
+        : copyFile(sourcePath, temporaryPath))
+      if (
+        options?.maximumBytes !== undefined &&
+        (await stat(temporaryPath)).size > options.maximumBytes
+      ) {
+        throw new Error('Exclusive copy source exceeds its size bound.')
+      }
+    }
     try {
       // Why: this same-volume hardlink atomically installs the staged copy
       // without risking a collision overwrite after an EXDEV fallback.
@@ -37,6 +63,48 @@ export async function copySessionFileWithoutOverwrite(
       // rollout as a copy failure; the .tmp file is ignored by Codex.
       console.warn('[codex-session-backfill] Failed to remove staged copy:', temporaryPath, error)
     }
+  }
+}
+
+async function boundedCopy(sourcePath: string, targetPath: string, maximum: number): Promise<void> {
+  const source = await open(sourcePath, constants.O_RDONLY | constants.O_NOFOLLOW)
+  try {
+    const info = await source.stat()
+    if (!info.isFile() || info.size > maximum) {
+      throw new Error('Exclusive copy source exceeds its size bound.')
+    }
+    const target = await open(targetPath, 'r+')
+    try {
+      const buffer = Buffer.alloc(64 * 1024)
+      let length = 0
+      while (true) {
+        const { bytesRead } = await source.read(
+          buffer,
+          0,
+          Math.min(buffer.length, maximum - length + 1),
+          length
+        )
+        if (!bytesRead) {
+          break
+        }
+        if (length + bytesRead > maximum) {
+          throw new Error('Exclusive copy source exceeds its size bound.')
+        }
+        let offset = 0
+        while (offset < bytesRead) {
+          const result = await target.write(buffer, offset, bytesRead - offset, length + offset)
+          if (!result.bytesWritten) {
+            throw new Error('Exclusive copy could not complete its bounded write.')
+          }
+          offset += result.bytesWritten
+        }
+        length += bytesRead
+      }
+    } finally {
+      await target.close()
+    }
+  } finally {
+    await source.close()
   }
 }
 

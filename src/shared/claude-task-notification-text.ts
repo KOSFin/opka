@@ -9,14 +9,38 @@ const TASK_STATUS_PATTERN = /<status>([a-z_]+)<\/status>/
 export function readClaudeTaskNotification(
   text: string
 ): { taskId: string; status?: string } | null {
-  if (!text.startsWith(CLAUDE_TASK_NOTIFICATION_MARKER)) {
+  return parseTaskNotification(
+    text,
+    CLAUDE_TASK_NOTIFICATION_MARKER,
+    TASK_ID_PATTERN,
+    TASK_STATUS_PATTERN
+  )
+}
+
+function parseTaskNotification(
+  text: string,
+  marker: string,
+  idPattern: RegExp,
+  statusPattern: RegExp
+): { taskId: string; status?: string } | null {
+  if (!text.startsWith(marker)) {
     return null
   }
-  const taskId = TASK_ID_PATTERN.exec(text)?.[1]?.trim()
+  const taskId = idPattern.exec(text)?.[1]?.trim()
   if (!taskId) {
     return null
   }
   const summaryAt = text.indexOf('<summary>')
-  const status = TASK_STATUS_PATTERN.exec(summaryAt === -1 ? text : text.slice(0, summaryAt))?.[1]
+  const status = statusPattern.exec(summaryAt === -1 ? text : text.slice(0, summaryAt))?.[1]
   return { taskId, ...(status ? { status } : {}) }
+}
+
+/** Ship the same pure parser into the native sandbox, which cannot import host TypeScript. */
+export function nativeClaudeTaskNotificationParserSource(): string {
+  return `const parse = ${parseTaskNotification.toString()};
+const marker = ${JSON.stringify(CLAUDE_TASK_NOTIFICATION_MARKER)};
+const id = new RegExp(${JSON.stringify(TASK_ID_PATTERN.source)});
+const status = new RegExp(${JSON.stringify(TASK_STATUS_PATTERN.source)});
+export function readClaudeTaskNotification(text) { return parse(text, marker, id, status) }
+`
 }
