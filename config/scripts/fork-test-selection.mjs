@@ -23,15 +23,32 @@ export function parseForkSelectionArgs(args) {
   return { base: args[1], head: args[2] }
 }
 
+const FORK_SOURCE_PREFIXES = [
+  'src/',
+  'mobile/src/',
+  'mobile/app/',
+  'mobile/scripts/',
+  'mobile/packages/'
+]
+
 export function selectForkTests(files, changed, graph, fallbackFiles) {
   // Fork qualification retains its approved indirect-input coverage, not every upstream opaque reader.
-  const directGraph = () => ({
-    ...(typeof graph === 'function' ? graph() : graph),
-    opaque: new Set()
-  })
+  let cachedGraph
+  const directGraph = () =>
+    (cachedGraph ??= {
+      ...(typeof graph === 'function' ? graph() : graph),
+      opaque: new Set()
+    })
+  const sourceChanged = changed.filter((file) =>
+    FORK_SOURCE_PREFIXES.some((prefix) => file.startsWith(prefix))
+  )
   const selected = selectUnitFiles(files, changed, directGraph, {
-    sourcePrefixes: ['src/', 'mobile/src/', 'mobile/app/', 'mobile/scripts/', 'mobile/packages/']
+    sourcePrefixes: FORK_SOURCE_PREFIXES
   })
+  const sourceSelection =
+    selected.full && sourceChanged.length > 0 && sourceChanged.length < changed.length
+      ? selectUnitFiles(files, sourceChanged, directGraph, { sourcePrefixes: FORK_SOURCE_PREFIXES })
+      : null
   const covered = selected.full
     ? (fallbackFiles ?? files)
     : [...(fallbackFiles ?? []), ...selected.files]
@@ -40,7 +57,13 @@ export function selectForkTests(files, changed, graph, fallbackFiles) {
     reason: selected.full
       ? selected.reason
       : 'Approved fork qualification plus transitive consumers',
-    files: [...new Set([...covered, ...files.filter((file) => changed.includes(file))])].sort()
+    files: [
+      ...new Set([
+        ...covered,
+        ...(sourceSelection && !sourceSelection.full ? sourceSelection.files : []),
+        ...files.filter((file) => changed.includes(file))
+      ])
+    ].sort()
   }
 }
 

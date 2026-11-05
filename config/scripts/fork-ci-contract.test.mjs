@@ -11,6 +11,32 @@ import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('partitions root regressions across bounded runners and runs shared checks once', () => {
+    const job = workflow.jobs.regression
+    expect(job.strategy).toEqual({ 'fail-fast': false, matrix: { shard: [1, 2, 3, 4] } })
+    expect(job.name).toBe('Fork regression tests (${{ matrix.shard }}/4)')
+    expect(job['timeout-minutes']).toBe(25)
+    expect(job.env).toEqual({
+      OPKA_FORK_TEST_SHARD_INDEX: '${{ matrix.shard }}',
+      OPKA_FORK_TEST_SHARD_COUNT: '4',
+      NODE_OPTIONS: '--max-old-space-size=1536'
+    })
+    for (const step of job.steps.filter(
+      (entry) =>
+        entry.uses === './.github/actions/install-mobile-dependencies' ||
+        entry.name === 'Install the pinned headless renderer browser' ||
+        entry['working-directory'] === 'cloud'
+    )) {
+      expect(step.if).toBe('matrix.shard == 1')
+    }
+    const mobileEvidence = job.steps.find(
+      (entry) => entry.name === 'Save synthetic mobile page evidence'
+    )
+    expect(mobileEvidence.if).toBe('${{ always() && matrix.shard == 1 }}')
+    const selection = job.steps.find((entry) => entry.name === "Save this shard's test selection")
+    expect(selection.with.name).toBe('fork-test-selection-${{ github.sha }}-${{ matrix.shard }}')
+    expect(workflow.jobs.verify.needs).toContain('regression')
+  })
   it('runs rendered pages with Node and installs the browser their library owns', () => {
     const steps = workflow.jobs.regression.steps
     expect(

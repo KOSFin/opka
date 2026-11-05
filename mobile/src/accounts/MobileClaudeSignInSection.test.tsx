@@ -17,8 +17,8 @@ vi.mock('../components/PickerModal', () => ({
 import { MobileClaudeSignInSection } from './MobileClaudeSignInSection'
 const inventory = {
   worktrees: [
-    { id: 'folder:project', displayName: 'Project', path: '/test' },
-    { id: 'copy-two', displayName: 'Second copy', path: '/test-two' }
+    { worktreeId: 'folder:project', displayName: 'Project', path: '/test' },
+    { worktreeId: 'copy-two', displayName: 'Second copy', path: '/test-two' }
   ]
 }
 const receipt = {
@@ -54,7 +54,11 @@ it('opens Claude sign-in on the selected host workspace and navigates to its exa
     .mockResolvedValueOnce(rpcSuccess(receipt))
   await mount(client)
   await choose()
-  expect(client.sendRequest).toHaveBeenCalledWith('worktree.list', { limit: 100 })
+  expect(client.sendRequest).toHaveBeenCalledWith('worktree.ps', { limit: 100 })
+  expect(tree?.root.findByType('Picker').props.options).toEqual([
+    { value: 'folder:project', label: 'Project' },
+    { value: 'copy-two', label: 'Second copy' }
+  ])
   expect(client.sendRequest).toHaveBeenCalledWith('accounts.openSignInTerminal', {
     provider: 'claude',
     worktree: 'id:copy-two',

@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliInstallState, CliInstallStatus } from '../../shared/cli-install-types'
+import { PRODUCT_IDENTITY } from '../../shared/product-identity'
 
 const mocks = vi.hoisted(() => ({
+  profileConstructor: vi.fn(),
   getStatus: vi.fn(),
+  legacyGetStatus: vi.fn(),
+  legacyInstall: vi.fn(),
+  legacyRemove: vi.fn(),
   handle: vi.fn(),
   hydrateShellPath: vi.fn(),
   install: vi.fn(),
@@ -17,10 +22,10 @@ vi.mock('electron', () => ({ ipcMain: { handle: mocks.handle } }))
 
 vi.mock('../cli/cli-installer', () => ({
   CliInstaller: class {
-    getStatus = mocks.getStatus
-    install = mocks.install
+    getStatus = mocks.legacyGetStatus
+    install = mocks.legacyInstall
     isAppImageRegistrationOwnedBySibling = mocks.isAppImageRegistrationOwnedBySibling
-    remove = mocks.remove
+    remove = mocks.legacyRemove
   }
 }))
 
@@ -49,7 +54,20 @@ vi.mock('../cli/wsl-cli-registration-operation', () => ({
   runSerializedWslCliRegistrationOperation: vi.fn()
 }))
 
-vi.mock('../persistence', () => ({ getCanonicalUserDataPath: vi.fn() }))
+vi.mock('../persistence', () => ({
+  getCanonicalUserDataPath: () => '/private/opka-test-profile'
+}))
+
+vi.mock('../cli/profile-cli-registration', () => ({
+  ProfileCliRegistration: class {
+    constructor(...args: unknown[]) {
+      mocks.profileConstructor(...args)
+    }
+    getStatus = mocks.getStatus
+    install = mocks.install
+    remove = mocks.remove
+  }
+}))
 
 vi.mock('../startup/hydrate-shell-path', () => ({
   hydrateShellPath: mocks.hydrateShellPath,
@@ -64,21 +82,22 @@ const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
 
 function status(
   state: CliInstallState,
-  launcherPath = '/cache/current/resources/bin/orca-ide'
+  launcherPath = '/cache/current/resources/bin/orca'
 ): CliInstallStatus {
   return {
     platform: 'linux',
-    commandName: 'orca-ide',
-    commandPath: '/home/me/.local/bin/orca-ide',
-    pathDirectory: '/home/me/.local/bin',
+    commandName: PRODUCT_IDENTITY.command,
+    commandPath: '/private/opka-test-profile/cli/bin/opka',
+    pathDirectory: '/private/opka-test-profile/cli/bin',
     pathConfigured: true,
     launcherPath,
-    installMethod: 'symlink',
+    installMethod: 'wrapper',
     supported: true,
     state,
     currentTarget: state === 'not_installed' ? null : '/cache/old/resources/bin/orca-ide',
     unsupportedReason: null,
-    detail: null
+    detail: null,
+    registrationScope: 'profile'
   }
 }
 
@@ -94,6 +113,10 @@ function cliHandler(channelName: string): () => Promise<CliInstallStatus> {
 }
 
 beforeEach(() => {
+  mocks.profileConstructor.mockClear()
+  mocks.legacyGetStatus.mockClear()
+  mocks.legacyInstall.mockClear()
+  mocks.legacyRemove.mockClear()
   mocks.getStatus.mockReset()
   mocks.handle.mockReset()
   mocks.hydrateShellPath.mockReset().mockResolvedValue({ ok: false })
@@ -110,7 +133,8 @@ beforeEach(() => {
       : null
   )
   Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
-  vi.stubEnv('APPIMAGE', '/opt/Orca.AppImage')
+  vi.stubEnv('APPIMAGE', '/opt/Opka.AppImage')
+  vi.stubEnv('ORCA_FORK_PROFILE_CLI', '0')
 })
 
 afterEach(() => {
@@ -121,252 +145,136 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('AppImage CLI registration startup repair', () => {
-  it('repairs a managed stale registration and returns the installed status', async () => {
-    const stale = status('stale')
-    const installed = status('installed')
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.install.mockResolvedValue(installed)
-
-    await expect(installStatusHandler()()).resolves.toBe(installed)
-    expect(mocks.install).toHaveBeenCalledOnce()
-  })
-
-  it('keeps the stale status when automatic repair fails', async () => {
-    const stale = status('stale')
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.install.mockRejectedValue(new Error('read-only filesystem'))
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    await expect(installStatusHandler()()).resolves.toBe(stale)
-    expect(warn).toHaveBeenCalledWith(
-      '[cli] Failed to repair stale AppImage registration:',
-      'read-only filesystem'
-    )
-  })
-
-  it('retries a failed automatic repair after the cooldown', async () => {
-    const stale = status('stale')
-    const installed = status('installed')
-    let now = 1_000
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.install
-      .mockRejectedValueOnce(new Error('read-only filesystem'))
-      .mockResolvedValueOnce(installed)
-    vi.spyOn(Date, 'now').mockImplementation(() => now)
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const handler = installStatusHandler()
-
-    await expect(handler()).resolves.toBe(stale)
-    await expect(handler()).resolves.toBe(stale)
-    expect(mocks.install).toHaveBeenCalledOnce()
-    expect(warn).toHaveBeenCalledOnce()
-
-    now += 30_000
-    await expect(handler()).resolves.toBe(installed)
-    expect(mocks.install).toHaveBeenCalledTimes(2)
-  })
-
-  it('shares one automatic repair across concurrent status polls', async () => {
-    const stale = status('stale')
-    const installed = status('installed')
-    let finishRepair: (result: CliInstallStatus) => void = () => {}
-    const repair = new Promise<CliInstallStatus>((resolve) => {
-      finishRepair = resolve
-    })
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.install.mockReturnValue(repair)
-    const handler = installStatusHandler()
-
-    const first = handler()
-    const second = handler()
-    await vi.waitFor(() => expect(mocks.install).toHaveBeenCalledOnce())
-    finishRepair(installed)
-
-    await expect(Promise.all([first, second])).resolves.toEqual([installed, installed])
-  })
-
-  it('repairs a later AppImage generation after an earlier repair succeeds', async () => {
-    const firstStale = status('stale', '/cache/launcher/orca-ide')
-    const firstInstalled = status('installed', '/cache/launcher/orca-ide')
-    const nextStale = status('stale', '/cache/launcher/orca-ide')
-    const nextInstalled = status('installed', '/cache/launcher/orca-ide')
-    mocks.getStatus
-      .mockResolvedValueOnce(firstStale)
-      .mockResolvedValueOnce(firstStale)
-      .mockResolvedValueOnce(nextStale)
-      .mockResolvedValueOnce(nextStale)
-    mocks.install.mockResolvedValueOnce(firstInstalled).mockResolvedValueOnce(nextInstalled)
-    mocks.resolveAppImageCacheKey
-      .mockReturnValueOnce('generation-1')
-      .mockReturnValueOnce('generation-1')
-      .mockReturnValueOnce('generation-2')
-      .mockReturnValueOnce('generation-2')
-    const handler = installStatusHandler()
-
-    await expect(handler()).resolves.toBe(firstInstalled)
-    await expect(handler()).resolves.toBe(nextInstalled)
-    expect(mocks.install).toHaveBeenCalledTimes(2)
-  })
-
-  it('waits for the cooldown before repairing a newer AppImage generation', async () => {
-    const firstStale = status('stale', '/cache/launcher/orca-ide')
-    const nextStale = status('stale', '/cache/launcher/orca-ide')
-    const nextInstalled = status('installed', '/cache/launcher/orca-ide')
-    let now = 1_000
-    mocks.getStatus
-      .mockResolvedValueOnce(firstStale)
-      .mockResolvedValueOnce(firstStale)
-      .mockResolvedValueOnce(nextStale)
-      .mockResolvedValueOnce(nextStale)
-      .mockResolvedValueOnce(nextStale)
-    mocks.install
-      .mockRejectedValueOnce(new Error('temporary failure'))
-      .mockResolvedValueOnce(nextInstalled)
-    mocks.resolveAppImageCacheKey
-      .mockReturnValueOnce('generation-1')
-      .mockReturnValueOnce('generation-1')
-      .mockReturnValueOnce('generation-2')
-      .mockReturnValueOnce('generation-2')
-      .mockReturnValueOnce('generation-2')
-    vi.spyOn(Date, 'now').mockImplementation(() => now)
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const handler = installStatusHandler()
-
-    await expect(handler()).resolves.toBe(firstStale)
-    await expect(handler()).resolves.toBe(nextStale)
-    expect(mocks.install).toHaveBeenCalledOnce()
-
-    now += 30_000
-    await expect(handler()).resolves.toBe(nextInstalled)
-    expect(mocks.install).toHaveBeenCalledTimes(2)
-  })
-
-  it('keeps the explicit install action retryable after automatic repair fails', async () => {
-    const stale = status('stale')
-    const installed = status('installed')
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.install
-      .mockRejectedValueOnce(new Error('temporary failure'))
-      .mockResolvedValueOnce(installed)
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    registerCliHandlers()
-
-    await expect(cliHandler('cli:getInstallStatus')()).resolves.toBe(stale)
-    await expect(cliHandler('cli:install')()).resolves.toBe(installed)
-    expect(mocks.install).toHaveBeenCalledTimes(2)
-  })
-
-  it('serializes concurrent explicit installs', async () => {
-    const installed = status('installed')
-    let finishFirstInstall: (result: CliInstallStatus) => void = () => {}
-    const firstInstall = new Promise<CliInstallStatus>((resolve) => {
-      finishFirstInstall = resolve
-    })
-    mocks.install.mockReturnValueOnce(firstInstall).mockResolvedValueOnce(installed)
-    registerCliHandlers()
-    const handler = cliHandler('cli:install')
-
-    const first = handler()
-    const second = handler()
-    await vi.waitFor(() => expect(mocks.install).toHaveBeenCalledOnce())
-
-    finishFirstInstall(installed)
-    await expect(Promise.all([first, second])).resolves.toEqual([installed, installed])
-    expect(mocks.install).toHaveBeenCalledTimes(2)
-  })
-
-  it('does not undo a queued removal with a stale automatic repair', async () => {
-    const stale = status('stale')
-    const notInstalled = status('not_installed')
-    let finishRemove: (result: CliInstallStatus) => void = () => {}
-    const removal = new Promise<CliInstallStatus>((resolve) => {
-      finishRemove = resolve
-    })
-    mocks.getStatus.mockResolvedValueOnce(stale).mockResolvedValueOnce(notInstalled)
-    mocks.remove.mockReturnValue(removal)
-    registerCliHandlers()
-
-    const remove = cliHandler('cli:remove')()
-    await vi.waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce())
-    const poll = cliHandler('cli:getInstallStatus')()
-    finishRemove(notInstalled)
-
-    await expect(remove).resolves.toBe(notInstalled)
-    await expect(poll).resolves.toBe(notInstalled)
-    expect(mocks.install).not.toHaveBeenCalled()
-  })
-
-  it('keys a queued repair cooldown to the generation it rechecks', async () => {
-    const stale = status('stale')
-    const notInstalled = status('not_installed')
-    let finishRemove: (result: CliInstallStatus) => void = () => {}
-    const removal = new Promise<CliInstallStatus>((resolve) => {
-      finishRemove = resolve
-    })
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.remove.mockReturnValue(removal)
-    mocks.install.mockRejectedValue(new Error('temporary failure'))
-    mocks.resolveAppImageCacheKey
-      .mockReturnValueOnce('generation-1')
-      .mockReturnValue('generation-2')
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    registerCliHandlers()
-
-    const remove = cliHandler('cli:remove')()
-    await vi.waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce())
-    const oldGenerationPoll = cliHandler('cli:getInstallStatus')()
-    finishRemove(notInstalled)
-
-    await expect(remove).resolves.toBe(notInstalled)
-    await expect(oldGenerationPoll).resolves.toBe(stale)
-    await expect(cliHandler('cli:getInstallStatus')()).resolves.toBe(stale)
-    await expect(cliHandler('cli:getInstallStatus')()).resolves.toBe(stale)
-    expect(mocks.install).toHaveBeenCalledOnce()
-  })
-
-  it.each(['conflict', 'not_installed'] as const)(
-    'does not mutate a %s registration',
+describe('AppImage CLI profile registration', () => {
+  it.each(['installed', 'stale', 'conflict', 'not_installed', 'unsupported'] as const)(
+    'reports %s profile state without repairing global registrations',
     async (state) => {
       const current = status(state)
       mocks.getStatus.mockResolvedValue(current)
+      const handler = installStatusHandler()
+      await expect(handler()).resolves.toBe(current)
+      await expect(handler()).resolves.toBe(current)
+      expect(mocks.install).not.toHaveBeenCalled()
+      expect(mocks.legacyGetStatus).not.toHaveBeenCalled()
+      expect(mocks.legacyInstall).not.toHaveBeenCalled()
+      expect(mocks.hydrateShellPath).not.toHaveBeenCalled()
+    }
+  )
 
-      await expect(installStatusHandler()()).resolves.toBe(current)
+  it('binds the public command to this profile without isolating native user history', () => {
+    registerCliHandlers()
+    expect(mocks.profileConstructor).toHaveBeenCalledWith(
+      '/private/opka-test-profile',
+      process.resourcesPath,
+      'linux',
+      PRODUCT_IDENTITY.command,
+      false
+    )
+  })
+
+  it('keeps the explicitly isolated profile launcher mode separate', () => {
+    vi.stubEnv('ORCA_FORK_PROFILE_CLI', '1')
+    registerCliHandlers()
+    expect(mocks.profileConstructor).toHaveBeenCalledWith(
+      '/private/opka-test-profile',
+      process.resourcesPath
+    )
+  })
+
+  it('shares only read operations across concurrent status polls', async () => {
+    const stale = status('stale')
+    mocks.getStatus.mockResolvedValue(stale)
+    const handler = installStatusHandler()
+    await expect(Promise.all([handler(), handler()])).resolves.toEqual([stale, stale])
+    expect(mocks.getStatus).toHaveBeenCalledTimes(2)
+    expect(mocks.install).not.toHaveBeenCalled()
+  })
+
+  it('reads a later AppImage generation without rewriting the profile on a poll', async () => {
+    const old = status('stale', '/cache/old/resources/bin/orca')
+    const current = status('installed')
+    mocks.getStatus.mockResolvedValueOnce(old).mockResolvedValueOnce(current)
+    const handler = installStatusHandler()
+    await expect(handler()).resolves.toBe(old)
+    await expect(handler()).resolves.toBe(current)
+    expect(mocks.install).not.toHaveBeenCalled()
+  })
+
+  it('keeps the explicit profile install retryable after a failed attempt', async () => {
+    const installed = status('installed')
+    mocks.install
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce(installed)
+    registerCliHandlers()
+    const install = cliHandler('cli:install')
+    await expect(install()).rejects.toThrow('temporary failure')
+    await expect(install()).resolves.toBe(installed)
+    expect(mocks.install).toHaveBeenCalledTimes(2)
+    expect(mocks.legacyInstall).not.toHaveBeenCalled()
+  })
+
+  it('serializes concurrent explicit profile installs', async () => {
+    const installed = status('installed')
+    let finish: (value: CliInstallStatus) => void = () => {}
+    mocks.install
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve
+        })
+      )
+      .mockResolvedValueOnce(installed)
+    registerCliHandlers()
+    const install = cliHandler('cli:install')
+    const first = install()
+    const second = install()
+    await vi.waitFor(() => expect(mocks.install).toHaveBeenCalledOnce())
+    finish(installed)
+    await expect(Promise.all([first, second])).resolves.toEqual([installed, installed])
+    expect(mocks.install).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not undo a queued profile removal during status reads', async () => {
+    const absent = status('not_installed')
+    const stale = status('stale')
+    let finish: (value: CliInstallStatus) => void = () => {}
+    mocks.remove.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    )
+    mocks.getStatus.mockResolvedValueOnce(stale).mockResolvedValueOnce(absent)
+    registerCliHandlers()
+    const removal = cliHandler('cli:remove')()
+    await vi.waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce())
+    await expect(cliHandler('cli:getInstallStatus')()).resolves.toBe(stale)
+    expect(mocks.install).not.toHaveBeenCalled()
+    finish(absent)
+    await expect(removal).resolves.toBe(absent)
+    await expect(cliHandler('cli:getInstallStatus')()).resolves.toBe(absent)
+    expect(mocks.legacyRemove).not.toHaveBeenCalled()
+  })
+
+  it.each([true, false])(
+    'never repairs a global AppImage registration when sibling ownership is %s',
+    async (sibling) => {
+      const stale = status('stale')
+      mocks.getStatus.mockResolvedValue(stale)
+      mocks.isAppImageRegistrationOwnedBySibling.mockReturnValue(sibling)
+      await expect(installStatusHandler()()).resolves.toBe(stale)
+      expect(mocks.legacyInstall).not.toHaveBeenCalled()
+      expect(mocks.isAppImageRegistrationOwnedBySibling).not.toHaveBeenCalled()
       expect(mocks.install).not.toHaveBeenCalled()
     }
   )
 
-  it('does not mutate a stale non-AppImage registration', async () => {
-    const stale = status('stale')
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.resolveAppImageRuntimeIdentity.mockReturnValue(null)
-
-    await expect(installStatusHandler()()).resolves.toBe(stale)
-    expect(mocks.install).not.toHaveBeenCalled()
-  })
-
-  it('does not claim a sibling AppImage registration during a status poll', async () => {
-    const stale = {
-      ...status('stale'),
-      currentTarget: '/cache/current/resources/bin/orca-ide'
-    }
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.isAppImageRegistrationOwnedBySibling.mockReturnValue(true)
-
-    await expect(installStatusHandler()()).resolves.toBe(stale)
-    expect(mocks.install).not.toHaveBeenCalled()
-  })
-
-  it('migrates a legacy AppImage target even when a sibling owns the stable endpoint', async () => {
-    const stale = status('stale')
-    const installed = status('installed')
-    mocks.getStatus.mockResolvedValue(stale)
-    mocks.install.mockResolvedValue(installed)
-    mocks.isAppImageRegistrationOwnedBySibling.mockImplementation(
-      (current: CliInstallStatus) => current.currentTarget === current.launcherPath
-    )
-
-    await expect(installStatusHandler()()).resolves.toBe(installed)
-    expect(mocks.install).toHaveBeenCalledOnce()
+  it('keeps an explicit profile removal retryable after failure', async () => {
+    const absent = status('not_installed')
+    mocks.remove.mockRejectedValueOnce(new Error('temporary failure')).mockResolvedValueOnce(absent)
+    registerCliHandlers()
+    const remove = cliHandler('cli:remove')
+    await expect(remove()).rejects.toThrow('temporary failure')
+    await expect(remove()).resolves.toBe(absent)
+    expect(mocks.remove).toHaveBeenCalledTimes(2)
+    expect(mocks.legacyRemove).not.toHaveBeenCalled()
   })
 })

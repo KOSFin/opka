@@ -109,11 +109,19 @@ jobs:
         run: node config/scripts/check-readme-local-links.mjs
 
   regression:
-    name: Fork regression tests
+    name: Fork regression tests (${{ matrix.shard }}/4)
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.regression == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      OPKA_FORK_TEST_SHARD_INDEX: ${{ matrix.shard }}
+      OPKA_FORK_TEST_SHARD_COUNT: '4'
+      NODE_OPTIONS: --max-old-space-size=1536
     steps:
       - uses: actions/checkout@v6
         with:
@@ -123,7 +131,9 @@ jobs:
         with:
           native-runtime: node
       - uses: ./.github/actions/install-mobile-dependencies
+        if: matrix.shard == 1
       - name: Install the pinned headless renderer browser
+        if: matrix.shard == 1
         run: node node_modules/playwright-core/cli.js install --with-deps chromium webkit
       - name: Test host accounts, mobile state and generated pages
         env:
@@ -140,23 +150,34 @@ jobs:
             pnpm run test:fork
           fi
       - name: Save synthetic mobile page evidence
-        if: always()
+        if: ${{ always() && matrix.shard == 1 }}
         uses: actions/upload-artifact@v7
         with:
           name: mobile-web-ui-${{ github.sha }}
           path: out/mobile-web-qa/
           if-no-files-found: warn
           retention-days: 7
+      - name: Save this shard's test selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fork-test-selection-${{ github.sha }}-${{ matrix.shard }}
+          path: out/opka-ci/fork-test-selection.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Install the push gateway workspace without lifecycle scripts
+        if: matrix.shard == 1
         working-directory: cloud
         run: pnpm install --frozen-lockfile --ignore-scripts --filter '@orca-cloud/push...'
       - name: Compile the push gateway and its contracts
+        if: matrix.shard == 1
         working-directory: cloud
         run: |
           pnpm --filter @orca-cloud/postgres-schema build
           pnpm --filter @orca-cloud/push-contract build
           pnpm --filter @orca-cloud/push build
       - name: Check push configuration and FCM transport with synthetic credentials
+        if: matrix.shard == 1
         working-directory: cloud
         run: pnpm --filter @orca-cloud/push exec vitest run src/config.test.ts src/fcm-client.test.ts --maxWorkers=1
 

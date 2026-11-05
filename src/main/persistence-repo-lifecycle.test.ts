@@ -212,11 +212,15 @@ describe('Store', () => {
 
     const store = await createStore()
     const groups = store.getProjectGroups()
-    const shared = groups.find((group) => group.name === 'packages/shared')
+    const packages = groups.find((group) => group.name === 'packages')
+    const shared = groups.find((group) => group.name === 'shared')
+    expect(packages).toBeDefined()
+    expect(shared).toBeDefined()
 
     expect(groups.map((group) => [group.name, group.parentGroupId, group.parentPath])).toEqual([
       ['Platform', null, '/workspace/platform'],
-      ['packages/shared', 'root', '/workspace/platform/packages/shared']
+      ['packages', 'root', '/workspace/platform/packages'],
+      ['shared', packages?.id, '/workspace/platform/packages/shared']
     ])
     expect(store.getRepo('api')?.projectGroupId).toBe('root')
     expect(store.getRepo('web')?.projectGroupId).toBe('root')

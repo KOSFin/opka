@@ -1,3 +1,4 @@
+import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { ORCHESTRATION_METHODS } from './orchestration'
 import { eraseRpcMethods, type RpcContext } from '../core'
@@ -24,6 +25,25 @@ describe('orchestration worker release incarnation fallback', () => {
     dbOpen = true
     runtime = new OrcaRuntimeService()
     runtime.setOrchestrationDb(db)
+    vi.spyOn(runtime, 'requireStore').mockReturnValue({
+      getRepos: () => [],
+      getRepo: () => undefined,
+      addRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      updateRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      getAllWorktreeMeta: () => ({}),
+      getWorktreeMeta: () => undefined,
+      setWorktreeMeta: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      removeWorktreeMeta: () => {},
+      getGitHubCache: () => ({ pr: {}, issue: {} }),
+      getSettings: () =>
+        createGlobalSettingsFixture({ accountPools: [], experimentalNativeChat: false })
+    })
     inspectProcessLiveness = vi
       .spyOn(runtime, 'inspectTerminalProcessIncarnationLiveness')
       .mockResolvedValue('live')
