@@ -1,11 +1,15 @@
 import { build } from 'esbuild'
 import { runProcess } from '@orca/process-host'
-import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, realpath, rm } from 'node:fs/promises'
 import { join, relative, isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { userInfo } from 'node:os'
 import { isDarwinNativeProbeCi, nativeProbeCliSha256 } from './claude-native-probe-cli.mjs'
+import {
+  readNativeRefreshDiagnosticSummary,
+  summarizeNativeRefreshCommand
+} from './claude-native-refresh-diagnostics.mjs'
 import { createNativeRefreshConnectProxy } from './claude-native-refresh-connect-proxy.mjs'
 import {
   createDarwinRefreshServer,
@@ -107,6 +111,9 @@ export async function runDarwinNativeRefreshQualification({
   const growth = []
   const closureProofs = []
   const sourceObservations = []
+  const debugObservations = []
+  const commandObservations = []
+  const debugPath = join(home, 'native-refresh-debug.log')
   let stage = 'prepare'
   const closeFixture = async () => {
     try {
@@ -172,9 +179,10 @@ export async function runDarwinNativeRefreshQualification({
           run: async (launch, options) => {
             cleanupVerified = false
             try {
-              return await api.runAgentModelCatalogListing(
+              const stdout = await api.runAgentModelCatalogListing(
                 {
                   ...launch,
+                  args: [...launch.args, '--debug-file', debugPath],
                   env: {
                     ...launch.env,
                     HOME: home,
@@ -211,8 +219,17 @@ export async function runDarwinNativeRefreshQualification({
                   }
                 }
               )
+              commandObservations.push(summarizeNativeRefreshCommand(stdout))
+              return stdout
             } finally {
-              await verifyClosed()
+              try {
+                await verifyClosed()
+              } finally {
+                debugObservations.push(await readNativeRefreshDiagnosticSummary(debugPath))
+                if (cleanupVerified) {
+                  await rm(debugPath, { force: true })
+                }
+              }
             }
           }
         }
@@ -281,6 +298,8 @@ export async function runDarwinNativeRefreshQualification({
       groups,
       closureProofs,
       sourceObservations,
+      debugObservations,
+      commandObservations,
       growth,
       accessOnlyProjection: true,
       isolatedKeychain: true,
@@ -310,6 +329,20 @@ export async function runDarwinNativeRefreshQualification({
         }),
         () => ({ unavailable: true })
       )
+    let fileObservation = { readable: false }
+    try {
+      const access = api.readBoundedClaudeProfileJson(
+        join(config, '.credentials.json')
+      ).claudeAiOauth
+      fileObservation = {
+        readable: true,
+        freshAccessMatched: access?.accessToken === FRESH_ACCESS,
+        refreshRotated: access?.refreshToken === ROTATED_REFRESH,
+        fieldNames: Object.keys(access ?? {})
+          .filter((name) => /^[a-zA-Z]{1,40}$/.test(name))
+          .slice(0, 20)
+      }
+    } catch {}
     let profileObservation = { readable: false }
     try {
       const profile = api.readBoundedClaudeProfileJson(join(config, '.claude.json')).oauthAccount
@@ -326,6 +359,9 @@ export async function runDarwinNativeRefreshQualification({
         {
           stage,
           observation,
+          fileObservation,
+          debugObservations,
+          commandObservations,
           profileObservation,
           completed: groups.length,
           requests: server?.counts ?? null,
