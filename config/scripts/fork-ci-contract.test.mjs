@@ -11,6 +11,48 @@ import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 const workflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
 
 describe('fork CI safety and required checks', () => {
+  it('partitions root regressions across bounded runners and runs shared checks once', () => {
+    const job = workflow.jobs.regression
+    expect(job.strategy).toEqual({
+      'fail-fast': false,
+      matrix: {
+        include: [
+          { shard: 1, group: 'root', label: '1/4' },
+          { shard: 2, group: 'root', label: '2/4' },
+          { shard: 3, group: 'root', label: '3/4' },
+          { shard: 4, group: 'root', label: '4/4' },
+          { shard: 1, group: 'shared', label: 'mobile and integration' }
+        ]
+      }
+    })
+    expect(job.name).toBe('Fork regression tests (${{ matrix.label }})')
+    expect(job['timeout-minutes']).toBe(25)
+    expect(job.env).toEqual({
+      OPKA_FORK_TEST_GROUP: '${{ matrix.group }}',
+      OPKA_FORK_TEST_SHARD_INDEX: '${{ matrix.shard }}',
+      OPKA_FORK_TEST_SHARD_COUNT: '4',
+      NODE_OPTIONS: '--max-old-space-size=1536'
+    })
+    for (const step of job.steps.filter(
+      (entry) =>
+        entry.name === 'Install the pinned headless renderer browser' ||
+        entry['working-directory'] === 'cloud'
+    )) {
+      expect(step.if).toBe("matrix.group == 'shared'")
+    }
+    expect(
+      job.steps.find((entry) => entry.uses === './.github/actions/install-mobile-dependencies').if
+    ).toBeUndefined()
+    const mobileEvidence = job.steps.find(
+      (entry) => entry.name === 'Save synthetic mobile page evidence'
+    )
+    expect(mobileEvidence.if).toBe("${{ always() && matrix.group == 'shared' }}")
+    const selection = job.steps.find((entry) => entry.name === "Save this shard's test selection")
+    expect(selection.with.name).toBe(
+      'fork-test-selection-${{ github.sha }}-${{ matrix.group }}-${{ matrix.shard }}'
+    )
+    expect(workflow.jobs.verify.needs).toContain('regression')
+  })
   it('runs rendered pages with Node and installs the browser their library owns', () => {
     const steps = workflow.jobs.regression.steps
     expect(

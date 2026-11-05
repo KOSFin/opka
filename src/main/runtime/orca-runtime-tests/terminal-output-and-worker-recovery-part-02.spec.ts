@@ -465,7 +465,9 @@ describe('OrcaRuntimeService', () => {
             : null
       }
     )
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This recovery fixture implements only the dispatch lookup and exact-generation settlement methods reached by the test.
     runtime.setOrchestrationDb({
+      releaseAccountPoolPtyGeneration: vi.fn(),
       getActiveDispatchForTerminal: () => undefined,
       listLegacyWorkerTerminalRecoveryRows: () => [
         {

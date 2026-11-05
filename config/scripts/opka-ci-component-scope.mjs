@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { runProcessSync } from '@orca/process-host'
 import { isDirectInvocation } from './script-entry-detection.mjs'
 import { findReusableQualification } from './opka-ci-qualification-proof.mjs'
+import { findReusableFollowupProof, isFollowupProof } from './opka-ci-followup-proof.mjs'
 
 export const CI_LANES = ['static', 'regression', 'desktop', 'electron', 'installers', 'android']
 const allLanes = () => Object.fromEntries(CI_LANES.map((lane) => [lane, true]))
@@ -61,6 +62,21 @@ export function evaluateCiResults(scope, needs) {
   if (Object.keys(needs).length !== CI_LANES.length + 1) {
     throw new Error('Unexpected CI dependency set')
   }
+  if (scope.followupProof) {
+    const proof = scope.followupProof
+    if (
+      !isFollowupProof(proof) ||
+      proof.head !== scope.head ||
+      proof.sourceTree !== scope.tree ||
+      proof.base !== scope.base ||
+      scope.reused !== false ||
+      scope.static !== true ||
+      scope.regression !== true ||
+      proof.reusedLanes.some((lane) => scope[lane] !== false)
+    ) {
+      throw new Error('Invalid test-only follow-up qualification')
+    }
+  }
   for (const lane of CI_LANES) {
     const expected = scope.reused ? 'skipped' : scope[lane] ? 'success' : 'skipped'
     if (needs[lane]?.result !== expected) {
@@ -77,7 +93,7 @@ function git(...args) {
   return result.stdout.trim()
 }
 
-export async function detectCiScope(env = process.env) {
+export async function detectCiScope(env = process.env, findFollowup = findReusableFollowupProof) {
   const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'))
   const head = git('rev-parse', 'HEAD')
   const tree = git('rev-parse', 'HEAD^{tree}')
@@ -103,6 +119,41 @@ export async function detectCiScope(env = process.env) {
       }
     } catch {
       // An unavailable proof never excuses a required check.
+    }
+  }
+  if (env.GITHUB_EVENT_NAME === 'pull_request') {
+    try {
+      const proof = await findFollowup({
+        repository: env.GITHUB_REPOSITORY,
+        token: env.GH_TOKEN,
+        event,
+        head
+      })
+      if (
+        isFollowupProof(proof) &&
+        proof.head === head &&
+        proof.sourceTree === tree &&
+        proof.repository === env.GITHUB_REPOSITORY &&
+        proof.prNumber === (event.number ?? event.pull_request?.number)
+      ) {
+        return {
+          ...classifyCiPaths(proof.paths),
+          ...Object.fromEntries(proof.reusedLanes.map((lane) => [lane, false])),
+          static: true,
+          regression: true,
+          reused: false,
+          docs_only: false,
+          comparison_valid: true,
+          base: proof.base,
+          head,
+          tree,
+          paths: proof.paths,
+          followupProof: proof,
+          reasons: ['verified-test-only-follow-up']
+        }
+      }
+    } catch {
+      // Unverifiable component evidence keeps the normal required checks.
     }
   }
   try {
@@ -192,6 +243,13 @@ async function main() {
       .map((key) => `${key}=${scope[key] ?? false}\n`)
       .join('')}`
   )
+  if (scope.followupProof) {
+    const proof = scope.followupProof
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `Reused successful ${proof.reusedLanes.join(', ')} checks from run ${proof.runId}, attempt ${proof.attempt}, source ${proof.base}; only reviewed test/CI inputs changed. Static and regression checks run on the current source.\n`
+    )
+  }
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
     `CI scope: ${scope.reused ? `reused successful exact-tree PR run ${scope.reusedRun}` : CI_LANES.filter((lane) => scope[lane]).join(', ')}. Reasons: ${(scope.reasons ?? []).join(', ') || 'documentation only'}.\n`

@@ -47,10 +47,12 @@ vi.mock('../ipc/pty/provider/listener-lifecycle', () => moduleFactories.ptyListe
 
 describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
   beforeEach(() => {
+    vi.stubEnv('ORCA_DIAGNOSTICS_DISABLED', '0')
     installDefaultNetConnectStub()
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     vi.clearAllMocks()
   })
 

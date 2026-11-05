@@ -201,16 +201,46 @@ export const NODE_FORK_TESTS = [
   'config/scripts/fork-acceptance-remote-config.test.mjs'
 ]
 
-export function runForkTestPlan(plan, execute = run) {
+export function readForkTestShard(environment = process.env) {
+  const index = environment.OPKA_FORK_TEST_SHARD_INDEX
+  const count = environment.OPKA_FORK_TEST_SHARD_COUNT
+  if (index === undefined && count === undefined) {
+    return { index: 1, count: 1 }
+  }
+  if (count !== '4' || !['1', '2', '3', '4'].includes(index)) {
+    throw new Error('Fork test shards require COUNT=4 and INDEX=1..4 together')
+  }
+  return { index: Number(index), count: 4 }
+}
+
+export function readForkTestGroup(environment = process.env) {
+  const group = environment.OPKA_FORK_TEST_GROUP ?? 'all'
+  if (!['all', 'root', 'shared'].includes(group)) {
+    throw new Error('Fork test group must be all, root or shared')
+  }
+  return group
+}
+
+export function runForkTestPlan(plan, execute = run, environment = process.env) {
+  const shard = readForkTestShard(environment)
+  const group = readForkTestGroup(environment)
+  if (group === 'shared' && shard.index !== 1) {
+    throw new Error('Shared fork tests require shard index 1')
+  }
   const { lanes } = plan
+  const first = shard.index === 1
+  // Vitest refuses count > files; known-empty logical shards need no root invocation.
+  const rootCount = Math.min(shard.count, lanes.root.length)
+  const runRoot = group !== 'shared' && lanes.root.length > 0 && shard.index <= rootCount
+  const runShared = group === 'shared' || (group === 'all' && first)
   const results = []
   const prepared =
-    (!lanes.root.length && !lanes.node.length) ||
+    (!runRoot && !(group === 'shared' || (runShared && lanes.node.length))) ||
     (execute('pnpm', ['run', 'build:packages']) &&
       execute(process.execPath, ['config/scripts/ensure-native-runtime.mjs', '--runtime=node']))
   results.push(prepared)
   for (const lane of ['root', 'mobile', 'render']) {
-    if (!lanes[lane].length || (lane === 'root' && !prepared)) {
+    if (!lanes[lane].length || (lane === 'root' ? !runRoot || !prepared : !runShared)) {
       continue
     }
     results.push(
@@ -221,29 +251,36 @@ export function runForkTestPlan(plan, execute = run) {
           'run',
           '--config',
           'config/vitest.fork-selected.config.mjs',
-          '--maxWorkers=1'
+          '--maxWorkers=1',
+          ...(lane === 'root' && shard.count > 1 ? [`--shard=${shard.index}/${rootCount}`] : [])
         ],
         { OPKA_FORK_TEST_LANE: lane }
       )
     )
   }
-  results.push(
-    execute(process.execPath, [
-      '--test',
-      '--test-concurrency=1',
-      ...new Set([...lanes.node, ...NODE_FORK_TESTS])
-    ])
-  )
+  if (runShared) {
+    results.push(
+      execute(process.execPath, [
+        '--test',
+        '--test-concurrency=1',
+        ...new Set([...lanes.node, ...NODE_FORK_TESTS])
+      ])
+    )
+  }
   return results.every(Boolean)
 }
 
 if (isDirectInvocation(import.meta.url, process.argv[1])) {
+  const shard = readForkTestShard()
+  const group = readForkTestGroup()
   const request = parseForkSelectionArgs(process.argv.slice(2))
   const plan = prepareForkTestSelection(request, root, [
     ...FORK_TEST_FILTERS,
     ...MOBILE_FORK_TEST_FILTERS,
     ...MOBILE_RENDER_TEST_FILTERS
   ])
-  console.log(`Fork test selection: ${plan.reason}; ${plan.files.length} files`)
+  console.log(
+    `Fork test selection: ${plan.reason}; ${plan.files.length} files; group ${group}; shard ${shard.index}/${shard.count}`
+  )
   process.exitCode = runForkTestPlan(plan) ? 0 : 1
 }

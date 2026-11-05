@@ -86,9 +86,11 @@ function installHost() {
 function fakes() {
   const retireStructuredAgentSessionTabFromSnapshot = vi.fn(() => true)
   const runtime = {
+    requireStore: () => ({ getSettings: () => ({ accountPools: [] }) }),
     showTerminal: async () => ({ worktreeId: WORKTREE }),
     showManagedTerminalWorkspace: async () => ({ id: WORKTREE }),
     getNestedWorkerMaxDepth: () => 3,
+    getMaxConcurrentWorkers: () => undefined,
     getRuntimeId: () => 'epoch-1',
     ensureStructuredAgentSessionHost: async () => {},
     getTerminalOrchestrationCliCommand: () => 'orca',
@@ -103,7 +105,7 @@ function fakes() {
     getTerminalProcessIncarnation: vi.fn(() => 'inc_1'),
     getTerminalPaneKey: vi.fn(() => 'pane_1'),
     retireStructuredAgentSessionTabFromSnapshot
-  } as unknown as OrcaRuntimeService
+  }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the start path calls only these three methods.
   const db = {
     createStartingWorkerDispatch: () => ({
@@ -133,7 +135,8 @@ describe('a structured worker-start that fails after the session exists', () => 
         reason: 'user_default',
         detail: 'structured by default'
       } as const,
-      runtime,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this partial runtime supplies every member reached by the mocked failed-start and cleanup paths.
+      runtime: runtime as unknown as OrcaRuntimeService,
       db,
       run: { id: 'run_1' } as never,
       existingTask: { id: 't1', spec: 'do the thing' } as never,

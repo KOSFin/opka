@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from opka_android_handoff_status import completion_action, handoff_ready, is_package_resumed, ui_snapshot
+from opka_android_launcher_health import ensure_pre_handoff_health
 from opka_android_published_update import open_published_update, verify_native_download, verify_cache_cleanup, version_code
 
 PACKAGE = 'com.kosfin.opka.mobile'
@@ -121,6 +122,7 @@ def main():
             time.sleep(1)
         else:
             raise AssertionError('Fixture A did not remain running as the resumed activity')
+        ensure_pre_handoff_health(shell, screenshot, output, PACKAGE)
         screenshot('before-update')
         if args.published_version:
             open_published_update(args.published_version, shell, screenshot, output, args.surface)

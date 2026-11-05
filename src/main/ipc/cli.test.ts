@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   handlers,
@@ -6,18 +6,29 @@ const {
   wslInstallerMock,
   recordInstalledMock,
   recordRemovedMock,
-  getDefaultWslDistroMock
+  getDefaultWslDistroMock,
+  nativeProfileOperationMock
 } = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   ipcHandleMock: vi.fn(),
   wslInstallerMock: vi.fn(),
   recordInstalledMock: vi.fn(),
   recordRemovedMock: vi.fn(),
-  getDefaultWslDistroMock: vi.fn()
+  getDefaultWslDistroMock: vi.fn(),
+  nativeProfileOperationMock: vi.fn(() => {
+    throw new Error('Unexpected native-profile operation in WSL fixture')
+  })
 }))
 
 vi.mock('electron', () => ({ ipcMain: { handle: ipcHandleMock } }))
 vi.mock('../cli/cli-installer', () => ({ CliInstaller: vi.fn() }))
+vi.mock('../cli/profile-cli-registration', () => ({
+  ProfileCliRegistration: class {
+    getStatus = nativeProfileOperationMock
+    install = nativeProfileOperationMock
+    remove = nativeProfileOperationMock
+  }
+}))
 vi.mock('../cli/wsl-cli-installer', () => ({ WslCliInstaller: wslInstallerMock }))
 vi.mock('../cli/wsl-cli-registration-registry', () => ({
   recordWslCliRegistrationInstalled: recordInstalledMock,
@@ -44,6 +55,10 @@ function getWslHandler(channel: string): WslHandler {
 }
 
 describe('WSL CLI registration IPC', () => {
+  afterEach(() => {
+    expect(nativeProfileOperationMock).not.toHaveBeenCalled()
+    nativeProfileOperationMock.mockClear()
+  })
   beforeEach(() => {
     handlers.clear()
     ipcHandleMock.mockReset()

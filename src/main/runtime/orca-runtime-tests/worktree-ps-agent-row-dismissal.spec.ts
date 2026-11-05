@@ -116,16 +116,21 @@ describe('worktree ps follows a dismissal out of the agent-status store', () => 
       const { runtime, statusWiring } = wiredRuntime(incarnationId)
       emitWorkingStatus(runtime, 1)
       const row = statusWiring.statusStore.getStatusSnapshot()[0]!
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture reads the actual private controller-handle maps and PTY incarnation without replacing them.
       const internals = runtime as unknown as {
         handleByLeafKey: Map<string, string>
-        handleByPtyIncarnation: Map<string, { handle: string }>
-        ptysById: Map<string, { paneKey: string | null; tabId: string | null }>
+        handleByPtyId: Map<string, string>
+        ptysById: Map<
+          string,
+          { paneKey: string | null; tabId: string | null; incarnationId: string | null }
+        >
       }
       const pty = internals.ptysById.get('dismiss-pty')!
       pty.paneKey = null
       pty.tabId = null
       if (clearLeafBinding) {
-        expect(internals.handleByPtyIncarnation.get('dismiss-pty')?.handle).toBe(row.terminalHandle)
+        expect(pty.incarnationId).toBe(incarnationId)
+        expect(internals.handleByPtyId.get('dismiss-pty')).toBe(row.terminalHandle)
         internals.handleByLeafKey.clear()
       }
 

@@ -8,6 +8,7 @@ import type { TerminalTab } from '../../src/shared/terminal-tab-types'
 import type { Worktree } from '../../src/shared/worktree/types'
 import { OrchestrationDb } from '../../src/main/runtime/orchestration/db'
 import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
+import { createGlobalSettingsFixture } from '../../src/shared/global-settings-test-fixture'
 import type { RpcContext } from '../../src/main/runtime/rpc/core'
 import { ORCHESTRATION_METHODS } from '../../src/main/runtime/rpc/methods/orchestration'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
@@ -238,6 +239,25 @@ function orchestrationMethod(name: string) {
 async function releaseCompletedWorker(terminalState: 'running' | 'exited'): Promise<void> {
   const db = new OrchestrationDb(':memory:')
   const runtime = new OrcaRuntimeService()
+  vi.spyOn(runtime, 'requireStore').mockReturnValue({
+    getRepos: () => [],
+    getRepo: () => undefined,
+    addRepo: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    updateRepo: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    getAllWorktreeMeta: () => ({}),
+    getWorktreeMeta: () => undefined,
+    setWorktreeMeta: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    removeWorktreeMeta: () => {},
+    getGitHubCache: () => ({ pr: {}, issue: {} }),
+    getSettings: () =>
+      createGlobalSettingsFixture({ accountPools: [], experimentalNativeChat: false })
+  })
   runtime.setOrchestrationDb(db)
   const coordinatorPaneKey = 'coordinator-tab:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   const run = db.createRun({

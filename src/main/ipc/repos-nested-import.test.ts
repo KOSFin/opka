@@ -31,7 +31,11 @@ import { resetSshProviderAuthorities } from '../ssh/ssh-provider-authority'
 import { getGitRepoRoot, isGitRepo } from '../git/repo'
 import { createRepoHandlerHarness, resetProjectGroupMocks } from './repos-remote-test-harness'
 
-const { handleMock, mockStore, listWorktreeGraphMock } = reposMocks
+const { handleMock, listWorktreeGraphMock } = reposMocks
+const mockStore = {
+  ...reposMocks.mockStore,
+  getFolderWorkspaces: vi.fn(() => [])
+}
 
 beforeEach(() => {
   clearGitCapabilityStateForTests()

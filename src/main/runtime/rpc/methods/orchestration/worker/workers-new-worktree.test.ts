@@ -11,6 +11,29 @@ import type { RpcRequest } from '../../../core'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { prepareFederationWorkerLaunchOnHost } from './worker-opencode-model-preflight'
 import { FederationAttachStartParams } from '../federation/federation-start-schema'
+import { createGlobalSettingsFixture } from '../../../../../../shared/global-settings-test-fixture'
+
+function installSettingsStore(runtime: OrcaRuntimeService): void {
+  vi.spyOn(runtime, 'requireStore').mockReturnValue({
+    getRepos: () => [],
+    getRepo: () => undefined,
+    addRepo: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    updateRepo: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    getAllWorktreeMeta: () => ({}),
+    getWorktreeMeta: () => undefined,
+    setWorktreeMeta: () => {
+      throw new Error('Unexpected fixture store mutation')
+    },
+    removeWorktreeMeta: () => {},
+    getGitHubCache: () => ({ pr: {}, issue: {} }),
+    getSettings: () =>
+      createGlobalSettingsFixture({ accountPools: [], experimentalNativeChat: false })
+  })
+}
 
 describe('orchestration new-worktree workers', () => {
   type CreateWorktreeResult = Awaited<ReturnType<OrcaRuntimeService['createManagedWorktree']>>
@@ -23,6 +46,7 @@ describe('orchestration new-worktree workers', () => {
   beforeEach(() => {
     db = new OrchestrationDb(':memory:')
     runtime = new OrcaRuntimeService()
+    installSettingsStore(runtime)
     runtime.setOrchestrationDb(db)
     runId = db.createRun({
       objective: 'Test new-worktree workers',
@@ -710,6 +734,7 @@ describe('orchestration new-worktree workers', () => {
 
     db = new OrchestrationDb(join(dir, 'orchestration.db'))
     const restartedRuntime = new OrcaRuntimeService()
+    installSettingsStore(restartedRuntime)
     restartedRuntime.setOrchestrationDb(db)
     vi.spyOn(restartedRuntime, 'getTerminalPaneKey').mockImplementation((handle) =>
       handle === 'term_coord_reminted'

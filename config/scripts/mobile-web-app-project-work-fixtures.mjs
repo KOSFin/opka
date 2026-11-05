@@ -106,9 +106,13 @@ export const projectWorkRenderReplies = {
   'projectTask.create': {},
   'projectTask.update': {},
   'projectTask.move': {},
-  'worktree.list': {
+  'worktree.ps': {
     worktrees: [
-      { id: 'folder:render-sign-in', displayName: 'Sign-in workspace', path: '/synthetic/sign-in' }
+      {
+        worktreeId: 'folder:render-sign-in',
+        displayName: 'Sign-in workspace',
+        path: '/synthetic/sign-in'
+      }
     ]
   },
   'accounts.openSignInTerminal': {

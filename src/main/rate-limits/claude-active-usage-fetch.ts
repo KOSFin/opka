@@ -59,7 +59,8 @@ export async function fetchActiveClaudeRateLimits(
     )
   }
   try {
-    return await fetchClaudeOAuthUsage(credentials.token, options?.signal)
+    const result = await fetchClaudeOAuthUsage(credentials.token, options?.signal)
+    return { ...result, usageMetadata: { ...result.usageMetadata, ...metadata } }
   } catch (error) {
     const { failureKind } = classifyClaudeOAuthUsageError(error)
     // Why: the 429 wait gates the poll, and both messages tell the user why usage is missing.

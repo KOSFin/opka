@@ -1,3 +1,4 @@
+import { createGlobalSettingsFixture } from '../../../../../../shared/global-settings-test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RpcContext } from '../../../core'
 import { createOrchestrationRpcHarness } from '../rpc-test-harness'
@@ -15,6 +16,25 @@ describe('orchestration RPC methods', () => {
 
   function setup(withBoundRun = true): void {
     ;({ db, runtime, ctx } = h.setup(withBoundRun))
+    vi.spyOn(runtime, 'requireStore').mockReturnValue({
+      getRepos: () => [],
+      getRepo: () => undefined,
+      addRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      updateRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      getAllWorktreeMeta: () => ({}),
+      getWorktreeMeta: () => undefined,
+      setWorktreeMeta: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      removeWorktreeMeta: () => {},
+      getGitHubCache: () => ({ pr: {}, issue: {} }),
+      getSettings: () =>
+        createGlobalSettingsFixture({ accountPools: [], experimentalNativeChat: false })
+    })
   }
 
   afterEach(() => {

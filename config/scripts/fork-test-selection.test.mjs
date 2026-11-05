@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildUnitDependencyGraph } from './ci-unit-dependency-graph.mjs'
 import {
   forkGraphFailureReason,
@@ -89,6 +89,55 @@ describe('fork changed-component selection', () => {
     expect(result.full).toBe(true)
     expect(result.files).toEqual(['mobile/src/unrelated.test.ts', 'src/main/consumer.test.ts'])
     expect(result.files).not.toContain('mobile/src/aliased.test.ts')
+  })
+  it.each(['.github/workflows/pr.yml', 'config/scripts/runner.mjs', 'tests/e2e/browser.spec.ts'])(
+    'retains source consumers alongside approved coverage when %s also changes',
+    (globalInput) => {
+      const readGraph = vi.fn(() => graph)
+      const fallback = ['mobile/src/unrelated.test.ts']
+      const sourceOnly = selectForkTests(files, ['src/shared/contract.ts'], graph, fallback)
+      const mixed = selectForkTests(
+        files,
+        [globalInput, 'src/shared/contract.ts'],
+        readGraph,
+        fallback
+      )
+      expect(mixed.full).toBe(true)
+      expect(mixed.files).toEqual(sourceOnly.files)
+      expect(readGraph).toHaveBeenCalledTimes(1)
+    }
+  )
+  it.each([
+    '.github/workflows/pr.yml',
+    'config/vitest.config.ts',
+    'srcish/foreign.ts',
+    'mobile/srcish/foreign.ts'
+  ])('keeps global-only %s bounded without attempting the source graph', (globalInput) => {
+    const readGraph = vi.fn(() => {
+      throw new Error('Global-only graph must not run')
+    })
+    expect(
+      selectForkTests(files, [globalInput], readGraph, ['src/main/consumer.test.ts']).files
+    ).toEqual(['src/main/consumer.test.ts'])
+    expect(readGraph).not.toHaveBeenCalled()
+  })
+  it('retains a discovered changed test outside source prefixes along with source consumers', () => {
+    const outside = 'tests/e2e/direct.unit.test.ts'
+    const inventory = [...files, outside]
+    const selected = selectForkTests(
+      inventory,
+      ['config/scripts/runner.mjs', 'src/shared/contract.ts', outside],
+      graph,
+      ['mobile/src/unrelated.test.ts']
+    )
+    expect(selected.files).toEqual([
+      'mobile/src/aliased.test.ts',
+      'mobile/src/feature.test.tsx',
+      'mobile/src/unrelated.test.ts',
+      'src/main/consumer.test.ts',
+      outside
+    ])
+    expect(selected.files).not.toContain('config/scripts/actual-render.test.mjs')
   })
   it('never fans an unrelated opaque upstream reader into the approved fork inventory', () => {
     const result = selectForkTests(files, ['mobile/src/adapter.ts'], graph, [

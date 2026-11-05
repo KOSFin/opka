@@ -95,6 +95,24 @@ it('applies real user files with private immutable backups and restores the orig
   expect(await readdir(f.binDirectory)).toEqual([])
   expect(await readdir(f.stateDirectory)).toEqual([])
 })
+
+it('preserves validated profile modes when the service runs with a restrictive umask', async () => {
+  const f = await fixture()
+  await chmod(f.profile, 0o644)
+  const plan = await f.plan()
+  const previousUmask = process.umask(0o077)
+  try {
+    await applyNativeCliUserIntegration({ ...f.options, plan })
+    expect((await lstat(f.profile)).mode & 0o777).toBe(0o644)
+    expect((await lstat(join(f.binDirectory, 'claude'))).mode & 0o777).toBe(0o700)
+    expect((await lstat(join(f.stateDirectory, 'original-2'))).mode & 0o777).toBe(0o600)
+    await rollbackNativeCliUserIntegration(f.options)
+    expect(await readFile(f.profile, 'utf8')).toBe(f.original)
+    expect((await lstat(f.profile)).mode & 0o777).toBe(0o644)
+  } finally {
+    process.umask(previousUmask)
+  }
+})
 it('keeps ORIGINAL rollback data bounded across repeated apply and upgrades', async () => {
   const f = await fixture(),
     first = await f.plan()

@@ -116,13 +116,22 @@ export function mobileAccountDeviceSignInRequest(client: RpcClient): AccountDevi
   }
 }
 
+const accountSignInPsWorkspacesSchema = AccountSignInWorkspacesSchema.extend({
+  worktrees: z.array(
+    AccountSignInWorkspacesSchema.shape.worktrees.element
+      .omit({ id: true })
+      .extend({ worktreeId: z.string().min(1) })
+      .transform(({ worktreeId, ...workspace }) => ({ id: worktreeId, ...workspace }))
+  )
+})
+
 export const accountSignInWorkspacesRead = bindDeferredRpcOperation(
   defineRpcOperation({
     name: 'accounts.sign-in-workspaces',
-    method: 'worktree.list',
+    method: 'worktree.ps',
     acceptance: 'require-result-or-throw-message',
     barrier: 'after-caller-barrier',
-    read: rpcResultVariant('workspaces', AccountSignInWorkspacesSchema)
+    read: rpcResultVariant('workspaces', accountSignInPsWorkspacesSchema)
   })
 )
 const signInTerminalOpen = bindDeferredRpcOperation(

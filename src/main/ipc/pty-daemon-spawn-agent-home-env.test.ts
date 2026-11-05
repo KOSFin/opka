@@ -453,7 +453,8 @@ describe('registerPtyHandlers', () => {
           // Why: bare `orca` must resolve to the Orca CLI before /usr/bin/orca (the GNOME screen reader) in Orca terminals (#7904).
           expect(entries.indexOf(shimDir)).toBeGreaterThanOrEqual(0)
           expect(entries.indexOf(shimDir)).toBeLessThan(entries.indexOf('/usr/bin'))
-          expect(env.ORCA_CLI_COMMAND).toBeUndefined()
+          expect(env.ORCA_CLI_COMMAND).toBe(join(shimDir, 'orca'))
+          expect(env.ORCA_NATIVE_CLI_LAUNCHER).toBe(join(shimDir, 'orca'))
         } finally {
           Object.defineProperty(process, 'platform', {
             configurable: true,

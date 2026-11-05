@@ -25,7 +25,7 @@ const fixture = vi.hoisted(() => {
       stats: {},
       runtime: null,
       claudeAccounts: {},
-      codexAccounts: {},
+      codexAccounts: { setRoutingRemoval: vi.fn() },
       rateLimits: {}
     },
     userData: ''

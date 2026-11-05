@@ -1,3 +1,4 @@
+import { createGlobalSettingsFixture } from '../../../../../../shared/global-settings-test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import { reconcileRequestedWorkerTerminalReleases } from '../../../../orchestration/worker-terminal-release-reconciliation'
@@ -28,6 +29,25 @@ describe('orchestration worker release recovery', () => {
     dbOpen = true
     runtime = new OrcaRuntimeService()
     runtime.setOrchestrationDb(db)
+    vi.spyOn(runtime, 'requireStore').mockReturnValue({
+      getRepos: () => [],
+      getRepo: () => undefined,
+      addRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      updateRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      getAllWorktreeMeta: () => ({}),
+      getWorktreeMeta: () => undefined,
+      setWorktreeMeta: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      removeWorktreeMeta: () => {},
+      getGitHubCache: () => ({ pr: {}, issue: {} }),
+      getSettings: () =>
+        createGlobalSettingsFixture({ accountPools: [], experimentalNativeChat: false })
+    })
     vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) =>
       handle === 'term_coord' ? coordinatorPaneKey : handle === 'term_worker' ? workerPaneKey : null
     )

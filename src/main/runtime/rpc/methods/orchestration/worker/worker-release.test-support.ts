@@ -1,3 +1,4 @@
+import { createGlobalSettingsFixture } from '../../../../../../shared/global-settings-test-fixture'
 import { expect, vi } from 'vitest'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { eraseRpcMethods, type RpcContext } from '../../../core'
@@ -61,6 +62,25 @@ export function createOrchestrationWorkerReleaseHarness(): OrchestrationWorkerRe
     dbOpen = true
     runtime = new OrcaRuntimeService()
     runtime.setOrchestrationDb(db)
+    vi.spyOn(runtime, 'requireStore').mockReturnValue({
+      getRepos: () => [],
+      getRepo: () => undefined,
+      addRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      updateRepo: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      getAllWorktreeMeta: () => ({}),
+      getWorktreeMeta: () => undefined,
+      setWorktreeMeta: () => {
+        throw new Error('Unexpected fixture store mutation')
+      },
+      removeWorktreeMeta: () => {},
+      getGitHubCache: () => ({ pr: {}, issue: {} }),
+      getSettings: () =>
+        createGlobalSettingsFixture({ accountPools: [], experimentalNativeChat: false })
+    })
     inspectProcessLiveness = vi.fn().mockResolvedValue('live')
     ;(
       runtime as unknown as {

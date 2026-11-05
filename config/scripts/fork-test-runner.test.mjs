@@ -2,8 +2,16 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, it } from 'vitest'
+import { BaseSequencer } from 'vitest/node'
 import { prepareForkTestSelection } from './fork-test-selection.mjs'
-import { NODE_FORK_TESTS, runForkTestPlan } from './run-fork-tests.mjs'
+import {
+  NODE_FORK_TESTS,
+  readForkTestGroup,
+  readForkTestShard,
+  runForkTestPlan
+} from './run-fork-tests.mjs'
+
+const runUnshardedPlan = (plan, execute) => runForkTestPlan(plan, execute, {})
 
 it('normal baseline selection needs no Git and separates Node without widening filters', () => {
   const root = mkdtempSync(join(tmpdir(), 'opka-fork-runners-'))
@@ -33,7 +41,7 @@ it('normal baseline selection needs no Git and separates Node without widening f
     ).toEqual(plan)
     const calls = []
     expect(
-      runForkTestPlan(plan, (...args) => {
+      runUnshardedPlan(plan, (...args) => {
         calls.push(args)
         return true
       })
@@ -56,7 +64,7 @@ const plan = () => ({
 it('executes selected Node scripts and always-required fixtures exactly once under pinned Node', () => {
   const calls = []
   expect(
-    runForkTestPlan(plan(), (...args) => {
+    runUnshardedPlan(plan(), (...args) => {
       calls.push(args)
       return true
     })
@@ -74,17 +82,318 @@ it('executes selected Node scripts and always-required fixtures exactly once und
 })
 
 it('does not mask a Node test failure with successful Vitest lanes', () => {
-  expect(runForkTestPlan(plan(), (_program, args) => !args.includes('--test'))).toBe(false)
+  expect(runUnshardedPlan(plan(), (_program, args) => !args.includes('--test'))).toBe(false)
 })
 
 it('reports preparation failure while still attempting the selected Node tests exactly once', () => {
   const calls = []
   expect(
-    runForkTestPlan(plan(), (program, args) => {
+    runUnshardedPlan(plan(), (program, args) => {
       calls.push([program, args])
       return program !== 'pnpm'
     })
   ).toBe(false)
   expect(calls.filter(([, args]) => args.includes('--test'))).toHaveLength(1)
   expect(calls.some(([, , env]) => env?.OPKA_FORK_TEST_LANE === 'root')).toBe(false)
+})
+
+const shardEnvironment = (index) => ({
+  OPKA_FORK_TEST_SHARD_INDEX: String(index),
+  OPKA_FORK_TEST_SHARD_COUNT: '4'
+})
+
+it('uses the pinned native sequencer to cover a 3348-file root selection exactly once', async () => {
+  const files = Array.from({ length: 3348 }, (_, index) => ({
+    moduleId: `/selected/src/root-${index}.test.ts`
+  }))
+  const shards = await Promise.all(
+    [1, 2, 3, 4].map((index) =>
+      new BaseSequencer({ config: { root: '/selected', shard: { index, count: 4 } } }).shard(files)
+    )
+  )
+  const assigned = shards.flat().map((file) => file.moduleId)
+  expect(shards.map((shard) => shard.length)).toEqual([837, 837, 837, 837])
+  expect(new Set(assigned).size).toBe(files.length)
+  expect(assigned.toSorted()).toEqual(files.map((file) => file.moduleId).toSorted())
+})
+
+it('runs the identical selected root plan in four native shards and extras only once', () => {
+  const selection = { ...plan(), lanes: { ...plan().lanes, root: ['a', 'b', 'c', 'd', 'e'] } }
+  const calls = []
+  for (const index of [1, 2, 3, 4]) {
+    expect(
+      runForkTestPlan(
+        selection,
+        (...args) => {
+          calls.push({ index, args })
+          return true
+        },
+        shardEnvironment(index)
+      )
+    ).toBe(true)
+  }
+  const vitest = calls.filter(({ args: [, args] }) =>
+    args.includes('node_modules/vitest/vitest.mjs')
+  )
+  const roots = vitest.filter(({ args: [, , env] }) => env.OPKA_FORK_TEST_LANE === 'root')
+  expect(roots.map(({ args: [, args] }) => args.at(-1))).toEqual([
+    '--shard=1/4',
+    '--shard=2/4',
+    '--shard=3/4',
+    '--shard=4/4'
+  ])
+  expect(
+    roots.every(
+      ({ args: [, args] }) =>
+        args.includes('--maxWorkers=1') && args.includes('config/vitest.fork-selected.config.mjs')
+    )
+  ).toBe(true)
+  expect(
+    vitest
+      .filter(({ args: [, , env] }) => env.OPKA_FORK_TEST_LANE !== 'root')
+      .map(({ index, args: [, , env] }) => [index, env.OPKA_FORK_TEST_LANE])
+  ).toEqual([
+    [1, 'mobile'],
+    [1, 'render']
+  ])
+  expect(
+    calls.filter(({ args: [, args] }) => args.includes('--test')).map(({ index }) => index)
+  ).toEqual([1])
+  expect(selection.lanes.root).toEqual(['a', 'b', 'c', 'd', 'e'])
+})
+
+it.each([0, 1, 2, 3])(
+  'skips only known empty logical root shards for %i selected files',
+  (size) => {
+    const calls = []
+    const selection = {
+      lanes: {
+        root: Array.from({ length: size }, (_, i) => `root-${i}`),
+        mobile: [],
+        render: [],
+        node: []
+      }
+    }
+    for (const index of [1, 2, 3, 4]) {
+      expect(
+        runForkTestPlan(
+          selection,
+          (_program, args, env) => {
+            calls.push({ index, args, env })
+            return true
+          },
+          shardEnvironment(index)
+        )
+      ).toBe(true)
+    }
+    expect(
+      calls
+        .filter(({ env }) => env?.OPKA_FORK_TEST_LANE === 'root')
+        .map(({ index, args }) => [index, args.at(-1)])
+    ).toEqual(Array.from({ length: size }, (_, i) => [i + 1, `--shard=${i + 1}/${size}`]))
+    expect(calls.some(({ args }) => args.includes('--passWithNoTests'))).toBe(false)
+  }
+)
+
+it('propagates a root shard failure without retrying or running first-shard extras', () => {
+  const calls = []
+  expect(
+    runForkTestPlan(
+      { lanes: { ...plan().lanes, root: ['a', 'b', 'c', 'd'] } },
+      (_program, args, env) => {
+        calls.push({ args, env })
+        return env?.OPKA_FORK_TEST_LANE !== 'root'
+      },
+      shardEnvironment(2)
+    )
+  ).toBe(false)
+  expect(calls.filter(({ env }) => env?.OPKA_FORK_TEST_LANE === 'root')).toHaveLength(1)
+  expect(calls.some(({ args }) => args.includes('--test'))).toBe(false)
+})
+
+it.each([
+  { OPKA_FORK_TEST_SHARD_INDEX: '1' },
+  { OPKA_FORK_TEST_SHARD_COUNT: '4' },
+  { OPKA_FORK_TEST_SHARD_INDEX: '0', OPKA_FORK_TEST_SHARD_COUNT: '4' },
+  { OPKA_FORK_TEST_SHARD_INDEX: '5', OPKA_FORK_TEST_SHARD_COUNT: '4' },
+  { OPKA_FORK_TEST_SHARD_INDEX: '01', OPKA_FORK_TEST_SHARD_COUNT: '4' },
+  { OPKA_FORK_TEST_SHARD_INDEX: '1', OPKA_FORK_TEST_SHARD_COUNT: '3' },
+  { OPKA_FORK_TEST_SHARD_INDEX: '', OPKA_FORK_TEST_SHARD_COUNT: '' }
+])('refuses invalid shard settings before executing any command: %j', (environment) => {
+  const calls = []
+  expect(() => runForkTestPlan(plan(), (...args) => calls.push(args), environment)).toThrow(
+    'COUNT=4 and INDEX=1..4'
+  )
+  expect(calls).toEqual([])
+})
+
+it('keeps ordinary local execution unsharded when both settings are absent', () => {
+  expect(readForkTestShard({})).toEqual({ index: 1, count: 1 })
+  const calls = []
+  expect(
+    runUnshardedPlan(plan(), (...args) => {
+      calls.push(args)
+      return true
+    })
+  ).toBe(true)
+  expect(calls.every(([, args]) => args.every((arg) => !arg.startsWith('--shard=')))).toBe(true)
+})
+
+it('runs four explicit root groups without consuming any shared lane', () => {
+  const calls = []
+  for (const index of [1, 2, 3, 4]) {
+    expect(
+      runForkTestPlan(
+        { lanes: { ...plan().lanes, root: ['a', 'b', 'c', 'd'] } },
+        (...args) => {
+          calls.push({ index, args })
+          return true
+        },
+        { ...shardEnvironment(index), OPKA_FORK_TEST_GROUP: 'root' }
+      )
+    ).toBe(true)
+  }
+  const tests = calls.filter(({ args: [, args] }) =>
+    args.includes('node_modules/vitest/vitest.mjs')
+  )
+  expect(
+    tests.map(({ index, args: [, args, env] }) => [index, env.OPKA_FORK_TEST_LANE, args.at(-1)])
+  ).toEqual([1, 2, 3, 4].map((index) => [index, 'root', `--shard=${index}/4`]))
+  expect(calls.filter(({ args: [program] }) => program === 'pnpm')).toHaveLength(4)
+  expect(calls.some(({ args: [, args] }) => args.includes('--test'))).toBe(false)
+})
+
+it.each([true, false])(
+  'runs shared lanes once, prepares them, and never runs root (root present: %s)',
+  (hasRoot) => {
+    const calls = []
+    const selection = { lanes: { ...plan().lanes, root: hasRoot ? ['root'] : [] } }
+    expect(
+      runForkTestPlan(
+        selection,
+        (...args) => {
+          calls.push(args)
+          return true
+        },
+        { ...shardEnvironment(1), OPKA_FORK_TEST_GROUP: 'shared' }
+      )
+    ).toBe(true)
+    expect(calls[0]).toEqual(['pnpm', ['run', 'build:packages']])
+    expect(calls[1]).toEqual([
+      process.execPath,
+      ['config/scripts/ensure-native-runtime.mjs', '--runtime=node']
+    ])
+    const tests = calls.filter(([, args]) => args.includes('node_modules/vitest/vitest.mjs'))
+    expect(tests.map(([, , env]) => env.OPKA_FORK_TEST_LANE)).toEqual(['mobile', 'render'])
+    expect(tests.every(([, args]) => !args.some((arg) => arg.startsWith('--shard=')))).toBe(true)
+    expect(calls.filter(([, args]) => args.includes('--test'))).toEqual([
+      [
+        process.execPath,
+        ['--test', '--test-concurrency=1', 'config/scripts/native.test.mjs', ...NODE_FORK_TESTS]
+      ]
+    ])
+  }
+)
+
+it('prepares always-required Node fixtures even when every selected lane is empty', () => {
+  const calls = []
+  expect(
+    runForkTestPlan(
+      { lanes: { root: [], mobile: [], render: [], node: [] } },
+      (...args) => {
+        calls.push(args)
+        return true
+      },
+      { OPKA_FORK_TEST_GROUP: 'shared' }
+    )
+  ).toBe(true)
+  expect(calls.map(([, args]) => args)).toEqual([
+    ['run', 'build:packages'],
+    ['config/scripts/ensure-native-runtime.mjs', '--runtime=node'],
+    ['--test', '--test-concurrency=1', ...NODE_FORK_TESTS]
+  ])
+})
+
+it.each(['root', 'shared'])(
+  'keeps %s preparation failures fatal without borrowing another group',
+  (group) => {
+    const calls = []
+    expect(
+      runForkTestPlan(
+        plan(),
+        (program, args, env) => {
+          calls.push({ program, args, env })
+          return program !== 'pnpm'
+        },
+        { OPKA_FORK_TEST_GROUP: group }
+      )
+    ).toBe(false)
+    expect(
+      calls.some(({ args }) => args.includes('config/scripts/ensure-native-runtime.mjs'))
+    ).toBe(false)
+    expect(calls.some(({ env }) => env?.OPKA_FORK_TEST_LANE === 'root')).toBe(false)
+    expect(calls.filter(({ args }) => args.includes('--test'))).toHaveLength(
+      group === 'shared' ? 1 : 0
+    )
+  }
+)
+
+it('keeps an empty root group empty without executing shared fixtures', () => {
+  const calls = []
+  expect(
+    runForkTestPlan(
+      { lanes: { ...plan().lanes, root: [] } },
+      (...args) => {
+        calls.push(args)
+        return true
+      },
+      { OPKA_FORK_TEST_GROUP: 'root' }
+    )
+  ).toBe(true)
+  expect(calls).toEqual([])
+})
+
+it.each(['', 'Root', 'mobile', 'root,shared'])(
+  'rejects unknown group %j before any command',
+  (group) => {
+    const calls = []
+    expect(() =>
+      runForkTestPlan(plan(), (...args) => calls.push(args), { OPKA_FORK_TEST_GROUP: group })
+    ).toThrow('group must be all, root or shared')
+    expect(calls).toEqual([])
+  }
+)
+
+it('rejects a non-first shared shard instead of silently omitting or duplicating its lanes', () => {
+  const calls = []
+  expect(() =>
+    runForkTestPlan(plan(), (...args) => calls.push(args), {
+      ...shardEnvironment(2),
+      OPKA_FORK_TEST_GROUP: 'shared'
+    })
+  ).toThrow('Shared fork tests require shard index 1')
+  expect(calls).toEqual([])
+})
+
+it('treats explicit all exactly like the existing local default', () => {
+  expect(readForkTestGroup({})).toBe('all')
+  for (const environment of [{}, { OPKA_FORK_TEST_GROUP: 'all' }]) {
+    const calls = []
+    expect(
+      runForkTestPlan(
+        plan(),
+        (...args) => {
+          calls.push(args)
+          return true
+        },
+        environment
+      )
+    ).toBe(true)
+    expect(
+      calls
+        .filter(([, args]) => args.includes('node_modules/vitest/vitest.mjs'))
+        .map(([, , env]) => env.OPKA_FORK_TEST_LANE)
+    ).toEqual(['root', 'mobile', 'render'])
+    expect(calls.filter(([, args]) => args.includes('--test'))).toHaveLength(1)
+  }
 })

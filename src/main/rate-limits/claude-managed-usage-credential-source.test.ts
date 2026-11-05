@@ -51,6 +51,39 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks())
 
+it.each(['host', 'wsl'] as const)(
+  'retains %s account identity on successful quota reads',
+  async (runtime) => {
+    const provenance = runtime === 'wsl' ? 'wsl:SyntheticDistro:profile:A' : 'profile:A'
+    const preparation = { configDir, envPatch: { CLAUDE_CONFIG_DIR: configDir }, provenance }
+    fixture.hostPreparation.mockReturnValue(preparation)
+    fixture.wslPreparation.mockResolvedValue(preparation)
+    fixture.fetchUsage.mockResolvedValue({
+      provider: 'claude',
+      status: 'ok',
+      error: null,
+      updatedAt: now,
+      session: { usedPercent: 21 },
+      weekly: null,
+      usageMetadata: { source: 'oauth' }
+    })
+    const result = await fetchInactiveClaudeAccountUsage({
+      id: 'A',
+      managedAuthRuntime: runtime,
+      wslDistro: runtime === 'wsl' ? 'SyntheticDistro' : null
+    })
+    expect(result).toMatchObject({
+      status: 'ok',
+      session: { usedPercent: 21 },
+      usageMetadata: {
+        source: 'oauth',
+        authProvenance: provenance,
+        credentialSource: fixture.source
+      }
+    })
+  }
+)
+
 it.each([
   ['host', 'scoped-keychain'],
   ['host', 'credentials-file'],
