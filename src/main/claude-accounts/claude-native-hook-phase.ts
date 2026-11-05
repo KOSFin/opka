@@ -160,7 +160,8 @@ export function createClaudeNativeHookPhase<T>(options: {
     async prompt(
       promptId: string,
       promptText: string,
-      isCallCurrent: () => boolean
+      isCallCurrent: () => boolean,
+      preserveNativeWork = false
     ): Promise<'allow' | 'block'> {
       if (disposed) {
         return 'block'
@@ -170,9 +171,11 @@ export function createClaudeNativeHookPhase<T>(options: {
         if (promptId === activePromptId) {
           return 'allow'
         }
-        attempted.clear()
-        lastFailurePromptId = undefined
-        phase = undefined
+        if (!preserveNativeWork) {
+          attempted.clear()
+          lastFailurePromptId = undefined
+          phase = undefined
+        }
         activePromptId = promptId
         notify()
         return 'allow'
@@ -212,6 +215,22 @@ export function createClaudeNativeHookPhase<T>(options: {
         }
       }
       return 'block'
+    },
+    classifyWake(marker: string): 'current' | 'stale' | 'none' {
+      const parsed = parse(marker)
+      return !parsed
+        ? 'none'
+        : phase && parsed.phaseId === phase.id && current(phase)
+          ? 'current'
+          : 'stale'
+    },
+    isPublishingWake: () => !!phase && phase.state === 'publishing' && current(phase),
+    observeInput(): void {
+      phase = undefined
+      attempted.clear()
+      lastFailurePromptId = undefined
+      activePromptId = undefined
+      notify()
     },
     completed(): void {
       if (!disposed && options.readCompletedSuccessfully()) {

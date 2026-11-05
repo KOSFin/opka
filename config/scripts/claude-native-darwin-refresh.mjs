@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { userInfo } from 'node:os'
 import { isDarwinNativeProbeCi, nativeProbeCliSha256 } from './claude-native-probe-cli.mjs'
-import { reserveDarwinRefreshHosts } from './claude-native-darwin-refresh-hosts.mjs'
+import { createNativeRefreshConnectProxy } from './claude-native-refresh-connect-proxy.mjs'
 import {
   createDarwinRefreshServer,
   EXPIRED_ACCESS,
@@ -92,16 +92,27 @@ export async function runDarwinNativeRefreshQualification({
       throw new Error('Synthetic refresh keychain operation failed')
     }
   }
-  let releaseHosts
+  let proxy
   let server
   let cleanupVerified = true
   let keychainSeeded = false
   const groups = []
   const growth = []
   let stage = 'prepare'
+  const closeFixture = async () => {
+    try {
+      await proxy?.close()
+      await server?.close()
+    } catch (error) {
+      if (!cleanupVerified) {
+        error.nativeCleanupUnverifiable = true
+      }
+      throw error
+    }
+  }
   try {
-    releaseHosts = await reserveDarwinRefreshHosts()
     server = await createDarwinRefreshServer(canonical)
+    proxy = await createNativeRefreshConnectProxy(server.port)
     for (let index = 0; index < 5; index++) {
       await writeFile(join(config, '.credentials.json'), credentials, { mode: 0o600 })
       await security([
@@ -143,6 +154,14 @@ export async function runDarwinNativeRefreshQualification({
                   ...launch.env,
                   HOME: home,
                   NODE_EXTRA_CA_CERTS: server.certificate,
+                  HTTPS_PROXY: proxy.url,
+                  https_proxy: proxy.url,
+                  HTTP_PROXY: proxy.url,
+                  http_proxy: proxy.url,
+                  ALL_PROXY: proxy.url,
+                  all_proxy: proxy.url,
+                  NO_PROXY: '',
+                  no_proxy: '',
                   ANTHROPIC_BASE_URL: 'https://claude.fedstart.com',
                   CLAUDE_CODE_CUSTOM_OAUTH_URL: 'https://claude.fedstart.com'
                 },
@@ -218,6 +237,8 @@ export async function runDarwinNativeRefreshQualification({
     }
     stage = 'whole-home-growth'
     if (
+      proxy.counts.accepted === 0 ||
+      proxy.counts.bytes === 0 ||
       server.counts.refresh !== 5 ||
       server.counts.inference !== 0 ||
       new Set(growth.map((value) => value.files)).size !== 1 ||
@@ -227,6 +248,10 @@ export async function runDarwinNativeRefreshQualification({
     ) {
       throw new Error('Synthetic refresh requests or whole-HOME growth exceeded contract')
     }
+    stage = 'proxy-close'
+    const proxyCounts = proxy.counts
+    const proxyClosure = await proxy.close()
+    proxy = undefined
     const receipt = {
       passed: true,
       nativeVersion: '2.1.318',
@@ -234,6 +259,8 @@ export async function runDarwinNativeRefreshQualification({
       realCredentials: false,
       executions: 5,
       requests: server.counts,
+      proxy: proxyCounts,
+      proxyClosure,
       groups,
       growth,
       accessOnlyProjection: true,
@@ -254,6 +281,7 @@ export async function runDarwinNativeRefreshQualification({
           stage,
           completed: groups.length,
           requests: server?.counts ?? null,
+          proxy: proxy?.counts ?? null,
           groups,
           growth,
           cleanupVerified
@@ -268,21 +296,17 @@ export async function runDarwinNativeRefreshQualification({
     }
     throw error
   } finally {
-    await server?.close()
+    await closeFixture()
     if (cleanupVerified) {
-      try {
-        if (keychainSeeded) {
-          await security([
-            'delete-generic-password',
-            '-s',
-            service,
-            '-a',
-            userInfo().username,
-            environment.keychain
-          ])
-        }
-      } finally {
-        await releaseHosts?.()
+      if (keychainSeeded) {
+        await security([
+          'delete-generic-password',
+          '-s',
+          service,
+          '-a',
+          userInfo().username,
+          environment.keychain
+        ])
       }
     }
   }

@@ -46,7 +46,7 @@ export async function createDarwinRefreshServer(root) {
   }
   const counts = { refresh: 0, inference: 0, other: 0 }
   const server = createServer(
-    { key: await readFile(key), cert: await readFile(certificate) },
+    { key: await readFile(key), cert: await readFile(certificate), handshakeTimeout: 3000 },
     async (request, response) => {
       let body = ''
       for await (const chunk of request) {
@@ -84,9 +84,21 @@ export async function createDarwinRefreshServer(root) {
   server.headersTimeout = 5000
   server.requestTimeout = 10000
   server.maxConnections = 4
+  server.maxRequestsPerSocket = 16
+  server.keepAliveTimeout = 1000
+  server.setTimeout(10000, (socket) => socket.destroy())
   await new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(443, '127.0.0.1', resolve)
+    server.listen(0, '127.0.0.1', resolve)
   })
-  return { certificate, counts, close: () => new Promise((resolve) => server.close(resolve)) }
+  const address = server.address()
+  if (!address || typeof address !== 'object') {
+    throw new Error('Missing loopback TLS port')
+  }
+  return {
+    port: address.port,
+    certificate,
+    counts,
+    close: () => new Promise((resolve) => server.close(resolve))
+  }
 }
