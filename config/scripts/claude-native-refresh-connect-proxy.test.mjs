@@ -36,7 +36,7 @@ test('CONNECT relays only the approved hostname to the private loopback fixture'
   await fixture(async (proxy) => {
     const { client, reply } = await request(
       proxy,
-      'CONNECT claude.fedstart.com:443 HTTP/1.1\r\nHost: claude.fedstart.com:443\r\n\r\n'
+      'CONNECT platform.claude.com:443 HTTP/1.1\r\nHost: platform.claude.com:443\r\n\r\n'
     )
     assert.match(reply, /200 Connection Established/)
     client.write('synthetic-opaque-tls-bytes')
@@ -49,8 +49,9 @@ test('unknown destinations, HTTP requests and noncanonical CONNECT targets never
   await fixture(async (proxy, peers) => {
     for (const line of [
       'CONNECT example.invalid:443',
-      'CONNECT claude.fedstart.com:444',
-      'GET http://claude.fedstart.com/'
+      'CONNECT platform.claude.com:444',
+      'CONNECT claude.fedstart.com:443',
+      'GET http://platform.claude.com/'
     ]) {
       const { client, reply } = await request(
         proxy,
@@ -60,7 +61,7 @@ test('unknown destinations, HTTP requests and noncanonical CONNECT targets never
       client.destroy()
     }
     assert.equal(proxy.counts.accepted, 0)
-    assert.equal(proxy.counts.rejected, 3)
+    assert.equal(proxy.counts.rejected, 4)
     assert.equal(peers.size, 0)
   })
 })
@@ -68,7 +69,7 @@ test('shutdown destroys an accepted open tunnel and proves listener/socket closu
   await fixture(async (proxy) => {
     const { client } = await request(
       proxy,
-      'CONNECT claude.fedstart.com:443 HTTP/1.1\r\nHost: claude.fedstart.com:443\r\n\r\n'
+      'CONNECT platform.claude.com:443 HTTP/1.1\r\nHost: platform.claude.com:443\r\n\r\n'
     )
     const exited = once(client, 'close')
     assert.deepEqual(await proxy.close(), { sockets: 0, listenerClosed: true })
@@ -85,7 +86,7 @@ test('one fixture accepts at most 32 CONNECT tunnels', async () => {
     for (let index = 0; index < 33; index++) {
       const { client, reply } = await request(
         proxy,
-        'CONNECT claude.fedstart.com:443 HTTP/1.1\r\nHost: claude.fedstart.com:443\r\n\r\n'
+        'CONNECT platform.claude.com:443 HTTP/1.1\r\nHost: platform.claude.com:443\r\n\r\n'
       )
       assert.match(reply, index < 32 ? /200/ : /403/)
       const ended = once(client, 'close')
@@ -94,5 +95,16 @@ test('one fixture accepts at most 32 CONNECT tunnels', async () => {
     }
     assert.equal(proxy.counts.accepted, 32)
     assert.equal(proxy.counts.rejected, 1)
+  })
+})
+test('native default API hostname reaches only the same loopback fixture', async () => {
+  await fixture(async (proxy) => {
+    const { client, reply } = await request(
+      proxy,
+      'CONNECT api.anthropic.com:443 HTTP/1.1\r\nHost: api.anthropic.com:443\r\n\r\n'
+    )
+    assert.match(reply, /200 Connection Established/)
+    client.destroy()
+    assert.equal(proxy.counts.accepted, 1)
   })
 })

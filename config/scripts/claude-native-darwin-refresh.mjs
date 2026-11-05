@@ -42,6 +42,8 @@ export async function runDarwinNativeRefreshQualification({
       contents:
         "export {refreshClaudeNativeAccess} from './src/main/claude-accounts/claude-native-refresh-authority.ts';" +
         "export {runAgentModelCatalogListing} from './src/main/native-chat/agent-model-catalog/agent-model-catalog-probe-runner.ts';" +
+        "export {readClaudeOAuthCredentials} from './src/main/rate-limits/claude-oauth-credentials.ts';" +
+        "export {readBoundedClaudeProfileJson} from './src/main/claude-accounts/claude-native-access.ts';" +
         "export {claudeKeychainService} from './src/main/claude-accounts/keychain.ts';" +
         "export {measureOwnedNativeProbeDirectory} from './src/main/claude-accounts/claude-native-probe-test-growth.ts';",
       resolveDir: process.cwd()
@@ -98,6 +100,7 @@ export async function runDarwinNativeRefreshQualification({
   let keychainSeeded = false
   const groups = []
   const growth = []
+  const closureProofs = []
   let stage = 'prepare'
   const closeFixture = async () => {
     try {
@@ -130,6 +133,34 @@ export async function runDarwinNativeRefreshQualification({
       keychainSeeded = true
       let group
       let closed
+      const verifyClosed = async () => {
+        if (!group || closed?.root !== 'exited') {
+          throw new Error('Synthetic native refresh group closure is unverifiable')
+        }
+        try {
+          await readFile(join(writer, 'writer-owner.json'))
+          throw new Error('Synthetic native refresh writer receipt remains')
+        } catch (error) {
+          if (error.code !== 'ENOENT') {
+            throw error
+          }
+        }
+        try {
+          process.kill(-group.pgid, 0)
+          throw new Error('Synthetic native refresh process group remains live')
+        } catch (error) {
+          if (error.code !== 'ESRCH') {
+            throw error
+          }
+        }
+        cleanupVerified = true
+        closureProofs.push({
+          root: closed.root,
+          tree: closed.tree,
+          groupExited: true,
+          writerReceiptAbsent: true
+        })
+      }
       stage = 'native-refresh'
       const snapshot = await api.refreshClaudeNativeAccess(
         {
@@ -147,73 +178,52 @@ export async function runDarwinNativeRefreshQualification({
         {
           run: async (launch, options) => {
             cleanupVerified = false
-            return api.runAgentModelCatalogListing(
-              {
-                ...launch,
-                env: {
-                  ...launch.env,
-                  HOME: home,
-                  NODE_EXTRA_CA_CERTS: server.certificate,
-                  HTTPS_PROXY: proxy.url,
-                  https_proxy: proxy.url,
-                  HTTP_PROXY: proxy.url,
-                  http_proxy: proxy.url,
-                  ALL_PROXY: proxy.url,
-                  all_proxy: proxy.url,
-                  NO_PROXY: '',
-                  no_proxy: '',
-                  ANTHROPIC_BASE_URL: 'https://claude.fedstart.com',
-                  CLAUDE_CODE_CUSTOM_OAUTH_URL: 'https://claude.fedstart.com'
+            try {
+              return await api.runAgentModelCatalogListing(
+                {
+                  ...launch,
+                  env: {
+                    ...launch.env,
+                    HOME: home,
+                    NODE_EXTRA_CA_CERTS: server.certificate,
+                    HTTPS_PROXY: proxy.url,
+                    https_proxy: proxy.url,
+                    HTTP_PROXY: proxy.url,
+                    http_proxy: proxy.url,
+                    ALL_PROXY: proxy.url,
+                    all_proxy: proxy.url,
+                    NO_PROXY: '',
+                    no_proxy: ''
+                  },
+                  envToDelete: launch.envToDelete
                 },
-                envToDelete: launch.envToDelete?.filter(
-                  (name) => !['ANTHROPIC_BASE_URL', 'CLAUDE_CODE_CUSTOM_OAUTH_URL'].includes(name)
-                )
-              },
-              {
-                ...options,
-                inheritedEnv: {
-                  PATH: process.env.PATH,
-                  USER: userInfo().username,
-                  LANG: 'en_US.UTF-8',
-                  TMPDIR: home
-                },
-                onGroupProven(value) {
-                  group = value
-                  options.onGroupProven?.(value)
-                },
-                onClosed(value) {
-                  closed = value
-                  options.onClosed?.(value)
-                },
-                onNotStarted() {
-                  options.onNotStarted?.()
+                {
+                  ...options,
+                  inheritedEnv: {
+                    PATH: process.env.PATH,
+                    USER: userInfo().username,
+                    LANG: 'en_US.UTF-8',
+                    TMPDIR: home
+                  },
+                  onGroupProven(value) {
+                    group = value
+                    options.onGroupProven?.(value)
+                  },
+                  onClosed(value) {
+                    closed = value
+                    options.onClosed?.(value)
+                  },
+                  onNotStarted() {
+                    options.onNotStarted?.()
+                  }
                 }
-              }
-            )
+              )
+            } finally {
+              await verifyClosed()
+            }
           }
         }
       )
-      stage = 'group-proof'
-      if (!group || closed?.root !== 'exited') {
-        throw new Error('Synthetic native refresh group closure is unverifiable')
-      }
-      try {
-        await readFile(join(writer, 'writer-owner.json'))
-        throw new Error('Synthetic native refresh writer receipt remains')
-      } catch (error) {
-        if (error.code !== 'ENOENT') {
-          throw error
-        }
-      }
-      try {
-        process.kill(-group.pgid, 0)
-        throw new Error('Synthetic native refresh process group remains live')
-      } catch (error) {
-        if (error.code !== 'ESRCH') {
-          throw error
-        }
-      }
-      cleanupVerified = true
       stage = 'access-projection'
       if (
         snapshot.access.accessToken !== FRESH_ACCESS ||
@@ -262,10 +272,12 @@ export async function runDarwinNativeRefreshQualification({
       proxy: proxyCounts,
       proxyClosure,
       groups,
+      closureProofs,
       growth,
       accessOnlyProjection: true,
       isolatedKeychain: true,
-      loopbackOnlyNative: true
+      loopbackOnlyNative: true,
+      nativeDefaultAuthNamespace: true
     }
     await writeFile(
       join(output, 'fresh-refresh-authority.json'),
@@ -274,15 +286,44 @@ export async function runDarwinNativeRefreshQualification({
     )
     return receipt
   } catch (error) {
+    const observation = await api
+      .readClaudeOAuthCredentials({
+        credentialsFileConfigDir: config,
+        keychainConfigDir: config,
+        includeNativeAccess: true
+      })
+      .then(
+        (value) => ({
+          source: value.source,
+          unavailable: value.unavailable === true,
+          nativeAccessKnown: Boolean(value.nativeAccess),
+          freshAccessMatched: value.nativeAccess?.accessToken === FRESH_ACCESS,
+          expiryFresh: (value.nativeAccess?.expiresAt ?? 0) > Date.now() + 30000
+        }),
+        () => ({ unavailable: true })
+      )
+    let profileObservation = { readable: false }
+    try {
+      const profile = api.readBoundedClaudeProfileJson(join(config, '.claude.json')).oauthAccount
+      profileObservation = {
+        readable: true,
+        accountMatched: profile?.accountUuid === identity.accountUuid,
+        organizationMatched: profile?.organizationUuid === identity.organizationUuid,
+        emailMatched: profile?.emailAddress === identity.emailAddress
+      }
+    } catch {}
     await writeFile(
       join(output, 'fresh-refresh-diagnostic.json'),
       JSON.stringify(
         {
           stage,
+          observation,
+          profileObservation,
           completed: groups.length,
           requests: server?.counts ?? null,
           proxy: proxy?.counts ?? null,
           groups,
+          closureProofs,
           growth,
           cleanupVerified
         },

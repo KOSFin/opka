@@ -31,7 +31,7 @@ export async function createNativeRefreshConnectProxy(tlsPort) {
   server.on('connect', (request, client, head) => {
     if (
       closing ||
-      request.url !== 'claude.fedstart.com:443' ||
+      !['platform.claude.com:443', 'api.anthropic.com:443'].includes(request.url) ||
       head.length !== 0 ||
       counts.accepted >= 32 ||
       sockets.size >= 8 ||

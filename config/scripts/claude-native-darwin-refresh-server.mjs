@@ -18,7 +18,7 @@ export async function createDarwinRefreshServer(root) {
   const configuration = join(root, 'tls.cnf')
   await writeFile(
     configuration,
-    '[req]\ndistinguished_name=dn\nx509_extensions=san\nprompt=no\n[dn]\nCN=claude.fedstart.com\n[san]\nsubjectAltName=DNS:claude.fedstart.com\n',
+    '[req]\ndistinguished_name=dn\nx509_extensions=san\nprompt=no\n[dn]\nCN=platform.claude.com\n[san]\nsubjectAltName=DNS:platform.claude.com,DNS:api.anthropic.com\n',
     { mode: 0o600 }
   )
   const result = await runProcess({
