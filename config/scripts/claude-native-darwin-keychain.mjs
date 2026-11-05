@@ -17,9 +17,8 @@ export async function prepareDarwinProbeKeychain({ config, tokenA, accountA }) {
   ) {
     throw new Error('An isolated Darwin CI keychain is required')
   }
-  const { claudeKeychainService, readNativeAccessSnapshot } = await import(
-    pathToFileURL(productionModule).href
-  )
+  const { claudeKeychainService, readNativeAccessSnapshot, createClaudeNativeKeychainGuard } =
+    await import(pathToFileURL(productionModule).href)
   const service = claudeKeychainService(config)
   const username = userInfo().username
   const mode = process.env.OPKA_DARWIN_KEYCHAIN_MODE
@@ -63,7 +62,17 @@ export async function prepareDarwinProbeKeychain({ config, tokenA, accountA }) {
   return {
     async observe(finalIdentity) {
       const snapshot = await readNativeAccessSnapshot(config, finalIdentity).catch(() => null)
+      let guardRefused = false
+      await createClaudeNativeKeychainGuard({ home: config, assertExclusive() {} })().catch(
+        (error) => {
+          if (!error.message.includes('manual Keychain login')) {
+            throw error
+          }
+          guardRefused = true
+        }
+      )
       return {
+        guardRefused,
         mode,
         sourceAccessReadable: Boolean(snapshot),
         sourcePrefersKeychain: snapshot?.access.accessToken === tokenA,

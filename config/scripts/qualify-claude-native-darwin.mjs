@@ -65,6 +65,7 @@ try {
   await build({
     stdin: {
       contents:
+        "export {createClaudeNativeKeychainGuard} from './src/main/claude-accounts/claude-native-keychain-guard.ts';" +
         "export {claudeKeychainService} from './src/main/claude-accounts/keychain.ts';" +
         "export {readClaudeNativeAccessSnapshot as readNativeAccessSnapshot} from './src/main/claude-accounts/claude-native-access.ts';",
       resolveDir: process.cwd()
@@ -83,7 +84,8 @@ try {
   const projection = await import(pathToFileURL(production).href)
   if (
     typeof projection.readNativeAccessSnapshot !== 'function' ||
-    typeof projection.claudeKeychainService !== 'function'
+    typeof projection.claudeKeychainService !== 'function' ||
+    typeof projection.createClaudeNativeKeychainGuard !== 'function'
   ) {
     throw new Error('Production access projection could not be loaded')
   }
@@ -186,13 +188,11 @@ console.log('Loopback allowed; external connect denied by sandbox');`
       receipt.finalAccountMetadata !== 'B' ||
       receipt.finalOrganizationMetadata !== 'B' ||
       receipt.finalCredential !== 'B' ||
-      (mode === 'absent' &&
-        (result.code !== 0 ||
-          !observed.sourceReadsFileB ||
-          !receipt.oauthReloaded ||
-          !receipt.requestIdentityCoherent)) ||
-      (mode === 'present' &&
-        !receipt.requests?.some((request) => request.secondPrompt && request.identity === 'A'))
+      observed.guardRefused !== (mode === 'present') ||
+      result.code !== 0 ||
+      (mode === 'absent' && !observed.sourceReadsFileB) ||
+      !receipt.oauthReloaded ||
+      !receipt.requestIdentityCoherent
     ) {
       throw new Error(`Native Darwin ${mode} qualification did not meet its contract`)
     }

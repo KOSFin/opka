@@ -35,6 +35,13 @@ export class NativeClaudeProbeLimitFailover {
       response.writeHead(403).end('{}')
       return true
     }
+    if (requestPath === '/probe-limit-stop' || requestPath === '/probe-limit-failure') {
+      this.events.push({ event: 'native-hook-shape', ...payload.inventory })
+    }
+    if (requestPath === '/probe-limit-stop') {
+      response.writeHead(200).end('{}')
+      return true
+    }
     if (this.phase) {
       let verdict = {}
       if (requestPath === '/probe-limit-admit') {
@@ -131,6 +138,8 @@ export class NativeClaudeProbeLimitFailover {
 import { request } from 'node:http'
 let input='';for await(const chunk of process.stdin){input+=chunk;if(input.length>1048576)throw new Error('Synthetic hook input overflow')}
 const native=JSON.parse(input||'{}')
+const roster=native.background_tasks
+const inventory={hookEvent:native.hook_event_name==='StopFailure'?'StopFailure':native.hook_event_name==='Stop'?'Stop':'other',backgroundTasksPresent:Object.hasOwn(native,'background_tasks'),backgroundTasksArray:Array.isArray(roster),backgroundTasksCount:Array.isArray(roster)?roster.length:null,backgroundTasksMalformedEntries:Array.isArray(roster)?roster.some(item=>item===null||typeof item!=='object'||typeof item.type!=='string'):false,childIdentityPresent:typeof native.agent_id==='string'&&native.agent_id.length>0}
 const req = request({hostname:'127.0.0.1',port:${port},path:process.argv[2],method:'POST'}, res => {
   let body='';res.on('data',chunk=>body+=chunk);res.on('end',()=>{
     const verdict=JSON.parse(body||'{}')
@@ -140,7 +149,7 @@ const req = request({hostname:'127.0.0.1',port:${port},path:process.argv[2],meth
 })
 req.on('error',()=>{process.exitCode=1})
 req.setTimeout(5000,()=>req.destroy())
-req.end(JSON.stringify({nonce:${JSON.stringify(this.nonce)},promptId:native.prompt_id,marker:native.prompt?.match(/<opka-native-wake:v1:[a-f0-9-]{36}:[12]:[a-f0-9]{64}>/)?.[0]}))
+req.end(JSON.stringify({nonce:${JSON.stringify(this.nonce)},promptId:native.prompt_id,inventory,marker:native.prompt?.match(/<opka-native-wake:v1:[a-f0-9-]{36}:[12]:[a-f0-9]{64}>/)?.[0]}))
 `,
       { mode: 0o600 }
     )
@@ -148,6 +157,18 @@ req.end(JSON.stringify({nonce:${JSON.stringify(this.nonce)},promptId:native.prom
       join(config, 'settings.json'),
       JSON.stringify({
         hooks: {
+          Stop: [
+            {
+              hooks: [
+                {
+                  type: 'command',
+                  command: process.execPath,
+                  args: [script, '/probe-limit-stop'],
+                  timeout: 8
+                }
+              ]
+            }
+          ],
           StopFailure: [
             {
               matcher: 'rate_limit',

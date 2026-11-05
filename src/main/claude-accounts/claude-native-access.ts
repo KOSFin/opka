@@ -60,7 +60,11 @@ export function readBoundedClaudeProfileSurface(file: string): {
     throw new Error('Claude native profile surface is unavailable.')
   }
   const raw = readFileSync(file, 'utf8')
-  return { raw, value: z.record(z.string(), z.unknown()).parse(JSON.parse(raw)) }
+  try {
+    return { raw, value: z.record(z.string(), z.unknown()).parse(JSON.parse(raw)) }
+  } catch {
+    throw new Error('Claude native profile JSON is unreadable.')
+  }
 }
 
 /** The caller resolves and holds the host-owned profile before this read. */

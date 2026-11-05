@@ -167,6 +167,11 @@ export function createClaudeNativeHookPhase<T>(options: {
       }
       const marker = parse(promptText)
       if (!marker) {
+        if (promptId === activePromptId) {
+          return 'allow'
+        }
+        attempted.clear()
+        lastFailurePromptId = undefined
         phase = undefined
         activePromptId = promptId
         notify()
