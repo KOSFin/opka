@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { isDarwinNativeProbeCi } from './claude-native-probe-cli.mjs'
 import { prepareDarwinNativeEnvironment } from './claude-native-darwin-environment.mjs'
+import { redactTranscript } from './pty-transcript-secret-scan.mjs'
 
 if (!isDarwinNativeProbeCi()) {
   throw new Error('This qualification requires an isolated GitHub macOS runner')
@@ -110,6 +111,21 @@ try {
         OPKA_DARWIN_KEYCHAIN_MODULE: resolve('config/scripts/claude-native-darwin-keychain.mjs')
       }
     })
+    await writeFile(
+      join(output, `${mode}-execution.json`),
+      JSON.stringify(
+        {
+          code: result.code,
+          signal: result.signal,
+          timedOut: result.timedOut,
+          outputTruncated: result.outputTruncated,
+          stdout: redactTranscript(result.stdout.slice(-32768)).text,
+          stderr: redactTranscript(result.stderr.slice(-32768)).text
+        },
+        null,
+        2
+      )
+    )
     const nativeProcess = JSON.parse(await readFile(processReceipt, 'utf8'))
     if (
       !Number.isSafeInteger(nativeProcess.pid) ||
