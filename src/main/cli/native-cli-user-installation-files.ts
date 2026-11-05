@@ -131,6 +131,7 @@ export async function writeNativeUserPrivate(
   const file = await open(path, 'wx', mode)
   try {
     await file.writeFile(bytes)
+    await file.chmod(mode)
     await file.sync()
   } finally {
     await file.close()
