@@ -54,6 +54,13 @@ type ManagedProviderProcessOptions = {
   stderrLineMaxChars?: number
   /** Drain both output pipes without parsing or retaining untrusted provider content. */
   discardOutput?: boolean
+  /** Byte-preserving transport; neither output pipe is decoded or retained. */
+  rawOutput?: {
+    stdout: (chunk: Buffer) => void
+    stderr: (chunk: Buffer) => void
+    onInputError?: (error: Error) => void
+    onOutputError?: (channel: 'stdout' | 'stderr', error: Error) => void
+  }
   onGroupProven?: (identity: ProviderGroupIdentity) => void
 }
 
@@ -131,7 +138,21 @@ export function spawnManagedProviderProcess(
       stderrTail = `${stderrTail}${line}\n`.slice(-STDERR_TAIL_MAX_CHARS)
     }
   }
-  if (options.discardOutput) {
+  if (options.rawOutput) {
+    const onInputError = (error: Error) => options.rawOutput?.onInputError?.(error)
+    const onStdoutError = (error: Error) => options.rawOutput?.onOutputError?.('stdout', error)
+    const onStderrError = (error: Error) => options.rawOutput?.onOutputError?.('stderr', error)
+    child.stdin.on('error', onInputError)
+    child.stdout.on('error', onStdoutError)
+    child.stderr.on('error', onStderrError)
+    child.once('close', () => {
+      child.stdin.removeListener('error', onInputError)
+      child.stdout.removeListener('error', onStdoutError)
+      child.stderr.removeListener('error', onStderrError)
+    })
+    child.stdout.on('data', options.rawOutput.stdout)
+    child.stderr.on('data', options.rawOutput.stderr)
+  } else if (options.discardOutput) {
     child.stdout.resume()
     child.stderr.resume()
   } else {

@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import { isDarwinNativeProbeCi } from './claude-native-probe-cli.mjs'
 import {
   probeDarwinSecurityWrites,
+  inspectSecurityWriteDefault,
   runFixedSecurityWriteControls
 } from './claude-native-darwin-security-write-probe.mjs'
 
@@ -199,5 +200,75 @@ test(
       assert.equal(f.observations.length, 1)
       assert.equal(JSON.stringify(f.observations).includes('synthetic-private-rejection'), false)
     }
+  }
+)
+
+test(
+  'default-control flags isolate parser, canonical-path, ownership and termination predicates without paths',
+  {
+    skip: process.platform === 'win32'
+  },
+  async () => {
+    const base = {
+      code: 0,
+      signal: null,
+      stdout: JSON.stringify('/synthetic-selected'),
+      durationMs: 1,
+      timedOut: false,
+      terminationObserved: true,
+      outputTruncated: false
+    }
+    const same = async () => '/synthetic-canonical'
+    const matched = await inspectSecurityWriteDefault(base, '/synthetic-owned', same)
+    assert.equal(matched.ownedMatch, true)
+    assert.equal(matched.pathJSONKnown, true)
+    assert.equal(matched.canonicalExists, true)
+    const invalid = await inspectSecurityWriteDefault(
+      { ...base, stdout: 'not-json' },
+      '/synthetic-owned',
+      same
+    )
+    assert.equal(invalid.pathJSONKnown, false)
+    const missing = await inspectSecurityWriteDefault(base, '/synthetic-owned', async () => {
+      throw new Error('private-path')
+    })
+    assert.equal(missing.pathJSONKnown, true)
+    assert.equal(missing.canonicalExists, false)
+    const different = await inspectSecurityWriteDefault(
+      base,
+      '/synthetic-owned',
+      async (path) => path
+    )
+    assert.equal(different.canonicalExists, true)
+    assert.equal(different.ownedMatch, false)
+    const unknown = await inspectSecurityWriteDefault(
+      { ...base, terminationObserved: false },
+      '/synthetic-owned',
+      same
+    )
+    assert.equal(unknown.control.terminationObserved, false)
+    assert.equal(
+      JSON.stringify([matched, invalid, missing, different, unknown]).includes('/synthetic'),
+      false
+    )
+  }
+)
+test(
+  'verified no-default mode runs only explicit fake-keychain writes',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const f = fixture()
+    await runFixedSecurityWriteControls({ ...f.args, allowImplicit: false })
+    assert.equal(f.observations.length, 2)
+    assert.equal(
+      f.observations.every((value) => value.explicit && value.cleanupVerified && value.readMatched),
+      true
+    )
+    assert.equal(
+      f.calls
+        .filter((value) => value.args[0] === '-i')
+        .every((value) => value.input.includes('"/synthetic/fake.keychain-db"')),
+      true
+    )
   }
 )

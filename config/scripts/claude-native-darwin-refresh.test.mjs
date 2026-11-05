@@ -44,7 +44,11 @@ test('refresh fixture closure has no unresolved runtime identifiers', async () =
       'config/scripts/claude-native-darwin-security-probe.mjs',
       'config/scripts/claude-native-darwin-security-shim.mjs',
       'config/scripts/claude-native-darwin-security-shim-runner.mjs',
-      'config/scripts/claude-native-darwin-security-write-probe.mjs'
+      'config/scripts/claude-native-darwin-security-write-probe.mjs',
+      'config/scripts/claude-native-darwin-keychain-domain.mjs',
+      'config/scripts/claude-native-darwin-refresh-preflight.mjs',
+      'config/scripts/claude-native-darwin-refresh-cache.mjs',
+      'config/scripts/claude-native-darwin-refresh-writer.mjs'
     ],
     cwd: root,
     timeoutMs: 10000,

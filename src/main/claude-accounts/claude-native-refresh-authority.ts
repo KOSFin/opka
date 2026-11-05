@@ -1,6 +1,7 @@
 import { dirname } from 'node:path'
+import { createClaudeNativeRefreshMonitor } from './claude-native-refresh-monitor'
 import { QUALIFIED_NATIVE_CLAUDE_VERSION } from '../../shared/native-claude-capability'
-import { CLAUDE_AUTH_ENV_VARS } from '../../shared/claude-auth-environment'
+import { CLAUDE_MANAGED_OAUTH_ENV_VARS } from '../../shared/claude-auth-environment'
 import { reserveEngineWriter } from '../codex-routing/engine-writer-ownership'
 import {
   AgentModelCatalogProbeError,
@@ -41,10 +42,14 @@ type RefreshOptions = {
 
 function fresh(
   snapshot: ClaudeNativeAccessSnapshot | null,
-  now: number
+  now: number,
+  expected: ClaudeNativeIdentity
 ): snapshot is ClaudeNativeAccessSnapshot {
   return Boolean(
     snapshot &&
+    snapshot.identity.accountUuid === expected.accountUuid &&
+    snapshot.identity.organizationUuid === expected.organizationUuid &&
+    snapshot.identity.emailAddress.toLowerCase() === expected.emailAddress.toLowerCase() &&
     snapshot.access.expiresAt > now + 30_000 &&
     snapshot.access.scopes.includes('user:inference')
   )
@@ -78,9 +83,21 @@ export function refreshClaudeNativeAccess(
     source.assertExclusive()
     const now = options.now ?? Date.now
     const read = options.read ?? readClaudeNativeAccessSnapshot
-    const previous = await read(source.configDir, source.expectedIdentity)
+    const readFresh = async () => {
+      source.assertExclusive()
+      try {
+        return await read(source.configDir, source.expectedIdentity)
+      } finally {
+        source.assertExclusive()
+      }
+    }
+    const previous = await readFresh()
     const attempted = lastAttempt.get(source.configDir)
-    if (fresh(previous, now()) && attempted !== undefined && now() - attempted < COOLDOWN_MS) {
+    if (
+      fresh(previous, now(), source.expectedIdentity) &&
+      attempted !== undefined &&
+      now() - attempted < COOLDOWN_MS
+    ) {
       return previous
     }
     const owner = (options.reserve ?? reserveEngineWriter)({
@@ -92,79 +109,117 @@ export function refreshClaudeNativeAccess(
     if (lastAttempt.size > MAX_PENDING) {
       lastAttempt.delete(lastAttempt.keys().next().value ?? '')
     }
-    let closed = false
+    const monitor = createClaudeNativeRefreshMonitor({
+      signal: options.signal,
+      timeoutMs: 45000,
+      readFresh: async () => fresh(await readFresh(), now(), source.expectedIdentity)
+    })
+    const input = `${JSON.stringify({ type: 'user', message: { role: 'user', content: '/usage' }, parent_tool_use_id: null })}\n`
+    let inputPending: Promise<void> | undefined
+    let closed = false,
+      writerExited = false
     let phase = 'native-command'
     try {
-      await (options.run ?? runAgentModelCatalogListing)(
-        {
-          ...source.launch,
-          cwd: source.configDir,
-          args: [
-            ...source.launch.args,
-            '-p',
-            '/usage',
-            '--output-format',
-            'json',
-            '--tools',
-            '',
-            '--strict-mcp-config',
-            '--setting-sources',
-            '',
-            '--no-session-persistence',
-            '--settings',
-            '{"disableAllHooks":true,"autoMemoryEnabled":false}'
-          ],
-          env: {
-            HOME: dirname(source.configDir),
-            CLAUDE_CONFIG_DIR: source.configDir,
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
-            DISABLE_AUTOUPDATER: '1',
-            DISABLE_TELEMETRY: '1',
-            DISABLE_ERROR_REPORTING: '1'
+      if (monitor.signal.aborted) {
+        owner.cancelBeforeSpawn()
+        closed = true
+        throw new Error('native-start-cancelled')
+      }
+      try {
+        await (options.run ?? runAgentModelCatalogListing)(
+          {
+            ...source.launch,
+            cwd: source.configDir,
+            keepStdinOpen: true,
+            stdin: input,
+            args: [
+              ...source.launch.args,
+              '-p',
+              '--input-format',
+              'stream-json',
+              '--output-format',
+              'stream-json',
+              '--verbose',
+              '--tools',
+              '',
+              '--strict-mcp-config',
+              '--setting-sources',
+              '',
+              '--no-session-persistence',
+              '--settings',
+              '{"disableAllHooks":true,"autoMemoryEnabled":false}'
+            ],
+            env: {
+              HOME: dirname(source.configDir),
+              CLAUDE_CONFIG_DIR: source.configDir,
+              CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+              DISABLE_AUTOUPDATER: '1',
+              DISABLE_TELEMETRY: '1',
+              DISABLE_ERROR_REPORTING: '1'
+            },
+            envToDelete: [
+              ...CLAUDE_MANAGED_OAUTH_ENV_VARS,
+              'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'
+            ]
           },
-          envToDelete: [
-            ...CLAUDE_AUTH_ENV_VARS,
-            'ANTHROPIC_CUSTOM_HEADERS',
-            'ANTHROPIC_BASE_URL',
-            'CLAUDE_CODE_CUSTOM_OAUTH_URL',
-            'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
-            'CLAUDE_CODE_USE_BEDROCK',
-            'CLAUDE_CODE_USE_VERTEX',
-            'CLAUDE_CODE_USE_FOUNDRY'
-          ]
-        },
-        {
-          site: 'claude-native-refresh-authority',
-          timeoutMs: 45_000,
-          maxOutputBytes: 64 * 1024,
-          signal: options.signal,
-          onGroupProven: owner.recordGroup,
-          onNotStarted() {
-            try {
-              owner.cancelBeforeSpawn()
-              closed = true
-            } catch {
-              writerUnverifiable = true
-            }
-          },
-          onClosed(result) {
-            try {
-              owner.release(result)
-              closed = true
-            } catch {
-              writerUnverifiable = true
+          {
+            site: 'claude-native-refresh-authority',
+            timeoutMs: 45_000,
+            maxOutputBytes: 64 * 1024,
+            signal: monitor.signal,
+            onStdout: monitor.onStdout,
+            onStdinReady(write) {
+              inputPending = write(input).catch(() => {
+                monitor.fail()
+              })
+            },
+            onGroupProven: owner.recordGroup,
+            onNotStarted() {
+              monitor.onClosed()
+              try {
+                owner.cancelBeforeSpawn()
+                closed = true
+              } catch {
+                writerUnverifiable = true
+              }
+            },
+            onClosed(result) {
+              monitor.onClosed()
+              try {
+                owner.release(result)
+                closed = true
+                writerExited = true
+              } catch {
+                writerUnverifiable = true
+              }
             }
           }
+        )
+      } catch (error) {
+        if (
+          !(
+            error instanceof AgentModelCatalogProbeError &&
+            error.reason === 'stopped' &&
+            monitor.readyStopped &&
+            writerExited &&
+            !options.signal?.aborted
+          )
+        ) {
+          throw error
         }
-      )
+      }
+      await inputPending
+      await monitor.finish()
       phase = 'writer-close'
-      if (!closed) {
+      if (!writerExited) {
         throw new Error('writer-unverifiable')
       }
-      source.assertExclusive()
+      if (!monitor.successfulResult || options.signal?.aborted) {
+        throw new Error('native-result-unavailable')
+      }
       phase = 'fresh-access-read'
-      const updated = await read(source.configDir, source.expectedIdentity)
-      if (!fresh(updated, now())) {
+      const updated = await readFresh()
+      if (!fresh(updated, now(), source.expectedIdentity) || options.signal?.aborted) {
         throw new Error('access-unavailable')
       }
       return updated
@@ -176,6 +231,9 @@ export function refreshClaudeNativeAccess(
       throw new Error(
         `Claude native refresh did not produce fresh matching access credentials (${phase}/${reason}).`
       )
+    } finally {
+      await inputPending
+      await monitor.finish()
     }
   })
   serial = operation.then(

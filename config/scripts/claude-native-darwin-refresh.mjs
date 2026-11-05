@@ -12,9 +12,16 @@ import {
   summarizeNativeRefreshCommand
 } from './claude-native-refresh-diagnostics.mjs'
 import { createNativeRefreshConnectProxy } from './claude-native-refresh-connect-proxy.mjs'
-import { probeDarwinRefreshSecurity } from './claude-native-darwin-security-probe.mjs'
+import {
+  assertDarwinRefreshWriterAbsent,
+  cancelUnstartedDarwinRefresh
+} from './claude-native-darwin-refresh-writer.mjs'
+import { probeDarwinRefreshPreflight } from './claude-native-darwin-refresh-preflight.mjs'
+import {
+  qualifyDarwinRefreshCache,
+  assertDarwinRefreshAccess
+} from './claude-native-darwin-refresh-cache.mjs'
 import { prepareDarwinSecurityDiagnostic } from './claude-native-darwin-security-shim.mjs'
-import { probeDarwinSecurityWrites } from './claude-native-darwin-security-write-probe.mjs'
 import {
   createDarwinRefreshServer,
   EXPIRED_ACCESS,
@@ -122,6 +129,17 @@ export async function runDarwinNativeRefreshQualification({
   const securityWritePreflight = []
   let securityWriteDefaultMatched = false
   let securityWriteDefaultControl = null
+  let keychainDomain = null
+  let nativeExecutions = 0
+  let initialGrowth = null
+  const cancelBeforeSpawn = async (options) => {
+    try {
+      await cancelUnstartedDarwinRefresh(options, writer)
+    } catch (error) {
+      cleanupVerified = false
+      throw error
+    }
+  }
   const debugPath = join(home, 'native-refresh-debug.log')
   let stage = 'prepare'
   const closeFixture = async () => {
@@ -139,10 +157,13 @@ export async function runDarwinNativeRefreshQualification({
     securityDiagnostic = await prepareDarwinSecurityDiagnostic(canonical)
     server = await createDarwinRefreshServer(canonical)
     proxy = await createNativeRefreshConnectProxy(server.port)
-    for (let index = 0; index < 5; index++) {
-      await writeFile(join(config, '.credentials.json'), credentials, { mode: 0o600 })
+    await writeFile(join(config, '.credentials.json'), credentials, { mode: 0o600 })
+    initialGrowth = await api.measureOwnedNativeProbeDirectory(home)
+    for (let index = 0; index < 1; index++) {
       let group
       let closed
+      let forwardedClose
+      let notStarted = false
       const verifyClosed = async () => {
         if (!group || closed?.root !== 'exited') {
           throw new Error('Synthetic native refresh group closure is unverifiable')
@@ -220,59 +241,31 @@ export async function runDarwinNativeRefreshQualification({
                   delete env[name]
                 }
                 try {
-                  securityPreflight = await probeDarwinRefreshSecurity({
-                    sandbox: environment.sandbox,
-                    keychain: environment.keychain,
-                    env
-                  })
-                  if (
-                    securityPreflight.some(
-                      (value) => value.code !== 44 || value.timedOut || value.outputTruncated
-                    )
-                  ) {
-                    throw new Error(
-                      'Synthetic OS Security lookup preflight refused before native usage'
-                    )
-                  }
-                  stage = 'security-write-preflight'
-                  await probeDarwinSecurityWrites({
+                  const preflight = await probeDarwinRefreshPreflight({
                     sandbox: environment.sandbox,
                     keychain: environment.keychain,
                     env,
-                    onObservation: (value) => securityWritePreflight.push(value),
                     onDefaultObservation: (value) => {
                       securityWriteDefaultControl = value
-                    },
-                    onDefaultVerified: () => {
-                      securityWriteDefaultMatched = true
                     }
                   })
-                  if (
-                    securityWritePreflight.some(
-                      (value) =>
-                        value.write.code !== 0 ||
-                        value.write.timedOut ||
-                        !value.readMatched ||
-                        !value.cleanupVerified
-                    )
-                  ) {
-                    throw new Error('Synthetic Security write control refused before native usage')
-                  }
+                  keychainDomain = preflight.domain
+                  securityPreflight = preflight.lookups
+                  securityWritePreflight.push(...preflight.writes)
+                  securityWriteDefaultMatched = preflight.ownedDefault
                 } catch (preflightError) {
-                  options.onNotStarted?.()
-                  try {
-                    await readFile(join(writer, 'writer-owner.json'))
-                    throw new Error('Unverified unstarted native writer')
-                  } catch (error) {
-                    if (error.code !== 'ENOENT') {
-                      throw error
-                    }
-                  }
+                  await cancelBeforeSpawn(options)
                   cleanupVerified = preflightError.nativeCleanupUnverifiable !== true
                   throw preflightError
                 }
                 stage = 'native-refresh'
               }
+              if (options.signal?.aborted) {
+                await cancelBeforeSpawn(options)
+                cleanupVerified = true
+                throw new Error('Synthetic native refresh stopped before spawn')
+              }
+              nativeExecutions++
               const stdout = await api.runAgentModelCatalogListing(fixtureLaunch, {
                 ...options,
                 inheritedEnv,
@@ -282,18 +275,33 @@ export async function runDarwinNativeRefreshQualification({
                 },
                 onClosed(value) {
                   closed = value
-                  options.onClosed?.(value)
+                  forwardedClose = options.onClosed?.(value)
+                  return forwardedClose
                 },
                 onNotStarted() {
-                  options.onNotStarted?.()
+                  notStarted = true
+                  forwardedClose = options.onNotStarted?.()
+                  return forwardedClose
                 }
               })
               commandObservations.push(summarizeNativeRefreshCommand(stdout))
               return stdout
+            } catch (commandError) {
+              commandObservations.push({
+                controlledStopped: commandError.reason === 'stopped',
+                successfulExit: false
+              })
+              throw commandError
             } finally {
               try {
+                await forwardedClose
                 if (!cleanupVerified) {
-                  await verifyClosed()
+                  if (notStarted && !group) {
+                    await assertDarwinRefreshWriterAbsent(writer)
+                    cleanupVerified = true
+                  } else {
+                    await verifyClosed()
+                  }
                 }
               } finally {
                 debugObservations.push(await readNativeRefreshDiagnosticSummary(debugPath))
@@ -306,17 +314,11 @@ export async function runDarwinNativeRefreshQualification({
         }
       )
       stage = 'access-projection'
-      if (
-        snapshot.access.accessToken !== FRESH_ACCESS ||
-        snapshot.identity.accountUuid !== identity.accountUuid ||
-        snapshot.identity.organizationUuid !== identity.organizationUuid ||
-        JSON.stringify(snapshot).includes(ROTATED_REFRESH) ||
-        Object.hasOwn(snapshot.access, 'refreshToken')
-      ) {
-        throw new Error(
-          'Synthetic native refresh projection violated identity/access-only contract'
-        )
-      }
+      assertDarwinRefreshAccess(snapshot, {
+        identity,
+        accessToken: FRESH_ACCESS,
+        refreshToken: ROTATED_REFRESH
+      })
       groups.push({
         proven: true,
         root: closed.root,
@@ -338,18 +340,56 @@ export async function runDarwinNativeRefreshQualification({
         fileFreshAccessMatched: fileAccess?.accessToken === FRESH_ACCESS,
         fileRefreshRotated: fileAccess?.refreshToken === ROTATED_REFRESH
       })
+      if (
+        keychainDomain?.mode === 'isolated-no-keychain' &&
+        (selected.source !== 'credentials-file' ||
+          selected.nativeAccess?.accessToken !== FRESH_ACCESS ||
+          fileAccess?.accessToken !== FRESH_ACCESS ||
+          fileAccess?.refreshToken !== ROTATED_REFRESH)
+      ) {
+        throw new Error('Isolated no-keychain mode did not persist the strict native file fallback')
+      }
       growth.push(await api.measureOwnedNativeProbeDirectory(home))
     }
+    stage = 'cached-access'
+    const cachedGrowth = await qualifyDarwinRefreshCache({
+      initial: growth[0],
+      read: () =>
+        api.refreshClaudeNativeAccess(
+          {
+            configDir: config,
+            writerDirectory: writer,
+            expectedIdentity: identity,
+            qualifiedVersion: '2.1.318',
+            launch: { command: executable, args: [], cwd: config },
+            assertExclusive() {}
+          },
+          {
+            run: async (_launch, options) => {
+              await cancelBeforeSpawn(options)
+              throw new Error('Cached read attempted another native actor')
+            }
+          }
+        ),
+      validate: (snapshot) =>
+        assertDarwinRefreshAccess(snapshot, {
+          identity,
+          accessToken: FRESH_ACCESS,
+          refreshToken: ROTATED_REFRESH
+        }),
+      measure: () => api.measureOwnedNativeProbeDirectory(home)
+    })
+    growth.push(...cachedGrowth)
     stage = 'whole-home-growth'
     if (
       proxy.counts.accepted === 0 ||
       proxy.counts.bytes === 0 ||
-      server.counts.refresh !== 5 ||
+      server.counts.refresh !== 1 ||
+      nativeExecutions !== 1 ||
+      groups.length !== 1 ||
       server.counts.inference !== 0 ||
       new Set(growth.map((value) => value.files)).size !== 1 ||
-      Math.max(...growth.map((value) => value.bytes)) -
-        Math.min(...growth.map((value) => value.bytes)) >=
-        4096
+      growth.some((value) => value.files !== growth[0].files || value.bytes !== growth[0].bytes)
     ) {
       throw new Error('Synthetic refresh requests or whole-HOME growth exceeded contract')
     }
@@ -362,7 +402,10 @@ export async function runDarwinNativeRefreshQualification({
       nativeVersion: '2.1.318',
       sha256: await nativeProbeCliSha256(executable),
       realCredentials: false,
-      executions: 5,
+      executions: nativeExecutions,
+      cachedReads: 4,
+      initialGrowth,
+      keychainDomain,
       requests: server.counts,
       proxy: proxyCounts,
       proxyClosure,
@@ -381,7 +424,9 @@ export async function runDarwinNativeRefreshQualification({
       accessOnlyProjection: true,
       isolatedKeychain: true,
       loopbackOnlyNative: true,
-      nativeDefaultAuthNamespace: true
+      nativeDefaultAuthNamespace: keychainDomain?.mode === 'owned-default',
+      keychainNamespaceMode: keychainDomain?.mode ?? 'unverifiable',
+      fileFallbackQualified: keychainDomain?.mode === 'isolated-no-keychain'
     }
     await writeFile(
       join(output, 'fresh-refresh-authority.json'),
@@ -449,6 +494,9 @@ export async function runDarwinNativeRefreshQualification({
           diagnosticOnly: true,
           profileObservation,
           completed: groups.length,
+          nativeExecutions,
+          keychainDomain,
+          initialGrowth,
           requests: server?.counts ?? null,
           proxy: proxy?.counts ?? null,
           groups,

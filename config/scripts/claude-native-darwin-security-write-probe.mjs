@@ -1,13 +1,13 @@
 import { Buffer } from 'node:buffer'
 import { runProcess } from '@orca/process-host'
-import { realpath } from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
 import { isAbsolute } from 'node:path'
 import { isDarwinNativeProbeCi } from './claude-native-probe-cli.mjs'
 import {
-  securityDiagnosticElapsedBucket,
-  securityDiagnosticSignal
-} from './claude-native-darwin-security-shim-runner.mjs'
+  summarizeDarwinSecurityControl as summary,
+  probeDarwinRefreshKeychainDomain
+} from './claude-native-darwin-keychain-domain.mjs'
+export { inspectSecurityWriteDefault } from './claude-native-darwin-keychain-domain.mjs'
 
 const SERVICE = 'opka-native-security-write-preflight'
 const PLACEHOLDER = 'opka-noncredential-write-check'
@@ -17,22 +17,13 @@ function unverified() {
   error.nativeCleanupUnverifiable = true
   return error
 }
-function summary(result) {
-  return {
-    code:
-      Number.isInteger(result.code) && result.code >= 0 && result.code <= 255 ? result.code : null,
-    signal: securityDiagnosticSignal(result.signal),
-    elapsed:
-      Number.isFinite(result.durationMs) && result.durationMs >= 0
-        ? securityDiagnosticElapsedBucket(result.durationMs)
-        : 'pending',
-    timedOut: result.timedOut === true,
-    terminationObserved: result.terminationObserved === true
-  }
-}
-
 /** Pure orchestration seam; only the guarded wrapper below executes OS Security. */
-export async function runFixedSecurityWriteControls({ keychain, invoke, onObservation }) {
+export async function runFixedSecurityWriteControls({
+  keychain,
+  invoke,
+  onObservation,
+  allowImplicit = true
+}) {
   if (!isAbsolute(keychain) || keychain.length > 1024 || /["\\\0\r\n]/.test(keychain)) {
     throw new Error('Synthetic keychain path is not supported')
   }
@@ -46,7 +37,7 @@ export async function runFixedSecurityWriteControls({ keychain, invoke, onObserv
   const find = ['find-generic-password', '-a', ACCOUNT, '-w', '-s', SERVICE, keychain]
   const cleanup = ['delete-generic-password', '-a', ACCOUNT, '-s', SERVICE, keychain]
   for (const sandboxed of [false, true]) {
-    for (const explicit of [false, true]) {
+    for (const explicit of allowImplicit ? [false, true] : [true]) {
       const absent = await run(false, find)
       if (absent.code !== 44 || absent.timedOut || !absent.terminationObserved) {
         throw unverified()
@@ -123,45 +114,20 @@ export async function probeDarwinSecurityWrites({
       terminationObserved
     }
   }
-  let defaultKeychain
-  try {
-    defaultKeychain = await invoke(false, ['default-keychain', '-d', 'user'])
-  } catch {
-    onDefaultObservation?.({ invokeRejected: true })
-    throw unverified()
-  }
-  let pathJSONKnown = false
-  let canonicalExists = false
-  let ownedMatch = false
-  try {
-    const path = JSON.parse(defaultKeychain.stdout.trim())
-    pathJSONKnown = typeof path === 'string' && isAbsolute(path)
-    if (pathJSONKnown) {
-      const actual = await realpath(path)
-      const expected = await realpath(keychain)
-      canonicalExists = true
-      ownedMatch = actual === expected
-    }
-  } catch {}
-  onDefaultObservation?.({
-    invokeRejected: false,
-    control: summary(defaultKeychain),
-    outputTruncated: defaultKeychain.outputTruncated === true,
-    pathJSONKnown,
-    canonicalExists,
-    ownedMatch
+  const domain = await probeDarwinRefreshKeychainDomain({
+    sandbox,
+    keychain,
+    env,
+    onObservation: onDefaultObservation
   })
-  if (
-    defaultKeychain.code !== 0 ||
-    defaultKeychain.timedOut ||
-    !defaultKeychain.terminationObserved ||
-    defaultKeychain.outputTruncated ||
-    !pathJSONKnown ||
-    !canonicalExists ||
-    !ownedMatch
-  ) {
-    throw unverified()
+  if (domain.mode === 'owned-default') {
+    onDefaultVerified?.()
   }
-  onDefaultVerified?.()
-  await runFixedSecurityWriteControls({ keychain, invoke, onObservation })
+  await runFixedSecurityWriteControls({
+    keychain,
+    invoke,
+    onObservation,
+    allowImplicit: domain.mode === 'owned-default'
+  })
+  return domain
 }
