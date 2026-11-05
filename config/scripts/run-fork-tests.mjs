@@ -213,21 +213,34 @@ export function readForkTestShard(environment = process.env) {
   return { index: Number(index), count: 4 }
 }
 
+export function readForkTestGroup(environment = process.env) {
+  const group = environment.OPKA_FORK_TEST_GROUP ?? 'all'
+  if (!['all', 'root', 'shared'].includes(group)) {
+    throw new Error('Fork test group must be all, root or shared')
+  }
+  return group
+}
+
 export function runForkTestPlan(plan, execute = run, environment = process.env) {
   const shard = readForkTestShard(environment)
+  const group = readForkTestGroup(environment)
+  if (group === 'shared' && shard.index !== 1) {
+    throw new Error('Shared fork tests require shard index 1')
+  }
   const { lanes } = plan
   const first = shard.index === 1
   // Vitest refuses count > files; known-empty logical shards need no root invocation.
   const rootCount = Math.min(shard.count, lanes.root.length)
-  const runRoot = lanes.root.length > 0 && shard.index <= rootCount
+  const runRoot = group !== 'shared' && lanes.root.length > 0 && shard.index <= rootCount
+  const runShared = group === 'shared' || (group === 'all' && first)
   const results = []
   const prepared =
-    (!runRoot && !(first && lanes.node.length)) ||
+    (!runRoot && !(group === 'shared' || (runShared && lanes.node.length))) ||
     (execute('pnpm', ['run', 'build:packages']) &&
       execute(process.execPath, ['config/scripts/ensure-native-runtime.mjs', '--runtime=node']))
   results.push(prepared)
   for (const lane of ['root', 'mobile', 'render']) {
-    if (!lanes[lane].length || (lane === 'root' ? !runRoot || !prepared : !first)) {
+    if (!lanes[lane].length || (lane === 'root' ? !runRoot || !prepared : !runShared)) {
       continue
     }
     results.push(
@@ -245,7 +258,7 @@ export function runForkTestPlan(plan, execute = run, environment = process.env) 
       )
     )
   }
-  if (first) {
+  if (runShared) {
     results.push(
       execute(process.execPath, [
         '--test',
@@ -259,6 +272,7 @@ export function runForkTestPlan(plan, execute = run, environment = process.env) 
 
 if (isDirectInvocation(import.meta.url, process.argv[1])) {
   const shard = readForkTestShard()
+  const group = readForkTestGroup()
   const request = parseForkSelectionArgs(process.argv.slice(2))
   const plan = prepareForkTestSelection(request, root, [
     ...FORK_TEST_FILTERS,
@@ -266,7 +280,7 @@ if (isDirectInvocation(import.meta.url, process.argv[1])) {
     ...MOBILE_RENDER_TEST_FILTERS
   ])
   console.log(
-    `Fork test selection: ${plan.reason}; ${plan.files.length} files; shard ${shard.index}/${shard.count}`
+    `Fork test selection: ${plan.reason}; ${plan.files.length} files; group ${group}; shard ${shard.index}/${shard.count}`
   )
   process.exitCode = runForkTestPlan(plan) ? 0 : 1
 }

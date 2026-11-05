@@ -1,6 +1,6 @@
 /**
  * End of the seam: `orchestration.workerStart` reads the user's own setting and starts the worker
- * that setting describes. No flag reaches this decision, and no combination refuses the start.
+ * that setting describes. Optional chat preferences never replace required private account policy.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -200,11 +200,19 @@ describe('worker-start honours the settings default', () => {
     expect(createExistingWorktreeWorkerTerminal).toHaveBeenCalledTimes(1)
   })
 
-  it('still starts a worker when the runtime has no settings to read', async () => {
-    const result = await startWorker(null)
+  it('starts a terminal worker without a chat preference when private pool policy is known', async () => {
+    const result = await startWorker({ accountPools: [] })
 
     expect(result).toMatchObject({ state: 'ready', mode: { mode: 'terminal' } })
     expect(createExistingWorktreeWorkerTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to launch when the private account policy cannot be read', async () => {
+    await expect(startWorker(null)).rejects.toThrow('runtime_unavailable')
+    expect(createExistingWorktreeWorkerTerminal).not.toHaveBeenCalled()
+    expect(createStructuredWorkerSessionForWorktree).not.toHaveBeenCalled()
+    expect(runtime.sendTerminalAgentPrompt).not.toHaveBeenCalled()
+    expect(sendStructuredWorkerPreamble).not.toHaveBeenCalled()
   })
 
   it('seeds --model and --effort into the structured session instead of downgrading', async () => {

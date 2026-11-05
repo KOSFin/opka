@@ -62,9 +62,11 @@ afterEach(() => {
 it('leaves the preamble only what the setup gate did not use of the caller’s timeout', async () => {
   vi.useFakeTimers({ toFake: ['Date'] })
   const runtime = {
+    requireStore: () => ({ getSettings: () => ({ accountPools: [] }) }),
     showTerminal: async () => ({ worktreeId: 'wt_1' }),
     showManagedTerminalWorkspace: async () => ({ id: 'wt_1' }),
     getNestedWorkerMaxDepth: () => 3,
+    getMaxConcurrentWorkers: () => undefined,
     getRuntimeId: () => 'epoch-1',
     getTerminalOrchestrationCliCommand: () => 'orca',
     getStructuredAgentSessionCreateSupport: async () => ({ supported: true }),

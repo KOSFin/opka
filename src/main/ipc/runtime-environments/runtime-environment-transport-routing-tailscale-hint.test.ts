@@ -4,7 +4,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { generateKeyPair, publicKeyToBase64 } from '../../../shared/e2ee-crypto'
 import { encodePairingOffer, type PairingOffer } from '../../../shared/pairing'
-import { addEnvironmentFromPairingCode } from '../../../shared/runtime-environment-store'
+import {
+  addEnvironmentFromPairingCode,
+  resolveEnvironmentPairingOffer
+} from '../../../shared/runtime-environment-store'
 import {
   callRuntimeEnvironment,
   subscribeRuntimeEnvironment
@@ -57,14 +60,19 @@ describe('Tailscale hint on remote runtime connection failure', () => {
     }
   })
 
-  it('gives tailnet-specific guidance on the status probe for a Tailscale endpoint', async () => {
+  it('keeps CGNAT connection guidance vendor-neutral and preserves the saved pairing', async () => {
     const id = seedEnvironment('ts-host', 'ws://100.64.0.1:9')
+    const before = resolveEnvironmentPairingOffer(userDataPath, id)
     const response = await getRuntimeEnvironmentStatus(userDataPath, id, 800)
     expect(response.ok).toBe(false)
     if (response.ok === false) {
-      expect(response.error.message).toContain('Funnel reverted to tailnet-only')
+      expect(response.error.message).toContain('same private VPN')
+      expect(response.error.message).toContain('Keep the saved pairing')
+      expect(response.error.message).not.toContain('Funnel')
+      expect(response.error.message).not.toContain('Tailscale')
       expect(response.error.message).not.toContain('https://tailscale.com/download')
     }
+    expect(resolveEnvironmentPairingOffer(userDataPath, id)).toEqual(before)
   })
 
   it('augments the thrown error for in-use calls (the toast path)', async () => {
