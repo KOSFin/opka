@@ -2,10 +2,19 @@ import { expect, it, vi } from 'vitest'
 import { eraseRpcMethods, isStreamingMethod } from '../core'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { NATIVE_CLI_ACCOUNT_METHODS } from './native-cli-accounts'
-const hooks = vi.hoisted(() => ({ prepare: vi.fn(), release: vi.fn() }))
+const hooks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+  release: vi.fn(),
+  coverage: vi.fn(),
+  observe: vi.fn()
+}))
 vi.mock('../../native-cli-account-launch', () => ({
   prepareNativeCliAccountLaunch: hooks.prepare,
   releaseNativeCliAccountLaunch: hooks.release
+}))
+vi.mock('../../native-claude-hook-sessions', () => ({
+  dispatchNativeClaudeCoverage: hooks.coverage,
+  dispatchNativeClaudeHook: hooks.observe
 }))
 const launchId = '12345678-1234-4234-8234-123456789012'
 for (const method of eraseRpcMethods(NATIVE_CLI_ACCOUNT_METHODS)) {
@@ -28,11 +37,24 @@ for (const method of eraseRpcMethods(NATIVE_CLI_ACCOUNT_METHODS)) {
                 promptId: 'prompt',
                 event: 'stop'
               }
-            : { launchId }
+            : method.name === 'accounts.nativeClaudeCoverage'
+              ? {
+                  launchId,
+                  capability: 'synthetic-capability-'.repeat(3),
+                  sessionId: 'session',
+                  generation: launchId,
+                  sequence: 1,
+                  observation: { kind: 'draft', active: false }
+                }
+              : { launchId }
       )
-      await expect(method.handler(params, { runtime, clientKind })).rejects.toThrow(
-        'owning host local CLI'
-      )
+      await expect(
+        Promise.resolve().then(() => method.handler(params, { runtime, clientKind }))
+      ).rejects.toThrow('owning host local CLI')
+      expect(hooks.prepare).not.toHaveBeenCalled()
+      expect(hooks.release).not.toHaveBeenCalled()
+      expect(hooks.coverage).not.toHaveBeenCalled()
+      expect(hooks.observe).not.toHaveBeenCalled()
     }
   )
 }

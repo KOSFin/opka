@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { basename, join, relative } from 'node:path'
 import { expect, it } from 'vitest'
 import { stripComments } from '../../shared/source-scan/source-tree-scan'
 
@@ -29,6 +29,11 @@ const credentialRoots: readonly (string | { root: string; only: RegExp })[] = [
  * uses today; a new primitive in one of them is a review, not a silent pass.
  */
 const fsAllowances: Record<string, readonly string[]> = {
+  'claude-accounts/claude-native-coverage-install.ts': ['mkdirSync', 'writeFileSync'],
+  'claude-accounts/claude-native-facade-preparation.ts': ['rmSync'],
+  // Child stdin and an in-memory UTF-8 decoder, not filesystem persistence.
+  'claude-accounts/claude-native-refresh-authority.ts': ['write'],
+  'claude-accounts/claude-native-refresh-monitor.ts': ['write'],
   // Nonsecret host-bound source attestation; OAuth credentials remain native-owned.
   'claude-accounts/claude-native-refresh-sources.ts': ['writeFileAtomically'],
   // Explicit removal of a verified closed native source; no credential writers.
@@ -144,6 +149,15 @@ function credentialFileNames(text: string): Set<string> {
 /** Credential writes refused everywhere scanned, whatever form the call takes. */
 function credentialMutations(text: string, file = ''): string[] {
   const found: string[] = []
+  for (const fixture of nativeProbeFixtures) {
+    const name = basename(fixture, '.ts')
+    if (
+      new RegExp(`(?:from\\s*|import\\s*\\(\\s*)['"](?:[^'"]*/)?${name}(?:\\.js)?['"]`).test(text)
+    ) {
+      found.push('synthetic native fixture import')
+      break
+    }
+  }
   // A `security` launch whose verb is not spelled out could be a write, so only the runner may
   // forward argv, and its callers must spell the verb.
   if (
@@ -198,6 +212,19 @@ function credentialMutations(text: string, file = ''): string[] {
     : found
 }
 
+// Explicit synthetic-only closure; new fixture-like names still undergo the credential census.
+const nativeProbeFixtures = new Set(
+  [
+    'claude-native-mod-probe-fixture',
+    'claude-native-owned-pty-test-fixture',
+    'claude-native-print-gateway-fixture',
+    'claude-native-print-gateway-endpoint',
+    'claude-native-stdio-rewake-prototype',
+    'claude-native-tool-probe-response',
+    'claude-native-wrapper-test-host'
+  ].map((name) => `main/claude-accounts/${name}.ts`)
+)
+
 function files(dir: string): string[] {
   if (!existsSync(dir)) {
     return []
@@ -209,7 +236,8 @@ function files(dir: string): string[] {
         ? []
         : files(file)
       : /\.(?:ts|tsx|mts|cts|js|mjs|cjs|sh)$/.test(entry.name) &&
-          !/\.test\.|\.spec\.|test-harness|harness\.ts|test-fixtures|test-utils/.test(entry.name)
+          !/\.test\.|\.spec\.|test-harness|harness\.ts|test-fixtures|test-utils/.test(entry.name) &&
+          !nativeProbeFixtures.has(relative(src, file).replaceAll('\\', '/'))
         ? [file]
         : []
   })
@@ -305,4 +333,18 @@ it('lets only account removal delete a Keychain item, and nothing add one', () =
       KEYCHAIN_DELETE_OWNER
     )
   ).not.toEqual([])
+})
+
+it('keeps unknown fixture writers and imports of synthetic-only helpers inside the production boundary', () => {
+  const unknown = 'main/claude-accounts/new-native-fixture.ts'
+  expect(nativeProbeFixtures.has(unknown)).toBe(false)
+  expect(
+    credentialMutations("writeFileSync(join(home, '.credentials.json'), token)", unknown)
+  ).not.toEqual([])
+  expect(
+    credentialMutations(
+      "import { createNativeClaudeWrapperTestHost } from './claude-native-wrapper-test-host'",
+      'main/claude-accounts/service.ts'
+    )
+  ).toContain('synthetic native fixture import')
 })

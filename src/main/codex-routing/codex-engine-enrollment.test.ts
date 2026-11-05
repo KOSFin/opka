@@ -2,10 +2,11 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { engineHostFixture, tick } from './codex-engine-host-fixture'
+import type { CodexEngineHostOptions } from './codex-engine-host'
 
 const fixtures: ReturnType<typeof engineHostFixture>[] = []
-const fixture = () => {
-  const f = engineHostFixture(30)
+const fixture = (ensureAsset?: CodexEngineHostOptions['ensureAsset']) => {
+  const f = engineHostFixture(30, { ensureAsset })
   fixtures.push(f)
   return f
 }
@@ -16,9 +17,8 @@ afterEach(async () => {
 })
 
 it('returns pollable starting before a slow asset preparation and cancels it without creating enrollment files', async () => {
-  const f = fixture()
   let preparation: AbortSignal | undefined
-  f.options.ensureAsset = async (options) => {
+  const f = fixture(async (options) => {
     preparation = options.signal
     await new Promise<void>((_resolve, reject) =>
       options.signal?.addEventListener(
@@ -28,7 +28,7 @@ it('returns pollable starting before a slow asset preparation and cancels it wit
       )
     )
     throw new Error('Synthetic download unexpectedly completed')
-  }
+  })
   const state = await f.host.beginGrant('owner', {
     accountId: f.a.id,
     expectedRosterRevision: 'r1'
@@ -48,10 +48,9 @@ it('returns pollable starting before a slow asset preparation and cancels it wit
 })
 
 it('reports a failed lazy binary preparation through the existing owner polling state', async () => {
-  const f = fixture()
-  f.options.ensureAsset = async () => {
+  const f = fixture(async () => {
     throw new Error('synthetic private download failure')
-  }
+  })
   const state = await f.host.beginGrant('owner', {
     accountId: f.a.id,
     expectedRosterRevision: 'r1'

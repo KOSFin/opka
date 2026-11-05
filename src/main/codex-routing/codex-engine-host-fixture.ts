@@ -26,6 +26,7 @@ export function engineHostFixture(
   settings: {
     dbPath?: string
     recordQuotaFailure?: CodexEngineHostOptions['recordQuotaFailure']
+    ensureAsset?: CodexEngineHostOptions['ensureAsset']
   } = {}
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'opka-engine-host-'))
@@ -116,16 +117,18 @@ export function engineHostFixture(
     assertExclusiveProfile: () => {},
     assertEnrollmentIdle: () => {},
     withAccountMutationLease: (operation) => operation(),
-    ensureAsset: async () => {
-      stats.provisions++
-      return {
-        binaryPath: join(directory, 'synthetic-engine'),
-        expectedSha256: 'a'.repeat(64),
-        archiveSha256: 'b'.repeat(64),
-        version: 'synthetic',
-        reused: true
-      }
-    },
+    ensureAsset:
+      settings.ensureAsset ??
+      (async () => {
+        stats.provisions++
+        return {
+          binaryPath: join(directory, 'synthetic-engine'),
+          expectedSha256: 'a'.repeat(64),
+          archiveSha256: 'b'.repeat(64),
+          version: 'synthetic',
+          reused: true
+        }
+      }),
     runLogin: async (opts) => {
       login = opts
       opts.onPrompt({

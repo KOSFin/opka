@@ -186,6 +186,8 @@ test('one real Codex chat discovers a task, saves a report and requests review',
       revision: task.revision,
       expectedExecutionHostId: 'local'
     })
+    // A completed task RPC proves boot is ready before restoring the sandbox's Node launcher.
+    await prepareForkProfileNodeCli(session.userDataDir)
     const board = runProcessSync({
       program: '/usr/bin/sandbox-exec',
       args: ['-f', profile, cli, 'project-task', 'board', '--json'],
@@ -196,7 +198,13 @@ test('one real Codex chat discovers a task, saves a report and requests review',
     })
     expect(
       board.code,
-      `The own-profile CLI must discover the current task before inference: ${board.stderr.slice(0, 2000)} ${board.stdout.slice(0, 2000)}`
+      JSON.stringify({
+        signal: board.signal,
+        timedOut: board.timedOut,
+        outputTruncated: board.outputTruncated,
+        stdoutBytes: board.stdout.length,
+        stderrBytes: board.stderr.length
+      })
     ).toBe(0)
     expect(board.stdout).toContain('Исправить сложение')
     await probeForkCodexStartup(wrapper, root, probeEnv)
