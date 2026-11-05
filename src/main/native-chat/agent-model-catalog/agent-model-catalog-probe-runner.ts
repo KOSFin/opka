@@ -6,7 +6,11 @@ import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 
 import { createOutputSink } from '@orca/process-host/bounded-output-sink'
 import { spawnManagedProviderProcess } from '../../provider-process/managed-provider-process'
-import type { ProviderProcessClosePolicy } from '../../provider-process/provider-process-close'
+import type {
+  ProviderProcessClosePolicy,
+  ProviderProcessCloseResult
+} from '../../provider-process/provider-process-close'
+import type { ProviderGroupIdentity } from '../../provider-process/provider-group-orphan-guard'
 import type { ProviderProcessLaunch } from '../../provider-process/provider-process-launch'
 import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../../provider-process/provider-process-supervisor'
 import {
@@ -53,6 +57,7 @@ function probeClosePolicy(supervised: boolean): ProviderProcessClosePolicy {
 export type AgentModelCatalogListingLaunch = ProviderProcessLaunch & {
   /** Written then closed; a listing that reads no request gets an immediately closed stdin. */
   stdin?: string
+  keepStdinOpen?: true
 }
 
 export type AgentModelCatalogRunnerOptions = {
@@ -61,6 +66,11 @@ export type AgentModelCatalogRunnerOptions = {
   maxOutputBytes?: number
   /** Stops the listing and its child, as the deadline would. */
   signal?: AbortSignal
+  onGroupProven?: (identity: ProviderGroupIdentity) => void
+  onClosed?: (result: ProviderProcessCloseResult) => void
+  onNotStarted?: () => void
+  onStdout?: (chunk: Buffer | string) => void
+  onStdinReady?: (write: (text: string) => Promise<void>) => void
   /** Test seams. */
   spawnImpl?: PipedProcessSpawner
   platform?: NodeJS.Platform
@@ -78,8 +88,9 @@ export async function runAgentModelCatalogListing(
   const managed = spawnManagedProviderProcess(launch, {
     site: options.site,
     // A listing's stdin end is the end of its request, not a stop.
-    lifetime: 'one-shot',
+    lifetime: launch.keepStdinOpen ? 'session' : 'one-shot',
     policy: probeClosePolicy,
+    ...(options.onGroupProven ? { onGroupProven: options.onGroupProven } : {}),
     ...(options.spawnImpl ? { spawnImpl: options.spawnImpl } : {}),
     ...(options.platform ? { platform: options.platform } : {}),
     ...(options.inheritedEnv ? { inheritedEnv: options.inheritedEnv } : {})
@@ -115,6 +126,11 @@ export async function runAgentModelCatalogListing(
       )
       child.stdout.on('data', (chunk: Buffer | string) => {
         output.write(chunk)
+        try {
+          options.onStdout?.(chunk)
+        } catch {
+          fail('Native command output admission failed', 'stopped')
+        }
         if (output.truncated()) {
           fail(`${launch.command} listed more than the model catalog reads`, 'output-overflow')
         }
@@ -145,7 +161,19 @@ export async function runAgentModelCatalogListing(
         }
       })
       try {
-        child.stdin.end(launch.stdin ?? '')
+        options.onStdinReady?.(
+          (text) =>
+            new Promise<void>((resolve, reject) => {
+              if (options.signal?.aborted || child.stdin.destroyed || !child.stdin.writable) {
+                reject(new Error('Native command input is unavailable.'))
+                return
+              }
+              child.stdin.write(text, (error) => (error ? reject(error) : resolve()))
+            })
+        )
+        if (!launch.keepStdinOpen) {
+          child.stdin.end(launch.stdin ?? '')
+        }
       } catch {
         // A child that is already gone reports through `close`.
       }
@@ -153,7 +181,12 @@ export async function runAgentModelCatalogListing(
   } finally {
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', onAbort)
-    await managed.close()
+    const closed = await managed.close()
+    if (managed.providerNotStarted && options.onNotStarted) {
+      options.onNotStarted()
+    } else {
+      options.onClosed?.(closed)
+    }
   }
 }
 

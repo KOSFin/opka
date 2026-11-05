@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isDarwinNativeProbeCi } from './claude-native-probe-cli.mjs'
 import { prepareDarwinNativeEnvironment } from './claude-native-darwin-environment.mjs'
+import { runDarwinNativeRefreshQualification } from './claude-native-darwin-refresh.mjs'
 import { redactTranscript } from './pty-transcript-secret-scan.mjs'
 
 if (!isDarwinNativeProbeCi()) {
@@ -108,7 +109,7 @@ console.log('Loopback allowed; external connect denied by sandbox');`
     ],
     { timeoutMs: 5000 }
   )
-  for (const mode of ['absent', 'present']) {
+  for (const mode of process.argv.includes('--refresh-only') ? [] : ['absent', 'present']) {
     const temporary = join(root, `temporary-${mode}`)
     await mkdir(temporary, { mode: 0o700 })
     const processReceipt = join(root, `${mode}-process.json`)
@@ -197,6 +198,21 @@ console.log('Loopback allowed; external connect denied by sandbox');`
       throw new Error(`Native Darwin ${mode} qualification did not meet its contract`)
     }
     console.log(JSON.stringify({ case: mode, passed: true, sha256: receipt.sha256 }))
+  }
+  if (process.argv.includes('--refresh-only')) {
+    try {
+      await runDarwinNativeRefreshQualification({
+        root,
+        output,
+        environment,
+        executable: artifact.executable
+      })
+    } catch (error) {
+      if (error.nativeCleanupUnverifiable) {
+        nativeCleanupVerified = false
+      }
+      throw error
+    }
   }
 } finally {
   if (nativeCleanupVerified) {
