@@ -1,10 +1,9 @@
 import { parse } from 'smol-toml'
 import { createReadStream } from 'node:fs'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { codexNativeRoutingLaunch } from '../../src/main/codex-routing/codex-native-launch-config.ts'
 import { createHash } from 'node:crypto'
 import { readFile, writeFile, lstat } from 'node:fs/promises'
-import { join } from 'node:path'
 
 export async function writeNativeProbeConfiguration({
   root,

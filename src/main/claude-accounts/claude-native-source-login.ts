@@ -108,7 +108,7 @@ export async function runClaudeNativeSourceLogin(options: {
           announce()
         },
         onStdout(chunk) {
-          output = (output + chunk).slice(-32768)
+          output = (output + chunk.toString()).slice(-32768)
           for (const match of output.matchAll(/https:\/\/[^\s<>"']+/g)) {
             if (isClaudeManualSignInLink(match[0])) {
               observedLink = match[0]

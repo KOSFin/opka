@@ -120,7 +120,7 @@ try {
       ]
       events.forEach(([type, payload], sequence_number) => {
         response.write(
-          `event: ${type}\ndata: ${JSON.stringify({ type, sequence_number, ...payload })}\n\n`
+          `event: ${String(type)}\ndata: ${JSON.stringify({ type, sequence_number, ...payload })}\n\n`
         )
       })
       response.end()

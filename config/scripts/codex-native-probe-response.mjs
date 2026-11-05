@@ -115,7 +115,7 @@ export function writeNativeProbeResponse(
   }
   for (const [index, [type, value]] of events.entries()) {
     res.write(
-      `event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: index, ...value })}\n\n`
+      `event: ${String(type)}\ndata: ${JSON.stringify({ type, sequence_number: index, ...value })}\n\n`
     )
   }
   res.end()
@@ -160,7 +160,7 @@ export function writeNativeProbePartialResponse(res, body, report) {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
   for (const [index, [type, value]] of events.entries()) {
     res.write(
-      `event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: index, ...value })}\n\n`
+      `event: ${String(type)}\ndata: ${JSON.stringify({ type, sequence_number: index, ...value })}\n\n`
     )
   }
   res.on('close', () => {
