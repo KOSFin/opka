@@ -62,17 +62,16 @@ export async function prepareDarwinProbeKeychain({ config, tokenA, accountA }) {
   }
   return {
     async observe(finalIdentity) {
-      const snapshot = await readNativeAccessSnapshot(config, finalIdentity)
-      if (!snapshot || JSON.stringify(snapshot).includes('synthetic-keychain-refresh-only')) {
-        throw new Error('Native access projection exposed a refresh credential or failed')
-      }
+      const snapshot = await readNativeAccessSnapshot(config, finalIdentity).catch(() => null)
       return {
         mode,
-        sourceAccessReadable: true,
-        sourcePrefersKeychain: snapshot.access.accessToken === tokenA,
-        sourceReadsFileB: snapshot.access.accessToken === 'sk-ant-oat01-synthetic-probe-b',
-        refreshTokenExposed: false,
-        identityMatches: snapshot.identity.accountUuid === finalIdentity.accountUuid,
+        sourceAccessReadable: Boolean(snapshot),
+        sourcePrefersKeychain: snapshot?.access.accessToken === tokenA,
+        sourceReadsFileB: snapshot?.access.accessToken === 'sk-ant-oat01-synthetic-probe-b',
+        refreshTokenExposed: Boolean(
+          snapshot && JSON.stringify(snapshot).includes('synthetic-keychain-refresh-only')
+        ),
+        identityMatches: snapshot?.identity.accountUuid === finalIdentity.accountUuid,
         initialIdentityKnown: Boolean(accountA.accountUuid)
       }
     },
