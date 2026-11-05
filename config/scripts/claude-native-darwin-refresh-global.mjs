@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
@@ -39,9 +40,14 @@ export async function prepareDarwinRefreshGlobalSentinels(home) {
     await mkdir(directory, { mode: 0o700 })
   }
   const entries = []
-  for (const [path, content] of [
-    [join(home, '.claude.json'), { hasCompletedOnboarding: true, syntheticDefaultSentinel: true }],
+  for (const [role, path, content] of [
     [
+      'state',
+      join(home, '.claude.json'),
+      { hasCompletedOnboarding: true, syntheticDefaultSentinel: true }
+    ],
+    [
+      'credentials',
       join(directory, '.credentials.json'),
       {
         claudeAiOauth: {
@@ -52,20 +58,29 @@ export async function prepareDarwinRefreshGlobalSentinels(home) {
         }
       }
     ],
-    [join(directory, 'settings.json'), { env: { OPKA_SYNTHETIC_GLOBAL_SENTINEL: 'unchanged' } }]
+    [
+      'settings',
+      join(directory, 'settings.json'),
+      { env: { OPKA_SYNTHETIC_GLOBAL_SENTINEL: 'unchanged' } }
+    ]
   ]) {
     const before = await snapshot(path)
     if (!before) {
       await writeFile(path, JSON.stringify(content), { flag: 'wx', mode: 0o600 })
     }
-    entries.push({ path, created: !before, expected: before ?? (await snapshot(path)) })
+    entries.push({ role, path, created: !before, expected: before ?? (await snapshot(path)) })
   }
   return {
-    async assertUnchanged() {
+    async assertUnchanged(onChanged) {
+      const changed = { state: false, credentials: false, settings: false }
       for (const entry of entries) {
         if (!same(entry.expected, await snapshot(entry.path))) {
-          throw new Error('Native source changed global auth or settings')
+          changed[entry.role] = true
         }
+      }
+      if (Object.values(changed).some(Boolean)) {
+        onChanged?.(changed)
+        throw new Error('Native source changed global auth or settings')
       }
     },
     async dispose() {
@@ -97,10 +112,31 @@ export function assertDarwinRefreshKeychainSelection(
   }
 }
 
-export async function assertDarwinRefreshFileUnchanged(path, expected) {
+export async function assertDarwinRefreshFileUnchanged(path, expected, onDifference) {
   const bytes = Buffer.from(expected)
   const stat = await lstat(path)
-  if (!stat.isFile() || stat.size !== bytes.length || !bytes.equals(await readFile(path))) {
+  if (!stat.isFile() || stat.size > 1024 * 1024) {
+    onDifference?.({ readable: false })
     throw new Error('Native refresh changed the adversarial source file')
   }
+  const actual = await readFile(path)
+  if (bytes.equals(actual)) {
+    return
+  }
+  const difference = { readable: true, bytesEqual: false, jsonEquivalent: false }
+  try {
+    const a = JSON.parse(actual.toString('utf8')),
+      b = JSON.parse(expected)
+    difference.jsonEquivalent = isDeepStrictEqual(a, b)
+    for (const [label, field] of [
+      ['accessEqual', 'accessToken'],
+      ['refreshEqual', 'refreshToken'],
+      ['expiryEqual', 'expiresAt'],
+      ['scopesEqual', 'scopes']
+    ]) {
+      difference[label] = isDeepStrictEqual(a.claudeAiOauth?.[field], b.claudeAiOauth?.[field])
+    }
+  } catch {}
+  onDifference?.(difference)
+  throw new Error('Native refresh changed the adversarial source file')
 }

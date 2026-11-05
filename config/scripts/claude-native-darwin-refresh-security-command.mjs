@@ -7,7 +7,7 @@ export async function runDarwinRefreshSecurityCommand(args, run = runProcess) {
     program: '/usr/bin/security',
     args,
     timeoutMs: 3000,
-    maxOutputBytes: 256,
+    maxOutputBytes: 4096,
     terminationBarrier: true,
     onChildTerminated() {
       terminationObserved = true

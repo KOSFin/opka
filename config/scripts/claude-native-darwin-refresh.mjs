@@ -26,7 +26,11 @@ import {
   assertDarwinRefreshKeychainSelection,
   assertDarwinRefreshFileUnchanged
 } from './claude-native-darwin-refresh-global.mjs'
-import { runDarwinRefreshSecurityCommand } from './claude-native-darwin-refresh-security-command.mjs'
+import { readDarwinRefreshFailureProjection } from './claude-native-darwin-refresh-projection.mjs'
+import {
+  finishDarwinRefreshCleanup,
+  mutateDarwinRefreshKeychainSource
+} from './claude-native-darwin-refresh-cleanup.mjs'
 import { prepareDarwinSecurityDiagnostic } from './claude-native-darwin-security-shim.mjs'
 import {
   createDarwinRefreshServer,
@@ -158,6 +162,21 @@ export async function runDarwinNativeRefreshQualification({
   }
   const debugPath = join(home, 'native-refresh-debug.log')
   let stage = 'prepare'
+  let primaryError
+  let globalSentinelChanges = null
+  let adversarialFileDifference = null
+  let cleanupStage = 'not-started'
+  let cleanupObservation = null
+  const assertSourceFile = async () => {
+    stage = 'adversarial-file-byte-guard'
+    await assertDarwinRefreshFileUnchanged(
+      join(config, '.credentials.json'),
+      credentials,
+      (value) => {
+        adversarialFileDifference = value
+      }
+    )
+  }
   const closeFixture = async () => {
     try {
       await proxy?.close()
@@ -170,47 +189,33 @@ export async function runDarwinNativeRefreshQualification({
     }
   }
   const closeOwnedFixture = async () => {
+    cleanupStage = 'proxy-server-close'
     await closeFixture()
     if (cleanupVerified) {
+      cleanupStage = 'global-sentinel-cleanup'
       await globalSentinels?.dispose()
       if (sourceSeeded) {
-        const { result: deleted, terminationObserved } = await runDarwinRefreshSecurityCommand([
-          'delete-generic-password',
-          '-s',
+        cleanupStage = 'scoped-keychain-delete'
+        await mutateDarwinRefreshKeychainSource({
+          kind: 'delete',
           service,
-          '-a',
-          userInfo().username,
-          environment.keychain
-        ])
-        if (
-          deleted.code !== 0 ||
-          deleted.timedOut ||
-          deleted.outputTruncated ||
-          !terminationObserved
-        ) {
-          throw new Error('Synthetic Keychain source cleanup is unverified')
-        }
+          keychain: environment.keychain,
+          onObservation: (value) => {
+            cleanupObservation = value
+          }
+        })
       }
     }
   }
   try {
     globalSentinels = await prepareDarwinRefreshGlobalSentinels(nativeUserHome)
     cleanupVerified = false
-    const { result: seed, terminationObserved } = await runDarwinRefreshSecurityCommand([
-      'add-generic-password',
-      '-U',
-      '-A',
-      '-s',
+    await mutateDarwinRefreshKeychainSource({
+      kind: 'seed',
       service,
-      '-a',
-      userInfo().username,
-      '-w',
-      keychainCredentials,
-      environment.keychain
-    ])
-    if (seed.code !== 0 || seed.timedOut || seed.outputTruncated || !terminationObserved) {
-      throw new Error('Synthetic scoped Keychain source seed failed')
-    }
+      keychain: environment.keychain,
+      credentials: keychainCredentials
+    })
     sourceSeeded = true
     cleanupVerified = true
     securityDiagnostic = await prepareDarwinSecurityDiagnostic(canonical)
@@ -377,7 +382,7 @@ export async function runDarwinNativeRefreshQualification({
           }
         }
       )
-      stage = 'access-projection'
+      stage = 'strict-access-projection'
       assertDarwinRefreshAccess(snapshot, {
         identity,
         accessToken: FRESH_ACCESS,
@@ -404,12 +409,16 @@ export async function runDarwinNativeRefreshQualification({
         fileFreshAccessMatched: fileAccess?.accessToken === FRESH_ACCESS,
         fileRefreshRotated: fileAccess?.refreshToken === ROTATED_REFRESH
       })
+      stage = 'scoped-keychain-selection'
       assertDarwinRefreshKeychainSelection(selected, fileAccess, {
         freshAccess: FRESH_ACCESS,
         fileRefresh
       })
-      await assertDarwinRefreshFileUnchanged(join(config, '.credentials.json'), credentials)
-      await globalSentinels.assertUnchanged()
+      await assertSourceFile()
+      stage = 'global-sentinel-guard'
+      await globalSentinels.assertUnchanged((value) => {
+        globalSentinelChanges = value
+      })
       growth.push(await api.measureOwnedNativeProbeDirectory(home))
     }
     stage = 'cached-access'
@@ -440,12 +449,15 @@ export async function runDarwinNativeRefreshQualification({
           refreshToken: ROTATED_REFRESH
         }),
       measure: async () => {
-        await assertDarwinRefreshFileUnchanged(join(config, '.credentials.json'), credentials)
+        await assertSourceFile()
         return api.measureOwnedNativeProbeDirectory(home)
       }
     })
     growth.push(...cachedGrowth)
-    await globalSentinels.assertUnchanged()
+    stage = 'global-sentinel-guard'
+    await globalSentinels.assertUnchanged((value) => {
+      globalSentinelChanges = value
+    })
     stage = 'whole-home-growth'
     if (
       proxy.counts.accepted === 0 ||
@@ -505,51 +517,24 @@ export async function runDarwinNativeRefreshQualification({
     )
     return receipt
   } catch (error) {
-    const observation = await api
-      .readClaudeOAuthCredentials({
-        credentialsFileConfigDir: config,
-        keychainConfigDir: config,
-        includeNativeAccess: true
+    primaryError = error
+    const { observation, fileObservation, profileObservation } =
+      await readDarwinRefreshFailureProjection({
+        api,
+        config,
+        identity,
+        freshAccess: FRESH_ACCESS,
+        rotatedRefresh: ROTATED_REFRESH
       })
-      .then(
-        (value) => ({
-          source: value.source,
-          unavailable: value.unavailable === true,
-          nativeAccessKnown: Boolean(value.nativeAccess),
-          freshAccessMatched: value.nativeAccess?.accessToken === FRESH_ACCESS,
-          expiryFresh: (value.nativeAccess?.expiresAt ?? 0) > Date.now() + 30000
-        }),
-        () => ({ unavailable: true })
-      )
-    let fileObservation = { readable: false }
-    try {
-      const access = api.readBoundedClaudeProfileJson(
-        join(config, '.credentials.json')
-      ).claudeAiOauth
-      fileObservation = {
-        readable: true,
-        freshAccessMatched: access?.accessToken === FRESH_ACCESS,
-        refreshRotated: access?.refreshToken === ROTATED_REFRESH,
-        fieldNames: Object.keys(access ?? {})
-          .filter((name) => /^[a-zA-Z]{1,40}$/.test(name))
-          .slice(0, 20)
-      }
-    } catch {}
-    let profileObservation = { readable: false }
-    try {
-      const profile = api.readBoundedClaudeProfileJson(join(config, '.claude.json')).oauthAccount
-      profileObservation = {
-        readable: true,
-        accountMatched: profile?.accountUuid === identity.accountUuid,
-        organizationMatched: profile?.organizationUuid === identity.organizationUuid,
-        emailMatched: profile?.emailAddress === identity.emailAddress
-      }
-    } catch {}
     await writeFile(
       join(output, 'fresh-refresh-diagnostic.json'),
       JSON.stringify(
         {
           stage,
+          primaryFailure: stage,
+          globalSentinelChanges,
+          adversarialFileDifference,
+          sourceObservations,
           observation,
           fileObservation,
           debugObservations,
@@ -584,6 +569,28 @@ export async function runDarwinNativeRefreshQualification({
     }
     throw error
   } finally {
-    await closeOwnedFixture()
+    await finishDarwinRefreshCleanup({
+      primaryError,
+      close: closeOwnedFixture,
+      record: async ({ failed }) => {
+        if (failed) {
+          cleanupVerified = false
+        }
+        await writeFile(
+          join(output, 'fresh-refresh-cleanup.json'),
+          JSON.stringify(
+            {
+              primaryFailure: primaryError ? stage : null,
+              cleanupStage,
+              cleanupObservation,
+              cleanupVerified
+            },
+            null,
+            2
+          ),
+          { mode: 0o600 }
+        )
+      }
+    })
   }
 }

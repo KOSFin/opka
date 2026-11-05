@@ -23,7 +23,14 @@ test('fake global sentinels detect mutation and preserve the evidence', () =>
     await guard.assertUnchanged()
     const file = join(home, '.claude', '.credentials.json')
     await writeFile(file, 'changed')
-    await assert.rejects(guard.assertUnchanged(), /changed global/)
+    let changed
+    await assert.rejects(
+      guard.assertUnchanged((value) => {
+        changed = value
+      }),
+      /changed global/
+    )
+    assert.deepEqual(changed, { state: false, credentials: true, settings: false })
     await assert.rejects(guard.dispose(), /cleanup is unverified/)
     assert.equal(await readFile(file, 'utf8'), 'changed')
   }))
@@ -82,4 +89,22 @@ test('same refresh token and footprint cannot conceal changed file access bytes'
       assertDarwinRefreshFileUnchanged(file, expected),
       /changed the adversarial/
     )
+  }))
+
+test('format-only source rewrite is classified but still fails the exact-byte guard', () =>
+  fixture(async (home) => {
+    const file = join(home, 'credentials.json')
+    const expected = '{"claudeAiOauth":{"accessToken":"B","refreshToken":"B"}}'
+    await writeFile(file, JSON.stringify(JSON.parse(expected), null, 2))
+    let difference
+    await assert.rejects(
+      assertDarwinRefreshFileUnchanged(file, expected, (value) => {
+        difference = value
+      }),
+      /changed the adversarial/
+    )
+    assert.equal(difference.bytesEqual, false)
+    assert.equal(difference.jsonEquivalent, true)
+    assert.equal(difference.accessEqual, true)
+    assert.equal(difference.refreshEqual, true)
   }))

@@ -6,6 +6,7 @@ test('actual host termination callback proves closure with an ordinary ProcessRe
   const raw = { code: 0, timedOut: false, outputTruncated: false }
   const observed = await runDarwinRefreshSecurityCommand(['fake'], async (options) => {
     assert.equal(options.terminationBarrier, true)
+    assert.equal(options.maxOutputBytes, 4096)
     options.onChildTerminated()
     return raw
   })
