@@ -19,6 +19,7 @@ import {
 import { probeDarwinRefreshPreflight } from './claude-native-darwin-refresh-preflight.mjs'
 import {
   qualifyDarwinRefreshCache,
+  sameDarwinRefreshFootprint,
   assertDarwinRefreshAccess
 } from './claude-native-darwin-refresh-cache.mjs'
 import {
@@ -222,6 +223,7 @@ export async function runDarwinNativeRefreshQualification({
     server = await createDarwinRefreshServer(canonical)
     proxy = await createNativeRefreshConnectProxy(server.port)
     await writeFile(join(config, '.credentials.json'), credentials, { mode: 0o600 })
+    stage = 'owned-source-footprint'
     initialGrowth = await api.measureOwnedNativeProbeDirectory(home)
     for (let index = 0; index < 1; index++) {
       let group
@@ -419,6 +421,7 @@ export async function runDarwinNativeRefreshQualification({
       await globalSentinels.assertUnchanged((value) => {
         globalSentinelChanges = value
       })
+      stage = 'owned-source-footprint'
       growth.push(await api.measureOwnedNativeProbeDirectory(home))
     }
     stage = 'cached-access'
@@ -450,6 +453,7 @@ export async function runDarwinNativeRefreshQualification({
         }),
       measure: async () => {
         await assertSourceFile()
+        stage = 'owned-source-footprint'
         return api.measureOwnedNativeProbeDirectory(home)
       }
     })
@@ -467,7 +471,7 @@ export async function runDarwinNativeRefreshQualification({
       groups.length !== 1 ||
       server.counts.inference !== 0 ||
       new Set(growth.map((value) => value.files)).size !== 1 ||
-      growth.some((value) => value.files !== growth[0].files || value.bytes !== growth[0].bytes)
+      growth.some((value) => !sameDarwinRefreshFootprint(value, growth[0]))
     ) {
       throw new Error('Synthetic refresh requests or whole-HOME growth exceeded contract')
     }

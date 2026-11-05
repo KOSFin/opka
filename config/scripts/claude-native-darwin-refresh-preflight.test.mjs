@@ -141,3 +141,15 @@ test('cached access validation keeps exact account identity and excludes native 
     assert.throws(() => assertDarwinRefreshAccess(bad, expected), /identity|refresh credentials/)
   }
 })
+
+test('cached native access rejects changed link counts even with identical file bytes', async () => {
+  await assert.rejects(
+    qualifyDarwinRefreshCache({
+      initial: { files: 1, bytes: 10, links: 0 },
+      read: async () => ({}),
+      validate() {},
+      measure: async () => ({ files: 1, bytes: 10, links: 1 })
+    }),
+    /changed the owned HOME/
+  )
+})

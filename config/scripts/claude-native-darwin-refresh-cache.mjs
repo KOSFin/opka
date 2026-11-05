@@ -4,7 +4,7 @@ export async function qualifyDarwinRefreshCache({ read, measure, validate, initi
   for (let index = 0; index < 4; index++) {
     validate(await read())
     const value = await measure()
-    if (value.files !== initial.files || value.bytes !== initial.bytes) {
+    if (!sameDarwinRefreshFootprint(value, initial)) {
       throw new Error('Cached native access changed the owned HOME footprint')
     }
     measurements.push(value)
@@ -25,4 +25,12 @@ export function assertDarwinRefreshAccess(snapshot, { identity, accessToken, ref
   ) {
     throw new Error('Native projection changed identity or exposed refresh credentials')
   }
+}
+
+export function sameDarwinRefreshFootprint(value, initial) {
+  return (
+    value.files === initial.files &&
+    value.bytes === initial.bytes &&
+    (value.links ?? 0) === (initial.links ?? 0)
+  )
 }
