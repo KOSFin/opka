@@ -126,7 +126,7 @@ def main():
                               '/sdcard/opka-ui-journey.xml', time.monotonic() + 10)
         return root
 
-    def find(label, timeout=25, contains=False, actionable=False, editable=False):
+    def find(label, timeout=25, contains=False, actionable=False, editable=False, reveal_forward=None):
         def resolve(root):
             if editable:
                 return editable_task_field(root, label)
@@ -135,10 +135,12 @@ def main():
             return next((node for node in root.iter('node') if label_matches(node, label, contains)
                          and node.get('enabled', 'true') == 'true'), None)
         return find_visible(tree, resolve, label, timeout,
-                            lambda *gesture: command('shell', 'input', 'swipe', *gesture))
+                            lambda *gesture: command('shell', 'input', 'swipe', *gesture),
+                            reveal_forward=reveal_forward, actionable=actionable)
 
-    def tap(label, contains=False, editable=False):
-        node = find(label, contains=contains, actionable=True, editable=editable)
+    def tap(label, contains=False, editable=False, reveal_forward=None):
+        node = find(label, contains=contains, actionable=True, editable=editable,
+                    reveal_forward=reveal_forward)
         numbers = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
         if len(numbers) != 4:
             raise AssertionError(f'No touch bounds for {label!r}')
@@ -228,7 +230,7 @@ def main():
         tap('Codex pool settings')
         find('codex pool mode')
         capture('04-pools-expanded')
-        tap('Accounts')
+        tap('Accounts', reveal_forward=False)
         find('Add Codex account')
         host_list()
         capture('05-project-return')
