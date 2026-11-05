@@ -48,18 +48,20 @@ test('global directory symlinks are refused before writing', () =>
     await assert.rejects(readFile(join(target, '.credentials.json')), { code: 'ENOENT' })
   }))
 test('only refreshed Keychain A with untouched adversarial file B qualifies', () => {
-  const selected = { source: 'keychain', nativeAccess: { accessToken: 'fresh-A' } }
+  const selected = { source: 'scoped-keychain', nativeAccess: { accessToken: 'fresh-A' } }
   const file = { refreshToken: 'file-B' }
   assertDarwinRefreshKeychainSelection(selected, file, {
     freshAccess: 'fresh-A',
     fileRefresh: 'file-B'
   })
-  assert.throws(() =>
-    assertDarwinRefreshKeychainSelection({ ...selected, source: 'credentials-file' }, file, {
-      freshAccess: 'fresh-A',
-      fileRefresh: 'file-B'
-    })
-  )
+  for (const source of ['keychain', 'legacy-keychain', 'credentials-file', 'none']) {
+    assert.throws(() =>
+      assertDarwinRefreshKeychainSelection({ ...selected, source }, file, {
+        freshAccess: 'fresh-A',
+        fileRefresh: 'file-B'
+      })
+    )
+  }
   assert.throws(() =>
     assertDarwinRefreshKeychainSelection(
       selected,

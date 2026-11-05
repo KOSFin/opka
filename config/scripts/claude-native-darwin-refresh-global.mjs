@@ -89,7 +89,7 @@ export function assertDarwinRefreshKeychainSelection(
   { freshAccess, fileRefresh }
 ) {
   if (
-    selected?.source !== 'keychain' ||
+    selected?.source !== 'scoped-keychain' ||
     selected.nativeAccess?.accessToken !== freshAccess ||
     fileAccess?.refreshToken !== fileRefresh
   ) {
