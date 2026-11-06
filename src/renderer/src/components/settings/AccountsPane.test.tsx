@@ -290,7 +290,7 @@ describe('Claude accounts section', () => {
     expect(markup).toContain('Sign in again to use this account')
     expect(selectButtons(markup).map((button) => button.includes('disabled=""'))).toEqual([
       true,
-      false
+      true
     ])
     expect(markup.match(/>Remove<\/button>/g)).toHaveLength(2)
   })

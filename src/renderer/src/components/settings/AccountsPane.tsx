@@ -1,3 +1,5 @@
+import { providerAccountUsageRevision } from './provider-account-usage-revision'
+import type { RateLimitState } from '../../../../shared/rate-limit-types'
 import { useEffect, useRef, useState } from 'react'
 import type {
   ClaudeRateLimitAccountsState,
@@ -71,7 +73,6 @@ import {
 import { MiniMaxAccountsSection } from './MiniMaxAccountsSection'
 import { useUsageHostSettings } from './use-usage-host-settings'
 import { ManagedDataAccountsSection } from './ManagedDataAccountsSection'
-import { AccountPoolSection } from './AccountPoolSection'
 import { RemoteAccountSignInSection } from './RemoteAccountSignInSection'
 import { renderAccountsRemovalDialogs } from './accounts-pane-removal-dialogs'
 
@@ -90,6 +91,11 @@ export function AccountsPane({
 }: AccountsPaneProps): React.JSX.Element {
   const searchQuery = useAppStore((s) => s.settingsSearchQuery)
   const [enrollmentRevision, setEnrollmentRevision] = useState(0)
+  const [remotePoolUsage, setRemotePoolUsage] = useState<{
+    owner: string
+    state: RateLimitState | null
+  } | null>(null)
+  const localPoolUsage = useAppStore((state) => state.rateLimits)
   const codexRateLimits = useAppStore((s) => s.rateLimits.codex)
   const codexRateLimitTarget = useAppStore((s) => s.rateLimits.codexTarget)
   const miniMaxRateLimits = useAppStore((s) => s.rateLimits.minimax)
@@ -257,6 +263,11 @@ export function AccountsPane({
     // path resolves once and the close() is a no-op.
     const watcher = watchProviderAccounts(owner, {
       onSnapshot: (snapshot) => {
+        setRemotePoolUsage({
+          owner: getProviderAccountsOwnerKey(owner),
+          state: snapshot.rateLimits
+        })
+
         // Why: a failed provider's half is a substituted empty roster, not
         // authoritative data; keep prior state and leave the loaded gate shut.
         if (!snapshot.failedProviders?.includes('codex')) {
@@ -280,7 +291,7 @@ export function AccountsPane({
     return () => {
       watcher.close()
     }
-  }, [scopeEnvironmentId])
+  }, [scopeEnvironmentId, enrollmentRevision])
 
   const runCodexAccountAction = createCodexAccountActionRunner({
     settings,
@@ -344,6 +355,18 @@ export function AccountsPane({
     codexConfigSyncWarning,
     codexRateLimits,
     codexRateLimitTarget,
+    poolUsageSnapshot: isRemoteAccountScope
+      ? remotePoolUsage?.owner === accountOwnerKey
+        ? remotePoolUsage.state
+        : null
+      : localPoolUsage,
+    poolUsageRevision: providerAccountUsageRevision(
+      isRemoteAccountScope
+        ? remotePoolUsage?.owner === accountOwnerKey
+          ? remotePoolUsage.state
+          : null
+        : localPoolUsage
+    ),
     setRemoveCodexTarget,
     runCodexAccountAction,
     recordOpenCodeSettingEdit
@@ -355,16 +378,6 @@ export function AccountsPane({
         target={accountOwner}
         hostLabel={remoteServerLabel ?? 'Server'}
         onComplete={() => setEnrollmentRevision((revision) => revision + 1)}
-      />
-    ) : null,
-    !searchQuery ||
-    /pool|priority|rotation|account|sequential|balanced|drain/i.test(searchQuery) ? (
-      <AccountPoolSection
-        key={`pool:${accountOwnerKey}:${enrollmentRevision}`}
-        target={accountOwner}
-        hostLabel={
-          remoteServerLabel ?? translate('settings.accountPools.localHost', 'Local desktop')
-        }
       />
     ) : null,
     !searchQuery || /opencode|devin|account/i.test(searchQuery) ? (
@@ -424,7 +437,7 @@ export function AccountsPane({
   ]
 
   return (
-    <div className="space-y-8">
+    <div id="account-pools" className="space-y-8">
       {renderAccountsRemovalDialogs(model, removeCodexTarget, removeClaudeTarget)}
       <SettingsSectionStack sections={visibleSections} spacing="group" />
     </div>

@@ -166,13 +166,12 @@ render.each(sizes)('project work on $name', (size) => {
       await page.close()
     }
   }, 90_000)
-  it('separates account and pool controls and completes device prompt interactions', async () => {
+  it('uses one account list for manual selection, pools and device prompts', async () => {
     const opened = await openScreen(size, 'accounts')
     const { page } = opened
     try {
       await page.getByText('Add Codex account', { exact: true }).waitFor()
       await capture(page, size, 'accounts')
-      await page.getByRole('radio', { name: 'Pools & switching', exact: true }).click()
       await page.waitForTimeout(300)
       await capture(page, size, 'pools-initial')
       await writeFile(
@@ -186,10 +185,14 @@ render.each(sizes)('project work on $name', (size) => {
           2
         )
       )
-      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
-      await page.getByText('Default for new manual launches', { exact: true }).waitFor()
+      await page
+        .getByRole('button', {
+          name: 'Use test@example.invalid for new manual codex chats',
+          exact: true
+        })
+        .waitFor()
+      expect(await page.getByText('test@example.invalid', { exact: true }).count()).toBe(1)
       await capture(page, size, 'pools')
-      await page.getByRole('radio', { name: 'Accounts', exact: true }).click()
       await page.getByText('Add Codex account', { exact: true }).click()
       await page.getByText('TEST-ABCDE', { exact: true }).waitFor()
       await capture(page, size, 'device-sign-in')
@@ -229,19 +232,16 @@ render.each(sizes)('project work on $name', (size) => {
       await page.close()
     }
   }, 90_000)
-  it('preserves an unsaved pool priority across tabs and collapse without writing policy', async () => {
+  it('preserves an unsaved pool priority across refresh and collapse without writing policy', async () => {
     const opened = await openScreen(size, 'accounts')
     const { page } = opened
     try {
-      await page.getByRole('radio', { name: 'Pools & switching', exact: true }).click()
-      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
       await page.getByLabel('test@example.invalid priority', { exact: true }).fill('2')
       await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
-      await page.getByRole('radio', { name: 'Accounts', exact: true }).click()
       expect(
         await page.getByLabel('test@example.invalid priority', { exact: true }).isVisible()
       ).toBe(false)
-      await page.getByRole('radio', { name: 'Pools & switching', exact: true }).click()
+      await page.getByRole('button', { name: 'Refresh accounts', exact: true }).click()
       await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
       expect(
         await page.getByLabel('test@example.invalid priority', { exact: true }).inputValue()

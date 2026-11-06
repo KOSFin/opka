@@ -11,6 +11,7 @@ import { MobileAccountPoolLaunchSettings } from './MobileAccountPoolLaunchSettin
 import { MobileAccountPoolMemberSettings } from './MobileAccountPoolMemberSettings'
 import { poolStyles } from './mobile-account-pool-styles'
 import { styles } from './mobile-accounts-screen-styles'
+import type { MobileAccountPresentation } from './mobile-account-presentation'
 import {
   MobileNativePoolRoutingScope,
   MobileNativePoolRoutingNotice,
@@ -27,7 +28,8 @@ export function MobileAccountPoolCard({
   onChange,
   onPick,
   onSave,
-  routingTarget
+  routingTarget,
+  presentation
 }: {
   policy: AccountPoolPolicy
   view: AccountPoolView
@@ -38,13 +40,16 @@ export function MobileAccountPoolCard({
   onPick: (accountId?: string) => void
   onSave: () => void
   routingTarget?: MobileNativePoolRoutingTarget
+  presentation?: MobileAccountPresentation
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(Boolean(presentation))
   const [advanced, setAdvanced] = useState(false)
   const title = policy.provider === 'claude' ? 'Claude' : 'Codex'
   const Icon = policy.provider === 'claude' ? ClaudeIcon : OpenAIIcon
   const accounts = view.accounts[policy.provider]
   const enabled = policy.applyToNewWork && policy.strategy !== 'manual'
+  const applied = view.policies.find((entry) => entry.id === policy.id)
+  const manualBlocked = enabled || Boolean(applied?.applyToNewWork && applied.strategy !== 'manual')
   return (
     <MobileNativePoolRoutingScope
       target={routingTarget}
@@ -77,8 +82,8 @@ export function MobileAccountPoolCard({
         {expanded ? (
           <View style={poolStyles.content}>
             <Text style={styles.rowSubtitle}>
-              The normal CLI login works for manual launches. Pools use saved accounts with stable
-              identities; add a saved account in Accounts to include it here.
+              Manual mode uses the selected account. Automatic pool mode chooses from the same
+              accounts below. Save changes before starting new work.
             </Text>
             <MobileAccountPoolLaunchSettings
               policy={policy}
@@ -140,13 +145,13 @@ export function MobileAccountPoolCard({
                 No saved accounts on this host. Manual CLI login is still available.
               </Text>
             ) : null}
+            {presentation?.renderSystemAccount?.(policy.provider, manualBlocked)}
             {accounts.accounts.map((account) => {
               const member = policy.members.find((entry) => entry.accountId === account.id)
-              return (
-                <View key={account.id} style={poolStyles.account}>
-                  <Text style={styles.rowTitle}>{account.email}</Text>
+              const controls = (
+                <View style={poolStyles.memberSettings}>
                   <MobileNativePoolConnection accountId={account.id} />
-                  {accounts.activeAccountId === account.id ? (
+                  {!enabled && !presentation && accounts.activeAccountId === account.id ? (
                     <Text style={styles.rowSubtitle}>Default for new manual launches</Text>
                   ) : null}
                   {advanced ? (
@@ -183,7 +188,19 @@ export function MobileAccountPoolCard({
                   ) : null}
                 </View>
               )
+              return presentation?.renderAccount ? (
+                <View key={account.id} style={poolStyles.account}>
+                  {presentation.renderAccount(policy.provider, account.id, manualBlocked)}
+                  {controls}
+                </View>
+              ) : (
+                <View key={account.id} style={poolStyles.account}>
+                  <Text style={styles.rowTitle}>{account.email}</Text>
+                  {controls}
+                </View>
+              )
             })}
+            {presentation?.renderProviderFooter?.(policy.provider)}
             {dirty ? (
               <Pressable
                 accessibilityRole="button"
