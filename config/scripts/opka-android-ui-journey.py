@@ -226,7 +226,7 @@ def main():
         tap('Accounts')
         find('Add Codex account')
         capture('03-accounts')
-        find('codex pool mode')
+        find('codex pool mode', reveal_forward=True)
         capture('04-pools-expanded')
         find('Add Codex account', reveal_forward=False)
         host_list()

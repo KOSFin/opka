@@ -1,6 +1,10 @@
 import { realpath, readdir, lstat } from 'node:fs/promises'
-import { join, resolve, relative, isAbsolute } from 'node:path'
-import { z } from 'zod'
+import { join, resolve, relative } from 'node:path'
+import {
+  CodexNativeHomeManifestSchema as Manifest,
+  type CodexNativeHomeManifest
+} from './codex-native-home-manifest'
+import { managedNativeConfigHash } from './codex-native-home-managed-config'
 import {
   nativeUserDirectory,
   nativeUserFile,
@@ -19,28 +23,6 @@ import { adoptCodexNativeHistory, type CodexNativeHomeAdoption } from './codex-n
 import { planNativeHomeResources } from './codex-native-home-resources'
 import { copyNativeHomeResources } from './codex-native-home-resource-copy'
 
-const ConfigState = z
-  .object({ sourceHash: z.string().nullable(), publishedHash: z.string() })
-  .strict()
-const Manifest = z
-  .object({
-    version: z.literal(1),
-    nativeVersion: z.literal('0.166.0'),
-    sourceHome: z.string().max(8192).refine(isAbsolute),
-    sourcePresent: z.boolean(),
-    resources: z.string(),
-    resourceBytes: z
-      .number()
-      .int()
-      .nonnegative()
-      .max(2 * 1024 ** 3),
-    mutablePluginState: z.literal('fresh'),
-    configs: z.record(
-      z.string().regex(/^(?:config|[A-Za-z0-9_-]{1,128}\.config)\.toml$/),
-      ConfigState
-    )
-  })
-  .strict()
 const preparing = new Set<string>()
 export type PrepareCodexNativeHomeOptions = {
   storageRoot: string
@@ -50,6 +32,7 @@ export type PrepareCodexNativeHomeOptions = {
   assertExclusive: () => void
   resourceRoots?: readonly string[]
   adopt?: CodexNativeHomeAdoption
+  prepareManagedConfig?: (home: string) => Promise<ReadonlySet<string>>
 }
 export type PreparedCodexNativeHome = {
   home: string
@@ -100,7 +83,7 @@ async function prepare(
     throw new Error('Interrupted native Codex HOME preparation needs review; files were preserved.')
   }
   const beforeManifest = await nativeUserFile(manifestPath)
-  let previous: z.infer<typeof Manifest> | undefined
+  let previous: CodexNativeHomeManifest | undefined
   if (beforeManifest) {
     try {
       previous = Manifest.parse(JSON.parse(beforeManifest.bytes.toString('utf8')))
@@ -184,12 +167,15 @@ async function prepare(
   if (Object.keys(next.configs).length > 16) {
     throw new Error('Native profile preparation exceeds its fixed config bound.')
   }
-  const manifest = JSON.stringify(next)
+  let manifest = JSON.stringify(next)
   if (manifest.length > 64 * 1024) {
     throw new Error('Native Codex HOME metadata exceeds its fixed bound.')
   }
   const needsWrite =
-    !beforeManifest || beforeManifest.bytes.toString('utf8') !== manifest || Boolean(options.adopt)
+    !beforeManifest ||
+    beforeManifest.bytes.toString('utf8') !== manifest ||
+    Boolean(options.adopt) ||
+    Boolean(options.prepareManagedConfig)
   if (!needsWrite) {
     const actual = await readNativeHomeConfigs(home, home, options.context)
     return {
@@ -225,6 +211,18 @@ async function prepare(
         assertExclusive: options.assertExclusive
       })
     : undefined
+  if (options.prepareManagedConfig) {
+    const path = join(home, 'config.toml')
+    const before = await nativeUserFile(path)
+    const keys = await options.prepareManagedConfig(home)
+    const after = await nativeUserFile(path)
+    const baseline = next.configs['config.toml']
+    if (!before || !after || !baseline) {
+      throw new Error('Managed native Codex preferences are unavailable.')
+    }
+    baseline.publishedHash = managedNativeConfigHash(before, after, baseline.publishedHash, keys)
+    manifest = JSON.stringify(next)
+  }
   const actual = await readNativeHomeConfigs(home, home, options.context)
   if (!beforeManifest || beforeManifest.bytes.toString('utf8') !== manifest) {
     await replaceNativeUserFile({

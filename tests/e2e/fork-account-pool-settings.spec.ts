@@ -232,9 +232,9 @@ test('older hosts expose an unavailable state without mutation controls', async 
     const launched = await session.launch({ executablePath })
     app = launched.app
     await openPools(app, launched.page, true)
-    await expect(launched.page.locator('#account-pools').getByRole('alert')).toContainText(
-      'Account pools unavailable'
-    )
+    await expect(
+      launched.page.locator('#accounts-codex-switching').getByRole('alert')
+    ).toContainText('Account pools unavailable')
     await expect(launched.page.getByRole('button', { name: 'Save Codex settings' })).toHaveCount(0)
   } finally {
     await session.dispose(app)

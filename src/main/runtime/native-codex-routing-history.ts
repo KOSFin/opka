@@ -1,6 +1,7 @@
 import { prepareNativeCodexStatusHooks } from '../codex-routing/native-codex-status-hooks'
 import { isAgentStatusHooksEnabledForAgent } from '../agent-hooks/managed-agent-hook-controls'
 import { prepareCodexNativeHome } from '../codex-routing/codex-native-home'
+import { readManagedNativeTrustKeys } from '../codex-routing/codex-native-home-managed-config'
 import { prepareNativeCodexGatewayAuth } from '../codex-routing/native-codex-gateway-credential'
 import type { NativeCodexRoutingContext } from './read-native-codex-routing-context'
 import { readIndexedCodexRolloutPath } from '../codex/codex-indexed-rollout-path'
@@ -33,6 +34,21 @@ export async function prepareNativeCodexRoutingHistory(
     const prepared = await prepareCodexNativeHome({
       ...context,
       sourceHome,
+      prepareManagedConfig: async (home) => {
+        const keys = readManagedNativeTrustKeys(home)
+        prepareNativeCodexGatewayAuth(home, localGatewayKey, context.assertExclusive)
+        await prepareNativeCodexStatusHooks({
+          home,
+          executable,
+          assertExclusive: context.assertExclusive,
+          isEnabled: () =>
+            isAgentStatusHooksEnabledForAgent(runtime.requireStore().getSettings(), 'codex')
+        })
+        for (const key of readManagedNativeTrustKeys(home)) {
+          keys.add(key)
+        }
+        return keys
+      },
       context: {
         nativeVersion,
         profile: params.codexProfile,
@@ -43,14 +59,6 @@ export async function prepareNativeCodexRoutingHistory(
       ...(sourcePath
         ? { adopt: { sourceHome: selectedSourceHome, transcriptPath: sourcePath } }
         : {})
-    })
-    prepareNativeCodexGatewayAuth(prepared.home, localGatewayKey, context.assertExclusive)
-    await prepareNativeCodexStatusHooks({
-      home: prepared.home,
-      executable,
-      assertExclusive: context.assertExclusive,
-      isEnabled: () =>
-        isAgentStatusHooksEnabledForAgent(runtime.requireStore().getSettings(), 'codex')
     })
     releaseOwned = claim(runtime, prepared.home, null)
     return {

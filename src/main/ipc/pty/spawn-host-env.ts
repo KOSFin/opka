@@ -1,3 +1,5 @@
+import { isNativeCodexRoutingEnvironment } from '../../runtime/native-codex-routing-ownership'
+import { requireNativeCodexHomeContext } from '../../runtime/native-codex-home-context'
 import {
   resolveWorkerCodexLaunchHome,
   WORKER_CODEX_ACCOUNT_ENV
@@ -110,16 +112,37 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       accounts: deps.getSettings?.()?.codexManagedAccounts
     })
   const explicitWorkerHome = workerHome()
-  const codexResumePreparation = args.preAdopted
-    ? null
-    : deps.prepareCodexResumeHome({
-        launchAgent: args.launchAgent,
-        providerSession: args.resumeProviderSession,
-        target,
-        // Why: a host runtime skips resume prep for a launch whose env names a client-sent CODEX_HOME.
-        launchEnv: args.env,
-        ...(args.resumeOnSelectedAccount ? { useSelectedAccount: true } : {})
-      })
+  const nativeHome =
+    args.launchAgent === 'codex' &&
+    target.runtime === 'host' &&
+    deps.runtime &&
+    args.env &&
+    isNativeCodexRoutingEnvironment(deps.runtime, args.env)
+      ? requireNativeCodexHomeContext(deps.runtime).homeDirectory
+      : undefined
+  const assertNativeHome = () => {
+    if (
+      nativeHome &&
+      (!deps.runtime ||
+        !args.env ||
+        !codexHomePathsEqual(args.env.CODEX_HOME ?? null, nativeHome) ||
+        !isNativeCodexRoutingEnvironment(deps.runtime, args.env))
+    ) {
+      throw new Error('The native Codex routing HOME or authority changed during launch.')
+    }
+  }
+  assertNativeHome()
+  const codexResumePreparation =
+    args.preAdopted || nativeHome
+      ? null
+      : deps.prepareCodexResumeHome({
+          launchAgent: args.launchAgent,
+          providerSession: args.resumeProviderSession,
+          target,
+          // Why: a host runtime skips resume prep for a launch whose env names a client-sent CODEX_HOME.
+          launchEnv: args.env,
+          ...(args.resumeOnSelectedAccount ? { useSelectedAccount: true } : {})
+        })
   const codexResumeLaunch = codexResumePreparation
     ? await deps.resolveCodexResumeLaunch(args.command, codexResumePreparation)
     : deps.noCodexResumeLaunch(args.preAdopted ? undefined : args.command)
@@ -132,6 +155,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
   const baseEnv = deps.stripSequencedStartupResumeArgv(args.env, codexResumeLaunch)
   const launchesCodex = args.launchAgent === 'codex'
   const selectLaunchCodexHome = async (): Promise<string | null> =>
+    nativeHome ??
     explicitWorkerHome ??
     (await deps.getSelectedCodexHomePath?.(target, baseEnv, { launchesCodex })) ??
     null
@@ -145,7 +169,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
           : await selectLaunchCodexHome()
       )
     : null
-  if (!args.preAdopted && launchesCodex && !args.callerNamedSession) {
+  if (!args.preAdopted && launchesCodex && !args.callerNamedSession && !nativeHome) {
     const resolution = resolveCodexHomeAfterManagedAuthReadiness({
       selectedCodexHomePath,
       getSettings: () => deps.getSettings?.(),
@@ -170,6 +194,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
   if (launchesCodex && selectedCodexHomePath) {
     await ensureCodexStateDbBackfillRecoveryStarted(selectedCodexHomePath)
   }
+  assertNativeHome()
   args.mark?.('codex_home')
   const isWsl = shouldSkipCodexHomeEnvForWindowsShell(args.shellOverride, args.cwd)
   const skipCodexHomeEnv = args.isDaemonHostSpawn && isWsl && !selectedCodexHomePath
@@ -200,6 +225,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
     args.preAdopted ||
     (args.emptySessionIdSkipsHostEnv && !sessionId)
   ) {
+    assertNativeHome()
     if (explicitWorkerHome) {
       workerHome()
     }
@@ -262,6 +288,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       getRuntimeSourceStamp(deps.runtime, getAppEnvironment().getPath('userData'))
     )
     promoteAgentTeamsShimPath(env, args.requestedAgentTeamsPath)
+    assertNativeHome()
     if (explicitWorkerHome) {
       workerHome()
     }
