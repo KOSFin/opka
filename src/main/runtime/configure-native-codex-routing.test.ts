@@ -20,7 +20,7 @@ beforeEach(() => {
   lock.pid = process.pid
   lock.nonce = 'initial-owner'
 })
-function fixture() {
+function fixture(httpProxyUrl = 'http://127.0.0.1:19877') {
   const unused = (): never => {
     throw new Error('Lazy runtime accessor was called during installation')
   }
@@ -36,7 +36,7 @@ function fixture() {
       getSettings: () => ({
         codexManagedAccounts: [],
         activeCodexManagedAccountId: null,
-        httpProxyUrl: 'http://127.0.0.1:19877',
+        httpProxyUrl,
         httpProxyBypassRules: 'localhost'
       })
     },
@@ -91,4 +91,8 @@ it('proves the exact enrollment writer idle before reusing its fixed account sta
   })
   expect(() => f.installed.assertEnrollmentIdle('../other-account')).toThrow()
   expect(assertEngineWriterIdle).toHaveBeenCalledTimes(1)
+})
+
+it('inherits the service egress when no application proxy override is configured', () => {
+  expect(fixture('').installed.networkProxySettings).toBeUndefined()
 })

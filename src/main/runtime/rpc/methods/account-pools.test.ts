@@ -6,9 +6,10 @@ import {
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { eraseRpcMethods, isStreamingMethod } from '../core'
 import { ACCOUNT_POOL_METHODS } from './account-pools'
+import { accountPoolDrafts } from '../../../../shared/account-pool-view'
 
-function fixture() {
-  let policies: AccountPoolPolicy[] = []
+function fixture(initialPolicies: AccountPoolPolicy[] = []) {
+  let policies = initialPolicies
   const updateSettings = vi.fn((updates: { accountPools: AccountPoolPolicy[] }) => {
     policies = updates.accountPools
   })
@@ -82,4 +83,32 @@ it('defaults old policies to no automatic enrollment or rotation', async () => {
   const { applyToNewWork: _apply, rotation: _rotation, ...oldPolicy } = f.policy
   const parsed = AccountPoolUpdateParams.parse({ policy: oldPolicy, expectedRevision: 0 })
   expect(parsed.policy).toMatchObject({ applyToNewWork: false, rotation: 'off' })
+})
+
+it('saves a repaired draft at the same revision after a roster member was removed', async () => {
+  const original = fixture().policy
+  const stale = {
+    ...original,
+    revision: 22,
+    members: [...original.members, { ...original.members[0], accountId: 'removed' }]
+  }
+  const f = fixture([stale])
+  await expect(f.update(stale, 22)).rejects.toThrow(/registered on this execution host/)
+  expect(f.updateSettings).not.toHaveBeenCalled()
+  const repaired = accountPoolDrafts({
+    capability: 'orchestration.account-pools.v1',
+    policies: [stale],
+    accounts: {
+      claude: { accounts: [], activeAccountId: null },
+      codex: { accounts: [{ id: 'a', email: 'synthetic@example.test' }], activeAccountId: 'a' }
+    },
+    candidates: [],
+    assignments: []
+  }).find((policy) => policy.id === stale.id)
+  if (!repaired) {
+    throw new Error('Missing repaired policy')
+  }
+  expect(await f.update(repaired, 22)).toMatchObject({ revision: 23, members: original.members })
+  expect(f.policies()[0].members).toHaveLength(1)
+  expect(stale.members).toHaveLength(2)
 })

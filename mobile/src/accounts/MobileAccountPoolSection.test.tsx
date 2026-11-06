@@ -1,3 +1,8 @@
+import {
+  AccountPoolViewSchema,
+  accountPoolDrafts,
+  setPoolMembership
+} from '../../../src/shared/account-pool-view'
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -190,4 +195,51 @@ it('clears drafts and refuses captured save after a same-client authority migrat
   expect(card().props.policy.strategy).toBe('balanced')
   expect(card().props.dirty).toBe(true)
   expect(tree!.root.findAllByType('Picker').filter((node) => node.props.visible)).toHaveLength(0)
+})
+
+it('saves without invisible deleted registrations while preserving surviving membership', async () => {
+  const client = new FakeSession('connected')
+  const policy = setPoolMembership(
+    setPoolMembership(
+      accountPoolDrafts(AccountPoolViewSchema.parse(snapshot))[1],
+      'removed',
+      'enabled'
+    ),
+    'retained',
+    'draining'
+  )
+  policy.revision = 22
+  const view = {
+    ...snapshot,
+    policies: [policy],
+    accounts: {
+      ...snapshot.accounts,
+      codex: {
+        accounts: [{ id: 'retained', email: 'synthetic@example.test' }],
+        activeAccountId: 'retained'
+      }
+    }
+  }
+  client.sendRequest.mockResolvedValue(rpcSuccess(view))
+  await act(async () => {
+    tree = create(
+      createElement(MobileAccountPoolSection, { client, connected: true, hostName: 'Server' })
+    )
+  })
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Codex pool settings')
+      ?.props.onPress()
+  )
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Save codex pool')
+      ?.props.onPress()
+  )
+  expect(client.sendRequest).toHaveBeenCalledWith('accountPool.update', {
+    expectedRevision: 22,
+    policy: { ...policy, members: [policy.members[1]] }
+  })
 })

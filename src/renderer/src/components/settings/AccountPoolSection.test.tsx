@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import {
+  AccountPoolViewSchema,
+  accountPoolDrafts,
+  setPoolMembership
+} from '../../../../shared/account-pool-view'
 import { AccountPoolSection } from './AccountPoolSection'
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: rpc }))
@@ -150,4 +155,28 @@ it('keeps the previous host hidden while loading and shows the new host error', 
   expect(screen.getByRole('status').textContent).toContain('Loading account pools')
   fail(new Error('New host unavailable'))
   expect((await screen.findByRole('alert')).textContent).toContain('New host unavailable')
+})
+
+it('saves without invisible deleted registrations while preserving surviving membership', async () => {
+  const policy = setPoolMembership(
+    setPoolMembership(
+      accountPoolDrafts(AccountPoolViewSchema.parse(snapshot))[1],
+      'removed',
+      'enabled'
+    ),
+    'c1',
+    'draining'
+  )
+  policy.revision = 22
+  rpc.mockResolvedValue({ ...snapshot, policies: [policy] })
+  const target = { kind: 'environment', environmentId: 'owner' } as const
+  render(<AccountPoolSection target={target} hostLabel="Server" />)
+  fireEvent.click(await screen.findByRole('button', { name: /Codex/ }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Save codex pool' }))
+  await waitFor(() =>
+    expect(rpc).toHaveBeenCalledWith(target, 'accountPool.update', {
+      expectedRevision: 22,
+      policy: { ...policy, members: [policy.members[1]] }
+    })
+  )
 })
