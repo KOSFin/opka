@@ -191,7 +191,9 @@ function followupProof(kind = 'test-only-followup') {
   const names = [
     'Types and changed-code quality',
     ...[1, 2, 3, 4].map((index) =>
-      kind === 'account-pool-readiness-followup' && index === 4
+      ['account-pool-readiness-followup', 'account-pool-readiness-android-followup'].includes(
+        kind
+      ) && index === 4
         ? 'Fork regression tests (mobile and integration)'
         : `Fork regression tests (${index}/4)`
     ),
@@ -200,7 +202,9 @@ function followupProof(kind = 'test-only-followup') {
     'Desktop assets (windows-2022)',
     'Hidden Electron journeys and Swift',
     'Beta installer qualification / Installer qualification passed',
-    'Android component acceptance / Opka Android installer confirmation and retained state'
+    ...(kind === 'account-pool-readiness-android-followup'
+      ? []
+      : ['Android component acceptance / Opka Android installer confirmation and retained state'])
   ]
   return {
     schemaVersion: 1,
@@ -213,12 +217,21 @@ function followupProof(kind = 'test-only-followup') {
     base: 'b'.repeat(40),
     runId: 17,
     attempt: 2,
-    reusedLanes: ['desktop', 'electron', 'installers', 'android'],
-    paths: [
-      kind === 'account-pool-readiness-followup'
-        ? 'src/renderer/src/components/settings/AccountPoolSection.consistency.test.tsx'
-        : 'config/scripts/mobile-web-app-project-work-fixtures.mjs'
-    ],
+    reusedLanes:
+      kind === 'account-pool-readiness-android-followup'
+        ? ['desktop', 'electron', 'installers']
+        : ['desktop', 'electron', 'installers', 'android'],
+    paths:
+      kind === 'account-pool-readiness-android-followup'
+        ? [
+            'src/renderer/src/components/settings/AccountPoolSection.consistency.test.tsx',
+            'config/scripts/opka_android_target_viewport.py'
+          ]
+        : [
+            kind === 'account-pool-readiness-followup'
+              ? 'src/renderer/src/components/settings/AccountPoolSection.consistency.test.tsx'
+              : 'config/scripts/mobile-web-app-project-work-fixtures.mjs'
+          ],
     jobs: names.map((name, index) => ({
       id: index + 1,
       name,
@@ -274,7 +287,11 @@ describe('verified test-only follow-up qualification', () => {
     }
   })
 
-  it.each(['test-only-followup', 'account-pool-readiness-followup'])(
+  it.each([
+    'test-only-followup',
+    'account-pool-readiness-followup',
+    'account-pool-readiness-android-followup'
+  ])(
     'uses verified preceding source for %s and rejects foreign or stale evidence',
     async (kind) => {
       const directory = mkdtempSync(join(tmpdir(), 'opka-ci-followup-scope-'))
@@ -304,7 +321,11 @@ describe('verified test-only follow-up qualification', () => {
         expect(scope.base).toBe(proof.base)
         expect(scope.comparison_valid).toBe(true)
         expect(scope.paths).toEqual(proof.paths)
-        expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static', 'regression'])
+        expect(CI_LANES.filter((lane) => scope[lane])).toEqual(
+          kind === 'account-pool-readiness-android-followup'
+            ? ['static', 'regression', 'android']
+            : ['static', 'regression']
+        )
         expect(() => evaluateCiResults(scope, results(scope))).not.toThrow()
         for (const invalid of [
           { ...proof, repository: 'foreign/repo' },
@@ -336,6 +357,22 @@ it('requires fresh static and all regression groups for readiness without borrow
     expect(() => evaluateCiResults(forged, results(forged))).toThrow()
   }
   for (const lane of ['desktop', 'electron', 'installers', 'android']) {
+    const forged = { ...scope, [lane]: true }
+    expect(() => evaluateCiResults(forged, results(forged))).toThrow()
+  }
+})
+
+it('requires fresh Android, static and all regression groups for the combined fixture proof', () => {
+  const scope = followupScope(followupProof('account-pool-readiness-android-followup'))
+  expect(() => evaluateCiResults(scope, results(scope))).not.toThrow()
+  for (const lane of ['static', 'regression', 'android']) {
+    for (const result of ['failure', 'cancelled', 'skipped']) {
+      expect(() => evaluateCiResults(scope, { ...results(scope), [lane]: { result } })).toThrow()
+    }
+    const forged = { ...scope, [lane]: false }
+    expect(() => evaluateCiResults(forged, results(forged))).toThrow()
+  }
+  for (const lane of ['desktop', 'electron', 'installers']) {
     const forged = { ...scope, [lane]: true }
     expect(() => evaluateCiResults(forged, results(forged))).toThrow()
   }

@@ -74,7 +74,40 @@ class TargetViewportContract(unittest.TestCase):
         target = self.save(root)
         self.assertIsNone(bounds(target))
         self.assertIsNone(visible_bounds(root, target))
-        self.assertEqual(container_swipe(root, target, True), ['1008', '1774', '1008', '1336', '350'])
+        self.assertEqual(container_swipe(root, target, True), ['540', '1541', '540', '1298', '350'])
+
+    def test_captured_accounts_swipe_stays_inside_content_not_system_navigation_edges(self):
+        root = ET.parse(Path(__file__).with_name('fixtures') / 'android-webview-accessibility/accounts-offscreen.xml').getroot()
+        target = next(node for node in root.iter('node') if node.get('text') == 'codex pool mode')
+        self.assertIsNone(bounds(target))
+        gesture = list(map(int, container_swipe(root, target, True)))
+        self.assertGreaterEqual(gesture[0], 108)
+        self.assertLessEqual(gesture[0], 972)
+        self.assertGreater(gesture[1], gesture[3])
+        self.assertGreaterEqual(gesture[3], 850)
+        self.assertLessEqual(gesture[1], 1728)
+
+    def test_real_scrollable_ancestor_wins_over_a_nearer_generic_view(self):
+        root = ET.fromstring('<hierarchy><node bounds="[0,0][1000,1600]" class="android.widget.ScrollView" scrollable="true"><node bounds="[100,800][900,1500]" class="android.view.View"><node bounds="[0,0][0,0]" text="Target"/></node></node></hierarchy>')
+        target = list(root.iter('node'))[-1]
+        gesture = list(map(int, container_swipe(root, target, True)))
+        self.assertLess(gesture[3], 800)
+        self.assertTrue(100 <= gesture[0] <= 900)
+
+    def test_form_swipe_starts_outside_multiline_input_and_system_edges(self):
+        root = self.captured()
+        gesture = list(map(int, container_swipe(root, self.save(root), True)))
+        self.assertTrue(108 <= gesture[0] <= 972)
+        for node in root.iter('node'):
+            area = bounds(node)
+            if node.get('class') == 'android.widget.EditText' and area:
+                self.assertFalse(area[0] <= gesture[0] < area[2] and area[1] <= gesture[1] < area[3])
+
+    def test_input_covering_every_safe_start_refuses_a_gesture(self):
+        root = ET.fromstring('<hierarchy><node bounds="[0,0][1000,1600]" class="android.widget.ScrollView" scrollable="true"><node class="android.widget.EditText" bounds="[0,0][1000,1600]"/><node bounds="[0,0][0,0]" text="Target"/></node></hierarchy>')
+        target = list(root.iter('node'))[-1]
+        self.assertIsNone(container_swipe(root, target, True))
+        self.assertIsNone(container_swipe(root, target, False))
 
     def test_scroll_then_fresh_observation_must_expose_real_positive_target(self):
         hidden, shown = self.captured(), self.captured()
@@ -93,8 +126,8 @@ class TargetViewportContract(unittest.TestCase):
             find_visible(lambda: root, self.save, 'Save task', 8,
                          lambda *args: gestures.append(args), now=lambda: next(clock), pause=lambda _: None)
         self.assertEqual(len(gestures), 4)
-        self.assertEqual(gestures[0][1:4:2], ('1774', '1336'))
-        self.assertEqual(gestures[-1][1:4:2], ('1336', '1774'))
+        self.assertEqual(gestures[0][1:4:2], ('1541', '1298'))
+        self.assertEqual(gestures[-1][1:4:2], ('1298', '1620'))
 
     def test_clipped_targets_are_intersected_with_the_actual_window(self):
         root = ET.fromstring('<hierarchy><node bounds="[0,0][100,100]"><node bounds="[90,90][200,200]"/></node></hierarchy>')

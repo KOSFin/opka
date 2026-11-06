@@ -1,4 +1,9 @@
 import { expect, it } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { runProcessSync } from '@orca/process-host'
 import { findReusableFollowupProof, isFollowupProof } from './opka-ci-followup-proof.mjs'
 
 const base = 'a'.repeat(40)
@@ -449,3 +454,178 @@ it.each(['in_progress', 'queued'])(
     expect(await findReusableFollowupProof(options)).toBeNull()
   }
 )
+
+const viewportFixture = 'config/scripts/opka_android_target_viewport.py'
+const androidAcceptance =
+  'Android component acceptance / Opka Android installer confirmation and retained state'
+function readinessAndroidContext() {
+  const value = readinessContext()
+  value.state.paths.push(viewportFixture)
+  value.state.jobs.find((job) => job.name === androidAcceptance).conclusion = 'failure'
+  return value
+}
+
+it('reuses only positive desktop, Electron and installer jobs for combined readiness/viewport fixtures', async () => {
+  const { options } = readinessAndroidContext()
+  const proof = await findReusableFollowupProof(options)
+  expect(proof).toMatchObject({
+    kind: 'account-pool-readiness-android-followup',
+    reusedLanes: ['desktop', 'electron', 'installers']
+  })
+  expect(isFollowupProof(proof)).toBe(true)
+  expect(proof.jobs.map((job) => job.name)).toEqual(
+    names
+      .filter((name) => name !== androidAcceptance)
+      .map((name) => (name === rootFour ? shared : name))
+  )
+  expect(proof.jobs.some((job) => [rootFour, androidAcceptance].includes(job.name))).toBe(false)
+})
+
+it.each(
+  names
+    .filter((name) => name !== androidAcceptance)
+    .map((name) => (name === rootFour ? shared : name))
+)('requires successful unchanged-platform evidence for combined fixtures: %s', async (name) => {
+  const { options, state } = readinessAndroidContext()
+  state.jobs.find((job) => job.name === name).conclusion = 'failure'
+  expect(await findReusableFollowupProof(options)).toBeNull()
+})
+
+it.each([readinessFixture, viewportFixture])(
+  'requires both combined fixtures, including %s',
+  async (path) => {
+    const { options, state } = readinessAndroidContext()
+    state.paths = state.paths.filter((changed) => changed !== path)
+    expect(await findReusableFollowupProof(options)).toBeNull()
+  }
+)
+
+it.each([
+  'mobile/src/components/AccountPoolSection.tsx',
+  'src/main/runtime/app.ts',
+  'config/scripts/fixtures/unknown.xml',
+  '.github/workflows/pr.yml',
+  'pnpm-lock.yaml',
+  fixturePath
+])('rejects product changes and unapproved files in combined follow-up: %s', async (path) => {
+  const { options, state } = readinessAndroidContext()
+  state.paths.push(path)
+  expect(await findReusableFollowupProof(options)).toBeNull()
+  expect(state.calls).toEqual([])
+})
+
+it('never reuses the failed Android acceptance or smuggles it into positive proof', async () => {
+  const { options } = readinessAndroidContext()
+  const proof = await findReusableFollowupProof(options)
+  expect(isFollowupProof({ ...proof, reusedLanes: [...proof.reusedLanes, 'android'] })).toBe(false)
+  expect(isFollowupProof({ ...proof, kind: 'account-pool-readiness-followup' })).toBe(false)
+  expect(
+    isFollowupProof({
+      ...proof,
+      jobs: [
+        ...proof.jobs,
+        {
+          id: 999,
+          name: androidAcceptance,
+          runId: proof.runId,
+          head: proof.base,
+          status: 'completed',
+          conclusion: 'success'
+        }
+      ]
+    })
+  ).toBe(false)
+})
+
+it.each([
+  'config/scripts/opka_android_task_fields_test.py',
+  'config/scripts/fixtures/android-webview-accessibility/accounts-offscreen.xml'
+])('admits only the reviewed synthetic viewport regression input %s', async (path) => {
+  const { options, state } = readinessAndroidContext()
+  state.paths.push(path)
+  expect(isFollowupProof(await findReusableFollowupProof(options))).toBe(true)
+})
+
+it('recovers bounded multi-commit ancestry in a real shallow Git merge checkout', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'opka-followup-shallow-'))
+  const origin = join(root, 'origin')
+  const checkout = join(root, 'checkout')
+  const hooks = join(root, 'no-hooks')
+  mkdirSync(origin)
+  mkdirSync(hooks)
+  const git = (cwd, args) =>
+    runProcessSync({
+      program: 'git',
+      cwd,
+      args: ['-c', `core.hooksPath=${hooks}`, '-c', 'commit.gpgsign=false', ...args],
+      timeoutMs: 10_000,
+      maxOutputBytes: 128 * 1024
+    })
+  const success = (cwd, args) => {
+    const result = git(cwd, args)
+    if (result.code !== 0 || result.timedOut || result.outputTruncated) {
+      throw new Error(`Synthetic Git fixture failed at ${args[0]}`)
+    }
+    return result.stdout.trim()
+  }
+  try {
+    success(origin, ['init'])
+    success(origin, ['symbolic-ref', 'HEAD', 'refs/heads/release-fix'])
+    success(origin, ['config', 'user.name', 'Fixture'])
+    success(origin, ['config', 'user.email', 'fixture@example.invalid'])
+    for (const path of [readinessFixture, viewportFixture]) {
+      mkdirSync(join(origin, path, '..'), { recursive: true })
+      writeFileSync(join(origin, path), 'before\n')
+    }
+    success(origin, ['add', '.'])
+    success(origin, ['commit', '-m', 'Synthetic base'])
+    const before = success(origin, ['rev-parse', 'HEAD'])
+    for (const index of [1, 2, 3, 4]) {
+      writeFileSync(join(origin, readinessFixture), `revision ${index}\n`)
+      if (index === 4) {
+        writeFileSync(join(origin, viewportFixture), 'viewport correction\n')
+      }
+      success(origin, ['add', '.'])
+      success(origin, ['commit', '-m', `Synthetic follow-up ${index}`])
+    }
+    const source = success(origin, ['rev-parse', 'HEAD'])
+    success(origin, ['checkout', '-b', 'synthetic-merge', before])
+    success(origin, ['merge', '--no-ff', 'release-fix', '-m', 'Synthetic PR merge'])
+    const merge = success(origin, ['rev-parse', 'HEAD'])
+    success(root, [
+      'clone',
+      '--depth=2',
+      '--branch',
+      'synthetic-merge',
+      pathToFileURL(origin).href,
+      checkout
+    ])
+    expect(success(checkout, ['rev-parse', '--is-shallow-repository'])).toBe('true')
+    expect(git(checkout, ['merge-base', '--is-ancestor', before, source]).code).toBe(1)
+    const { options, state } = readinessAndroidContext()
+    state.event.before = before
+    state.event.pull_request.head.sha = source
+    state.run.head_sha = before
+    state.jobs.forEach((job) => {
+      job.head_sha = before
+    })
+    options.head = merge
+    const calls = []
+    options.runGit = (args) => {
+      calls.push(args)
+      return git(checkout, args)
+    }
+    const proof = await findReusableFollowupProof(options)
+    expect(proof).toMatchObject({
+      kind: 'account-pool-readiness-android-followup',
+      base: before,
+      head: merge,
+      sourceHead: source,
+      reusedLanes: ['desktop', 'electron', 'installers']
+    })
+    expect(calls).toContainEqual(['fetch', '--no-tags', '--depth=64', 'origin', source])
+    expect(success(checkout, ['rev-parse', 'HEAD'])).toBe(merge)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
