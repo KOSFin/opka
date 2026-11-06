@@ -125,7 +125,9 @@ describe('explicit release qualification and artifact recovery', () => {
       '.github/workflows/pr.yml',
       'config/scripts/opka-android-native-fixture.py',
       'config/scripts/opka-release-assets.mjs',
-      'config/scripts/opka-android-ui-journey.py'
+      'config/scripts/opka-android-ui-journey.py',
+      'config/scripts/opka_android_target_viewport_other.py',
+      'config/scripts/fixtures/android-webview-accessibility/other.xml'
     ]) {
       expect(() => validateQualificationSource(source, qa, [path])).toThrow('Application source')
     }
@@ -134,6 +136,11 @@ describe('explicit release qualification and artifact recovery', () => {
     expect(() =>
       validateQualificationSource(source, qa, [
         'fork-docs/testing/ci-component-routing.md',
+        'config/scripts/opka_android_target_viewport.py',
+        'config/scripts/opka_android_task_fields_test.py',
+        'config/scripts/fixtures/android-webview-accessibility/accounts-deep-offscreen.xml',
+        'config/scripts/opka-ci-component-scope.mjs',
+        'config/scripts/opka-ci-component-scope.test.mjs',
         '.github/workflows/opka-release.yml',
         '.github/workflows/opka-android-update-acceptance.yml',
         'config/scripts/opka_android_ci_acceptance_test.py',

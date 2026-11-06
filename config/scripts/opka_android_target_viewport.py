@@ -77,6 +77,7 @@ def container_swipe(root, node, forward):
 def find_visible(snapshot, resolve, label, timeout, swipe, now=None, pause=None, reveal_forward=None, actionable=False):
     now, pause = now or time.monotonic, pause or time.sleep
     deadline, attempts = now() + timeout, 0
+    seen_geometry = set()
     while now() < deadline:
         root = snapshot()
         node = resolve(root)
@@ -86,11 +87,14 @@ def find_visible(snapshot, resolve, label, timeout, swipe, now=None, pause=None,
                 result = copy.copy(node)
                 result.set('bounds', f'[{area[0]},{area[1]}][{area[2]},{area[3]}]')
                 return result
-            if attempts < 4:
+            geometry = tuple((item.get('class'), item.get('bounds')) for item in root.iter('node'))
+            continuing = reveal_forward is not None and attempts < 8 and geometry not in seen_geometry
+            if attempts < 4 or continuing:
                 direction = attempts < 2 if reveal_forward is None else reveal_forward
                 gesture = container_swipe(root, node, direction)
                 if gesture:
                     swipe(*gesture)
+                    seen_geometry.add(geometry)
                     attempts += 1
         pause(0.35)
     raise AssertionError(f'UI did not expose visible {label!r}')

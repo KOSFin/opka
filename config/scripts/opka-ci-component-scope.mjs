@@ -25,6 +25,11 @@ export function classifyCiPaths(paths) {
     if (/^(?:config\/scripts|\.github\/scripts)\/[^/]+\.test\.mjs$/.test(path)) {
       enable('ci-contract-test', ['regression'])
     } else if (
+      path === 'config/scripts/opka-release-qualification.mjs' ||
+      path === 'config/scripts/opka-ci-component-scope.mjs'
+    ) {
+      enable('ci-admission-contract', ['regression'])
+    } else if (
       /^config\/scripts\/opka[-_]android[^/]*\.py$/.test(path) ||
       path === 'config/scripts/build-android-update-handoff.py' ||
       path.startsWith('config/android-update-handoff/') ||
