@@ -227,3 +227,36 @@ it('chooses connected B over higher-priority native-roster-ready A without an en
   expect(f.db.listAccountPoolAssignments()[0].accountId).toBe(f.b.id)
   expect(f.settings.codexManagedAccounts?.map((account) => account.id)).toContain(f.a.id)
 })
+
+it('refreshes a previously unready canonical Stop before the next native HTTP admission', async () => {
+  const f = await fixture()
+  f.plans.add(nativeLaunchId)
+  let settled = false
+  const order: string[] = []
+  routingHooks.boundary.mockImplementation(() => ({
+    canSwitch: () => settled,
+    refreshNativeEvidence: () => {
+      order.push('refresh')
+      settled = true
+    },
+    snapshot: () => {
+      order.push('snapshot')
+      const ready = settled
+      return { canSwitch: () => ready, onBoundaryAccepted: () => {} }
+    },
+    dispose: () => {}
+  }))
+  const plan = await prepareNativeCliAccountLaunch(f.runtime, request)
+  expect((await nativePlanTurn(plan)).status).toBe(200)
+  expect(f.db.listAccountPoolAssignments()[0].accountId).toBe(f.a.id)
+  const policy = f.settings.accountPools?.[0]
+  if (!policy) {
+    throw new Error('Missing saved pool')
+  }
+  policy.revision++
+  policy.members[0].state = 'disabled'
+  expect(order).not.toContain('refresh')
+  expect((await nativePlanTurn(plan, '2')).status).toBe(200)
+  expect(order.slice(-2)).toEqual(['refresh', 'snapshot'])
+  expect(f.db.listAccountPoolAssignments()[0].accountId).toBe(f.b.id)
+})

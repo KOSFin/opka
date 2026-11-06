@@ -161,7 +161,10 @@ export async function prepareNativeCodexRoutingLaunch(
       initialAccountId: previous?.accountId,
       ownerPrefix: `native-cli:${params.launchId}`,
       canSwitch: () => sessionAuthority.boundary(boundary.snapshot()).canSwitch(),
-      readBoundary: (nextTurn) => sessionAuthority.boundary(boundary.snapshot(), nextTurn),
+      readBoundary: (nextTurn) => {
+        boundary.refreshNativeEvidence()
+        return sessionAuthority.boundary(boundary.snapshot(), nextTurn)
+      },
       areRetainedTurnsSettled: sessionAuthority.areRetainedTurnsSettled,
       onRootTurnAccepted: sessionAuthority.onRootTurnAccepted,
       prepareQuotaRetry: sessionAuthority.prepareQuotaRetry,

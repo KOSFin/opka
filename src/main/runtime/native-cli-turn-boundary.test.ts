@@ -362,3 +362,98 @@ it('rechecks the exact observed native Stop after private inventory certificatio
   f.boundary.refreshNativeEvidence()
   expect(f.boundary.canSwitch()).toBe(false)
 })
+
+it('certifies the genuine held Stop after a newer prompt and delayed transcript EOF', () => {
+  const f = fixture(() => 'session', true)
+  f.state.nativeChildren = 'unverifiable'
+  f.notify()
+  expect(f.boundary.canSwitch()).toBe(false)
+  f.state.row = {
+    ...f.state.row,
+    state: 'working',
+    turnStartedAt: 2100,
+    turnCompletedAt: undefined,
+    mainAgent: { state: 'working', stateStartedAt: 2100 }
+  }
+  f.notify()
+  f.boundary.refreshNativeEvidence()
+  expect(f.boundary.canSwitch()).toBe(false)
+  f.state.nativeChildren = 'settled'
+  f.boundary.refreshNativeEvidence()
+  const permit = f.boundary.snapshot()
+  expect(permit.canSwitch()).toBe(true)
+  permit.onBoundaryAccepted()
+  f.boundary.refreshNativeEvidence()
+  expect(f.boundary.canSwitch()).toBe(false)
+})
+
+it('never certifies a delayed Stop after its native owner changed', () => {
+  const f = fixture(() => 'session', true)
+  f.state.nativeChildren = 'unverifiable'
+  f.notify()
+  const owner = f.state.nativeOwner
+  if (!owner) {
+    throw new Error('Missing native owner')
+  }
+  f.state.nativeOwner = { ...owner, incarnationId: 'other' }
+  f.state.row.state = 'working'
+  f.state.row.turnStartedAt = 2100
+  f.state.row.mainAgent = { state: 'working', stateStartedAt: 2100 }
+  f.state.nativeChildren = 'settled'
+  f.boundary.refreshNativeEvidence()
+  expect(f.boundary.canSwitch()).toBe(false)
+  f.state.nativeOwner = owner
+  f.boundary.refreshNativeEvidence()
+  expect(f.boundary.canSwitch()).toBe(false)
+})
+
+it('keeps captured Stop provenance across an idle pause without renewing its timestamp', () => {
+  const f = fixture(() => 'session', true)
+  f.state.nativeChildren = 'unverifiable'
+  f.notify()
+  f.state.now = 1000000
+  f.state.row = {
+    ...f.state.row,
+    state: 'working',
+    turnStartedAt: 999999,
+    turnCompletedAt: undefined,
+    mainAgent: { state: 'working', stateStartedAt: 999999 }
+  }
+  f.notify()
+  f.state.nativeChildren = 'settled'
+  f.boundary.refreshNativeEvidence()
+  expect(f.boundary.canSwitch()).toBe(true)
+})
+
+it.each(['seeded', 'replay', 'interrupted', 'root-bound'] as const)(
+  'discards pending Stop evidence after %s',
+  (invalidated) => {
+    const f = fixture(() => 'session', true)
+    f.state.nativeChildren = 'unverifiable'
+    f.notify()
+    if (invalidated === 'root-bound') {
+      f.boundary.rootBound()
+    } else if (invalidated === 'seeded') {
+      f.notify('seeded')
+    } else {
+      if (invalidated === 'replay') {
+        f.state.row.isReplay = true
+      } else {
+        f.state.row.interrupted = true
+      }
+      f.notify()
+    }
+    f.state.row = {
+      ...f.state.row,
+      isReplay: false,
+      interrupted: false,
+      state: 'working',
+      turnStartedAt: 2100,
+      turnCompletedAt: undefined,
+      mainAgent: { state: 'working', stateStartedAt: 2100 }
+    }
+    f.state.nativeChildren = 'settled'
+    f.boundary.refreshNativeEvidence()
+    expect(f.boundary.canSwitch()).toBe(false)
+  }
+)

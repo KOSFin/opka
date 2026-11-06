@@ -79,6 +79,7 @@ export async function nativeRoutingFixture() {
   })
   routingHooks.boundary.mockReset().mockImplementation(() => ({
     canSwitch: () => true,
+    refreshNativeEvidence: () => {},
     snapshot: () => ({ canSwitch: () => true, onBoundaryAccepted: () => {} }),
     dispose: vi.fn()
   }))

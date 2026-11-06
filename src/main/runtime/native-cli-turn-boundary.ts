@@ -58,6 +58,7 @@ export function createNativeCliTurnBoundary(args: {
   now?: () => number
 }) {
   let permit: Permit | undefined
+  let pendingStop: Permit | undefined
   let idlePermit: Permit | undefined
   let anchor: Owner | undefined
   let consumed: number | undefined
@@ -95,7 +96,7 @@ export function createNativeCliTurnBoundary(args: {
       args.readRetainedNativeBoundary(held.owner)
     )
   }
-  const matches = (held: Permit): boolean => {
+  const matches = (held: Permit, requireSettled = true): boolean => {
     try {
       const state = current()
       if (!state || !sameOwner(state.owner, held.owner)) {
@@ -117,7 +118,7 @@ export function createNativeCliTurnBoundary(args: {
         !row.providerSessionOnly &&
         !row.programStatusOnly &&
         !row.claudeTaskWakeupPending &&
-        settled(state.owner, row, held.completedRow) &&
+        (!requireSettled || settled(state.owner, row, held.completedRow)) &&
         !row.subagents?.some((child) => child.state !== 'idle') &&
         (row.state !== 'working' || (row.turnStartedAt ?? 0) > held.completedAt)
       )
@@ -132,6 +133,7 @@ export function createNativeCliTurnBoundary(args: {
     try {
       const state = current()
       if (!state || (anchor && !sameOwner(state.owner, anchor))) {
+        pendingStop = undefined
         if (!permit || !retained(permit)) {
           permit = undefined
         }
@@ -141,12 +143,22 @@ export function createNativeCliTurnBoundary(args: {
         return
       }
       if (seeded) {
+        pendingStop = undefined
         idlePermit = undefined
         permit = undefined
         return
       }
       if (permit && !matches(permit)) {
         permit = undefined
+      }
+      if (pendingStop) {
+        if (pendingStop.completedAt === consumed || !matches(pendingStop, false)) {
+          pendingStop = undefined
+        } else if (matches(pendingStop)) {
+          permit = pendingStop
+          idlePermit = permit
+          pendingStop = undefined
+        }
       }
       const common = {
         provider: args.provider,
@@ -156,9 +168,7 @@ export function createNativeCliTurnBoundary(args: {
         lastRotatedTurn: consumed
       }
       const completedAt = native(state.owner)
-        ? settled(state.owner, state.row)
-          ? accountPoolCompletedMainTurnBoundary(common)
-          : null
+        ? accountPoolCompletedMainTurnBoundary(common)
         : accountPoolCompletedTurnBoundary({
             ...common,
             executionId: state.owner.executionId,
@@ -167,22 +177,29 @@ export function createNativeCliTurnBoundary(args: {
       if (
         completedAt === null ||
         !state.row.providerSession ||
-        permit?.completedAt === completedAt
+        permit?.completedAt === completedAt ||
+        pendingStop?.completedAt === completedAt
       ) {
         return
       }
       anchor ??= { ...state.owner }
-      permit = {
+      const candidate: Permit = {
         version: ++version,
         completedAt,
         sessionId: state.row.providerSession.id,
         owner: { ...state.owner },
-        completedRow: { ...state.row }
+        completedRow: structuredClone(state.row)
       }
-      if (native(state.owner)) {
-        idlePermit = permit
+      if (native(state.owner) && !settled(state.owner, state.row)) {
+        pendingStop = candidate
+      } else {
+        permit = candidate
+        if (native(state.owner)) {
+          idlePermit = permit
+        }
       }
     } catch {
+      pendingStop = undefined
       permit = undefined
     }
   }
@@ -198,6 +215,9 @@ export function createNativeCliTurnBoundary(args: {
       onBoundaryAccepted: () => {
         if (!disposed && held !== undefined && permit?.version === held.version) {
           consumed = held.completedAt
+          if (pendingStop?.version === held.version) {
+            pendingStop = undefined
+          }
           permit = undefined
           if (native(held.owner)) {
             anchor = undefined
@@ -235,6 +255,7 @@ export function createNativeCliTurnBoundary(args: {
     idleSnapshot,
     rootBound: () => {
       if (!disposed && args.readNativeOwner) {
+        pendingStop = undefined
         permit = undefined
         idlePermit = undefined
         anchor = undefined
@@ -244,6 +265,7 @@ export function createNativeCliTurnBoundary(args: {
     canSwitch: () => snapshot().canSwitch(),
     dispose: () => {
       disposed = true
+      pendingStop = undefined
       idlePermit = undefined
       permit = undefined
       release()
