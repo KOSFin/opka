@@ -215,7 +215,7 @@ export function createNativeCliTurnBoundary(args: {
       onBoundaryAccepted: () => {
         if (!disposed && held !== undefined && permit?.version === held.version) {
           consumed = held.completedAt
-          if (pendingStop?.version === held.version) {
+          if (pendingStop && sameOwner(pendingStop.owner, held.owner)) {
             pendingStop = undefined
           }
           permit = undefined

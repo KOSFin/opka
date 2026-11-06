@@ -11,7 +11,8 @@ vi.mock('./pty-account-pool-child-inventory', () => ({ readPtyAccountPoolChildre
 function fixture(
   expectedSessionId?: () => string | null,
   useNative = false,
-  readRetainedNativeBoundary?: (owner: NativeCliSessionOwner) => boolean
+  readRetainedNativeBoundary?: (owner: NativeCliSessionOwner) => boolean,
+  readInventory?: () => { status: 'settled' | 'live' | 'unverifiable' }
 ) {
   const row: AgentStatusIpcPayload = {
     paneKey: 'pane',
@@ -79,8 +80,9 @@ function fixture(
     ...(useNative
       ? {
           readNativeOwner: () => state.nativeOwner,
-          readNativeChildren: () =>
-            state.nativeChildren ? { status: state.nativeChildren } : undefined
+          readNativeChildren:
+            readInventory ??
+            (() => (state.nativeChildren ? { status: state.nativeChildren } : undefined))
         }
       : {}),
     ...(expectedSessionId ? { expectedSessionId } : {}),
@@ -457,3 +459,37 @@ it.each(['seeded', 'replay', 'interrupted', 'root-bound'] as const)(
     expect(f.boundary.canSwitch()).toBe(false)
   }
 )
+
+it('consumes a newer pending Stop of the same owner when an older permit is accepted', () => {
+  const statuses: ('settled' | 'unverifiable')[] = []
+  const f = fixture(
+    () => 'session',
+    true,
+    undefined,
+    () => ({
+      status: statuses.shift() ?? 'settled'
+    })
+  )
+  f.notify()
+  const old = f.boundary.snapshot()
+  f.state.row = {
+    ...f.state.row,
+    turnStartedAt: 2500,
+    turnCompletedAt: 3000,
+    mainAgent: { state: 'done', outcome: 'success', stateStartedAt: 3000 }
+  }
+  f.state.now = 3500
+  statuses.push('settled', 'unverifiable')
+  f.notify()
+  expect(old.canSwitch()).toBe(true)
+  old.onBoundaryAccepted()
+  f.state.row = {
+    ...f.state.row,
+    state: 'working',
+    turnStartedAt: 3600,
+    turnCompletedAt: undefined,
+    mainAgent: { state: 'working', stateStartedAt: 3600 }
+  }
+  f.boundary.refreshNativeEvidence()
+  expect(f.boundary.canSwitch()).toBe(false)
+})
