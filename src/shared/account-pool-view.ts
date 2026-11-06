@@ -34,7 +34,12 @@ export function accountPoolDrafts(view: AccountPoolView): AccountPoolPolicy[] {
   return (['claude', 'codex'] as const).flatMap((provider) => {
     const existing = view.policies.filter((policy) => policy.provider === provider)
     return existing.length
-      ? existing
+      ? existing.map((policy) => ({
+          ...policy,
+          members: policy.members.filter((member) =>
+            view.accounts[provider].accounts.some((account) => account.id === member.accountId)
+          )
+        }))
       : [
           {
             id: `${provider}-default`,

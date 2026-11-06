@@ -1,6 +1,11 @@
+import {
+  codexRoutingFailureMessage,
+  rejectCodexRoutingRequest as reject,
+  type CodexRoutingFailurePhase
+} from './codex-routing-failure'
 import { readCodexNativeHttpRequest } from './codex-native-http-authentication'
 import { retryCodexQuotaBeforeDeadline } from './codex-quota-retry-deadline'
-import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer, request, type IncomingMessage } from 'node:http'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { z } from 'zod'
@@ -46,14 +51,6 @@ export type CodexRoutingHttpOptions = {
   ) => CodexHttpAccountRoute
 }
 
-function reject(response: ServerResponse, status: number, message: string): void {
-  if (!response.headersSent && !response.destroyed) {
-    response.writeHead(status, { 'content-type': 'application/json', connection: 'close' })
-    response.end(JSON.stringify({ error: { type: 'opka_account_routing', message } }))
-  } else {
-    response.destroy()
-  }
-}
 async function readRequest(request: IncomingMessage, limit: number): Promise<Buffer | null> {
   const chunks: Buffer[] = []
   let total = 0
@@ -132,6 +129,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
         upstream?.destroy()
       }
       let routeSignal: AbortSignal | undefined
+      let failurePhase: CodexRoutingFailurePhase = 'admission'
       outgoing.once('close', cancel)
       try {
         const bytes = await readRequest(incoming, maxRequestBytes)
@@ -180,6 +178,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
             throw new Error('Host route configuration is invalid')
           }
           const body = JSON.stringify({ ...payload, model: `${route.prefix}/${payload.model}` })
+          failurePhase = 'engine-headers'
           upstream = request({
             host: '127.0.0.1',
             port: route.port,
@@ -253,6 +252,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
               )
             }
           })
+          failurePhase = 'engine-body'
           await pipeline(response, budget, outgoing)
           break
         }
@@ -267,7 +267,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
           error instanceof CodexTurnBoundaryError ||
             error instanceof CodexNativeAffinityCapacityError
             ? error.message
-            : 'Account routing is unavailable; check the execution host account settings.'
+            : codexRoutingFailureMessage(error, failurePhase)
         )
       } finally {
         outgoing.off('close', cancel)

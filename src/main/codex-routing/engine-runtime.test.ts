@@ -278,3 +278,45 @@ it('keeps the two-account native qualification fixture explicit, synthetic and p
   }
   expect(() => prepareEngineRuntimeConfig(input)).toThrow('loopback')
 })
+
+it('inherits service proxy and bypass settings for native enrollment without an app override', () => {
+  vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:19877')
+  vi.stubEnv('NO_PROXY', 'localhost,127.0.0.1')
+  const files = prepareEngineRuntimeConfig(options())
+  expect(createEngineRuntimeLaunch(files, binary().binaryPath, 128).env).toMatchObject({
+    HTTPS_PROXY: 'http://127.0.0.1:19877',
+    NO_PROXY: 'localhost,127.0.0.1'
+  })
+  expect(
+    createEngineRuntimeLaunch(files, binary().binaryPath, 128, {
+      httpProxyUrl: 'http://127.0.0.1:19878',
+      httpProxyBypassRules: 'localhost'
+    }).env
+  ).toMatchObject({ HTTPS_PROXY: 'http://127.0.0.1:19878', NO_PROXY: 'localhost' })
+})
+
+it('passes the inherited proxy into the engine request transport, not only the OAuth environment', () => {
+  vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:19877')
+  const input = {
+    ...options(),
+    auth: { kind: 'device-enrollment' as const, directory: join(root, 'private-auth') }
+  }
+  const read = (settings?: { httpProxyUrl: string } | null) =>
+    JSON.parse(
+      readFileSync(
+        prepareEngineRuntimeConfig({ ...input, networkProxySettings: settings }).configPath,
+        'utf8'
+      )
+    )
+  expect(read().requests).toEqual({ 'proxy-url': 'http://127.0.0.1:19877' })
+  expect(read({ httpProxyUrl: 'http://127.0.0.1:19878' }).requests).toEqual({
+    'proxy-url': 'http://127.0.0.1:19878'
+  })
+  expect(read(null)).not.toHaveProperty('requests')
+  expect(() => read({ httpProxyUrl: 'unsupported://127.0.0.1' })).toThrow(
+    'proxy configuration is invalid'
+  )
+  expect(
+    JSON.parse(readFileSync(prepareEngineRuntimeConfig(options()).configPath, 'utf8'))
+  ).not.toHaveProperty('requests')
+})

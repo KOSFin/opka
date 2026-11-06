@@ -52,10 +52,12 @@ export function configureNativeCodexRouting(
     registerCleanup: options.registerCleanup,
     memoryMiB: 128,
     maxRequestBytes: 4 * 1024 * 1024,
-    networkProxySettings: {
-      httpProxyUrl: settings.httpProxyUrl,
-      httpProxyBypassRules: settings.httpProxyBypassRules
-    },
+    networkProxySettings: settings.httpProxyUrl?.trim()
+      ? {
+          httpProxyUrl: settings.httpProxyUrl,
+          httpProxyBypassRules: settings.httpProxyBypassRules
+        }
+      : undefined,
     assertExclusiveProfile,
     recordQuotaFailure: createRuntimeCodexQuotaFailureRecorder({
       getSettings: () => options.store.getSettings(),

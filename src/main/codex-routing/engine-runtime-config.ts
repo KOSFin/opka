@@ -11,6 +11,11 @@ import {
 } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { renameFileWithWindowsRetry } from '../codex-accounts/fs-utils'
+import {
+  getProxyUrlFromEnvironment,
+  normalizeProxyUrl,
+  type NetworkProxySettings
+} from '../../shared/network-proxy'
 
 export type EngineReadyAuthReference =
   | {
@@ -36,6 +41,7 @@ export type EngineRuntimeConfigOptions = {
   port: number
   auth: EngineReadyAuthReference
   maxRequestBytes: number
+  networkProxySettings?: NetworkProxySettings | null
   /** The host must own the directory lease and have excluded a live previous engine/writer. */
   assertExclusiveRuntimeDirectory: () => void
 }
@@ -117,9 +123,19 @@ export function prepareEngineRuntimeConfig(
   ) {
     throw new Error('Synthetic routing only accepts the fixed A/B fixture')
   }
+  const proxy =
+    auth.kind === 'synthetic-test'
+      ? normalizeProxyUrl('')
+      : options.networkProxySettings === undefined
+        ? getProxyUrlFromEnvironment(process.env)
+        : normalizeProxyUrl(options.networkProxySettings?.httpProxyUrl)
+  if (!proxy.ok) {
+    throw new Error('Routing engine proxy configuration is invalid.')
+  }
   const clientKey = randomBytes(32).toString('hex')
   const config = {
     'config-version': 8,
+    ...(proxy.value ? { requests: { 'proxy-url': proxy.value } } : {}),
     server: {
       host: '127.0.0.1',
       port,

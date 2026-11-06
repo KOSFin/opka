@@ -55,6 +55,7 @@ export async function runEngineDeviceLogin(
         port: 8317,
         auth: { kind: 'device-enrollment', directory: options.authDirectory },
         maxRequestBytes: 16384,
+        networkProxySettings: options.networkProxySettings,
         assertExclusiveRuntimeDirectory: options.assertExclusiveRuntimeDirectory
       })
       const launch = createEngineRuntimeLaunch(

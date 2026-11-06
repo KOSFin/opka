@@ -171,7 +171,9 @@ it('cancels an accepted stream and frees the request budget without a replay', a
 
 it('ends header waits within a fixed budget and still releases the prepared route', async () => {
   const { post, finish } = await fixture({ headerDeadline: 100 })
-  expect((await post('{"model":"hang"}')).status).toBe(502)
+  const failed = await post('{"model":"hang"}')
+  expect(failed.status).toBe(502)
+  expect(await failed.text()).toContain('engine-headers/HEADER_DEADLINE')
   await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(1))
   const next = await post('{"model":"native-model"}')
   expect(next.status).toBe(200)
