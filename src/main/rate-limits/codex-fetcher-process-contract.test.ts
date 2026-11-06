@@ -1,13 +1,15 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RunProcess from '@orca/process-host'
 
-const { ptySpawnMock, resolveCodexCommandMock, stubScript } = vi.hoisted(() => ({
+const { ptySpawnMock, resolveCodexCommandMock, spawnProgramMock, stubScript } = vi.hoisted(() => ({
   stubScript: { path: '' },
   ptySpawnMock: vi.fn(),
-  resolveCodexCommandMock: vi.fn()
+  resolveCodexCommandMock: vi.fn(),
+  spawnProgramMock: vi.fn()
 }))
 
 // Runs the node stub in place of the resolved CLI, through the real chokepoint.
@@ -21,12 +23,14 @@ vi.mock('@orca/process-host', async (importOriginal) => {
   const actual = await importOriginal<typeof RunProcess>()
   return {
     ...actual,
-    spawnProcess: (spec: Parameters<typeof actual.spawnProcess>[0]) =>
-      actual.spawnProcess({
+    spawnProcess: (spec: Parameters<typeof actual.spawnProcess>[0]) => {
+      spawnProgramMock(spec.program)
+      return actual.spawnProcess({
         ...spec,
         program: process.execPath,
         args: [stubScript.path, ...(spec.args ?? [])]
       })
+    }
   }
 })
 
@@ -156,6 +160,34 @@ describe('Codex rate-limit process contract', () => {
     })
     expect(ptySpawnMock).not.toHaveBeenCalled()
   })
+
+  it.skipIf(process.platform === 'win32')(
+    'reads the saved account quota without entering the installed account router',
+    async () => {
+      const bin = join(tempRoot, 'managed-bin')
+      mkdirSync(bin)
+      const launcher = join(bin, 'codex')
+      const native = join(tempRoot, 'native-codex')
+      const contents = '#!/bin/sh\n# Opka native account launcher v1\nexit 7\n'
+      writeFileSync(launcher, contents, { mode: 0o700 })
+      writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
+      const entry = {
+        nativeExecutable: native,
+        shimSha256: createHash('sha256').update(contents).digest('hex')
+      }
+      writeFileSync(
+        join(bin, '.opka-native-cli.json'),
+        JSON.stringify({ version: 1, providers: { codex: entry, claude: entry } }),
+        { mode: 0o600 }
+      )
+      resolveCodexCommandMock.mockReturnValue(launcher)
+
+      await expect(
+        fetchCodexRateLimits({ codexHomePath: process.env.ORCA_EXPECTED_CODEX_HOME })
+      ).resolves.toMatchObject({ status: 'ok', weekly: { usedPercent: 29 } })
+      expect(spawnProgramMock).toHaveBeenCalledWith(native)
+    }
+  )
 
   it.each(['localhost;*.fixture.invalid', ''])(
     'passes configured proxy and bypass %j to the actual probe',

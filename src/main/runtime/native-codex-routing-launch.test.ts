@@ -1,5 +1,5 @@
 import { removeEngineGrantConnection } from '../codex-routing/engine-grant-files'
-import { rmSync } from 'node:fs'
+import { realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import {
@@ -44,7 +44,7 @@ it('wires the real launch→host→DB→HTTP path without initial double admissi
   expect(plan).toMatchObject({
     accountId: null,
     poolId: 'existing-roster',
-    env: { CODEX_HOME: f.home }
+    env: { CODEX_HOME: realpathSync(f.home) }
   })
   expect(plan.envToDelete).toEqual(
     expect.arrayContaining(['CODEX_ACCESS_TOKEN', 'CODEX_SQLITE_HOME'])
@@ -95,7 +95,7 @@ it('atomically hands off the exact one-hop PTY admission then reads live full po
   expect((await nativePlanTurn(plan, '2')).status).toBe(200)
   expect(f.db.listAccountPoolAssignments()[0].accountId).toBe(f.b.id)
   expect(f.hostAdapters.subscribeToPtyExit).toHaveBeenCalledTimes(2)
-  expect(plan.env.CODEX_HOME).toBe(f.home)
+  expect(plan.env.CODEX_HOME).toBe(realpathSync(f.home))
 })
 
 it('gives a separately spawned nested CLI a fresh admission without stealing its live parent lease', async () => {
@@ -226,4 +226,37 @@ it('chooses connected B over higher-priority native-roster-ready A without an en
   expect((await nativePlanTurn(plan)).status).toBe(200)
   expect(f.db.listAccountPoolAssignments()[0].accountId).toBe(f.b.id)
   expect(f.settings.codexManagedAccounts?.map((account) => account.id)).toContain(f.a.id)
+})
+
+it('refreshes a previously unready canonical Stop before the next native HTTP admission', async () => {
+  const f = await fixture()
+  f.plans.add(nativeLaunchId)
+  let settled = false
+  const order: string[] = []
+  routingHooks.boundary.mockImplementation(() => ({
+    canSwitch: () => settled,
+    refreshNativeEvidence: () => {
+      order.push('refresh')
+      settled = true
+    },
+    snapshot: () => {
+      order.push('snapshot')
+      const ready = settled
+      return { canSwitch: () => ready, onBoundaryAccepted: () => {} }
+    },
+    dispose: () => {}
+  }))
+  const plan = await prepareNativeCliAccountLaunch(f.runtime, request)
+  expect((await nativePlanTurn(plan)).status).toBe(200)
+  expect(f.db.listAccountPoolAssignments()[0].accountId).toBe(f.a.id)
+  const policy = f.settings.accountPools?.[0]
+  if (!policy) {
+    throw new Error('Missing saved pool')
+  }
+  policy.revision++
+  policy.members[0].state = 'disabled'
+  expect(order).not.toContain('refresh')
+  expect((await nativePlanTurn(plan, '2')).status).toBe(200)
+  expect(order.slice(-2)).toEqual(['refresh', 'snapshot'])
+  expect(f.db.listAccountPoolAssignments()[0].accountId).toBe(f.b.id)
 })

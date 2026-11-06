@@ -1,3 +1,6 @@
+import { ProviderAccountQuota } from './ProviderAccountQuota'
+import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 import { Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import type { CodexRateLimitAccountsState } from '../../../../shared/managed-account-types'
 import { translate } from '@/i18n/i18n'
@@ -15,7 +18,8 @@ import type { AccountsPaneSectionModel } from './accounts-pane-types'
 
 export function renderCodexAccountRow(
   account: CodexRateLimitAccountsState['accounts'][number],
-  model: AccountsPaneSectionModel
+  model: AccountsPaneSectionModel,
+  presentation: { controls?: ReactNode; automatic?: boolean } = {}
 ): React.JSX.Element {
   const {
     accountRuntime,
@@ -59,13 +63,14 @@ export function renderCodexAccountRow(
       key={account.id}
       role="group"
       aria-label={account.email}
-      className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
+      className={cn(
+        'w-full space-y-3 rounded-md border px-3 py-2.5 text-left transition-colors',
         needsReauthentication
           ? 'border-destructive/50 bg-destructive/5'
           : isActive
             ? 'border-foreground/20 bg-accent/15'
             : 'border-border/70'
-      }`}
+      )}
     >
       <div className="flex w-full items-center justify-between gap-3 max-md:flex-col max-md:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
@@ -77,7 +82,7 @@ export function renderCodexAccountRow(
             >
               {getCodexAccountRuntimeLabel(account, accountRuntime.label)}
             </Badge>
-            {isActive ? (
+            {isActive && !presentation.automatic ? (
               <Badge
                 variant="outline"
                 className="h-4 shrink-0 rounded px-1.5 text-[10px] font-medium leading-none text-foreground/80"
@@ -95,9 +100,10 @@ export function renderCodexAccountRow(
             ) : null}
           </div>
           <div
-            className={`flex min-w-0 items-center gap-1.5 text-[11px] max-sm:flex-wrap ${
+            className={cn(
+              'flex min-w-0 items-center gap-1.5 text-[11px] max-sm:flex-wrap',
               needsReauthentication ? 'text-destructive' : 'text-muted-foreground'
-            }`}
+            )}
           >
             {accountDetail ? (
               <>
@@ -134,7 +140,7 @@ export function renderCodexAccountRow(
                 accountRuntimeView
               )
             }}
-            disabled={isBusy || isActive}
+            disabled={isBusy || isActive || presentation.automatic}
           >
             {translate('accounts.useForNewChats', 'Use for new chats')}
           </Button>
@@ -184,6 +190,8 @@ export function renderCodexAccountRow(
           </Button>
         </div>
       </div>
+      <ProviderAccountQuota provider="codex" accountId={account.id} model={model} />
+      {presentation.controls}
     </div>
   )
 }

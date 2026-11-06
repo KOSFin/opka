@@ -3,6 +3,8 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { MobileAccountsScreen } from './MobileAccountsScreen'
+import { decodeAccountsSnapshot } from '../components/AccountUsage'
+import { accountPoolSnapshotRefreshKey } from './mobile-account-presentation'
 
 const dependencies = vi.hoisted(() => ({
   back: vi.fn(),
@@ -105,7 +107,19 @@ vi.mock('./MobileAccountSignInSection', () => ({
   MobileAccountSignInSection: () => createElement('SignInSection')
 }))
 vi.mock('./MobileAccountPoolSection', () => ({
-  MobileAccountPoolSection: () => createElement('AccountPoolSection')
+  MobileAccountPoolSection: ({
+    presentation
+  }: {
+    presentation: import('./mobile-account-presentation').MobileAccountPresentation
+  }) =>
+    createElement(
+      'AccountPoolSection',
+      null,
+      presentation.renderSystemAccount?.('claude', false),
+      presentation.renderSystemAccount?.('codex', false),
+      presentation.renderAccount?.('codex', 'codex-1', null, false),
+      presentation.renderProviderFooter?.('codex')
+    )
 }))
 
 vi.mock('../components/AgentIcons', () => ({
@@ -513,26 +527,37 @@ describe('accounts route Codex reset credit', () => {
     expect(dependencies.back).toHaveBeenCalledOnce()
     act(() => renderer.unmount())
   })
-  it('switches visible account controls while retaining both sections for unsaved drafts', async () => {
+  it('shows one account surface with no separate account/pool tabs', async () => {
     const renderer = await renderAccountsRoute()
-    const panels = [
-      renderer.root.findByProps({ testID: 'account-management-panel' }),
-      renderer.root.findByProps({ testID: 'account-pools-panel' })
-    ]
-    const expectVisibility = (accountsVisible: boolean) => {
-      panels.forEach((panel, index) => {
-        const hidden = index === 0 ? !accountsVisible : accountsVisible
-        expect(panel.props.style?.display === 'none').toBe(hidden)
-        expect(panel.props.accessibilityElementsHidden).toBe(hidden)
-        expect(panel.props.importantForAccessibility).toBe(hidden ? 'no-hide-descendants' : 'auto')
-      })
-    }
-    expectVisibility(true)
-    await act(async () => pressables(renderer, 'Pools & switching')[0]?.props.onPress())
-    expectVisibility(false)
-    await act(async () => pressables(renderer, 'Accounts')[0]?.props.onPress())
-    expectVisibility(true)
-    expect(systemDefaultButtons(renderer).length).toBeGreaterThan(0)
+    expect(pressables(renderer, 'Pools & switching')).toHaveLength(0)
+    expect(renderer.root.findAllByType('AccountPoolSection')).toHaveLength(1)
+    expect(systemDefaultButtons(renderer)).toHaveLength(2)
+    expect(pressables(renderer, 'Use dev@example.com for new manual codex chats')).toHaveLength(1)
     act(() => renderer.unmount())
   })
+})
+
+it('refreshes pool candidates on inactive usage or selected-account changes', () => {
+  const snapshot = decodeAccountsSnapshot(AVAILABLE_SNAPSHOT)
+  const before = accountPoolSnapshotRefreshKey(snapshot, 0)
+  const inactive = {
+    ...snapshot,
+    rateLimits: {
+      ...snapshot.rateLimits,
+      inactiveCodexAccounts: [
+        { accountId: 'other', rateLimits: null, updatedAt: 101, isFetching: false }
+      ]
+    }
+  }
+  expect(accountPoolSnapshotRefreshKey(inactive, 0)).not.toBe(before)
+  expect(
+    accountPoolSnapshotRefreshKey(
+      {
+        ...snapshot,
+        codex: { ...snapshot.codex, activeAccountIdsByRuntime: { host: null, wsl: {} } }
+      },
+      0
+    )
+  ).not.toBe(before)
+  expect(accountPoolSnapshotRefreshKey(snapshot, 1)).not.toBe(before)
 })

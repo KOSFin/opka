@@ -129,7 +129,7 @@ export function MobileNativePoolRoutingNotice() {
     <View style={poolStyles.memberSettings}>
       <Text style={styles.rowSubtitle}>
         {value.state
-          ? 'Connect each included account once for ordinary CLI commands. Sign in with that same account; it stays in this host’s account list.'
+          ? 'CLI switching needs one additional authorization for each saved account. Use the same account when prompted; this connects switching without adding another account.'
           : 'Checking CLI connections…'}
       </Text>
       {value.state?.shellSetup ? (

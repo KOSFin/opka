@@ -39,6 +39,24 @@ const fake = vi.hoisted(() => {
   }
   return state
 })
+vi.mock('@/runtime/runtime-rpc-client', () => ({
+  callRuntimeRpc: async (target: RuntimeClientTarget, method: string) => {
+    if (method === 'settings.get') {
+      return { settings: {} }
+    }
+    if (method !== 'accountPool.list') {
+      return {}
+    }
+    const claude = fake.rosters.get(target.kind === 'environment' ? target.environmentId : 'local')
+    return {
+      capability: 'orchestration.account-pools.v1',
+      policies: [],
+      accounts: { claude, codex: { accounts: [], activeAccountId: null } },
+      candidates: [],
+      assignments: []
+    }
+  }
+}))
 vi.mock('@/i18n/i18n', () => ({
   i18n: { language: 'en' },
   translate: (_key: string, fallback: string, values?: Record<string, string | number>) =>

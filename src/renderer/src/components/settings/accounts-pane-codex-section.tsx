@@ -1,14 +1,13 @@
+import { AccountPoolSection } from './AccountPoolSection'
+import { CodexSystemLoginRow } from './CodexSystemLoginRow'
 import { AlertTriangle, Loader2, Plus, X } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
-import { selectCodexProviderAccount } from '@/runtime/runtime-provider-accounts-client'
-import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { OpenAIIcon } from '../status-bar/icons'
 import { CodexLoginLinkNotice } from './CodexLoginLinkNotice'
 import { SearchableSetting } from './SearchableSetting'
 import { getAccountsCodexSearchEntries } from './accounts-search'
-import { getCodexSystemDefaultSubtitle } from './accounts-pane-runtime'
 import type { AccountsPaneSectionModel } from './accounts-pane-types'
 import { renderCodexAccountRow } from './accounts-pane-codex-account-row'
 
@@ -26,10 +25,7 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
     remoteAccountScopeNotice,
     runCodexAccountAction,
     accountOwner,
-    systemCodexActive,
-    systemCodexIdentity,
     systemCodexMissingSignIn,
-    systemCodexNeedsSignIn,
     visibleCodexAccounts,
     wslCapabilitiesLoading
   } = model
@@ -197,93 +193,60 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
         this desktop, which has nothing to do with the server named above. */}
         {isRemoteAccountScope ? null : <CodexLoginLinkNotice />}
 
-        <div className="space-y-2">
-          <div
-            className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
-              systemCodexNeedsSignIn
-                ? 'border-destructive/50 bg-destructive/5'
-                : systemCodexActive
-                  ? 'border-foreground/20 bg-accent/15'
-                  : 'border-border/70'
-            }`}
-          >
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-medium">
-                  {translate('accounts.cliLoginOnHost', 'CLI login on this host')}
-                </span>
-                {systemCodexActive ? (
-                  <Badge
-                    variant="outline"
-                    className="h-4 shrink-0 rounded px-1.5 text-[10px] font-medium leading-none text-foreground/80"
-                  >
-                    {translate('accounts.defaultForNewChats', 'Default for new chats')}
-                  </Badge>
-                ) : null}
-                {systemCodexNeedsSignIn ? (
-                  <Badge
-                    variant="destructive"
-                    className="h-4 shrink-0 rounded px-1.5 text-[10px] font-medium leading-none"
-                  >
-                    {translate('auto.components.settings.AccountsPane.93c47b333a', 'Needs sign-in')}
-                  </Badge>
-                ) : null}
+        {accountRuntime.runtime === 'host' ? (
+          <AccountPoolSection
+            target={accountOwner}
+            hostLabel={accountRuntimeSentenceLabel}
+            provider="codex"
+            refreshKey={model.poolUsageRevision}
+            accountIds={visibleCodexAccounts.map((account) => account.id)}
+            beforeAccounts={(automatic) => (
+              <details className="space-y-2">
+                <summary className="cursor-pointer text-xs font-medium">
+                  {automatic
+                    ? 'Existing CLI login (manual mode only)'
+                    : model.systemCodexActive
+                      ? 'Manual default: existing CLI login'
+                      : 'Existing CLI login'}
+                </summary>
+                <CodexSystemLoginRow model={model} automatic={automatic} />
+              </details>
+            )}
+            renderAccount={(accountId, controls, automatic) => {
+              const account = visibleCodexAccounts.find((entry) => entry.id === accountId)
+              return account ? renderCodexAccountRow(account, model, { controls, automatic }) : null
+            }}
+            fallbackAccounts={(manualBlocked) => (
+              <div className="space-y-2">
+                <CodexSystemLoginRow model={model} automatic={manualBlocked} />
+                {visibleCodexAccounts.map((account) =>
+                  renderCodexAccountRow(account, model, { automatic: manualBlocked })
+                )}
               </div>
-              <span
-                className={`truncate text-[11px] ${
-                  systemCodexNeedsSignIn ? 'text-destructive' : 'text-muted-foreground'
-                }`}
-              >
-                {systemCodexNeedsSignIn
-                  ? systemCodexMissingSignIn
-                    ? translate(
-                        'auto.components.settings.AccountsPane.codexSystemDefaultNeedsSignIn',
-                        'No Codex sign-in was found for {{value0}}.',
-                        { value0: accountRuntimeSentenceLabel }
-                      )
-                    : translate(
-                        'auto.components.settings.AccountsPane.fd62f37c24',
-                        'Codex reported this {{value0}} login is out of date.',
-                        { value0: accountRuntimeSentenceLabel }
-                      )
-                  : getCodexSystemDefaultSubtitle(systemCodexIdentity, accountRuntimeSentenceLabel)}
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                void runCodexAccountAction('select:system', () =>
-                  selectCodexProviderAccount(accountOwner, {
-                    accountId: null,
-                    runtime: accountRuntime.runtime,
-                    wslDistro: accountRuntime.wslDistro
-                  })
-                )
-              }
-              disabled={codexAction !== 'idle' || accountRuntimeUnavailable || systemCodexActive}
-            >
-              {translate('accounts.useForNewChats', 'Use for new chats')}
-            </Button>
+            )}
+          />
+        ) : (
+          <div className="space-y-2">
+            <CodexSystemLoginRow model={model} />
+            {visibleCodexAccounts.length === 0 ? (
+              <div className="rounded-md border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
+                {isRemoteAccountScope
+                  ? translate(
+                      'auto.components.settings.AccountsPane.remoteEmptyCodexAccounts',
+                      'No managed Codex accounts on {{value0}}. It uses its system default Codex login; add accounts on that server.',
+                      { value0: accountRuntimeSentenceLabel }
+                    )
+                  : translate(
+                      'auto.components.settings.AccountsPane.b4c9450319',
+                      "No managed Codex accounts for {{value0}}. Orca will use that environment's system default Codex login until you add one here.",
+                      { value0: accountRuntimeSentenceLabel }
+                    )}
+              </div>
+            ) : (
+              visibleCodexAccounts.map((account) => renderCodexAccountRow(account, model))
+            )}
           </div>
-          {visibleCodexAccounts.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
-              {isRemoteAccountScope
-                ? translate(
-                    'auto.components.settings.AccountsPane.remoteEmptyCodexAccounts',
-                    'No managed Codex accounts on {{value0}}. It uses its system default Codex login; add accounts on that server.',
-                    { value0: accountRuntimeSentenceLabel }
-                  )
-                : translate(
-                    'auto.components.settings.AccountsPane.b4c9450319',
-                    "No managed Codex accounts for {{value0}}. Orca will use that environment's system default Codex login until you add one here.",
-                    { value0: accountRuntimeSentenceLabel }
-                  )}
-            </div>
-          ) : (
-            visibleCodexAccounts.map((account) => renderCodexAccountRow(account, model))
-          )}
-        </div>
+        )}
       </SearchableSetting>
     </section>
   )

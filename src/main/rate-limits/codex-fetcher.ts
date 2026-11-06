@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs'
 import type { CodexRateLimitResetOutcome, ProviderRateLimits } from '../../shared/rate-limit-types'
+import { resolveUnwrappedNativeCliCommand } from '../../shared/native-cli-unwrapped-command'
 import { isCodexAuthError } from '../../shared/codex-auth-errors'
 import { buildWslExecArgs, buildWslLoginShellCommand } from '../../shared/wsl-login-shell-command'
 import { parseWslUncPath } from '../../shared/wsl-paths'
@@ -91,7 +93,11 @@ async function fetchViaRpc(options?: CodexRateLimitFetchOptions): Promise<Provid
   const wslCodex = options?.codexHomePath
     ? buildWslCodexCommand(options.codexHomePath, codexArgs)
     : null
-  const codexCommand = wslCodex ? 'codex' : resolveCodexCommand()
+  const resolvedCommand = wslCodex ? 'codex' : resolveCodexCommand()
+  const codexCommand =
+    !wslCodex && existsSync(resolvedCommand)
+      ? resolveUnwrappedNativeCliCommand('codex', resolvedCommand)
+      : resolvedCommand
   // Why the bare CLI: spawnProcess resolves an npm `codex.cmd` shim past cmd.exe itself.
   // Why a worker thread (#27362): a cold codex.exe can block process creation for seconds.
   const child = spawnProcessOnWorkerThread({

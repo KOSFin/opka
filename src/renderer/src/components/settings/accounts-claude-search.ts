@@ -10,6 +10,12 @@ export const getAccountsClaudeSearchEntries = createLocalizedCatalog(() => [
       'Optional account switching for Claude while preserving shared chat context.'
     ),
     keywords: [
+      'pool',
+      'priority',
+      'rotation',
+      'sequential',
+      'balanced',
+      'drain',
       ...translateSearchKeyword('auto.components.settings.accounts.search.e14049e1a8', 'claude'),
       ...translateSearchKeyword('auto.components.settings.accounts.search.06662af91e', 'account'),
       ...translateSearchKeyword('auto.components.settings.accounts.search.5b3f18ef4a', 'switch'),

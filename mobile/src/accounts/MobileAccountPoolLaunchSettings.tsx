@@ -23,6 +23,12 @@ export function MobileAccountPoolLaunchSettings({
   ]
   return (
     <View style={poolStyles.content}>
+      <Text style={styles.rowTitle}>
+        Selection mode:{' '}
+        {policy.applyToNewWork && policy.strategy !== 'manual'
+          ? 'Automatic pool'
+          : 'Manual account'}
+      </Text>
       <View style={poolStyles.toggleRow}>
         <Text style={[styles.rowTitle, styles.rowMain]}>Use automatic pool</Text>
         <MobileSwitch

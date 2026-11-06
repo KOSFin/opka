@@ -9,20 +9,31 @@ import { PickerModal } from '../components/PickerModal'
 import { MobileAccountPoolCard } from './MobileAccountPoolCard'
 import { poolStyles } from './mobile-account-pool-styles'
 import { styles } from './mobile-accounts-screen-styles'
+import {
+  mergeMobileAccountPoolDrafts,
+  type MobileAccountPresentation
+} from './mobile-account-presentation'
 
 type PoolPicker = { policyId: string; accountId?: string; value: string }
 export function MobileAccountPoolSection({
   client,
   connected,
   hostName,
-  refreshKey = 0
+  refreshKey = 0,
+  presentation,
+  refreshUsage
 }: {
   client: RpcClient | null
   connected: boolean
   hostName: string
-  refreshKey?: number
+  refreshKey?: number | string
+  presentation?: MobileAccountPresentation
+  refreshUsage?: () => Promise<void>
 }) {
   const dirty = useRef(new Set<string>())
+  const readSequence = useRef(0)
+  const saveSequence = useRef<number | null>(null)
+  const previousProjection = useRef<number | string | undefined>(undefined)
   const generation = client?.getGeneration?.() ?? 0
   const ownerClient = useRef({ client, generation })
   const latestOwner = useRef({ client, generation })
@@ -47,43 +58,43 @@ export function MobileAccountPoolSection({
   const [saved, setSaved] = useState(false)
   const [picker, setPicker] = useState<PoolPicker | null>(null)
   const refresh = useCallback(async () => {
-    if (!client || !connected) {
+    if (!client || !connected || busy || saveSequence.current !== null) {
       return
     }
     const requestOwner = { client, generation }
+    const sequence = ++readSequence.current
     setBusy(true)
     setSaved(false)
     setError('')
     try {
+      await refreshUsage?.()
       const next = accountPoolsRead.interpret(await accountPoolsRead.request(client))
-      if (!owns(requestOwner)) {
+      if (!owns(requestOwner) || sequence !== readSequence.current) {
         return
       }
       verifiedOwner.current = requestOwner
       setView(next)
-      setDrafts((previous) =>
-        accountPoolDrafts(next).map((policy) =>
-          dirty.current.has(policy.id)
-            ? (previous.find((entry) => entry.id === policy.id) ?? policy)
-            : policy
-        )
-      )
+      setDrafts((previous) => mergeMobileAccountPoolDrafts(next, previous, dirty.current))
     } catch (cause) {
-      if (owns(requestOwner)) {
+      if (owns(requestOwner) && sequence === readSequence.current) {
         setError(cause instanceof Error ? cause.message : String(cause))
       }
     } finally {
-      if (owns(requestOwner)) {
+      if (owns(requestOwner) && sequence === readSequence.current) {
         setBusy(false)
       }
     }
-  }, [client, connected, generation])
+  }, [client, connected, generation, refreshUsage, busy])
   useEffect(() => {
     let stale = false
     const requestOwner = { client, generation }
     if (ownerClient.current.client !== client || ownerClient.current.generation !== generation) {
       ownerClient.current = requestOwner
       verifiedOwner.current = null
+      previousProjection.current = undefined
+      readSequence.current += 1
+      saveSequence.current = null
+      setBusy(false)
       setPicker(null)
       dirty.current.clear()
       setView(null)
@@ -91,41 +102,35 @@ export function MobileAccountPoolSection({
       setSaved(false)
     }
     if (!client || !connected) {
+      previousProjection.current = undefined
       return
     }
-    setBusy(true)
+    if (busy || saveSequence.current !== null || previousProjection.current === refreshKey) {
+      return
+    }
+    previousProjection.current = refreshKey
+    const sequence = ++readSequence.current
     void accountPoolsRead
       .request(client)
       .then((result) => {
-        if (stale || !owns(requestOwner)) {
+        if (stale || !owns(requestOwner) || sequence !== readSequence.current) {
           return
         }
         const next = accountPoolsRead.interpret(result)
         verifiedOwner.current = requestOwner
         setView(next)
-        setDrafts((previous) =>
-          accountPoolDrafts(next).map((policy) =>
-            dirty.current.has(policy.id)
-              ? (previous.find((entry) => entry.id === policy.id) ?? policy)
-              : policy
-          )
-        )
+        setDrafts((previous) => mergeMobileAccountPoolDrafts(next, previous, dirty.current))
         setError('')
       })
       .catch((cause: unknown) => {
-        if (!stale && owns(requestOwner)) {
+        if (!stale && owns(requestOwner) && sequence === readSequence.current) {
           setError(cause instanceof Error ? cause.message : String(cause))
-        }
-      })
-      .finally(() => {
-        if (!stale && owns(requestOwner)) {
-          setBusy(false)
         }
       })
     return () => {
       stale = true
     }
-  }, [client, connected, refreshKey, generation])
+  }, [client, connected, refreshKey, generation, busy])
   function change(policy: AccountPoolPolicy) {
     if (!owns({ client, generation })) {
       return
@@ -135,10 +140,19 @@ export function MobileAccountPoolSection({
     setSaved(false)
   }
   async function save(policy: AccountPoolPolicy) {
-    if (!client || !connected || busy || !verifiedOwner.current || !owns(verifiedOwner.current)) {
+    if (
+      !client ||
+      !connected ||
+      busy ||
+      saveSequence.current !== null ||
+      !verifiedOwner.current ||
+      !owns(verifiedOwner.current)
+    ) {
       return
     }
     const requestOwner = { client, generation }
+    const sequence = ++readSequence.current
+    saveSequence.current = sequence
     setBusy(true)
     setSaved(false)
     setError('')
@@ -149,30 +163,27 @@ export function MobileAccountPoolSection({
           expectedRevision: policy.revision
         })
       )
-      if (!owns(requestOwner)) {
+      if (!owns(requestOwner) || sequence !== readSequence.current) {
         return
       }
       const next = accountPoolsRead.interpret(await accountPoolsRead.request(client))
-      if (!owns(requestOwner)) {
+      if (!owns(requestOwner) || sequence !== readSequence.current) {
         return
       }
       setView(next)
-      setDrafts((previous) =>
-        previous.map((entry) =>
-          entry.id === policy.id
-            ? (next.policies.find((savedPolicy) => savedPolicy.id === policy.id) ?? entry)
-            : entry
-        )
-      )
       dirty.current.delete(policy.id)
+      setDrafts((previous) => mergeMobileAccountPoolDrafts(next, previous, dirty.current))
       setSaved(true)
     } catch (cause) {
-      if (owns(requestOwner)) {
+      if (owns(requestOwner) && sequence === readSequence.current) {
         setError(cause instanceof Error ? cause.message : String(cause))
       }
     } finally {
-      if (owns(requestOwner)) {
-        setBusy(false)
+      if (saveSequence.current === sequence) {
+        saveSequence.current = null
+        if (owns(requestOwner)) {
+          setBusy(false)
+        }
       }
     }
   }
@@ -201,19 +212,24 @@ export function MobileAccountPoolSection({
   const disabled = busy || !connected
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionHeading}>Account pools</Text>
+      <Text style={styles.sectionHeading}>Accounts & switching</Text>
       <Text style={styles.rowSubtitle}>
-        Execution host: {hostName || 'this host'}. Pools apply to managed launches on this host.
+        Execution host: {hostName || 'this host'}. One account list for manual selection and
+        automatic pools.
       </Text>
       <Text style={styles.rowSubtitle}>
-        Manual pauses selection. Sequential uses the lowest priority first. Balanced spreads
-        launches. Drain stops new assignments.
+        Choose manual mode or an automatic pool for each provider. Changes apply after Save.
       </Text>
       {error ? (
         <Text accessibilityRole="alert" style={styles.errorText}>
           Account pools unavailable or could not save. Older hosts may require an update. {error}
         </Text>
       ) : null}
+      {!view && error
+        ? presentation?.renderUnavailableAccounts?.(
+            !/unknown method|method not found|not supported/i.test(error)
+          )
+        : null}
       {!view && !error ? (
         <Text style={styles.rowSubtitle}>
           {connected ? 'Loading pools…' : 'Connect to manage pools.'}
@@ -232,6 +248,7 @@ export function MobileAccountPoolSection({
         ? drafts.map((policy) => (
             <MobileAccountPoolCard
               key={policy.id}
+              presentation={presentation}
               policy={policy}
               routingTarget={{ client, connected, hostName }}
               view={view}

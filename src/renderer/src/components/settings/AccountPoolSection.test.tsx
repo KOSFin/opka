@@ -180,3 +180,68 @@ it('saves without invisible deleted registrations while preserving surviving mem
     })
   )
 })
+
+it('embeds one account card with management and switching controls in the provider section', async () => {
+  rpc.mockResolvedValue(snapshot)
+  render(
+    <AccountPoolSection
+      target={{ kind: 'local' }}
+      hostLabel="Local"
+      provider="codex"
+      renderAccount={(_id, controls, automatic) => (
+        <div role="group" aria-label="test@example.test">
+          <p>test@example.test</p>
+          <button disabled={automatic}>Choose this account</button>
+          <button>Remove account</button>
+          {controls}
+        </div>
+      )}
+    />
+  )
+  expect(await screen.findByText('test@example.test')).toBeTruthy()
+  expect(screen.getAllByText('test@example.test')).toHaveLength(1)
+  expect(screen.queryByRole('button', { name: /Claude/ })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Remove account' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Choose this account' }).hasAttribute('disabled')).toBe(
+    false
+  )
+  fireEvent.click(screen.getByRole('switch', { name: 'Use automatic pool' }))
+  expect(screen.getByText('Selection mode: Automatic pool')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Choose this account' }).hasAttribute('disabled')).toBe(
+    true
+  )
+  expect(screen.getByRole('button', { name: 'Save Codex settings' })).toBeTruthy()
+})
+
+it('updates host quota from a usage push without losing an unsaved mode change', async () => {
+  let next = snapshot
+  rpc.mockImplementation(() => Promise.resolve(next))
+  const target = { kind: 'environment', environmentId: 'owner' } as const
+  const ui = render(<AccountPoolSection target={target} hostLabel="Server" refreshKey="old" />)
+  fireEvent.click(await screen.findByRole('button', { name: /Codex/ }))
+  fireEvent.click(screen.getByRole('switch', { name: 'Use automatic pool' }))
+  next = { ...snapshot, candidates: [{ ...snapshot.candidates[0], quota: 'available' }] }
+  ui.rerender(<AccountPoolSection target={target} hostLabel="Server" refreshKey="fresh" />)
+  expect(await screen.findByText(/Auth: ready · Quota: available/)).toBeTruthy()
+  expect(
+    screen.getByRole('switch', { name: 'Use automatic pool' }).getAttribute('aria-checked')
+  ).toBe('true')
+  expect(screen.getByText('Unsaved changes. Save to apply.')).toBeTruthy()
+  expect(rpc.mock.calls.every((call) => call[1] !== 'accountPool.update')).toBe(true)
+})
+
+it('refreshes host usage before projecting pool quota and preserves a dirty draft', async () => {
+  rpc.mockResolvedValue(snapshot)
+  render(<AccountPoolSection target={{ kind: 'local' }} hostLabel="Local" />)
+  fireEvent.click(await screen.findByRole('button', { name: /Codex/ }))
+  fireEvent.click(screen.getByRole('switch', { name: 'Use automatic pool' }))
+  rpc.mockClear()
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh pools' }))
+  await waitFor(() =>
+    expect(rpc.mock.calls.map((call) => call[1])).toEqual(['accounts.list', 'accountPool.list'])
+  )
+  expect(rpc.mock.calls[0][2]).toEqual({ refreshUsage: true })
+  expect(
+    screen.getByRole('switch', { name: 'Use automatic pool' }).getAttribute('aria-checked')
+  ).toBe('true')
+})

@@ -6,6 +6,7 @@ import type {
 } from '../../../../shared/managed-account-types'
 import type {
   ProviderRateLimits,
+  RateLimitState,
   RateLimitRuntimeTarget
 } from '../../../../shared/rate-limit-types'
 import type { CodexConfigSyncStatus } from '../../../../shared/codex-config-sync-types'
@@ -65,6 +66,8 @@ export type ClaudeAccountActionRunner = (
 ) => Promise<void>
 
 export type AccountsPaneSectionModel = {
+  poolUsageRevision?: string
+  poolUsageSnapshot?: RateLimitState | null
   settings: GlobalSettings
   /** Host whose accounts the pane lists and mutates. */
   accountOwner: RuntimeClientTarget

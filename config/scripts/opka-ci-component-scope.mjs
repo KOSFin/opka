@@ -72,7 +72,7 @@ export function evaluateCiResults(scope, needs) {
       scope.reused !== false ||
       scope.static !== true ||
       scope.regression !== true ||
-      proof.reusedLanes.some((lane) => scope[lane] !== false)
+      CI_LANES.some((lane) => scope[lane] !== !proof.reusedLanes.includes(lane))
     ) {
       throw new Error('Invalid test-only follow-up qualification')
     }
@@ -138,7 +138,7 @@ export async function detectCiScope(env = process.env, findFollowup = findReusab
       ) {
         return {
           ...classifyCiPaths(proof.paths),
-          ...Object.fromEntries(proof.reusedLanes.map((lane) => [lane, false])),
+          ...Object.fromEntries(CI_LANES.map((lane) => [lane, !proof.reusedLanes.includes(lane)])),
           static: true,
           regression: true,
           reused: false,
@@ -149,7 +149,13 @@ export async function detectCiScope(env = process.env, findFollowup = findReusab
           tree,
           paths: proof.paths,
           followupProof: proof,
-          reasons: ['verified-test-only-follow-up']
+          reasons: [
+            proof.kind === 'account-pool-readiness-followup'
+              ? 'verified-account-pool-readiness-follow-up'
+              : proof.kind === 'account-pool-readiness-android-followup'
+                ? 'verified-account-pool-readiness-android-follow-up'
+                : 'verified-test-only-follow-up'
+          ]
         }
       }
     } catch {
