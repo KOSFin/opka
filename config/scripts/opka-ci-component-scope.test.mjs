@@ -56,11 +56,7 @@ describe('component CI routing', () => {
   it('keeps source-only selection targeted but routes build policy through the approved full suite', () => {
     expect(classifyCiPaths(['src/renderer/src/App.tsx']).full).toBe(false)
     expect(classifyCiPaths(['src/shared/pairing.ts']).full).toBe(false)
-    for (const path of [
-      'config/scripts/opka-ci-component-scope.mjs',
-      'config/vitest.config.ts',
-      '.github/workflows/pr.yml'
-    ]) {
+    for (const path of ['config/vitest.config.ts', '.github/workflows/pr.yml']) {
       expect(classifyCiPaths([path]).full).toBe(true)
     }
     expect(classifyCiPaths(['src/renderer/src/App.tsx', 'pnpm-lock.yaml']).full).toBe(true)
@@ -83,6 +79,36 @@ describe('component CI routing', () => {
       expect(classifyCiPaths([path]).full).toBe(true)
     }
     expect(classifyCiPaths(['config/scripts/contract.test.mjs', 'pnpm-lock.yaml']).full).toBe(true)
+  })
+  it('checks release admission and viewport repairs without rebuilding application artifacts', () => {
+    const paths = [
+      'config/scripts/opka-release-qualification.mjs',
+      'config/scripts/opka-release-qualification.test.mjs',
+      'config/scripts/opka-ci-component-scope.mjs',
+      'config/scripts/opka-ci-component-scope.test.mjs',
+      'config/scripts/opka_android_target_viewport.py',
+      'config/scripts/opka_android_task_fields_test.py',
+      'config/scripts/fixtures/android-webview-accessibility/accounts-deep-offscreen.xml'
+    ]
+    for (const path of paths.slice(0, 4)) {
+      expect(CI_LANES.filter((lane) => classifyCiPaths([path])[lane])).toEqual([
+        'static',
+        'regression'
+      ])
+    }
+    const scope = classifyCiPaths(paths)
+    expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static', 'regression', 'android'])
+    expect(scope.full).toBe(false)
+    for (const path of [
+      'mobile/src/accounts/MobileAccountPoolCard.tsx',
+      'src/main/index.ts',
+      'pnpm-lock.yaml'
+    ]) {
+      expect(
+        classifyCiPaths([...paths, path]).installers || classifyCiPaths([...paths, path]).android
+      ).toBe(true)
+    }
+    expect(classifyCiPaths([...paths, 'config/scripts/opka-release-assets.mjs']).full).toBe(true)
   })
   it('routes Android acceptance drivers without rebuilding unrelated desktop and server installers', () => {
     const drivers = [

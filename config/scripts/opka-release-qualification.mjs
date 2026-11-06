@@ -4,6 +4,11 @@ import { pathToFileURL } from 'node:url'
 
 const REVIEWED_RELEASE_PATHS = new Set([
   'fork-docs/testing/ci-component-routing.md',
+  'config/scripts/opka_android_target_viewport.py',
+  'config/scripts/opka_android_task_fields_test.py',
+  'config/scripts/fixtures/android-webview-accessibility/accounts-deep-offscreen.xml',
+  'config/scripts/opka-ci-component-scope.mjs',
+  'config/scripts/opka-ci-component-scope.test.mjs',
   '.github/workflows/opka-android-update-acceptance.yml',
   '.github/workflows/opka-release.yml',
   'config/scripts/opka_android_ci_acceptance_test.py',

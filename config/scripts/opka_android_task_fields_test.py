@@ -129,6 +129,62 @@ class TargetViewportContract(unittest.TestCase):
         self.assertEqual(gestures[0][1:4:2], ('1541', '1298'))
         self.assertEqual(gestures[-1][1:4:2], ('1298', '1620'))
 
+    def test_directional_reveal_continues_past_four_only_for_new_geometry(self):
+        fixture = Path(__file__).with_name('fixtures') / 'android-webview-accessibility/accounts-deep-offscreen.xml'
+        frames = []
+        for offset in range(6):
+            root = ET.parse(fixture).getroot()
+            marker = next(node for node in root.iter('node') if node.get('text') == 'Use automatic pool')
+            marker.set('bounds', f'[105,{979 - offset * 40}][811,{1026 - offset * 40}]')
+            if offset == 5:
+                next(node for node in root.iter('node') if node.get('text') == 'codex pool mode').set('bounds', '[105,1660][947,1779]')
+            frames.append(root)
+        gestures, clock = [], iter(range(50))
+        def snapshot():
+            return frames[min(len(gestures), len(frames) - 1)]
+        target = find_visible(snapshot, lambda root: next(node for node in root.iter('node') if node.get('text') == 'codex pool mode'),
+                              'codex pool mode', 20, lambda *args: gestures.append(args),
+                              now=lambda: next(clock), pause=lambda _: None, reveal_forward=True)
+        self.assertEqual(target.get('bounds'), '[105,1660][947,1779]')
+        self.assertEqual(len(gestures), 5)
+
+    def test_directional_reveal_does_not_extend_for_text_noise_or_repeated_geometry(self):
+        root = self.captured()
+        gestures, clock, updates = [], iter(range(50)), [0]
+        marker = ET.SubElement(root, 'node', {'text': '0', 'bounds': '[1,1][20,20]'})
+        def snapshot():
+            updates[0] += 1
+            marker.set('text', str(updates[0]))
+            return root
+        with self.assertRaisesRegex(AssertionError, 'visible'):
+            find_visible(snapshot, self.save, 'Save task', 20, lambda *args: gestures.append(args),
+                         now=lambda: next(clock), pause=lambda _: None, reveal_forward=True)
+        self.assertEqual(len(gestures), 4)
+
+    def test_directional_reveal_does_not_extend_for_cycling_geometry(self):
+        root, gestures, clock = self.captured(), [], iter(range(50))
+        marker = ET.SubElement(root, 'node', {'bounds': '[1,1][20,20]'})
+        def snapshot():
+            offset = len(gestures) % 2
+            marker.set('bounds', f'[1,{1 + offset}][20,{20 + offset}]')
+            return root
+        with self.assertRaisesRegex(AssertionError, 'visible'):
+            find_visible(snapshot, self.save, 'Save task', 20, lambda *args: gestures.append(args),
+                         now=lambda: next(clock), pause=lambda _: None, reveal_forward=True)
+        self.assertEqual(len(gestures), 4)
+
+    def test_directional_reveal_has_an_eight_gesture_ceiling_even_with_progress(self):
+        root, gestures, clock, updates = self.captured(), [], iter(range(60)), [0]
+        marker = ET.SubElement(root, 'node', {'bounds': '[1,1][20,20]'})
+        def snapshot():
+            updates[0] += 1
+            marker.set('bounds', f'[1,{updates[0]}][20,{updates[0] + 20}]')
+            return root
+        with self.assertRaisesRegex(AssertionError, 'visible'):
+            find_visible(snapshot, self.save, 'Save task', 24, lambda *args: gestures.append(args),
+                         now=lambda: next(clock), pause=lambda _: None, reveal_forward=True)
+        self.assertEqual(len(gestures), 8)
+
     def test_clipped_targets_are_intersected_with_the_actual_window(self):
         root = ET.fromstring('<hierarchy><node bounds="[0,0][100,100]"><node bounds="[90,90][200,200]"/></node></hierarchy>')
         target = list(root.iter('node'))[-1]
