@@ -85,6 +85,40 @@ it('does not let native title requests steal the ROOT or consume its Stop permit
   expect(consumed).toBe(1)
 })
 
+it('defers saved priorities while a native title is live and applies them at the next quiet boundary', () => {
+  const { db, state, policy } = fixture()
+  policy.rotation = 'after-turn'
+  let consumed = 0
+  const session = createCodexPoolTurnSession({
+    db,
+    readState: () => state,
+    ownerPrefix: 'title-overlap',
+    canSwitch: () => true,
+    areRetainedTurnsSettled: () => true,
+    onBoundaryAccepted: () => {
+      consumed++
+    }
+  })
+  const first = session.begin(root('first'))
+  expect(first).toMatchObject({ accountId: 'a', policyRevision: 1 })
+  first.finish()
+  const title = session.begin({ threadId: 'title', turnId: 'title', auxiliary: true })
+  policy.revision = 2
+  policy.members[0].priority = 2
+  policy.members[1].priority = 1
+  const overlappingMain = session.begin(root('overlapping'))
+  expect(overlappingMain).toMatchObject({ accountId: 'a', policyRevision: 1 })
+  expect(session.activeRequests).toBe(2)
+  expect(consumed).toBe(0)
+  overlappingMain.finish()
+  title.finish()
+  expect(session.activeRequests).toBe(0)
+  const quietMain = session.begin(root('quiet'))
+  expect(quietMain).toMatchObject({ accountId: 'b', policyRevision: 2 })
+  expect(consumed).toBe(1)
+  quietMain.finish()
+})
+
 it('refuses stale child requests after a turn change instead of sending them under a new account', () => {
   const { session, policy } = fixture()
   session.begin(root('0')).finish()
