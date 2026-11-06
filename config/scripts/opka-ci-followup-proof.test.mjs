@@ -372,3 +372,80 @@ it('cancels the bounded API stream when response bytes exceed its cap', async ()
   expect(await findReusableFollowupProof(options)).toBeNull()
   expect(cancelled).toBe(true)
 })
+
+const readinessFixture =
+  'src/renderer/src/components/settings/AccountPoolSection.consistency.test.tsx'
+const rootFour = 'Fork regression tests (4/4)'
+const shared = 'Fork regression tests (mobile and integration)'
+function readinessContext() {
+  const value = context()
+  value.state.paths[0] = readinessFixture
+  value.state.jobs.find((job) => job.name === rootFour).conclusion = 'failure'
+  value.state.jobs.find((job) => job.name === shared).conclusion = 'success'
+  return value
+}
+
+it('reuses only successful native lanes after the exact readiness unit fixture changes', async () => {
+  const { options } = readinessContext()
+  const proof = await findReusableFollowupProof(options)
+  expect(proof).toMatchObject({
+    kind: 'account-pool-readiness-followup',
+    reusedLanes: ['desktop', 'electron', 'installers', 'android']
+  })
+  expect(isFollowupProof(proof)).toBe(true)
+  expect(proof.jobs.map((job) => job.name)).toEqual(
+    names.map((name) => (name === rootFour ? shared : name))
+  )
+  expect(proof.jobs.some((job) => job.name === rootFour)).toBe(false)
+  expect(proof.jobs.every((job) => job.conclusion === 'success')).toBe(true)
+})
+
+it.each(names.map((name) => (name === rootFour ? shared : name)))(
+  'cannot reuse readiness native work unless prior %s actually succeeded',
+  async (name) => {
+    const { options, state } = readinessContext()
+    state.jobs.find((job) => job.name === name).conclusion = 'failure'
+    expect(await findReusableFollowupProof(options)).toBeNull()
+  }
+)
+
+it.each([
+  'src/renderer/src/components/settings/AccountPoolSection.tsx',
+  'src/renderer/src/components/settings/Other.test.tsx',
+  '.github/workflows/pr.yml',
+  'pnpm-lock.yaml',
+  fixturePath,
+  'config/scripts/opka-android-ui-journey.py',
+  'tests/e2e/fork-account-pool-settings.spec.ts'
+])('rejects app, unrelated and deferred fixture changes: %s', async (path) => {
+  const { options, state } = readinessContext()
+  state.paths.push(path)
+  expect(await findReusableFollowupProof(options)).toBeNull()
+  expect(state.calls).toEqual([])
+})
+
+it('requires the readiness fixture and never accepts root failure as positive reusable evidence', async () => {
+  const { options, state } = readinessContext()
+  const proof = await findReusableFollowupProof(options)
+  expect(
+    isFollowupProof({ ...proof, reusedLanes: ['regression', 'electron', 'installers', 'android'] })
+  ).toBe(false)
+  expect(
+    isFollowupProof({
+      ...proof,
+      jobs: proof.jobs.map((job) => (job.name === shared ? { ...job, name: rootFour } : job))
+    })
+  ).toBe(false)
+  expect(isFollowupProof({ ...proof, kind: 'test-only-followup' })).toBe(false)
+  state.paths = ['config/scripts/opka-ci-followup-proof.mjs']
+  expect(await findReusableFollowupProof(options)).toBeNull()
+})
+
+it.each(['in_progress', 'queued'])(
+  'refuses unfinished prior native platform work (%s)',
+  async (status) => {
+    const { options, state } = readinessContext()
+    state.jobs.find((job) => job.name.startsWith('Android component acceptance')).status = status
+    expect(await findReusableFollowupProof(options)).toBeNull()
+  }
+)

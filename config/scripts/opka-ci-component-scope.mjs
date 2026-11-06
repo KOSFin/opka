@@ -149,7 +149,11 @@ export async function detectCiScope(env = process.env, findFollowup = findReusab
           tree,
           paths: proof.paths,
           followupProof: proof,
-          reasons: ['verified-test-only-follow-up']
+          reasons: [
+            proof.kind === 'account-pool-readiness-followup'
+              ? 'verified-account-pool-readiness-follow-up'
+              : 'verified-test-only-follow-up'
+          ]
         }
       }
     } catch {

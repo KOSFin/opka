@@ -152,8 +152,12 @@ it.each([
       })
     )
     render(pane())
-    const fallback = await screen.findByRole('button', { name: 'Fallback selection' })
-    expect(fallback.hasAttribute('disabled')).toBe(blocked)
+    expect((await screen.findByRole('alert')).textContent).toContain('Host policy unavailable')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Fallback selection' }).hasAttribute('disabled')
+      ).toBe(blocked)
+    )
     expect(screen.queryByRole('button', { name: 'Save Codex settings' })).toBeNull()
   }
 )
