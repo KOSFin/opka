@@ -70,6 +70,25 @@ const READINESS_ANDROID_FOLLOWUP = {
     'PR checks passed'
   ])
 }
+const ACCOUNTS_SECTION_LIFETIME_FIXTURE =
+  'src/renderer/src/components/settings/AccountsPane.section-lifetime.test.tsx'
+const ACCOUNTS_SECTION_LIFETIME_FOLLOWUP = {
+  kind: 'accounts-section-lifetime-followup',
+  fixtures: [ACCOUNTS_SECTION_LIFETIME_FIXTURE],
+  lanes: LANES,
+  allowedPaths: new Set([
+    ACCOUNTS_SECTION_LIFETIME_FIXTURE,
+    'config/scripts/opka-ci-followup-proof.mjs',
+    'config/scripts/opka-ci-followup-proof.test.mjs',
+    'config/scripts/opka-ci-followup-proof-test-fixture.mjs',
+    'config/scripts/opka-ci-accounts-lifetime-followup.test.mjs'
+  ]),
+  requiredJobs: [
+    ...REQUIRED_JOBS.filter((name) => name !== 'Fork regression tests (1/4)'),
+    'Fork regression tests (mobile and integration)'
+  ],
+  allowedFailures: new Set(['Fork regression tests (1/4)', 'PR checks passed'])
+}
 const profileForKind = (kind) =>
   kind === MOBILE_FOLLOWUP.kind
     ? MOBILE_FOLLOWUP
@@ -77,7 +96,9 @@ const profileForKind = (kind) =>
       ? READINESS_FOLLOWUP
       : kind === READINESS_ANDROID_FOLLOWUP.kind
         ? READINESS_ANDROID_FOLLOWUP
-        : null
+        : kind === ACCOUNTS_SECTION_LIFETIME_FOLLOWUP.kind
+          ? ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
+          : null
 const positive = (value) => Number.isSafeInteger(value) && value > 0
 const repositoryName = (value) => typeof value === 'string' && /^[\w.-]+\/[\w.-]+$/.test(value)
 const validPaths = (paths, profile) =>
@@ -279,9 +300,12 @@ export async function findReusableFollowupProof({
       return null
     }
     const paths = diff.slice(0, -1).split('\0')
-    const profile = [MOBILE_FOLLOWUP, READINESS_FOLLOWUP, READINESS_ANDROID_FOLLOWUP].find(
-      (entry) => validPaths(paths, entry)
-    )
+    const profile = [
+      MOBILE_FOLLOWUP,
+      READINESS_FOLLOWUP,
+      READINESS_ANDROID_FOLLOWUP,
+      ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
+    ].find((entry) => validPaths(paths, entry))
     if (!profile) {
       return null
     }
