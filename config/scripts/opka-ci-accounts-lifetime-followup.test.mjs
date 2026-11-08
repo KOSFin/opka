@@ -1,4 +1,9 @@
 import { expect, it } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { runProcessSync } from '@orca/process-host'
 import { findReusableFollowupProof, isFollowupProof } from './opka-ci-followup-proof.mjs'
 import { base, sourceHead, names, context } from './opka-ci-followup-proof-test-fixture.mjs'
 
@@ -79,9 +84,8 @@ it.each(['unrelatedFailure', 'pendingAndroid', 'failedDesktop', 'wrongPr', 'wron
   }
 )
 
-function chainedContext() {
+function chainedContext(intermediate = 'e'.repeat(40)) {
   const { options, state } = accountsSectionLifetimeContext()
-  const intermediate = 'e'.repeat(40)
   state.event.before = intermediate
   const skippedRun = {
     ...state.run,
@@ -237,5 +241,110 @@ it.each(['failed', 'pending'])(
       return originalFetch(url, requestOptions)
     }
     expect(await findReusableFollowupProof(options)).toBeNull()
+  }
+)
+
+it('recovers the older qualified ancestor from a cold shallow PR merge checkout', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'opka-followup-chain-'))
+  const origin = join(root, 'origin')
+  const checkout = join(root, 'checkout')
+  const hooks = join(root, 'no-hooks')
+  mkdirSync(origin)
+  mkdirSync(hooks)
+  const git = (cwd, args) =>
+    runProcessSync({
+      program: 'git',
+      cwd,
+      args: ['-c', `core.hooksPath=${hooks}`, '-c', 'commit.gpgsign=false', ...args],
+      timeoutMs: 10_000,
+      maxOutputBytes: 128 * 1024
+    })
+  const success = (cwd, args) => {
+    const result = git(cwd, args)
+    if (result.code !== 0 || result.timedOut || result.outputTruncated) {
+      throw new Error(`Synthetic Git fixture failed at ${args[0]}`)
+    }
+    return result.stdout.trim()
+  }
+  try {
+    success(origin, ['init'])
+    success(origin, ['symbolic-ref', 'HEAD', 'refs/heads/release-fix'])
+    success(origin, ['config', 'user.name', 'Fixture'])
+    success(origin, ['config', 'user.email', 'fixture@example.invalid'])
+    const testPath = join(origin, accountsSectionLifetimeFixture)
+    mkdirSync(join(testPath, '..'), { recursive: true })
+    writeFileSync(testPath, 'initial\n')
+    success(origin, ['add', '.'])
+    success(origin, ['commit', '-m', 'Synthetic PR base'])
+    const prBase = success(origin, ['rev-parse', 'HEAD'])
+    writeFileSync(testPath, 'first test-only repair\n')
+    success(origin, ['add', '.'])
+    success(origin, ['commit', '-m', 'Qualified platform source'])
+    const qualified = success(origin, ['rev-parse', 'HEAD'])
+    writeFileSync(testPath, 'second test-only repair\n')
+    success(origin, ['add', '.'])
+    success(origin, ['commit', '-m', 'First follow-up'])
+    const intermediate = success(origin, ['rev-parse', 'HEAD'])
+    writeFileSync(testPath, 'third test-only repair\n')
+    success(origin, ['add', '.'])
+    success(origin, ['commit', '-m', 'Second follow-up'])
+    const source = success(origin, ['rev-parse', 'HEAD'])
+    success(origin, ['checkout', '-b', 'synthetic-merge', prBase])
+    success(origin, ['merge', '--no-ff', 'release-fix', '-m', 'Synthetic PR merge'])
+    const merge = success(origin, ['rev-parse', 'HEAD'])
+    success(root, [
+      'clone',
+      '--depth=2',
+      '--branch',
+      'synthetic-merge',
+      pathToFileURL(origin).href,
+      checkout
+    ])
+    expect(success(checkout, ['rev-parse', '--is-shallow-repository'])).toBe('true')
+    const { options, state } = chainedContext(intermediate)
+    state.event.pull_request.head.sha = source
+    state.run.head_sha = qualified
+    state.jobs.forEach((job) => {
+      job.head_sha = qualified
+    })
+    options.head = merge
+    const calls = []
+    options.runGit = (args) => {
+      calls.push(args)
+      return git(checkout, args)
+    }
+    const proof = await findReusableFollowupProof(options)
+    expect(proof).toMatchObject({ base: qualified, sourceHead: source, head: merge, runId: 45 })
+    expect(calls).toContainEqual(['merge-base', '--is-ancestor', qualified, source])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+it.each([true, false])(
+  'requires the original Cursor fixture in the cumulative diff after a CI-only follow-up (%s)',
+  async (fixturePresent) => {
+    const { options, state } = chainedContext()
+    state.paths = [
+      'config/scripts/opka-ci-followup-proof.mjs',
+      'config/scripts/opka-ci-accounts-lifetime-followup.test.mjs'
+    ]
+    const git = options.runGit
+    options.runGit = (args) => {
+      if (args[0] === 'diff' && args[4] === base) {
+        const cumulative = fixturePresent
+          ? [accountsSectionLifetimeFixture, ...state.paths]
+          : state.paths
+        return { code: 0, stdout: `${cumulative.join('\0')}\0` }
+      }
+      return git(args)
+    }
+    const proof = await findReusableFollowupProof(options)
+    if (fixturePresent) {
+      expect(proof).toMatchObject({ base, runId: 45 })
+      expect(proof.paths).toContain(accountsSectionLifetimeFixture)
+    } else {
+      expect(proof).toBeNull()
+    }
   }
 )

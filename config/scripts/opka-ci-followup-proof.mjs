@@ -275,7 +275,7 @@ export async function findReusableFollowupProof({
       return null
     }
     checkedGit(execute, ['fetch', '--no-tags', '--depth=64', 'origin', sourceHead])
-    checkedGit(execute, ['fetch', '--no-tags', '--depth=1', 'origin', before])
+    checkedGit(execute, ['fetch', '--no-tags', '--depth=64', 'origin', before])
     if (checkedGit(execute, ['rev-parse', 'HEAD']).trim() !== head) {
       return null
     }
@@ -300,12 +300,18 @@ export async function findReusableFollowupProof({
       return null
     }
     const paths = diff.slice(0, -1).split('\0')
-    const profile = [
-      MOBILE_FOLLOWUP,
-      READINESS_FOLLOWUP,
-      READINESS_ANDROID_FOLLOWUP,
-      ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
-    ].find((entry) => validPaths(paths, entry))
+    const profile =
+      [
+        MOBILE_FOLLOWUP,
+        READINESS_FOLLOWUP,
+        READINESS_ANDROID_FOLLOWUP,
+        ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
+      ].find((entry) => validPaths(paths, entry)) ??
+      (paths.length > 0 &&
+      new Set(paths).size === paths.length &&
+      paths.every((path) => ACCOUNTS_SECTION_LIFETIME_FOLLOWUP.allowedPaths.has(path))
+        ? ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
+        : null)
     if (!profile) {
       return null
     }
