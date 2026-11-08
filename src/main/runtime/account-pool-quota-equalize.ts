@@ -55,7 +55,7 @@ export function rankQuotaEqualizeMembers<T extends Ranked>(
   return eligible.sort((a, b) => {
     const aScore = scores.get(a.candidate.accountId) ?? Infinity
     const bScore = scores.get(b.candidate.accountId) ?? Infinity
-    if (usePreferred) {
+    if (usePreferred && a !== b) {
       if (a === preferred) {
         return -1
       }
@@ -63,7 +63,8 @@ export function rankQuotaEqualizeMembers<T extends Ranked>(
         return 1
       }
     }
-    if (Math.abs(aScore - bScore) > HYSTERESIS_PERCENT) {
+    // Compare against the same minimum so three overlapping pairs cannot disagree.
+    if (aScore !== bScore && Math.max(aScore, bScore) > best + HYSTERESIS_PERCENT) {
       return aScore - bScore
     }
     const occupancy = a.active / a.weight - b.active / b.weight

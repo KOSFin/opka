@@ -43,3 +43,23 @@ it('treats two profiles with one quota identity as one conservative reading', ()
   alias.candidate.quotaIdentity = 'a'
   expect(rankQuotaEqualizeMembers([a, alias, entry('b', 20)])[0].candidate.accountId).toBe('b')
 })
+
+it('keeps the first choice within three points of the minimum for every input order', () => {
+  for (const values of [
+    [11, 8, 5],
+    [11, 5, 8],
+    [8, 11, 5],
+    [8, 5, 11],
+    [5, 11, 8],
+    [5, 8, 11]
+  ]) {
+    const members = values.map((value) => entry(String(value), value))
+    for (const current of [undefined, '11', '8', '5']) {
+      const [first] = rankQuotaEqualizeMembers([...members], current)
+      expect(first.candidate.usedPercent).toBeLessThanOrEqual(8)
+      if (current === '5' || current === '8') {
+        expect(first.candidate.accountId).toBe(current)
+      }
+    }
+  }
+})
