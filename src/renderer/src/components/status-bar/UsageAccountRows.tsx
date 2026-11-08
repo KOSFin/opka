@@ -8,6 +8,7 @@ import {
 } from '../../../../shared/usage-percentage-display'
 import type { StatusBarUsageMode } from '../../../../shared/status-bar-usage-mode'
 import { Button } from '../ui/button'
+import { DropdownMenuItem } from '../ui/dropdown-menu'
 import { CodexResetCreditControl } from '../codex-reset-credit-control'
 import { useUsageAccounts } from './UsageAccountsContext'
 import { useUsageAccountPools } from './use-usage-account-pools'
@@ -31,7 +32,7 @@ export function UsageAccountRows({
   display: UsagePercentageDisplay
   mode?: StatusBarUsageMode
   onManageProvider?: () => void
-  onSelectAccount?: (accountId: string) => void
+  onSelectAccount?: (accountId: string | null) => void
   selecting?: boolean
 }): React.JSX.Element | null {
   const owner = useUsageAccounts()
@@ -88,32 +89,44 @@ export function UsageAccountRows({
             data-open={open}
             className="group px-3.5 py-2 hover:bg-accent/20"
           >
-            <button
-              type="button"
-              className="flex w-full items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-expanded={open}
-              onClick={() => setOpenRowId(open ? null : rowKey)}
+            <DropdownMenuItem
+              asChild
+              onSelect={(event) => {
+                event.preventDefault()
+                setOpenRowId(open ? null : rowKey)
+              }}
             >
-              <span className="mt-0.5 shrink-0">
-                <ProviderIcon provider={provider} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block break-words text-xs font-medium">
-                  {providerName} · {row.label}
+              <button
+                type="button"
+                className="flex w-full items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-expanded={open}
+                onKeyDown={(event) => {
+                  if (event.key === 'Tab') {
+                    event.stopPropagation()
+                  }
+                }}
+              >
+                <span className="mt-0.5 shrink-0">
+                  <ProviderIcon provider={provider} />
                 </span>
-                <span className="text-3xs text-muted-foreground">
-                  {row.active
-                    ? translate('usage.accounts.default', 'Default for new chats')
-                    : translate('usage.accounts.savedProfile', 'Saved profile')}
-                  {row.detail ? ` · ${row.detail}` : ''}
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-xs font-medium">
+                    {providerName} · {row.label}
+                  </span>
+                  <span className="text-3xs text-muted-foreground">
+                    {row.active
+                      ? translate('usage.accounts.default', 'Default for new chats')
+                      : translate('usage.accounts.savedProfile', 'Saved profile')}
+                    {row.detail ? ` · ${row.detail}` : ''}
+                  </span>
                 </span>
-              </span>
-              {row.limits && now - row.limits.updatedAt > 10 * 60_000 ? (
-                <span className="shrink-0 text-3xs text-muted-foreground">
-                  {translate('usage.accounts.staleLimits', 'Last known')}
-                </span>
-              ) : null}
-            </button>
+                {row.limits && now - row.limits.updatedAt > 10 * 60_000 ? (
+                  <span className="shrink-0 text-3xs text-muted-foreground">
+                    {translate('usage.accounts.staleLimits', 'Last known')}
+                  </span>
+                ) : null}
+              </button>
+            </DropdownMenuItem>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 pl-5 text-2xs tabular-nums text-muted-foreground">
               {shown.length ? (
                 shown.map(({ label, window }) =>
@@ -132,7 +145,14 @@ export function UsageAccountRows({
                 <span>{translate('usage.accounts.unknownLimits', 'Limits unavailable')}</span>
               )}
             </div>
-            <div className="hidden space-y-2 pt-2 pl-5 group-hover:block group-focus-within:block group-data-[open=true]:block">
+            <div
+              className="hidden space-y-2 pt-2 pl-5 group-hover:block group-focus-within:block group-data-[open=true]:block"
+              onKeyDown={(event) => {
+                if (event.key === 'Tab') {
+                  event.stopPropagation()
+                }
+              }}
+            >
               {!owner.verified ? (
                 <p className="text-3xs text-muted-foreground">
                   {translate('usage.accounts.unverified', 'Last known · host not verified')}
@@ -163,33 +183,35 @@ export function UsageAccountRows({
                   </Button>
                 ) : null}
               </div>
-              {provider === 'codex' && row.id && snapshot ? (
+              {provider === 'codex' && snapshot ? (
                 <>
                   {!row.active && onSelectAccount ? (
                     <Button
                       variant="outline"
                       size="xs"
                       disabled={!owner.verified || selecting}
-                      onClick={() => {
-                        if (row.id) {
-                          onSelectAccount(row.id)
-                        }
-                      }}
+                      onClick={() => onSelectAccount(row.id)}
                     >
-                      {credits > 0 ? 'Select account to use reset' : 'Select account'}
+                      {row.id === null
+                        ? translate('usage.accounts.useCliLogin', 'Use CLI login')
+                        : credits > 0
+                          ? 'Select account to use reset'
+                          : 'Select account'}
                     </Button>
                   ) : null}
-                  <CodexResetCreditControl
-                    account={
-                      snapshot.codex.accounts.find((account) => account.id === row.id) ?? null
-                    }
-                    limits={row.limits}
-                    rateLimitTarget={owner.rateLimits.codexTarget}
-                    owner={owner.target}
-                    ownerLabel={owner.ownerLabel ?? 'This device'}
-                    verified={owner.verified}
-                    active={row.active}
-                  />
+                  {row.id ? (
+                    <CodexResetCreditControl
+                      account={
+                        snapshot.codex.accounts.find((account) => account.id === row.id) ?? null
+                      }
+                      limits={row.limits}
+                      rateLimitTarget={owner.rateLimits.codexTarget}
+                      owner={owner.target}
+                      ownerLabel={owner.ownerLabel ?? 'This device'}
+                      verified={owner.verified}
+                      active={row.active}
+                    />
+                  ) : null}
                 </>
               ) : null}
             </div>

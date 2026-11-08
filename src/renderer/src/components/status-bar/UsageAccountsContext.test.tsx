@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type * as I18nModule from '@/i18n/i18n'
@@ -36,6 +36,15 @@ vi.mock('../../store', () => ({
 vi.mock('@/i18n/i18n', async (original) => ({
   ...(await original<typeof I18nModule>()),
   translate: (_key: string, text: string) => text
+}))
+vi.mock('../ui/dropdown-menu', () => ({
+  DropdownMenuItem: ({
+    children,
+    onSelect
+  }: {
+    children: ReactNode
+    onSelect: (event: { preventDefault: () => void }) => void
+  }) => <span onClick={() => onSelect({ preventDefault: () => {} })}>{children}</span>
 }))
 const local = { kind: 'local' } as const
 const a = { kind: 'environment', environmentId: 'a' } as const
@@ -246,6 +255,37 @@ it('selects a concrete inactive Codex profile without consuming its reset', () =
   expect(onSelectAccount).toHaveBeenCalledWith('reserve')
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(screen.getByRole('button', { name: 'Use reset' }).hasAttribute('disabled')).toBe(true)
+})
+it('offers the real CLI login as a selectable account row', () => {
+  const snapshot = source('active')
+  snapshot.codex.systemDefault = {
+    hasAuth: true,
+    authKind: 'oauth',
+    email: 'cli@example.test',
+    providerAccountId: 'cli',
+    workspaceLabel: null
+  }
+  const onSelectAccount = vi.fn()
+  render(
+    <UsageAccountsProvider target={a} snapshot={snapshot} verified>
+      <UsageAccountRows
+        provider="codex"
+        now={Date.now()}
+        display="used"
+        onSelectAccount={onSelectAccount}
+      />
+    </UsageAccountsProvider>
+  )
+  const row = screen.getByRole('group', {
+    name: 'Codex CLI login on this host · cli@example.test usage'
+  })
+  const toggle = row.querySelector('button[aria-expanded]')
+  if (toggle) {
+    fireEvent.click(toggle)
+  }
+  fireEvent.click(screen.getByRole('button', { name: 'Use CLI login' }))
+  expect(onSelectAccount).toHaveBeenCalledWith(null)
+  expect(screen.queryByRole('dialog')).toBeNull()
 })
 function Probe({
   target,

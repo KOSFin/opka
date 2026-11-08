@@ -316,27 +316,53 @@ export function UsageRosterPanel({
       </div>
       <div className="border-t border-border/70" />
       <div className="max-h-80 overflow-y-auto scrollbar-sleek">
-        {accountProviders.map((provider) =>
-          provider.provider === 'codex' ? (
-            <UsageCodexAccountRows
-              key={`${ownerKey}:codex:${accountsOwner?.rateLimits.codexTarget.runtime}:${accountsOwner?.rateLimits.codexTarget.wslDistro ?? ''}`}
-              codex={provider}
-              now={now}
-              display={display}
-              mode={statusBarUsageMode}
-              onManageProvider={() => onOpenProvider('codex')}
-            />
-          ) : (
-            <UsageAccountRows
-              key={`${ownerKey}:claude:${accountsOwner?.rateLimits.claudeTarget.runtime}:${accountsOwner?.rateLimits.claudeTarget.wslDistro ?? ''}`}
-              provider="claude"
-              now={now}
-              display={display}
-              mode={statusBarUsageMode}
-              onManageProvider={() => onOpenProvider('claude')}
-            />
+        {accountProviders.map((provider) => {
+          const target =
+            provider.provider === 'codex'
+              ? accountsOwner?.rateLimits.codexTarget
+              : accountsOwner?.rateLimits.claudeTarget
+          const actions =
+            accountsOwner?.verified && accountsOwner.snapshot
+              ? renderRow?.(
+                  provider,
+                  <span className="text-xs">
+                    {provider.provider === 'codex' ? 'Codex' : 'Claude'} ·{' '}
+                    {translate('usage.accounts.switchRuntime', 'Switch account or runtime')}
+                  </span>
+                )
+              : null
+          return (
+            <React.Fragment
+              key={`${ownerKey}:${provider.provider}:${target?.runtime}:${target?.wslDistro ?? ''}`}
+            >
+              {provider.provider === 'codex' ? (
+                <UsageCodexAccountRows
+                  codex={provider}
+                  now={now}
+                  display={display}
+                  mode={statusBarUsageMode}
+                  onManageProvider={() => onOpenProvider('codex')}
+                />
+              ) : (
+                <UsageAccountRows
+                  provider="claude"
+                  now={now}
+                  display={display}
+                  mode={statusBarUsageMode}
+                  onManageProvider={() => onOpenProvider('claude')}
+                />
+              )}
+              {actions ? (
+                <div
+                  data-usage-account-actions={provider.provider}
+                  className="border-b border-border/50"
+                >
+                  {actions}
+                </div>
+              ) : null}
+            </React.Fragment>
           )
-        )}
+        })}
         {otherProviders.map((p) => {
           const state = getUsageRosterRowState(p, usedSections(p).length > 0)
           const showSignInAction = state.kind === 'sign-in' && canSignIn(p.provider)
@@ -364,15 +390,6 @@ export function UsageRosterPanel({
           return <React.Fragment key={p.provider}>{item}</React.Fragment>
         })}
       </div>
-      {accountsOwner &&
-      sorted.some((entry) => entry.provider === 'claude' || entry.provider === 'codex') ? (
-        <p className="border-t border-border/50 px-3.5 py-2 text-2xs text-muted-foreground">
-          {translate(
-            'usage.accounts.sharedBudgetHint',
-            'Profiles are separate sign-in contexts and may share provider limits.'
-          )}
-        </p>
-      ) : null}
       <div className="border-t border-border/70" />
       <DropdownMenuItem
         onSelect={onUsageDetails}
