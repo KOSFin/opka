@@ -300,8 +300,11 @@ describe('fork CI safety and required checks', () => {
       type: 'boolean',
       default: true
     })
-    expect(workflow.jobs.installers.with.build_android).toBe(
-      "${{ needs.scope.outputs.android != 'true' }}"
+    expect(workflow.jobs.installers.with.build_android).toBe(false)
+    expect(workflow.jobs.android.if).toContain("needs.scope.outputs.android == 'true'")
+    expect(workflow.jobs.verify.needs).toContain('android')
+    expect(workflow.jobs.electron.steps.map((step) => step.run ?? '').join('\n')).toContain(
+      'tests/e2e/fork-beta-update.spec.ts'
     )
     expect(installer.jobs.android.if).toBe('inputs.build_android')
     expect(installer.jobs.release_files.if).toBe('inputs.build_android')

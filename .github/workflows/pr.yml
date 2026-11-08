@@ -311,7 +311,7 @@ jobs:
     uses: ./.github/workflows/opka-installers.yml
     secrets: inherit
     with:
-      build_android: ${{ needs.scope.outputs.android != 'true' }}
+      build_android: false
       version: ${{ inputs.release_version || format('1.4.236-rc.{0}', github.run_number) }}
 
   android:
