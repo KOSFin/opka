@@ -5,7 +5,7 @@ import { readAccountAssignments } from './account-pool-admission'
 
 let db: OrchestrationDb | undefined
 afterEach(() => db?.close())
-function fixture(strategy: 'sequential' | 'balanced' | 'manual' = 'sequential') {
+function fixture(strategy: 'sequential' | 'balanced' | 'manual' | 'quota-equalize' = 'sequential') {
   const store = new OrchestrationDb(':memory:')
   db = store
   const admission: AccountPoolAdmission = {
@@ -78,6 +78,19 @@ it('balanced uses slots and weights within a tier while priority remains stronge
   admission.policy.members[1].priority = 2
   const third = start()
   expect(JSON.parse(third.worker.start_options).account.id).toBe('a')
+})
+it('equalizes fresh comparable Codex usage while preserving priority and slots', () => {
+  const { admission, start } = fixture('quota-equalize')
+  admission.candidates[0].usedPercent = 50
+  admission.candidates[1].usedPercent = 5
+  admission.candidates.forEach((candidate) => {
+    candidate.quotaWindows = [
+      { windowMinutes: 300, usedPercent: candidate.usedPercent ?? 0, resetsAt: Date.now() + 60_000 }
+    ]
+  })
+  expect(JSON.parse(start().worker.start_options).account.id).toBe('b')
+  admission.policy.members[1].priority = 2
+  expect(JSON.parse(start().worker.start_options).account.id).toBe('a')
 })
 it.each(['start_unknown', 'stop_unknown', 'starting', 'stopping', 'ready'])(
   'retains %s reservations and rolls back rejected dispatch/task',

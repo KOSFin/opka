@@ -1,5 +1,9 @@
 import { z } from 'zod'
-import { ACCOUNT_POOL_CAPABILITY, AccountPoolPolicySchema } from './account-pool-policy'
+import {
+  ACCOUNT_POOL_CAPABILITY,
+  ACCOUNT_POOL_EQUALIZE_CAPABILITY,
+  AccountPoolPolicySchema
+} from './account-pool-policy'
 import type { AccountPoolPolicy } from './account-pool-policy'
 
 const rosterSchema = z.object({
@@ -8,6 +12,7 @@ const rosterSchema = z.object({
 })
 export const AccountPoolViewSchema = z.object({
   capability: z.literal(ACCOUNT_POOL_CAPABILITY),
+  equalizeCapability: z.literal(ACCOUNT_POOL_EQUALIZE_CAPABILITY).optional(),
   policies: z.array(AccountPoolPolicySchema),
   accounts: z.object({ claude: rosterSchema, codex: rosterSchema }),
   candidates: z.array(

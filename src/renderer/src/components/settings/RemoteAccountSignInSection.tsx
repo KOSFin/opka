@@ -12,11 +12,13 @@ export function RemoteAccountSignInSection({
   target,
   hostLabel,
   onComplete,
+  provider,
   routingAccount
 }: {
   target: RuntimeClientTarget
   hostLabel: string
   onComplete: () => void
+  provider?: 'claude' | 'codex'
   routingAccount?: CodexRoutingSignInTarget
 }): React.JSX.Element {
   const controller = useRef<AbortController | null>(null)
@@ -84,6 +86,10 @@ export function RemoteAccountSignInSection({
     }
   }
 
+  if (provider === 'claude') {
+    return <RemoteClaudeSignInSection target={target} />
+  }
+
   return (
     <section
       className="space-y-3"
@@ -148,7 +154,7 @@ export function RemoteAccountSignInSection({
           {error || state?.error}
         </p>
       ) : null}
-      {!routingAccount ? <RemoteClaudeSignInSection target={target} /> : null}
+      {!routingAccount && !provider ? <RemoteClaudeSignInSection target={target} /> : null}
     </section>
   )
 }

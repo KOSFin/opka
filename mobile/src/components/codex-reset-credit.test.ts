@@ -72,9 +72,13 @@ function makeSnapshot(
 describe('getCodexResetCreditSummary', () => {
   const now = 1_700_000_000_000
 
-  it('hides the action when no earned credit is available', () => {
+  it('shows a disabled zero balance when the host reports reset credits', () => {
     expect(getCodexResetCreditSummary(null, now)).toBeNull()
-    expect(getCodexResetCreditSummary(makeLimits(0, now + 60_000), now)).toBeNull()
+    expect(getCodexResetCreditSummary(makeLimits(0, now + 60_000), now)).toEqual({
+      availableCount: 0,
+      availabilityLabel: '0 resets available',
+      expiryLabel: null
+    })
   })
 
   it('formats singular and plural availability with the next expiry', () => {

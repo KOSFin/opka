@@ -42,7 +42,7 @@ export function MobileAccountPoolCard({
   routingTarget?: MobileNativePoolRoutingTarget
   presentation?: MobileAccountPresentation
 }) {
-  const [expanded, setExpanded] = useState(Boolean(presentation))
+  const [expanded, setExpanded] = useState(false)
   const [advanced, setAdvanced] = useState(false)
   const title = policy.provider === 'claude' ? 'Claude' : 'Codex'
   const Icon = policy.provider === 'claude' ? ClaudeIcon : OpenAIIcon
@@ -85,6 +85,7 @@ export function MobileAccountPoolCard({
               Manual mode uses the selected account. Automatic pool mode chooses from the same
               accounts below. Save changes before starting new work.
             </Text>
+            {presentation?.renderProviderSignIn?.(policy.provider)}
             <MobileAccountPoolLaunchSettings
               policy={policy}
               disabled={disabled}
@@ -102,6 +103,12 @@ export function MobileAccountPoolCard({
                 Selection: {policy.strategy === 'manual' ? 'sequential' : policy.strategy}
               </Text>
             </Pressable>
+            {policy.strategy === 'quota-equalize' ? (
+              <Text style={styles.rowSubtitle}>
+                Fresh comparable limits choose the less used account between settled turns. Near
+                equal usage keeps the current account.
+              </Text>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${title} pool advanced settings`}

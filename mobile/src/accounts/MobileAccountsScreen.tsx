@@ -27,6 +27,7 @@ import { MobileAccountSignInSection } from './MobileAccountSignInSection'
 import { MobileProviderAccountRow } from './MobileProviderAccountRow'
 import { accountPoolSnapshotRefreshKey } from './mobile-account-presentation'
 import { MobileAccountsHeader } from './MobileAccountsHeader'
+import { MobileProviderAccountsDisclosure } from './MobileProviderAccountsDisclosure'
 
 type AccountsNotice = { title: string; message: string }
 
@@ -35,9 +36,13 @@ type AccountsNotice = { title: string; message: string }
  * `Alert.alert` (a no-op on React Native Web) and Back is the handoff's, which pops the shell.
  */
 export function MobileAccountsScreen() {
+  const { hostId } = useLocalSearchParams<{ hostId: string }>()
+  return <HostAccountsScreen key={hostId} hostId={hostId} />
+}
+
+function HostAccountsScreen({ hostId }: { hostId: string }) {
   const router = useRouteHandoff()
   const insets = useSafeAreaInsets()
-  const { hostId } = useLocalSearchParams<{ hostId: string }>()
 
   // Why: shared client per host. See docs/mobile-shared-client-per-host.md.
   const { client, state: connState } = useHostClient(hostId)
@@ -73,6 +78,8 @@ export function MobileAccountsScreen() {
     client,
     connected: screenActive && connState === 'connected',
     snapshot,
+    hostName,
+    hostId,
     accountMutationBusy: busyAccountId !== null,
     onSnapshot: acceptSnapshot,
     onNotice: setNotice
@@ -198,16 +205,54 @@ export function MobileAccountsScreen() {
     const { accountId } = getProviderAccountSelection(snapshot, provider)
     const usage = getAccountProviderUsage(snapshot, provider, accountId)
     const resetCredit = getCodexResetCreditSummary(usage, now)
-    return resetCredit && codexResetSupported && resetScope && connState === 'connected' ? (
+    const usageFresh =
+      !!usage &&
+      now - usage.updatedAt < 10 * 60_000 &&
+      usage.updatedAt <= now + 60_000 &&
+      usage.status === 'ok'
+    return resetCredit ? (
       <CodexResetCreditAction
         summary={resetCredit}
         scopeLabel={resetScopeLabel}
+        unavailableReason={
+          !codexResetSupported
+            ? 'Reset unavailable on this host'
+            : resetCredit.availableCount === 0
+              ? 'No resets left'
+              : !resetScope
+                ? 'Account or usage details changed; refresh to try again'
+                : !usageFresh
+                  ? 'Last known quota; refresh to use a reset'
+                  : null
+        }
         busy={resettingCodex}
-        disabled={resettingCodex || busyAccountId !== null || connState !== 'connected'}
+        disabled={
+          !codexResetSupported ||
+          !resetScope ||
+          !usageFresh ||
+          resetCredit.availableCount === 0 ||
+          resettingCodex ||
+          busyAccountId !== null ||
+          connState !== 'connected'
+        }
         onPress={confirmCodexReset}
       />
     ) : null
   }
+  const renderProviderSignIn = (provider: ProviderKey) => (
+    <MobileAccountSignInSection
+      key={`sign-in:${hostId}:${provider}`}
+      provider={provider}
+      hostId={hostId}
+      client={client}
+      connected={screenActive && connState === 'connected'}
+      hostName={hostName}
+      onComplete={() => {
+        setEnrollmentRevision((revision) => revision + 1)
+        void refresh()
+      }}
+    />
+  )
   const renderAccountRow = (
     provider: ProviderKey,
     accountId: string | null,
@@ -223,6 +268,12 @@ export function MobileAccountsScreen() {
         busyAccountId={busyAccountId}
         now={now}
         onSelect={(provider, id) => void selectAccount(provider, id)}
+        resetAction={
+          provider === 'codex' &&
+          getProviderAccountSelection(snapshot, provider).accountId === accountId
+            ? renderProviderFooter(provider)
+            : null
+        }
       />
     ) : null
 
@@ -255,17 +306,6 @@ export function MobileAccountsScreen() {
           </View>
         ) : (
           <>
-            <MobileAccountSignInSection
-              key={`sign-in:${hostId}`}
-              hostId={hostId}
-              client={client}
-              connected={screenActive && connState === 'connected'}
-              hostName={hostName}
-              onComplete={() => {
-                setEnrollmentRevision((revision) => revision + 1)
-                void refresh()
-              }}
-            />
             <MobileAccountPoolSection
               key={hostId}
               refreshKey={accountPoolSnapshotRefreshKey(snapshot, enrollmentRevision)}
@@ -276,22 +316,19 @@ export function MobileAccountsScreen() {
               presentation={{
                 renderSystemAccount: (provider, blocked) =>
                   renderAccountRow(provider, null, blocked),
+                renderProviderSignIn,
                 renderAccount: (provider, id, blocked) => renderAccountRow(provider, id, blocked),
-                renderProviderFooter,
                 renderUnavailableAccounts: (blocked) =>
                   (['claude', 'codex'] as const).map((provider) => (
-                    <View key={provider} style={styles.card}>
-                      <Text style={styles.sectionHeading}>
-                        {provider === 'claude' ? 'Claude' : 'Codex'}
-                      </Text>
+                    <MobileProviderAccountsDisclosure key={provider} provider={provider}>
+                      {renderProviderSignIn(provider)}
                       {renderAccountRow(provider, null, blocked)}
                       {snapshot[provider].accounts.map((account) => (
                         <View key={account.id}>
                           {renderAccountRow(provider, account.id, blocked)}
                         </View>
                       ))}
-                      {renderProviderFooter(provider)}
-                    </View>
+                    </MobileProviderAccountsDisclosure>
                   ))
               }}
             />

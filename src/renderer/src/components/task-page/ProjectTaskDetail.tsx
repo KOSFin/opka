@@ -18,7 +18,10 @@ import {
 } from '@/components/ui/select'
 import { ProjectTaskPreview } from './ProjectTaskPreview'
 import type { ProjectTaskEntry } from '../../../../shared/project-task-contract'
-import type { ProjectTaskWorkflow } from '../../../../shared/project-task-workflow'
+import {
+  projectTaskAcceptedDetail,
+  type ProjectTaskWorkflow
+} from '../../../../shared/project-task-workflow'
 import { projectTaskCall, type ProjectTaskClient } from './project-task-client'
 import { ProjectTaskConfirm, type ProjectTaskConfirmation } from './ProjectTaskConfirm'
 import { ProjectTaskAttempts } from './ProjectTaskAttempts'
@@ -94,13 +97,20 @@ export function ProjectTaskDetail({
     setReload((value) => value + 1)
     refresh()
   }
-  const confirm = (operation: string, label: string, params: object = {}, reason = false) =>
+  const confirm = (
+    operation: string,
+    label: string,
+    params: object = {},
+    reason: ProjectTaskConfirmation['reason'] = false
+  ) =>
     setConfirmation({
       title: label,
       description: `Task: ${task?.title}. Revision: ${task?.revision}. This action applies only to this project task; it does not approve external GitLab/Kaiten writes.`,
       reason,
+      focusConfirm: operation === 'approve' || reason === 'optional',
       run: async (evidence) => {
-        await apply(operation, { ...params, ...(reason ? { reason: evidence } : {}) })
+        const note = reason === 'optional' ? evidence.trim() || projectTaskAcceptedDetail : evidence
+        await apply(operation, { ...params, ...(reason ? { reason: note } : {}) })
         if (
           operation === 'delete' ||
           (operation === 'archive' && 'archived' in params && params.archived === true)
@@ -229,7 +239,7 @@ export function ProjectTaskDetail({
               <Button
                 disabled={dirty}
                 onClick={() =>
-                  confirm('decide', 'Accept reviewed result', { action: 'accept' }, true)
+                  confirm('decide', 'Accept reviewed result', { action: 'accept' }, 'optional')
                 }
               >
                 Accept result

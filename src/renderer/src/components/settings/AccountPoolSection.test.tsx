@@ -64,6 +64,24 @@ it('fails closed on an older host without exposing editable policies', async () 
   expect((await screen.findByRole('alert')).textContent).toContain('Account pools unavailable')
   expect(screen.queryByRole('button', { name: 'Save codex pool' })).toBeNull()
 })
+it('offers Codex quota equalization only when the host advertises support', async () => {
+  rpc.mockResolvedValue(snapshot)
+  const view = render(<AccountPoolSection target={{ kind: 'local' }} hostLabel="Local" />)
+  fireEvent.click(await screen.findByRole('button', { name: /Codex/ }))
+  fireEvent.click(screen.getByRole('switch', { name: 'Use automatic pool' }))
+  fireEvent.click(screen.getByRole('combobox', { name: 'codex pool mode' }))
+  expect(screen.queryByRole('option', { name: 'Equalize quota usage' })).toBeNull()
+  view.unmount()
+  rpc.mockResolvedValue({
+    ...snapshot,
+    equalizeCapability: 'orchestration.account-pools.equalize.v1'
+  })
+  render(<AccountPoolSection target={{ kind: 'local' }} hostLabel="Local" />)
+  fireEvent.click(await screen.findByRole('button', { name: /Codex/ }))
+  fireEvent.click(screen.getByRole('switch', { name: 'Use automatic pool' }))
+  fireEvent.click(screen.getByRole('combobox', { name: 'codex pool mode' }))
+  expect(screen.getByRole('option', { name: 'Equalize quota usage' })).toBeTruthy()
+})
 it('retains the draft and reports a concurrent-edit rejection', async () => {
   rpc.mockImplementation((_target, method) =>
     method === 'accountPool.update'

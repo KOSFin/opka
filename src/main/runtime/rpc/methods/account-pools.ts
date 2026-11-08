@@ -1,6 +1,7 @@
 import { defineMethod } from '../core'
 import {
   ACCOUNT_POOL_CAPABILITY,
+  ACCOUNT_POOL_EQUALIZE_CAPABILITY,
   AccountPoolPolicySchema,
   AccountPoolUpdateParams
 } from '../../../../shared/account-pool-policy'
@@ -16,6 +17,7 @@ export const ACCOUNT_POOL_METHODS = [
       const accounts = runtime.getAccountsSnapshot()
       return {
         capability: ACCOUNT_POOL_CAPABILITY,
+        equalizeCapability: ACCOUNT_POOL_EQUALIZE_CAPABILITY,
         policies: (runtime.requireStore().getSettings().accountPools ?? []).map((policy) =>
           AccountPoolPolicySchema.parse(policy)
         ),
@@ -30,6 +32,9 @@ export const ACCOUNT_POOL_METHODS = [
     permission: 'accounts-admin',
     params: AccountPoolUpdateParams,
     handler: async ({ policy, expectedRevision }, { runtime, signal }) => {
+      if (policy.strategy === 'quota-equalize' && policy.provider !== 'codex') {
+        throw new Error('Quota equalization is available only for Codex pools')
+      }
       const store = runtime.requireStore()
       if (!store.runDurableMutation || !store.updateSettings) {
         throw new Error('Durable account policies are unavailable on this host')

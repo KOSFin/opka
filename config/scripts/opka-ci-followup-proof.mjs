@@ -70,6 +70,25 @@ const READINESS_ANDROID_FOLLOWUP = {
     'PR checks passed'
   ])
 }
+const ACCOUNTS_SECTION_LIFETIME_FIXTURE =
+  'src/renderer/src/components/settings/AccountsPane.section-lifetime.test.tsx'
+const ACCOUNTS_SECTION_LIFETIME_FOLLOWUP = {
+  kind: 'accounts-section-lifetime-followup',
+  fixtures: [ACCOUNTS_SECTION_LIFETIME_FIXTURE],
+  lanes: LANES,
+  allowedPaths: new Set([
+    ACCOUNTS_SECTION_LIFETIME_FIXTURE,
+    'config/scripts/opka-ci-followup-proof.mjs',
+    'config/scripts/opka-ci-followup-proof.test.mjs',
+    'config/scripts/opka-ci-followup-proof-test-fixture.mjs',
+    'config/scripts/opka-ci-accounts-lifetime-followup.test.mjs'
+  ]),
+  requiredJobs: [
+    ...REQUIRED_JOBS.filter((name) => name !== 'Fork regression tests (1/4)'),
+    'Fork regression tests (mobile and integration)'
+  ],
+  allowedFailures: new Set(['Fork regression tests (1/4)', 'PR checks passed'])
+}
 const profileForKind = (kind) =>
   kind === MOBILE_FOLLOWUP.kind
     ? MOBILE_FOLLOWUP
@@ -77,7 +96,9 @@ const profileForKind = (kind) =>
       ? READINESS_FOLLOWUP
       : kind === READINESS_ANDROID_FOLLOWUP.kind
         ? READINESS_ANDROID_FOLLOWUP
-        : null
+        : kind === ACCOUNTS_SECTION_LIFETIME_FOLLOWUP.kind
+          ? ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
+          : null
 const positive = (value) => Number.isSafeInteger(value) && value > 0
 const repositoryName = (value) => typeof value === 'string' && /^[\w.-]+\/[\w.-]+$/.test(value)
 const validPaths = (paths, profile) =>
@@ -222,7 +243,7 @@ function positiveJobs(jobs, run, profile) {
   return required.every((job) => job?.conclusion === 'success') ? required : null
 }
 
-/** Reuses platform work only when the preceding same-PR source differs solely in these test inputs. */
+/** Reuses completed platform work only across approved same-PR test inputs. */
 export async function findReusableFollowupProof({
   repository,
   token,
@@ -254,7 +275,7 @@ export async function findReusableFollowupProof({
       return null
     }
     checkedGit(execute, ['fetch', '--no-tags', '--depth=64', 'origin', sourceHead])
-    checkedGit(execute, ['fetch', '--no-tags', '--depth=1', 'origin', before])
+    checkedGit(execute, ['fetch', '--no-tags', '--depth=64', 'origin', before])
     if (checkedGit(execute, ['rev-parse', 'HEAD']).trim() !== head) {
       return null
     }
@@ -279,9 +300,18 @@ export async function findReusableFollowupProof({
       return null
     }
     const paths = diff.slice(0, -1).split('\0')
-    const profile = [MOBILE_FOLLOWUP, READINESS_FOLLOWUP, READINESS_ANDROID_FOLLOWUP].find(
-      (entry) => validPaths(paths, entry)
-    )
+    const profile =
+      [
+        MOBILE_FOLLOWUP,
+        READINESS_FOLLOWUP,
+        READINESS_ANDROID_FOLLOWUP,
+        ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
+      ].find((entry) => validPaths(paths, entry)) ??
+      (paths.length > 0 &&
+      new Set(paths).size === paths.length &&
+      paths.every((path) => ACCOUNTS_SECTION_LIFETIME_FOLLOWUP.allowedPaths.has(path))
+        ? ACCOUNTS_SECTION_LIFETIME_FOLLOWUP
+        : null)
     if (!profile) {
       return null
     }
@@ -302,13 +332,16 @@ export async function findReusableFollowupProof({
         })
       )
     }
+    const multiCommit = profile.kind === ACCOUNTS_SECTION_LIFETIME_FOLLOWUP.kind
     const list = await request(
-      `actions/workflows/pr.yml/runs?event=pull_request&head_sha=${before}&per_page=100`
+      multiCommit
+        ? `actions/workflows/pr.yml/runs?event=pull_request&branch=${encodeURIComponent(pr.head.ref)}&per_page=20`
+        : `actions/workflows/pr.yml/runs?event=pull_request&head_sha=${before}&per_page=100`
     )
     if (
       !list ||
       !Number.isSafeInteger(list.total_count) ||
-      list.total_count > 100 ||
+      list.total_count > (multiCommit ? 20 : 100) ||
       !Array.isArray(list.workflow_runs) ||
       list.workflow_runs.length !== list.total_count
     ) {
@@ -316,64 +349,103 @@ export async function findReusableFollowupProof({
     }
     const candidates = list.workflow_runs.filter(
       (run) =>
-        run.head_sha === before &&
+        SHA.test(run.head_sha ?? '') &&
+        (!multiCommit ? run.head_sha === before : run.head_branch === pr.head.ref) &&
         Array.isArray(run.pull_requests) &&
         run.pull_requests.some((row) => row.number === pr.number)
     )
     if (!candidates.length || candidates.some((run) => !positive(run.id))) {
       return null
     }
-    const latest = candidates.toSorted((a, b) => b.id - a.id)[0]
-    const run = await request(`actions/runs/${latest.id}`)
-    if (run.id !== latest.id || !completeRun(run, repository, before, pr.number, pr.head.ref)) {
-      return null
+    const selected = multiCommit
+      ? candidates.toSorted((a, b) => b.id - a.id)
+      : [candidates.toSorted((a, b) => b.id - a.id)[0]]
+    const seenHeads = new Set()
+    for (const candidate of selected) {
+      const base = candidate.head_sha
+      if (seenHeads.has(base)) {
+        continue
+      }
+      seenHeads.add(base)
+      if (base === sourceHead) {
+        continue
+      }
+      let candidatePaths = paths
+      if (multiCommit) {
+        try {
+          checkedGit(execute, ['merge-base', '--is-ancestor', base, sourceHead])
+          const cumulative = checkedGit(execute, [
+            'diff',
+            '--name-only',
+            '--no-renames',
+            '-z',
+            base,
+            head,
+            '--'
+          ])
+          if (!cumulative.endsWith('\0')) {
+            continue
+          }
+          candidatePaths = cumulative.slice(0, -1).split('\0')
+          if (!validPaths(candidatePaths, profile)) {
+            continue
+          }
+        } catch {
+          continue
+        }
+      }
+      const run = await request(`actions/runs/${candidate.id}`)
+      if (run.id !== candidate.id || !completeRun(run, repository, base, pr.number, pr.head.ref)) {
+        continue
+      }
+      const jobs = positiveJobs(
+        await request(`actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`),
+        run,
+        profile
+      )
+      if (!jobs) {
+        continue
+      }
+      const current = await request(`actions/runs/${run.id}`)
+      if (
+        !completeRun(current, repository, base, pr.number, pr.head.ref) ||
+        current.id !== run.id ||
+        current.run_attempt !== run.run_attempt
+      ) {
+        continue
+      }
+      const proof = {
+        schemaVersion: 1,
+        kind: profile.kind,
+        repository,
+        prNumber: pr.number,
+        head,
+        sourceHead,
+        sourceTree,
+        base,
+        runId: run.id,
+        attempt: run.run_attempt,
+        reusedLanes: [...profile.lanes],
+        paths: candidatePaths,
+        jobs: jobs.map((job) => ({
+          id: job.id,
+          name: job.name,
+          runId: job.run_id,
+          head: job.head_sha,
+          status: job.status,
+          conclusion: job.conclusion
+        }))
+      }
+      if (!isFollowupProof(proof)) {
+        continue
+      }
+      proof.jobs.forEach(Object.freeze)
+      for (const value of [proof.jobs, proof.paths, proof.reusedLanes]) {
+        Object.freeze(value)
+      }
+      return Object.freeze(proof)
     }
-    const jobs = positiveJobs(
-      await request(`actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`),
-      run,
-      profile
-    )
-    if (!jobs) {
-      return null
-    }
-    const current = await request(`actions/runs/${run.id}`)
-    if (
-      !completeRun(current, repository, before, pr.number, pr.head.ref) ||
-      current.id !== run.id ||
-      current.run_attempt !== run.run_attempt
-    ) {
-      return null
-    }
-    const proof = {
-      schemaVersion: 1,
-      kind: profile.kind,
-      repository,
-      prNumber: pr.number,
-      head,
-      sourceHead,
-      sourceTree,
-      base: before,
-      runId: run.id,
-      attempt: run.run_attempt,
-      reusedLanes: [...profile.lanes],
-      paths,
-      jobs: jobs.map((job) => ({
-        id: job.id,
-        name: job.name,
-        runId: job.run_id,
-        head: job.head_sha,
-        status: job.status,
-        conclusion: job.conclusion
-      }))
-    }
-    if (!isFollowupProof(proof)) {
-      return null
-    }
-    proof.jobs.forEach(Object.freeze)
-    for (const value of [proof.jobs, proof.paths, proof.reusedLanes]) {
-      Object.freeze(value)
-    }
-    return Object.freeze(proof)
+    return null
   } catch {
     return null
   }

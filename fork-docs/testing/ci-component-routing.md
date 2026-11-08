@@ -98,3 +98,10 @@ Publisher работает с текущим verifier, перепроверяе�
 Полный набор checksums сравнивается до и после проверки. Пропуск новых builds
 допустим только в явно допущенном recovery mode; failure admission или Android
 по-прежнему блокирует публикацию. Эта схема не выдаёт старый failed run за green.
+
+
+## Mixed configuration and application changes
+
+The fork regression job keeps its approved baseline inventory. When a diff includes CI configuration or another global input together with application source, it adds changed test files and tests directly importing the changed modules. It does not expand a central settings import into the entire upstream test suite. Source-only diffs retain transitive-consumer selection. Missing graph evidence falls back to the approved baseline plus changed tests. This is fork qualification, not a claim that every upstream test ran. Static, platform build, hidden Electron, Android and installer gates remain independent required checks when selected.
+
+Regression fixture: a changed account policy imported by global settings and the application store retains the direct policy test and changed tests, while unrelated upstream store consumers do not inflate the mixed-input fallback. On iteration 011 candidate: 494 baseline tests, 515 selected total, compared with 10,425 before correction. Selector tests: 27 passed on the build host.

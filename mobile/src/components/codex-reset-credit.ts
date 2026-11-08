@@ -58,12 +58,12 @@ export function getCodexResetCreditSummary(
 ): CodexResetCreditSummary | null {
   const credits = limits?.rateLimitResetCredits
   const count = credits?.availableCount ?? 0
-  if (!Number.isInteger(count) || count <= 0) {
+  if (!Number.isInteger(count) || count < 0 || !credits) {
     return null
   }
   const expiry = credits?.nextExpiresAt
   const expiryLabel =
-    typeof expiry === 'number' && Number.isFinite(expiry)
+    count > 0 && typeof expiry === 'number' && Number.isFinite(expiry)
       ? formatResetCountdown(expiry - now).replace(
           /^Resets/,
           count === 1 ? 'Expires' : 'Next expires'

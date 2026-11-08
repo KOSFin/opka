@@ -108,6 +108,54 @@ it('saves the selected mode with host revision and refreshes host state', async 
     }
   })
 })
+it('offers quota equalization only when the owning host advertises it', async () => {
+  const client = new FakeSession('connected')
+  client.sendRequest.mockResolvedValue(rpcSuccess(snapshot))
+  await act(async () => {
+    tree = create(
+      createElement(MobileAccountPoolSection, { client, connected: true, hostName: 'Server' })
+    )
+  })
+  const open = async () => {
+    await act(async () =>
+      tree?.root
+        .findAllByType('Pressable')
+        .find((node) => node.props.accessibilityLabel === 'Codex pool settings')
+        ?.props.onPress()
+    )
+    await act(async () =>
+      tree?.root
+        .findAllByType('Pressable')
+        .find((node) => node.props.accessibilityLabel === 'codex pool mode')
+        ?.props.onPress()
+    )
+  }
+  await open()
+  const picker = () =>
+    tree?.root.findAllByType('Picker').find((node) => node.props.title === 'Pool mode')
+  expect(
+    picker()?.props.options.some((option: { value: string }) => option.value === 'quota-equalize')
+  ).toBe(false)
+  await act(async () => picker()?.props.onClose())
+  client.sendRequest.mockResolvedValue(
+    rpcSuccess({ ...snapshot, equalizeCapability: 'orchestration.account-pools.equalize.v1' })
+  )
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Refresh pools')
+      ?.props.onPress()
+  )
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'codex pool mode')
+      ?.props.onPress()
+  )
+  expect(
+    picker()?.props.options.some((option: { value: string }) => option.value === 'quota-equalize')
+  ).toBe(true)
+})
 it('does not request or offer mutation controls while disconnected', async () => {
   const client = new FakeSession('connected')
   await act(async () => {
@@ -117,6 +165,33 @@ it('does not request or offer mutation controls while disconnected', async () =>
   })
   expect(client.sendRequest).not.toHaveBeenCalled()
   expect(tree?.root.findAllByType('Pressable').every((node) => node.props.disabled)).toBe(true)
+})
+
+it('reveals provider-specific account addition only inside the opened pool section', async () => {
+  const client = new FakeSession('connected')
+  client.sendRequest.mockResolvedValue(rpcSuccess(snapshot))
+  await act(async () => {
+    tree = create(
+      createElement(MobileAccountPoolSection, {
+        client,
+        connected: true,
+        hostName: 'Server',
+        presentation: {
+          renderProviderSignIn: (provider: 'claude' | 'codex') =>
+            createElement('Text', null, `Add ${provider} account`)
+        }
+      })
+    )
+  })
+  expect(JSON.stringify(tree?.toJSON())).not.toContain('Add codex account')
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Codex pool settings')
+      ?.props.onPress()
+  )
+  expect(JSON.stringify(tree?.toJSON())).toContain('Add codex account')
+  expect(JSON.stringify(tree?.toJSON())).not.toContain('Add claude account')
 })
 
 it('retains an unsaved provider draft across collapse and host refresh without saving it', async () => {
@@ -290,6 +365,13 @@ it('uses one account row and keeps manual selection blocked until pool-off is sa
         .find((node) => node.props.accessibilityLabel === 'Save codex pool')!
         .props.onPress()
     )
+  expect(tree!.root.findAllByType('SavedAccount')).toHaveLength(0)
+  await act(async () =>
+    tree!.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Codex pool settings')!
+      .props.onPress()
+  )
   expect(tree!.root.findAllByType('SavedAccount')).toHaveLength(1)
   expect(blocked()).toBe(false)
   await toggle(true)

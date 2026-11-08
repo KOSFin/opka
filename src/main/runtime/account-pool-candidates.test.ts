@@ -47,6 +47,19 @@ it('retains exact-ID inactive compatibility while the active source is unresolve
   ]
   expect(accountPoolCandidates(source)[0]).toMatchObject({ quota: 'available', usedPercent: 15 })
 })
+it('publishes only fresh proven windows for pool comparison and blocks an exhausted short window', () => {
+  const source = snapshot('profile:b')
+  expect(accountPoolCandidates(source)[0].quotaWindows).toMatchObject([
+    { windowMinutes: 300, usedPercent: 15 }
+  ])
+  if (!source.rateLimits.codex?.session) {
+    throw new Error('Missing fixture window')
+  }
+  source.rateLimits.codex.session.usedPercent = 100
+  expect(accountPoolCandidates(source)[0].quota).toBe('exhausted')
+  source.rateLimits.codex.updatedAt = Date.now() - 11 * 60_000
+  expect(accountPoolCandidates(source)[0]).toMatchObject({ quota: 'unknown', usedPercent: null })
+})
 
 it.each(['profile:a', 'profile:b:wsl:Ubuntu'])(
   'rejects contradictory inactive proof %s before making pool quota available',

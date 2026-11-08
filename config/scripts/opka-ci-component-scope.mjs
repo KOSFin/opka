@@ -26,7 +26,8 @@ export function classifyCiPaths(paths) {
       enable('ci-contract-test', ['regression'])
     } else if (
       path === 'config/scripts/opka-release-qualification.mjs' ||
-      path === 'config/scripts/opka-ci-component-scope.mjs'
+      path === 'config/scripts/opka-ci-component-scope.mjs' ||
+      path === 'config/scripts/opka-ci-followup-proof.mjs'
     ) {
       enable('ci-admission-contract', ['regression'])
     } else if (
@@ -88,6 +89,13 @@ export function evaluateCiResults(scope, needs) {
       throw new Error(`Unexpected ${lane} result; required ${expected}`)
     }
   }
+}
+
+export function describeCiScope(scope) {
+  const selected = CI_LANES.filter((lane) => scope[lane])
+  const skipped = CI_LANES.filter((lane) => !scope[lane])
+  const reuse = scope.reused ? ` Exact-tree PR qualification: run ${scope.reusedRun}.` : ''
+  return `CI scope: selected ${selected.join(', ') || 'none'}; skipped ${skipped.join(', ') || 'none'}. Reasons: ${(scope.reasons ?? []).join(', ') || 'documentation only'}.${reuse}`
 }
 
 function git(...args) {
@@ -261,10 +269,7 @@ async function main() {
       `Reused successful ${proof.reusedLanes.join(', ')} checks from run ${proof.runId}, attempt ${proof.attempt}, source ${proof.base}; only reviewed test/CI inputs changed. Static and regression checks run on the current source.\n`
     )
   }
-  appendFileSync(
-    process.env.GITHUB_STEP_SUMMARY,
-    `CI scope: ${scope.reused ? `reused successful exact-tree PR run ${scope.reusedRun}` : CI_LANES.filter((lane) => scope[lane]).join(', ')}. Reasons: ${(scope.reasons ?? []).join(', ') || 'documentation only'}.\n`
-  )
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${describeCiScope(scope)}\n`)
 }
 if (isDirectInvocation(import.meta.url, process.argv[1])) {
   await main()
