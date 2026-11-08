@@ -77,7 +77,7 @@ async function press(label: string) {
   await act(async () => button.props.onPress())
 }
 describe('mobile project task journey', () => {
-  it('opens a project, task, saved report and sends a fenced review decision', async () => {
+  it.each(['', 'Reviewed the report'])('accepts a report with comment %j', async (comment) => {
     state.client = new FakeSession('connected')
     state.client.sendRequest.mockImplementation(async (method, params) => {
       if (method === 'projectTask.catalog') {
@@ -141,9 +141,7 @@ describe('mobile project task journey', () => {
     expect(text()).toContain('result.md')
     await press('Overview')
     await act(async () =>
-      tree?.root
-        .find((node) => String(node.type) === 'TextInput')
-        .props.onChangeText('Reviewed the report')
+      tree?.root.find((node) => String(node.type) === 'TextInput').props.onChangeText(comment)
     )
     await press('Accept result')
     expect(state.client.sendRequest).toHaveBeenCalledWith('projectTask.decide', {
@@ -152,7 +150,7 @@ describe('mobile project task journey', () => {
       revision: 'a'.repeat(64),
       expectedExecutionHostId: 'runtime:test',
       action: 'accept',
-      reason: 'Reviewed the report'
+      reason: comment || 'Operator accepted the reviewed result.'
     })
   })
   it('names loss of contact without declaring agent exit', async () => {

@@ -1,3 +1,6 @@
+// Older hosts require a nonempty review detail for every decision.
+export const projectTaskAcceptedDetail = 'Operator accepted the reviewed result.'
+
 export type ProjectTaskPhase = 'draft' | 'ready' | 'active' | 'review' | 'integration' | 'done'
 export type ProjectTaskEvent = {
   sequence: number

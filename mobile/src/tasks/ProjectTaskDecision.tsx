@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Pressable, Text, TextInput, View, StyleSheet } from 'react-native'
 import { z } from 'zod'
+import { projectTaskAcceptedDetail } from '../../../src/shared/project-task-workflow'
 import type { RpcClient } from '../transport/rpc-client'
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
@@ -64,7 +65,11 @@ export function ProjectTaskDecision({
         approveWrite.interpret(await approveWrite.request(client, params))
       } else {
         decisionWrite.interpret(
-          await decisionWrite.request(client, { ...params, action, reason: reason.trim() })
+          await decisionWrite.request(client, {
+            ...params,
+            action,
+            reason: reason.trim() || (action === 'accept' ? projectTaskAcceptedDetail : '')
+          })
         )
       }
       onDone()
@@ -76,7 +81,7 @@ export function ProjectTaskDecision({
       setBusy(false)
     }
   }
-  const disabled = !connected || busy || !executionHostId || (review && !reason.trim())
+  const disabled = !connected || busy || !executionHostId
   return (
     <View style={styles.section}>
       <Text style={styles.text}>
@@ -87,7 +92,7 @@ export function ProjectTaskDecision({
       {review ? (
         <TextInput
           accessibilityLabel="Review reason"
-          placeholder="Review notes or requested changes"
+          placeholder="Optional for acceptance. Describe any requested changes."
           placeholderTextColor={colors.textMuted}
           value={reason}
           onChangeText={setReason}
@@ -111,8 +116,8 @@ export function ProjectTaskDecision({
         {review ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ disabled }}
-            disabled={disabled}
+            accessibilityState={{ disabled: disabled || !reason.trim() }}
+            disabled={disabled || !reason.trim()}
             style={styles.button}
             onPress={() => void act('changes')}
           >

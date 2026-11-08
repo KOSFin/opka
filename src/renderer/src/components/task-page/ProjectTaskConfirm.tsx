@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -13,7 +13,8 @@ import {
 export type ProjectTaskConfirmation = {
   title: string
   description: string
-  reason?: boolean
+  reason?: boolean | 'optional'
+  focusConfirm?: boolean
   run: (reason: string) => Promise<void>
 }
 export function ProjectTaskConfirm({
@@ -26,6 +27,8 @@ export function ProjectTaskConfirm({
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const primary = useRef<HTMLButtonElement>(null)
+  const opener = useRef<HTMLElement | null>(null)
   const dismiss = () => {
     setReason('')
     setError('')
@@ -40,15 +43,43 @@ export function ProjectTaskConfirm({
         }
       }}
     >
-      <DialogContent surface="security">
+      <DialogContent
+        surface="security"
+        onOpenAutoFocus={(event) => {
+          opener.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null
+          if (action?.focusConfirm) {
+            event.preventDefault()
+            primary.current?.focus()
+          }
+        }}
+        onCloseAutoFocus={(event) => {
+          if (opener.current?.isConnected) {
+            event.preventDefault()
+            opener.current.focus()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{action?.title}</DialogTitle>
           <DialogDescription>{action?.description}</DialogDescription>
         </DialogHeader>
         {action?.reason && (
           <Textarea
-            aria-label="Review evidence"
-            placeholder="Result, checks performed, commit or MR links. This is an operator decision, not an automatic CI verification."
+            aria-label={action.reason === 'optional' ? 'Comment (optional)' : 'Review evidence'}
+            placeholder={
+              action.reason === 'optional'
+                ? 'Comment (optional)'
+                : 'Describe the result or requested changes'
+            }
+            maxLength={2000}
+            onKeyDown={(event) => {
+              const modifier = navigator.userAgent.includes('Mac') ? event.metaKey : event.ctrlKey
+              if (event.key === 'Enter' && modifier && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                if (!event.repeat) primary.current?.click()
+              }
+            }}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
           />
@@ -63,7 +94,8 @@ export function ProjectTaskConfirm({
             Cancel
           </Button>
           <Button
-            disabled={busy || !!(action?.reason && !reason.trim())}
+            ref={primary}
+            disabled={busy || (action?.reason === true && !reason.trim())}
             onClick={() => {
               if (!action) {
                 return
