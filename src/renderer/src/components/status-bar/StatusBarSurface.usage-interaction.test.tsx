@@ -234,6 +234,10 @@ it('keeps flat account actions reachable from the production Usage trigger and r
   trigger.focus()
   await user.keyboard('{Enter}')
   const row = await screen.findByRole('group', { name: 'Codex active@example.test usage' })
+  expect(
+    screen.getByRole('group', { name: 'Codex CLI login on this host · cli@example.test usage' })
+      .textContent
+  ).not.toContain('Saved profile')
   expect(screen.getByText('Synthetic host')).toBeTruthy()
   expect(screen.getAllByText('Codex · Switch account or runtime')).toHaveLength(1)
   expect(screen.getAllByText('Claude · Switch account or runtime')).toHaveLength(1)
