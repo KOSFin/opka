@@ -252,12 +252,12 @@ it.each([false, true])(
     }
     const view = render(<AccountsPane {...props} />)
     await act(async () => {})
-    const mountedDisclosure = screen.getByRole('button', { name: 'Cursor', exact: true })
+    const mountedDisclosure = screen.getByRole('button', { name: /^Cursor$/ })
     const statusReadsAfterMount = fake.cursorStatus.mock.calls.length
     for (const query of ['c', 'cu', 'cur', 'curs', 'curso', 'cursor', '', 'c', 'cu', 'cursor']) {
       fake.query = query
       await act(async () => view.rerender(<AccountsPane {...props} />))
-      expect(screen.getByRole('button', { name: 'Cursor', exact: true })).toBe(mountedDisclosure)
+      expect(screen.getByRole('button', { name: /^Cursor$/ })).toBe(mountedDisclosure)
     }
     expect(fake.cursorStatus.mock.calls.length).toBe(statusReadsAfterMount)
     expect(fake.write).not.toHaveBeenCalled()

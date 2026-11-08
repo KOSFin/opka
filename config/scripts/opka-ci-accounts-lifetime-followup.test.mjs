@@ -78,3 +78,164 @@ it.each(['unrelatedFailure', 'pendingAndroid', 'failedDesktop', 'wrongPr', 'wron
     expect(await findReusableFollowupProof(options)).toBeNull()
   }
 )
+
+function chainedContext() {
+  const { options, state } = accountsSectionLifetimeContext()
+  const intermediate = 'e'.repeat(40)
+  state.event.before = intermediate
+  const skippedRun = {
+    ...state.run,
+    id: 46,
+    run_attempt: 1,
+    head_sha: intermediate
+  }
+  const skippedJobs = state.jobs.map((job) => ({
+    ...job,
+    id: job.id + 1000,
+    run_id: 46,
+    head_sha: intermediate,
+    conclusion: ['Desktop assets', 'Hidden Electron', 'Beta installer', 'Android component'].some(
+      (name) => job.name.startsWith(name)
+    )
+      ? 'skipped'
+      : job.conclusion
+  }))
+  const originalFetch = options.fetchApi
+  options.fetchApi = async (url, requestOptions) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/actions/workflows/pr.yml/runs')) {
+      return new Response(
+        JSON.stringify({ total_count: 2, workflow_runs: [skippedRun, state.run] })
+      )
+    }
+    if (path.endsWith('/actions/runs/46')) {
+      return new Response(JSON.stringify(skippedRun))
+    }
+    if (path.endsWith('/attempts/1/jobs')) {
+      return new Response(JSON.stringify({ total_count: skippedJobs.length, jobs: skippedJobs }))
+    }
+    return originalFetch(url, requestOptions)
+  }
+  return { options, state, skippedRun, intermediate }
+}
+
+it('reuses the older successful platform run across a second test-only commit', async () => {
+  const { options, intermediate } = chainedContext()
+  const git = options.runGit
+  const calls = []
+  options.runGit = (args) => {
+    calls.push(args)
+    return git(args)
+  }
+  const proof = await findReusableFollowupProof(options)
+  expect(proof).toMatchObject({
+    kind: 'accounts-section-lifetime-followup',
+    base,
+    runId: 45,
+    attempt: 2,
+    sourceHead
+  })
+  expect(proof.paths).toContain(accountsSectionLifetimeFixture)
+  expect(calls).toContainEqual(['merge-base', '--is-ancestor', intermediate, sourceHead])
+  expect(calls).toContainEqual(['merge-base', '--is-ancestor', base, sourceHead])
+  expect(calls).toContainEqual([
+    'diff',
+    '--name-only',
+    '--no-renames',
+    '-z',
+    base,
+    options.head,
+    '--'
+  ])
+})
+
+it.each(['src/renderer/src/components/settings/AccountsPane.tsx', '.github/workflows/pr.yml'])(
+  'rejects a cumulative production or workflow difference: %s',
+  async (path) => {
+    const { options } = chainedContext()
+    const git = options.runGit
+    options.runGit = (args) => {
+      if (args[0] === 'diff' && args[4] === base) {
+        return { code: 0, stdout: `${accountsSectionLifetimeFixture}\0${path}\0` }
+      }
+      return git(args)
+    }
+    expect(await findReusableFollowupProof(options)).toBeNull()
+  }
+)
+
+it.each(['failed', 'pending', 'missing'])('rejects %s original platform evidence', async (kind) => {
+  const { options, state } = chainedContext()
+  const android = state.jobs.find((job) => job.name === androidAcceptance)
+  if (kind === 'missing') {
+    state.jobs.splice(state.jobs.indexOf(android), 1)
+  }
+  if (kind === 'failed') {
+    android.conclusion = 'failure'
+  }
+  if (kind === 'pending') {
+    android.status = 'in_progress'
+  }
+  expect(await findReusableFollowupProof(options)).toBeNull()
+})
+
+it.each(['repo', 'pr', 'branch', 'ancestor', 'attempt', 'api'])(
+  'rejects %s evidence for an older source run',
+  async (kind) => {
+    const { options, state } = chainedContext()
+    if (kind === 'repo') {
+      state.run.repository.full_name = 'other/project'
+    }
+    if (kind === 'pr') {
+      state.run.pull_requests[0].number = 17
+    }
+    if (kind === 'branch') {
+      state.run.head_branch = 'other-branch'
+    }
+    if (kind === 'attempt') {
+      state.finalRun = { ...state.run, run_attempt: 3 }
+    }
+    if (kind === 'ancestor') {
+      const git = options.runGit
+      options.runGit = (args) =>
+        args[0] === 'merge-base' && args[2] === base ? { code: 1, stdout: '' } : git(args)
+    }
+    if (kind === 'api') {
+      options.fetchApi = async (url) =>
+        new URL(url).pathname.endsWith('/actions/workflows/pr.yml/runs')
+          ? new Response(JSON.stringify({ total_count: 21, workflow_runs: [] }))
+          : new Response('{}')
+    }
+    expect(await findReusableFollowupProof(options)).toBeNull()
+  }
+)
+
+it.each(['failed', 'pending'])(
+  'rejects an older successful run for the same SHA after a newer %s platform run',
+  async (kind) => {
+    const { options, state } = chainedContext()
+    const newer = { ...state.run, id: 47, run_attempt: 1 }
+    const newerJobs = state.jobs.map((job) => ({
+      ...job,
+      id: job.id + 2000,
+      run_id: 47,
+      status: kind === 'pending' && job.name === androidAcceptance ? 'in_progress' : job.status,
+      conclusion: job.name === androidAcceptance ? 'failure' : job.conclusion
+    }))
+    const originalFetch = options.fetchApi
+    options.fetchApi = async (url, requestOptions) => {
+      const path = new URL(url).pathname
+      if (path.endsWith('/actions/workflows/pr.yml/runs')) {
+        return new Response(JSON.stringify({ total_count: 2, workflow_runs: [newer, state.run] }))
+      }
+      if (path.endsWith('/actions/runs/47')) {
+        return new Response(JSON.stringify(newer))
+      }
+      if (path.endsWith('/attempts/1/jobs')) {
+        return new Response(JSON.stringify({ total_count: newerJobs.length, jobs: newerJobs }))
+      }
+      return originalFetch(url, requestOptions)
+    }
+    expect(await findReusableFollowupProof(options)).toBeNull()
+  }
+)
