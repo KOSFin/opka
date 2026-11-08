@@ -42,7 +42,7 @@ export function MobileAccountPoolCard({
   routingTarget?: MobileNativePoolRoutingTarget
   presentation?: MobileAccountPresentation
 }) {
-  const [expanded, setExpanded] = useState(Boolean(presentation))
+  const [expanded, setExpanded] = useState(false)
   const [advanced, setAdvanced] = useState(false)
   const title = policy.provider === 'claude' ? 'Claude' : 'Codex'
   const Icon = policy.provider === 'claude' ? ClaudeIcon : OpenAIIcon

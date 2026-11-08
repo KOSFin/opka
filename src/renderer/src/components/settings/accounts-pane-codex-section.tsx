@@ -10,6 +10,7 @@ import { SearchableSetting } from './SearchableSetting'
 import { getAccountsCodexSearchEntries } from './accounts-search'
 import type { AccountsPaneSectionModel } from './accounts-pane-types'
 import { renderCodexAccountRow } from './accounts-pane-codex-account-row'
+import { CodexResetCreditControl } from '../codex-reset-credit-control'
 
 export function renderCodexAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
   const {
@@ -247,6 +248,20 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
             )}
           </div>
         )}
+        <CodexResetCreditControl
+          account={
+            visibleCodexAccounts.find((account) => account.id === activeCodexAccountId) ?? null
+          }
+          limits={model.poolUsageSnapshot?.codex ?? null}
+          rateLimitTarget={model.poolUsageSnapshot?.codexTarget ?? model.codexRateLimitTarget}
+          owner={accountOwner}
+          ownerLabel={
+            isRemoteAccountScope
+              ? (model.remoteServerName ?? 'Remote host')
+              : accountRuntimeSentenceLabel
+          }
+          verified={model.poolUsageSnapshot !== null && !accountRuntimeUnavailable}
+        />
       </SearchableSetting>
     </section>
   )

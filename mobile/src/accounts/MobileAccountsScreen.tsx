@@ -73,6 +73,8 @@ export function MobileAccountsScreen() {
     client,
     connected: screenActive && connState === 'connected',
     snapshot,
+    hostName,
+    hostId,
     accountMutationBusy: busyAccountId !== null,
     onSnapshot: acceptSnapshot,
     onNotice: setNotice
@@ -198,12 +200,36 @@ export function MobileAccountsScreen() {
     const { accountId } = getProviderAccountSelection(snapshot, provider)
     const usage = getAccountProviderUsage(snapshot, provider, accountId)
     const resetCredit = getCodexResetCreditSummary(usage, now)
-    return resetCredit && codexResetSupported && resetScope && connState === 'connected' ? (
+    const usageFresh =
+      !!usage &&
+      now - usage.updatedAt < 10 * 60_000 &&
+      usage.updatedAt <= now + 60_000 &&
+      usage.status === 'ok'
+    return resetCredit ? (
       <CodexResetCreditAction
         summary={resetCredit}
         scopeLabel={resetScopeLabel}
+        unavailableReason={
+          !codexResetSupported
+            ? 'Reset unavailable on this host'
+            : resetCredit.availableCount === 0
+              ? 'No resets left'
+              : !resetScope
+                ? 'Account or usage details changed; refresh to try again'
+                : !usageFresh
+                  ? 'Last known quota; refresh to use a reset'
+                  : null
+        }
         busy={resettingCodex}
-        disabled={resettingCodex || busyAccountId !== null || connState !== 'connected'}
+        disabled={
+          !codexResetSupported ||
+          !resetScope ||
+          !usageFresh ||
+          resetCredit.availableCount === 0 ||
+          resettingCodex ||
+          busyAccountId !== null ||
+          connState !== 'connected'
+        }
         onPress={confirmCodexReset}
       />
     ) : null

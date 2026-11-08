@@ -290,6 +290,13 @@ it('uses one account row and keeps manual selection blocked until pool-off is sa
         .find((node) => node.props.accessibilityLabel === 'Save codex pool')!
         .props.onPress()
     )
+  expect(tree!.root.findAllByType('SavedAccount')).toHaveLength(0)
+  await act(async () =>
+    tree!.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Codex pool settings')!
+      .props.onPress()
+  )
   expect(tree!.root.findAllByType('SavedAccount')).toHaveLength(1)
   expect(blocked()).toBe(false)
   await toggle(true)

@@ -6,12 +6,14 @@ import type { CodexResetCreditSummary } from './codex-reset-credit'
 export function CodexResetCreditAction({
   summary,
   scopeLabel,
+  unavailableReason,
   busy,
   disabled,
   onPress
 }: {
   summary: CodexResetCreditSummary
   scopeLabel?: string | null
+  unavailableReason?: string | null
   busy: boolean
   disabled: boolean
   onPress: () => void
@@ -23,7 +25,7 @@ export function CodexResetCreditAction({
         <View style={styles.copy}>
           <Text style={styles.title}>{summary.availabilityLabel}</Text>
           <Text style={styles.subtitle}>
-            {[summary.expiryLabel, scopeLabel].filter(Boolean).join(' · ') ||
+            {[summary.expiryLabel, scopeLabel, unavailableReason].filter(Boolean).join(' · ') ||
               'Earned Codex rate-limit reset'}
           </Text>
         </View>

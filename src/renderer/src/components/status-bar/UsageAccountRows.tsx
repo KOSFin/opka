@@ -12,6 +12,7 @@ import { useUsageAccounts } from './UsageAccountsContext'
 import { useUsageAccountPools } from './use-usage-account-pools'
 import { UsageAccountPoolLabel } from './UsageAccountPoolLabel'
 import { usageAccountRoster } from './usage-account-roster'
+import { CodexResetCreditControl } from '../codex-reset-credit-control'
 
 export function UsageAccountRows({
   provider,
@@ -24,7 +25,7 @@ export function UsageAccountRows({
 }): React.JSX.Element | null {
   const owner = useUsageAccounts()
   const pools = useUsageAccountPools()
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   if (!owner) {
     return null
   }
@@ -118,6 +119,16 @@ export function UsageAccountRows({
                   {translate('usage.accounts.unknownLimits', 'Limits unavailable')}
                 </p>
               )}
+              {provider === 'codex' && row.active && row.id && snapshot ? (
+                <CodexResetCreditControl
+                  account={snapshot.codex.accounts.find((account) => account.id === row.id) ?? null}
+                  limits={row.limits}
+                  rateLimitTarget={owner.rateLimits.codexTarget}
+                  owner={owner.target}
+                  ownerLabel={owner.ownerLabel ?? 'This device'}
+                  verified={owner.verified}
+                />
+              ) : null}
             </div>
           ))}
         </div>

@@ -8,6 +8,7 @@ import { accountPoolSnapshotRefreshKey } from './mobile-account-presentation'
 
 const dependencies = vi.hoisted(() => ({
   back: vi.fn(),
+  hostId: 'host-1',
   loadHosts: vi.fn(),
   uuid: vi.fn<() => string>(),
   resetRequest: vi.fn(),
@@ -42,7 +43,7 @@ vi.mock('expo-router', async () => {
     useFocusEffect(effect: () => void | (() => void)): void {
       React.useEffect(effect, [effect])
     },
-    useLocalSearchParams: () => ({ hostId: 'host-1' })
+    useLocalSearchParams: () => ({ hostId: dependencies.hostId })
   }
 })
 
@@ -127,6 +128,7 @@ vi.mock('../components/AgentIcons', () => ({
   OpenAIIcon: 'OpenAIIcon'
 }))
 
+const FIXTURE_NOW = Date.now()
 const AVAILABLE_SNAPSHOT = {
   claude: { accounts: [], activeAccountId: null },
   codex: {
@@ -155,7 +157,7 @@ const AVAILABLE_SNAPSHOT = {
       weekly: null,
       rateLimitResetCredits: { availableCount: 1, nextExpiresAt: null },
       usageMetadata: { authProvenance: 'profile:codex-1' },
-      updatedAt: 100,
+      updatedAt: FIXTURE_NOW,
       error: null,
       status: 'ok'
     },
@@ -174,7 +176,7 @@ const RESET_SNAPSHOT = {
       ...AVAILABLE_SNAPSHOT.rateLimits.codex,
       session: { ...AVAILABLE_SNAPSHOT.rateLimits.codex.session, usedPercent: 0 },
       rateLimitResetCredits: { availableCount: 0, nextExpiresAt: null },
-      updatedAt: 101
+      updatedAt: FIXTURE_NOW + 1
     }
   }
 } as const
@@ -265,6 +267,7 @@ const SECOND_KEY = '22222222-2222-4222-8222-222222222222'
 
 describe('accounts route Codex reset credit', () => {
   beforeEach(() => {
+    dependencies.hostId = 'host-1'
     dependencies.loadHosts.mockReset().mockResolvedValue([
       {
         id: 'host-1',
@@ -300,14 +303,15 @@ describe('accounts route Codex reset credit', () => {
     vi.restoreAllMocks()
   })
 
-  it('hides the scarce action when an older host does not advertise the capability', async () => {
+  it('shows the balance but disables the action on an older host', async () => {
     dependencies.statusCapabilities.mockReturnValue([])
     const renderer = await renderAccountsRoute()
     await act(async () => {
       await Promise.resolve()
     })
 
-    expect(resetButtons(renderer)).toHaveLength(0)
+    expect(resetButtons(renderer)).toHaveLength(1)
+    expect(resetButtons(renderer)[0]?.props.disabled).toBe(true)
     expect(dependencies.resetRequest).not.toHaveBeenCalled()
     act(() => renderer.unmount())
   })
@@ -362,7 +366,7 @@ describe('accounts route Codex reset credit', () => {
       ...AVAILABLE_SNAPSHOT,
       rateLimits: {
         ...AVAILABLE_SNAPSHOT.rateLimits,
-        codex: { ...AVAILABLE_SNAPSHOT.rateLimits.codex, updatedAt: 101 }
+        codex: { ...AVAILABLE_SNAPSHOT.rateLimits.codex, updatedAt: FIXTURE_NOW + 1 }
       }
     }
     act(() => {
@@ -497,6 +501,19 @@ describe('accounts route Codex reset credit', () => {
     act(() => openDialog(renderer)?.onCancel())
 
     expect(openDialog(renderer)).toBeNull()
+    expect(dependencies.resetRequest).not.toHaveBeenCalled()
+    act(() => renderer.unmount())
+  })
+
+  it('does not submit a confirmation captured before changing hosts', async () => {
+    const renderer = await renderAccountsRoute()
+    const button = await findResetButton(renderer)
+    await act(async () => button.props.onPress())
+    const action = getLatestConfirmAction(renderer)
+    dependencies.hostId = 'host-2'
+    await act(async () => renderer.update(createElement(MobileAccountsScreen)))
+    await act(async () => action())
+
     expect(dependencies.resetRequest).not.toHaveBeenCalled()
     act(() => renderer.unmount())
   })

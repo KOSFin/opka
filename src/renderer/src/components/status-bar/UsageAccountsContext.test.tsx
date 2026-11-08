@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import type * as I18nModule from '@/i18n/i18n'
 import type * as AccountsModule from '@/runtime/runtime-provider-accounts-client'
@@ -75,6 +75,7 @@ it('refreshes local inactive usage on popup mount and closes its local watcher',
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
+  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
   await screen.findByText('local@example.test')
   await waitFor(() => {
     expect(mocks.claude).toHaveBeenCalledTimes(1)
@@ -106,6 +107,8 @@ it('reads and expands account rows without fetching another remote stream or sel
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
+  expect(screen.queryByText('a@example.test')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
   expect(screen.getByText('a@example.test')).toBeTruthy()
   expect(screen.getAllByText('Limits unavailable').length).toBeGreaterThan(0)
   expect(mocks.watch).not.toHaveBeenCalled()
@@ -158,6 +161,7 @@ it('keeps a healthy partial snapshot verified when the failed provider reports i
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
+  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
   await screen.findByText('healthy@example.test')
   expect(screen.getByTestId('owner-verification').textContent).toBe('verified')
 })
@@ -172,6 +176,7 @@ it('rejects late callbacks after switching away and returning to the local owner
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
+  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
   act(() => deliveries[0](source('old')))
   await screen.findByText('old@example.test')
   view.rerender(
