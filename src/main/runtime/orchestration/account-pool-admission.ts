@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type Database from '../../sqlite/sync-database'
 import type { AccountPoolCandidate, AccountPoolPolicy } from '../../../shared/account-pool-policy'
 import { OrchestrationError } from './orchestration-error'
+import { rankQuotaEqualizeMembers } from '../account-pool-quota-equalize'
 
 const AllocationSequence = z.object({ sequence: z.number() })
 const PoolSlot = z.object({
@@ -87,7 +88,7 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
   }
   const assignments = [...pooled, ...readAccountAssignments(db).filter((entry) => !entry.poolId)]
   const lastAllocation =
-    policy.strategy === 'balanced'
+    policy.strategy === 'balanced' || policy.strategy === 'quota-equalize'
       ? db.prepare(
           'SELECT sequence FROM account_pool_assignments WHERE provider=? AND quota_identity=? ORDER BY sequence DESC LIMIT 1'
         )
@@ -149,6 +150,27 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
     }
     return policy.members.indexOf(a.member) - policy.members.indexOf(b.member)
   })
+  if (policy.strategy === 'quota-equalize') {
+    for (let start = 0; start < eligible.length;) {
+      let end = start + 1
+      while (
+        end < eligible.length &&
+        eligible[end].member.role === eligible[start].member.role &&
+        eligible[end].member.priority === eligible[start].member.priority
+      ) {
+        end += 1
+      }
+      eligible.splice(
+        start,
+        end - start,
+        ...rankQuotaEqualizeMembers(
+          eligible.slice(start, end).map((entry) => ({ ...entry, weight: entry.member.weight })),
+          admission.preferredAccountId
+        )
+      )
+      start = end
+    }
+  }
   const first = eligible[0]
   const preferred = eligible.find(
     (entry) =>

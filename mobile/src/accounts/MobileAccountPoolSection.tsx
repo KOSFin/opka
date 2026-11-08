@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import type { AccountPoolPolicy } from '../../../src/shared/account-pool-policy'
+import { ACCOUNT_POOL_EQUALIZE_CAPABILITY } from '../../../src/shared/account-pool-policy'
 import { accountPoolDrafts, setPoolMembership } from '../../../src/shared/account-pool-view'
 import type { AccountPoolView } from '../../../src/shared/account-pool-view'
 import type { RpcClient } from '../transport/rpc-client'
@@ -204,7 +205,14 @@ export function MobileAccountPoolSection({
       ) {
         change(setPoolMembership(policy, picker.accountId, value))
       }
-    } else if (value === 'manual' || value === 'sequential' || value === 'balanced') {
+    } else if (
+      value === 'manual' ||
+      value === 'sequential' ||
+      value === 'balanced' ||
+      (value === 'quota-equalize' &&
+        policy.provider === 'codex' &&
+        view?.equalizeCapability === ACCOUNT_POOL_EQUALIZE_CAPABILITY)
+    ) {
       change({ ...policy, strategy: value })
     }
     setPicker(null)
@@ -304,7 +312,12 @@ export function MobileAccountPoolSection({
               ]
             : [
                 { value: 'sequential', label: 'Sequential' },
-                { value: 'balanced', label: 'Balanced' }
+                { value: 'balanced', label: 'Balanced' },
+                ...(picker &&
+                drafts.find((entry) => entry.id === picker.policyId)?.provider === 'codex' &&
+                view?.equalizeCapability === ACCOUNT_POOL_EQUALIZE_CAPABILITY
+                  ? [{ value: 'quota-equalize', label: 'Equalize quota usage' }]
+                  : [])
               ]
         }
         onSelect={pick}

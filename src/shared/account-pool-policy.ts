@@ -13,7 +13,7 @@ export const AccountPoolPolicySchema = z.object({
   id: z.string().min(1).max(100),
   provider: z.enum(['claude', 'codex']),
   revision: z.number().int().nonnegative(),
-  strategy: z.enum(['manual', 'sequential', 'balanced']),
+  strategy: z.enum(['manual', 'sequential', 'balanced', 'quota-equalize']),
   applyToNewWork: z.boolean().default(false),
   rotation: z.enum(['off', 'on-limit', 'after-turn']).default('off'),
   unknownQuota: z.enum(['allow', 'exclude']),
@@ -33,12 +33,14 @@ export type AccountPoolCandidate = {
   auth: 'ready' | 'unavailable'
   quota: 'available' | 'exhausted' | 'unknown'
   usedPercent: number | null
+  quotaWindows?: { windowMinutes: number; usedPercent: number; resetsAt: number | null }[]
 }
 export const AccountPoolUpdateParams = z.object({
   policy: AccountPoolPolicySchema,
   expectedRevision: z.number().int().nonnegative()
 })
 export const ACCOUNT_POOL_CAPABILITY = 'orchestration.account-pools.v1' as const
+export const ACCOUNT_POOL_EQUALIZE_CAPABILITY = 'orchestration.account-pools.equalize.v1' as const
 
 /** One identity rule for native profiles, pool capacity and verified routing failure evidence. */
 export function codexAccountQuotaIdentity(account: {

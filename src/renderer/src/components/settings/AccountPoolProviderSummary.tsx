@@ -14,7 +14,9 @@ export function AccountPoolProviderSummary({
       ? translate('settings.accountPools.manualSelection', 'Manual selection')
       : policy.strategy === 'sequential'
         ? translate('settings.accountPools.sequential', 'Sequential')
-        : translate('settings.accountPools.balanced', 'Balanced')
+        : policy.strategy === 'quota-equalize'
+          ? 'Equalize quota usage'
+          : translate('settings.accountPools.balanced', 'Balanced')
   return (
     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
       {policy.provider === 'claude' ? <ClaudeIcon size={16} /> : <OpenAIIcon size={16} />}

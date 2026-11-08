@@ -36,6 +36,38 @@ it('rotates within the same healthy priority tier', () => {
   const f = fixture()
   expect(selectAccountPoolRotationMember(f.database, f, 'a').id).toBe('b')
 })
+it('keeps a near-equal Codex account and switches when comparable usage separates', () => {
+  const f = fixture()
+  f.policy.strategy = 'quota-equalize'
+  f.candidates.forEach((candidate, index) => {
+    candidate.quota = 'available'
+    candidate.usedPercent = index === 0 ? 49 : 50
+    candidate.quotaWindows = [
+      { windowMinutes: 300, usedPercent: candidate.usedPercent, resetsAt: 1_800_000 }
+    ]
+  })
+  expect(selectAccountPoolRotationMember(f.database, f, 'b').id).toBe('b')
+  f.candidates[1].quotaWindows = [{ windowMinutes: 300, usedPercent: 65, resetsAt: 1_800_000 }]
+  expect(selectAccountPoolRotationMember(f.database, f, 'b').id).toBe('a')
+})
+it('does not count the current reservation against its own capacity at a settled boundary', () => {
+  const f = fixture()
+  f.policy.strategy = 'quota-equalize'
+  f.policy.members[0].maxConcurrent = 1
+  f.candidates.forEach((candidate) => {
+    candidate.quota = 'available'
+    candidate.usedPercent = 20
+    candidate.quotaWindows = [{ windowMinutes: 300, usedPercent: 20, resetsAt: 1_800_000 }]
+  })
+  db!.acquireAccountPoolAssignment({
+    ...f,
+    ownerKey: 'current',
+    policy: { ...f.policy, members: [f.policy.members[0]] }
+  })
+  expect(
+    selectAccountPoolRotationMember(f.database, { ...f, replacesOwnerKey: 'current' }, 'a').id
+  ).toBe('a')
+})
 it('does not demote a healthy current account to a lower priority', () => {
   const f = fixture()
   f.policy.members[1].priority = 2

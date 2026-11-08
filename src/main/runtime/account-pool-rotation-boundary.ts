@@ -93,14 +93,17 @@ export function accountPoolRotationBoundary(
   }
 ): number | null {
   const { policy } = args
-  if (policy.strategy === 'manual' || policy.rotation === 'off') {
+  if (
+    policy.strategy === 'manual' ||
+    (policy.rotation === 'off' && policy.strategy !== 'quota-equalize')
+  ) {
     return null
   }
   const completedAt = accountPoolCompletedTurnBoundary({ ...args, provider: policy.provider })
   if (completedAt === null) {
     return null
   }
-  if (policy.rotation === 'after-turn') {
+  if (policy.rotation === 'after-turn' || policy.strategy === 'quota-equalize') {
     return completedAt
   }
   const member = policy.members.find((entry) => entry.accountId === args.accountId)

@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react'
 import type { AccountPoolPolicy } from '../../../../shared/account-pool-policy'
+import { ACCOUNT_POOL_EQUALIZE_CAPABILITY } from '../../../../shared/account-pool-policy'
 import type { AccountPoolView } from '../../../../shared/account-pool-view'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
@@ -82,7 +83,14 @@ export function AccountPoolPolicyEditor({
               value={policy.strategy === 'manual' ? 'sequential' : policy.strategy}
               disabled={busy}
               onValueChange={(strategy) => {
-                if (strategy === 'manual' || strategy === 'sequential' || strategy === 'balanced') {
+                if (
+                  strategy === 'manual' ||
+                  strategy === 'sequential' ||
+                  strategy === 'balanced' ||
+                  (strategy === 'quota-equalize' &&
+                    policy.provider === 'codex' &&
+                    view.equalizeCapability === ACCOUNT_POOL_EQUALIZE_CAPABILITY)
+                ) {
                   change({ ...policy, strategy })
                 }
               }}
@@ -93,9 +101,19 @@ export function AccountPoolPolicyEditor({
               <SelectContent>
                 <SelectItem value="sequential">Sequential</SelectItem>
                 <SelectItem value="balanced">Balanced</SelectItem>
+                {policy.provider === 'codex' &&
+                view.equalizeCapability === ACCOUNT_POOL_EQUALIZE_CAPABILITY ? (
+                  <SelectItem value="quota-equalize">Equalize quota usage</SelectItem>
+                ) : null}
               </SelectContent>
             </Select>
           </div>
+        ) : null}
+        {automatic && policy.strategy === 'quota-equalize' ? (
+          <p className="text-xs text-muted-foreground">
+            Uses fresh comparable quota windows. Rechecks only between settled turns; near equal
+            usage keeps the current account.
+          </p>
         ) : null}
         <NativePoolRoutingNotice />
         {automatic ? (

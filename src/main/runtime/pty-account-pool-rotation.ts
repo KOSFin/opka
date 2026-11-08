@@ -81,9 +81,7 @@ export class PtyAccountPoolRotation {
       !runtime
         .requireStore()
         .getSettings()
-        .accountPools?.some(
-          (pool) => pool.rotation === 'on-limit' || pool.rotation === 'after-turn'
-        )
+        .accountPools?.some((pool) => pool.rotation !== 'off' || pool.strategy === 'quota-equalize')
     ) {
       return
     }
@@ -176,7 +174,7 @@ export class PtyAccountPoolRotation {
     }
     const selected = selectAccountPoolRotationMember(
       db.db,
-      { policy, candidates },
+      { policy, candidates, replacesOwnerKey: previous.ownerKey },
       previous.accountId
     )
     if (selected.id === previous.accountId) {
