@@ -45,7 +45,7 @@ export function UsageAccountRows({
   const rows = snapshot ? usageAccountRoster(provider, snapshot, owner.rateLimits) : null
   const failed = snapshot?.failedProviders?.includes(provider)
   const providerName = provider === 'claude' ? 'Claude' : 'Codex'
-  if (!rows?.length) {
+  if (!snapshot || !rows?.length) {
     return (
       <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2 text-xs">
         <ProviderIcon provider={provider} />

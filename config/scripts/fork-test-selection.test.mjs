@@ -91,7 +91,7 @@ describe('fork changed-component selection', () => {
     expect(result.files).not.toContain('mobile/src/aliased.test.ts')
   })
   it.each(['.github/workflows/pr.yml', 'config/scripts/runner.mjs', 'tests/e2e/browser.spec.ts'])(
-    'retains source consumers alongside approved coverage when %s also changes',
+    'keeps direct tests but bounds app-wide transitive consumers when %s also changes',
     (globalInput) => {
       const readGraph = vi.fn(() => graph)
       const fallback = ['mobile/src/unrelated.test.ts']
@@ -102,11 +102,53 @@ describe('fork changed-component selection', () => {
         readGraph,
         fallback
       )
+      expect(sourceOnly.files).toContain('mobile/src/feature.test.tsx')
       expect(mixed.full).toBe(true)
-      expect(mixed.files).toEqual(sourceOnly.files)
+      expect(mixed.reason).toContain('direct changed-source tests')
+      expect(mixed.files).toEqual(['mobile/src/unrelated.test.ts', 'src/main/consumer.test.ts'])
+      expect(mixed.files).not.toContain('mobile/src/feature.test.tsx')
       expect(readGraph).toHaveBeenCalledTimes(1)
     }
   )
+  it('bounds central settings fanout while retaining direct and changed tests', () => {
+    const inputs = new Map([
+      ['src/shared/account-pool-policy.ts', 'export const policy = 1'],
+      [
+        'src/shared/global-settings-base.ts',
+        "import { policy } from './account-pool-policy'; export { policy }"
+      ],
+      [
+        'src/renderer/src/store.ts',
+        "import { policy } from '../../shared/global-settings-base'; export { policy }"
+      ],
+      ['src/renderer/src/unrelated.test.ts', "import './store'"],
+      ['src/shared/account-pool-policy.test.ts', "import './account-pool-policy'"],
+      ['config/scripts/changed.test.mjs', "import { it } from 'vitest'"],
+      ['config/scripts/fork-contract.test.mjs', "import { it } from 'vitest'"]
+    ])
+    const inventory = [...inputs.keys()].filter((file) => file.includes('.test.'))
+    const dependencyGraph = {
+      ...buildUnitDependencyGraph(inputs),
+      files: new Set(inputs.keys())
+    }
+    const result = selectForkTests(
+      inventory,
+      [
+        '.github/workflows/pr.yml',
+        'src/shared/account-pool-policy.ts',
+        'config/scripts/changed.test.mjs'
+      ],
+      dependencyGraph,
+      ['config/scripts/fork-contract.test.mjs']
+    )
+    expect(result.full).toBe(true)
+    expect(result.files).toEqual([
+      'config/scripts/changed.test.mjs',
+      'config/scripts/fork-contract.test.mjs',
+      'src/shared/account-pool-policy.test.ts'
+    ])
+    expect(result.files).not.toContain('src/renderer/src/unrelated.test.ts')
+  })
   it.each([
     '.github/workflows/pr.yml',
     'config/vitest.config.ts',
@@ -131,8 +173,6 @@ describe('fork changed-component selection', () => {
       ['mobile/src/unrelated.test.ts']
     )
     expect(selected.files).toEqual([
-      'mobile/src/aliased.test.ts',
-      'mobile/src/feature.test.tsx',
       'mobile/src/unrelated.test.ts',
       'src/main/consumer.test.ts',
       outside

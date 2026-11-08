@@ -77,7 +77,9 @@ export function ProjectTaskConfirm({
               const modifier = navigator.userAgent.includes('Mac') ? event.metaKey : event.ctrlKey
               if (event.key === 'Enter' && modifier && !event.nativeEvent.isComposing) {
                 event.preventDefault()
-                if (!event.repeat) primary.current?.click()
+                if (!event.repeat) {
+                  primary.current?.click()
+                }
               }
             }}
             value={reason}

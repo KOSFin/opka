@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
 import {
@@ -9,6 +10,20 @@ import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 const executablePath = process.env.ORCA_FORK_AUDIT_ELECTRON
 test.skip(!executablePath, 'Explicit isolated background Electron required')
 test.use({ trace: 'off', screenshot: 'off' })
+
+async function captureHiddenRenderer(page: Page, path: string): Promise<void> {
+  const cdp = await page.context().newCDPSession(page)
+  try {
+    const { data } = await cdp.send('Page.captureScreenshot', {
+      format: 'png',
+      fromSurface: false,
+      captureBeyondViewport: false
+    })
+    await writeFile(path, Buffer.from(data, 'base64'))
+  } finally {
+    await cdp.detach()
+  }
+}
 
 async function openPools(app: ElectronApplication, page: Page, unsupported = false): Promise<void> {
   await page.waitForFunction(() => window.__store?.getState().workspaceSessionReady === true)
@@ -188,14 +203,21 @@ test('pool operator edits real controls and reads the host-confirmed revision', 
     const launched = await session.launch({ executablePath })
     app = launched.app
     await openPools(app, launched.page)
-    const section = launched.page.locator('#accounts-codex-switching')
-    await expect(section.getByText('pool@example.test', { exact: true })).toHaveCount(1)
-    await expect(section.getByRole('button', { name: 'Use for new chats' })).toBeDisabled()
-    await expect(section.getByRole('button', { name: 'Remove', exact: true })).toBeEnabled()
+    const provider = launched.page.locator('[data-provider-accounts="Codex"]')
+    await provider.getByRole('button', { name: 'Codex', exact: true }).click()
+    await expect(provider.getByRole('button', { name: 'Codex', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    const section = provider.locator('#accounts-codex-switching')
+    const account = section.getByRole('group', { name: 'pool@example.test' })
+    await expect(account.getByText('pool@example.test', { exact: true })).toHaveCount(1)
+    await expect(account.getByRole('button', { name: 'Use for new chats' })).toBeDisabled()
+    await expect(account.getByRole('button', { name: 'Remove', exact: true })).toBeEnabled()
     await expect(section.getByText(/Auth: ready · Quota: unknown/)).toBeVisible()
     await expect(section.getByText('CLI switching ready', { exact: true })).toBeVisible()
     await expect(section.getByRole('switch', { name: 'Use automatic pool' })).toBeChecked()
-    await launched.page.screenshot({ path: info.outputPath('account-pool-settings-before.png') })
+    await captureHiddenRenderer(launched.page, info.outputPath('account-pool-settings-before.png'))
     await section.getByRole('combobox', { name: 'codex pool mode' }).click()
     await launched.page.getByRole('option', { name: 'Balanced', exact: true }).click()
     await section.getByRole('spinbutton', { name: 'pool@example.test priority' }).fill('2')
@@ -210,13 +232,13 @@ test('pool operator edits real controls and reads the host-confirmed revision', 
     await expect(
       section.getByRole('combobox', { name: 'pool@example.test pool participation' })
     ).toHaveText('Drain')
-    await launched.page.screenshot({ path: info.outputPath('account-pool-settings.png') })
+    await captureHiddenRenderer(launched.page, info.outputPath('account-pool-settings.png'))
     await launched.page.setViewportSize({ width: 720, height: 900 })
     await expect(section.getByRole('button', { name: 'Save Codex settings' })).toBeVisible()
     await expect(
       section.getByRole('spinbutton', { name: 'pool@example.test priority' })
     ).toHaveValue('2')
-    await launched.page.screenshot({ path: info.outputPath('account-pool-settings-narrow.png') })
+    await captureHiddenRenderer(launched.page, info.outputPath('account-pool-settings-narrow.png'))
   } finally {
     await session.dispose(app)
   }
@@ -232,9 +254,11 @@ test('older hosts expose an unavailable state without mutation controls', async 
     const launched = await session.launch({ executablePath })
     app = launched.app
     await openPools(app, launched.page, true)
-    await expect(
-      launched.page.locator('#accounts-codex-switching').getByRole('alert')
-    ).toContainText('Account pools unavailable')
+    const provider = launched.page.locator('[data-provider-accounts="Codex"]')
+    await provider.getByRole('button', { name: 'Codex', exact: true }).click()
+    await expect(provider.locator('#accounts-codex-switching').getByRole('alert')).toContainText(
+      'Account pools unavailable'
+    )
     await expect(launched.page.getByRole('button', { name: 'Save Codex settings' })).toHaveCount(0)
   } finally {
     await session.dispose(app)
@@ -260,12 +284,14 @@ test('server accounts show device sign-in, cancel safely and choose a Claude wor
     })
     await launched.page.getByRole('combobox', { name: 'Host', exact: true }).click()
     await launched.page.getByRole('option', { name: 'Synthetic server', exact: true }).click()
-    const signIn = launched.page.getByRole('region', { name: 'Server account sign-in' })
+    const codexProvider = launched.page.locator('[data-provider-accounts="Codex"]')
+    await codexProvider.getByRole('button', { name: 'Codex', exact: true }).click()
+    const signIn = codexProvider.getByRole('region', { name: 'Server account sign-in' })
     await expect(signIn.getByText(/Sign in for Synthetic server/)).toBeVisible()
     await expect(
-      launched.page
+      codexProvider
         .locator('#accounts-codex-switching')
-        .getByText('pool@example.test', { exact: true })
+        .getByRole('group', { name: 'pool@example.test' })
     ).toBeVisible()
     await expect(
       launched.page.getByText('Could not load provider accounts.', { exact: true })
@@ -273,20 +299,25 @@ test('server accounts show device sign-in, cancel safely and choose a Claude wor
     await signIn.getByRole('button', { name: 'Add Codex account', exact: true }).click()
     await expect(signIn.getByText('TEST-CODE1', { exact: true })).toBeVisible()
     await expect(signIn.getByRole('button', { name: 'Open sign-in page' })).toBeVisible()
-    await launched.page.screenshot({ path: info.outputPath('remote-codex-account-code.png') })
+    await captureHiddenRenderer(launched.page, info.outputPath('remote-codex-account-code.png'))
     await signIn.getByRole('button', { name: 'Cancel sign-in', exact: true }).click()
     await expect(signIn.getByText('TEST-CODE1', { exact: true })).toHaveCount(0)
     await expect.poll(() => remoteAccountSignInCalls(app!)).toContain('accounts.cancelDeviceSignIn')
-    await signIn.getByRole('button', { name: 'Add Claude account in terminal' }).click()
-    await signIn.getByRole('combobox', { name: 'Claude sign-in workspace' }).click()
+    const claudeProvider = launched.page.locator('[data-provider-accounts="Claude"]')
+    await claudeProvider.getByRole('button', { name: 'Claude', exact: true }).click()
+    await claudeProvider.getByRole('button', { name: 'Add Claude account in terminal' }).click()
+    await claudeProvider.getByRole('combobox', { name: 'Claude sign-in workspace' }).click()
     await launched.page.getByRole('option', { name: 'Second server project', exact: true }).click()
-    await expect(signIn.getByRole('combobox', { name: 'Claude sign-in workspace' })).toHaveText(
-      'Second server project'
-    )
     await expect(
-      signIn.getByRole('button', { name: 'Open Claude sign-in', exact: true })
+      claudeProvider.getByRole('combobox', { name: 'Claude sign-in workspace' })
+    ).toHaveText('Second server project')
+    await expect(
+      claudeProvider.getByRole('button', { name: 'Open Claude sign-in', exact: true })
     ).toBeEnabled()
-    await launched.page.screenshot({ path: info.outputPath('remote-claude-account-workspace.png') })
+    await captureHiddenRenderer(
+      launched.page,
+      info.outputPath('remote-claude-account-workspace.png')
+    )
   } finally {
     await session.dispose(app)
   }

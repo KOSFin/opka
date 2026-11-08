@@ -409,8 +409,8 @@ describe('reset result publication', () => {
     const first = watchProviderAccounts(REMOTE, { onSnapshot: usage, onError: vi.fn() })
     const second = watchProviderAccounts(REMOTE, { onSnapshot: settings, onError: vi.fn() })
     await flushMicrotasks()
-    const callbacks = runtimeEnvironmentSubscribe.mock.calls[0]?.[1] as SubscriptionCallbacks
-    const secondCallbacks = runtimeEnvironmentSubscribe.mock.calls[1]?.[1] as SubscriptionCallbacks
+    const callbacks: SubscriptionCallbacks = runtimeEnvironmentSubscribe.mock.calls[0]?.[1]
+    const secondCallbacks: SubscriptionCallbacks = runtimeEnvironmentSubscribe.mock.calls[1]?.[1]
     callbacks.onResponse({
       ok: true,
       result: { type: 'ready', snapshot: snapshotFixture('initial') }

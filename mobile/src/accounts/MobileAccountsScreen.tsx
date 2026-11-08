@@ -239,6 +239,20 @@ function HostAccountsScreen({ hostId }: { hostId: string }) {
       />
     ) : null
   }
+  const renderProviderSignIn = (provider: ProviderKey) => (
+    <MobileAccountSignInSection
+      key={`sign-in:${hostId}:${provider}`}
+      provider={provider}
+      hostId={hostId}
+      client={client}
+      connected={screenActive && connState === 'connected'}
+      hostName={hostName}
+      onComplete={() => {
+        setEnrollmentRevision((revision) => revision + 1)
+        void refresh()
+      }}
+    />
+  )
   const renderAccountRow = (
     provider: ProviderKey,
     accountId: string | null,
@@ -302,35 +316,12 @@ function HostAccountsScreen({ hostId }: { hostId: string }) {
               presentation={{
                 renderSystemAccount: (provider, blocked) =>
                   renderAccountRow(provider, null, blocked),
-                renderProviderSignIn: (provider) => (
-                  <MobileAccountSignInSection
-                    key={`sign-in:${hostId}:${provider}`}
-                    provider={provider}
-                    hostId={hostId}
-                    client={client}
-                    connected={screenActive && connState === 'connected'}
-                    hostName={hostName}
-                    onComplete={() => {
-                      setEnrollmentRevision((revision) => revision + 1)
-                      void refresh()
-                    }}
-                  />
-                ),
+                renderProviderSignIn,
                 renderAccount: (provider, id, blocked) => renderAccountRow(provider, id, blocked),
                 renderUnavailableAccounts: (blocked) =>
                   (['claude', 'codex'] as const).map((provider) => (
                     <MobileProviderAccountsDisclosure key={provider} provider={provider}>
-                      <MobileAccountSignInSection
-                        provider={provider}
-                        hostId={hostId}
-                        client={client}
-                        connected={screenActive && connState === 'connected'}
-                        hostName={hostName}
-                        onComplete={() => {
-                          setEnrollmentRevision((revision) => revision + 1)
-                          void refresh()
-                        }}
-                      />
+                      {renderProviderSignIn(provider)}
                       {renderAccountRow(provider, null, blocked)}
                       {snapshot[provider].accounts.map((account) => (
                         <View key={account.id}>

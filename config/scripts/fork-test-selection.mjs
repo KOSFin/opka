@@ -45,22 +45,27 @@ export function selectForkTests(files, changed, graph, fallbackFiles) {
   const selected = selectUnitFiles(files, changed, directGraph, {
     sourcePrefixes: FORK_SOURCE_PREFIXES
   })
-  const sourceSelection =
+  const mixedGlobal =
     selected.full && sourceChanged.length > 0 && sourceChanged.length < changed.length
-      ? selectUnitFiles(files, sourceChanged, directGraph, { sourcePrefixes: FORK_SOURCE_PREFIXES })
-      : null
+  const directConsumers = mixedGlobal
+    ? files.filter((file) =>
+        sourceChanged.some((source) => directGraph().reverse.get(source)?.has(file))
+      )
+    : []
   const covered = selected.full
     ? (fallbackFiles ?? files)
     : [...(fallbackFiles ?? []), ...selected.files]
   return {
     ...selected,
-    reason: selected.full
-      ? selected.reason
-      : 'Approved fork qualification plus transitive consumers',
+    reason: mixedGlobal
+      ? 'Global input: approved fork qualification plus direct changed-source tests'
+      : selected.full
+        ? selected.reason
+        : 'Approved fork qualification plus transitive consumers',
     files: [
       ...new Set([
         ...covered,
-        ...(sourceSelection && !sourceSelection.full ? sourceSelection.files : []),
+        ...directConsumers,
         ...files.filter((file) => changed.includes(file))
       ])
     ].sort()

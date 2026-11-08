@@ -90,6 +90,20 @@ class NativeActionTargets(unittest.TestCase):
         self.assertEqual(journey.visible_bounds(root, tab), [44, 231, 527, 304])
         self.assertEqual(tab.get('text'), 'Accounts')
 
+    def test_captured_codex_pool_disclosure_and_revealed_sign_in_are_actionable(self):
+        directory = Path(__file__).with_name('fixtures') / 'android-webview-accessibility'
+        collapsed = ET.parse(directory / 'accounts-pools.xml').getroot()
+        disclosure = journey.actionable_match(collapsed, 'Codex pool settings')
+        self.assertIsNotNone(disclosure)
+        self.assertEqual(disclosure.get('class'), 'android.widget.Button')
+        self.assertIsNotNone(journey.visible_bounds(collapsed, disclosure, for_tap=True))
+        self.assertIsNone(journey.actionable_match(collapsed, 'Add Codex account'))
+        expanded = ET.parse(directory / 'accounts-offscreen.xml').getroot()
+        sign_in = journey.actionable_match(expanded, 'Add Codex account')
+        self.assertIsNotNone(sign_in)
+        self.assertEqual(sign_in.get('class'), 'android.widget.Button')
+        self.assertIsNotNone(journey.visible_bounds(expanded, sign_in, for_tap=True))
+
     def test_captured_accounts_tab_behind_header_is_not_a_visible_target(self):
         fixture = Path(__file__).with_name('fixtures') / 'android-webview-accessibility/accounts-tab-occluded.xml'
         root = ET.parse(fixture).getroot()

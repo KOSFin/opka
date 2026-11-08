@@ -170,6 +170,7 @@ render.each(sizes)('project work on $name', (size) => {
     const opened = await openScreen(size, 'accounts')
     const { page } = opened
     try {
+      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
       await page.getByText('Add Codex account', { exact: true }).waitFor()
       await capture(page, size, 'accounts')
       await page.waitForTimeout(300)
@@ -186,11 +187,17 @@ render.each(sizes)('project work on $name', (size) => {
         )
       )
       await page
-        .getByRole('button', {
-          name: 'Use test@example.invalid for new manual codex chats',
-          exact: true
-        })
-        .waitFor()
+        .getByRole('button', { name: 'Show test@example.invalid codex usage', exact: true })
+        .click()
+      await page.getByText('Default for new manual chats', { exact: true }).waitFor()
+      expect(
+        await page
+          .getByRole('button', {
+            name: 'Use test@example.invalid for new manual codex chats',
+            exact: true
+          })
+          .count()
+      ).toBe(0)
       expect(await page.getByText('test@example.invalid', { exact: true }).count()).toBe(1)
       await capture(page, size, 'pools')
       await page.getByText('Add Codex account', { exact: true }).click()
@@ -209,6 +216,7 @@ render.each(sizes)('project work on $name', (size) => {
       await page.getByText('Cancel sign-in', { exact: true }).click()
       await page.getByText('Add Codex account', { exact: true }).waitFor()
       expect(await page.getByText('TEST-ABCDE', { exact: true }).count()).toBe(0)
+      await page.getByRole('button', { name: 'Claude pool settings', exact: true }).click()
       await page.getByText('Add Claude account in terminal', { exact: true }).click()
       await page.getByText('Open Claude sign-in in…', { exact: true }).waitFor()
       await capture(page, size, 'claude-workspace-picker')
@@ -236,6 +244,7 @@ render.each(sizes)('project work on $name', (size) => {
     const opened = await openScreen(size, 'accounts')
     const { page } = opened
     try {
+      await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
       await page.getByLabel('test@example.invalid priority', { exact: true }).fill('2')
       await page.getByRole('button', { name: 'Codex pool settings', exact: true }).click()
       expect(
