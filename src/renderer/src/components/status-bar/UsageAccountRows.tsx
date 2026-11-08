@@ -113,12 +113,14 @@ export function UsageAccountRows({
                   <span className="block break-words text-xs font-medium">
                     {providerName} · {row.label}
                   </span>
-                  <span className="text-3xs text-muted-foreground">
-                    {row.active
-                      ? translate('usage.accounts.default', 'Default for new chats')
-                      : translate('usage.accounts.savedProfile', 'Saved profile')}
-                    {row.detail ? ` · ${row.detail}` : ''}
-                  </span>
+                  {row.active || row.id !== null ? (
+                    <span className="text-3xs text-muted-foreground">
+                      {row.active
+                        ? translate('usage.accounts.default', 'Default for new chats')
+                        : translate('usage.accounts.savedProfile', 'Saved profile')}
+                      {row.detail ? ` · ${row.detail}` : ''}
+                    </span>
+                  ) : null}
                 </span>
                 {row.limits && now - row.limits.updatedAt > 10 * 60_000 ? (
                   <span className="shrink-0 text-3xs text-muted-foreground">
