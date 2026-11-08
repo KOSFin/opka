@@ -119,6 +119,33 @@ it('does not request or offer mutation controls while disconnected', async () =>
   expect(tree?.root.findAllByType('Pressable').every((node) => node.props.disabled)).toBe(true)
 })
 
+it('reveals provider-specific account addition only inside the opened pool section', async () => {
+  const client = new FakeSession('connected')
+  client.sendRequest.mockResolvedValue(rpcSuccess(snapshot))
+  await act(async () => {
+    tree = create(
+      createElement(MobileAccountPoolSection, {
+        client,
+        connected: true,
+        hostName: 'Server',
+        presentation: {
+          renderProviderSignIn: (provider: 'claude' | 'codex') =>
+            createElement('Text', null, `Add ${provider} account`)
+        }
+      })
+    )
+  })
+  expect(JSON.stringify(tree?.toJSON())).not.toContain('Add codex account')
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Codex pool settings')
+      ?.props.onPress()
+  )
+  expect(JSON.stringify(tree?.toJSON())).toContain('Add codex account')
+  expect(JSON.stringify(tree?.toJSON())).not.toContain('Add claude account')
+})
+
 it('retains an unsaved provider draft across collapse and host refresh without saving it', async () => {
   const client = new FakeSession('connected')
   client.sendRequest.mockResolvedValue(rpcSuccess(snapshot))

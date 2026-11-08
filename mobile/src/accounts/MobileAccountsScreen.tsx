@@ -27,6 +27,7 @@ import { MobileAccountSignInSection } from './MobileAccountSignInSection'
 import { MobileProviderAccountRow } from './MobileProviderAccountRow'
 import { accountPoolSnapshotRefreshKey } from './mobile-account-presentation'
 import { MobileAccountsHeader } from './MobileAccountsHeader'
+import { MobileProviderAccountsDisclosure } from './MobileProviderAccountsDisclosure'
 
 type AccountsNotice = { title: string; message: string }
 
@@ -281,17 +282,6 @@ export function MobileAccountsScreen() {
           </View>
         ) : (
           <>
-            <MobileAccountSignInSection
-              key={`sign-in:${hostId}`}
-              hostId={hostId}
-              client={client}
-              connected={screenActive && connState === 'connected'}
-              hostName={hostName}
-              onComplete={() => {
-                setEnrollmentRevision((revision) => revision + 1)
-                void refresh()
-              }}
-            />
             <MobileAccountPoolSection
               key={hostId}
               refreshKey={accountPoolSnapshotRefreshKey(snapshot, enrollmentRevision)}
@@ -302,14 +292,36 @@ export function MobileAccountsScreen() {
               presentation={{
                 renderSystemAccount: (provider, blocked) =>
                   renderAccountRow(provider, null, blocked),
+                renderProviderSignIn: (provider) => (
+                  <MobileAccountSignInSection
+                    key={`sign-in:${hostId}:${provider}`}
+                    provider={provider}
+                    hostId={hostId}
+                    client={client}
+                    connected={screenActive && connState === 'connected'}
+                    hostName={hostName}
+                    onComplete={() => {
+                      setEnrollmentRevision((revision) => revision + 1)
+                      void refresh()
+                    }}
+                  />
+                ),
                 renderAccount: (provider, id, blocked) => renderAccountRow(provider, id, blocked),
                 renderProviderFooter,
                 renderUnavailableAccounts: (blocked) =>
                   (['claude', 'codex'] as const).map((provider) => (
-                    <View key={provider} style={styles.card}>
-                      <Text style={styles.sectionHeading}>
-                        {provider === 'claude' ? 'Claude' : 'Codex'}
-                      </Text>
+                    <MobileProviderAccountsDisclosure key={provider} provider={provider}>
+                      <MobileAccountSignInSection
+                        provider={provider}
+                        hostId={hostId}
+                        client={client}
+                        connected={screenActive && connState === 'connected'}
+                        hostName={hostName}
+                        onComplete={() => {
+                          setEnrollmentRevision((revision) => revision + 1)
+                          void refresh()
+                        }}
+                      />
                       {renderAccountRow(provider, null, blocked)}
                       {snapshot[provider].accounts.map((account) => (
                         <View key={account.id}>
@@ -317,7 +329,7 @@ export function MobileAccountsScreen() {
                         </View>
                       ))}
                       {renderProviderFooter(provider)}
-                    </View>
+                    </MobileProviderAccountsDisclosure>
                   ))
               }}
             />

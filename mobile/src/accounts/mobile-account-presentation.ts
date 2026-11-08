@@ -11,6 +11,7 @@ export type MobileAccountPresentation = {
     manualSelectionBlocked: boolean
   ) => ReactNode
   renderSystemAccount?: (provider: ProviderKey, manualSelectionBlocked: boolean) => ReactNode
+  renderProviderSignIn?: (provider: ProviderKey) => ReactNode
   renderProviderFooter?: (provider: ProviderKey) => ReactNode
   renderUnavailableAccounts?: (manualSelectionBlocked: boolean) => ReactNode
 }

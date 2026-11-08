@@ -4,7 +4,6 @@ import { AlertTriangle, Loader2, Plus, X } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
-import { OpenAIIcon } from '../status-bar/icons'
 import { CodexLoginLinkNotice } from './CodexLoginLinkNotice'
 import { SearchableSetting } from './SearchableSetting'
 import { getAccountsCodexSearchEntries } from './accounts-search'
@@ -33,10 +32,6 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
   return (
     <section key="codex-accounts" id="accounts-codex" className="space-y-4 scroll-mt-6">
       <div className="space-y-1">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <OpenAIIcon size={16} />
-          {translate('auto.components.settings.AccountsPane.ef91cfa06b', 'Codex')}
-        </h3>
         <p className="text-xs text-muted-foreground">
           {translate(
             'accounts.codex.defaultOutsidePools',

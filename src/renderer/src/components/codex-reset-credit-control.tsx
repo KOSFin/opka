@@ -25,12 +25,24 @@ import { useAppStore } from '../store'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { usageMatchesAccount } from '../../../shared/usage-account-provenance'
 import { getCodexStatusRuntimeKey } from './status-bar/status-bar-runtime-targets'
+import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
+import {
+  getProviderAccountsSnapshotVersion,
+  publishProviderAccountsSnapshotIfCurrent,
+  type ProviderAccountsSnapshot
+} from '@/runtime/runtime-provider-accounts-client'
+import {
+  claimCodexResetCreditTransaction,
+  codexResetCreditTransactionKey,
+  mergeCodexResetCreditResult,
+  releaseCodexResetCreditTransaction
+} from './codex-reset-credit-transaction'
 
 type ResetReply = {
   outcome?: 'reset' | 'nothingToReset' | 'noCredit' | 'alreadyRedeemed'
   status?: 'rejectedBeforeProvider'
   scope: CodexResetCreditExpectedScope
-  snapshot: { rateLimits: RateLimitState }
+  snapshot: ProviderAccountsSnapshot & { rateLimits: RateLimitState }
 }
 
 export function CodexResetCreditControl({
@@ -39,7 +51,8 @@ export function CodexResetCreditControl({
   rateLimitTarget,
   owner,
   ownerLabel,
-  verified
+  verified,
+  active = true
 }: {
   account: CodexManagedAccountSummary | null
   limits: ProviderRateLimits | null
@@ -47,19 +60,19 @@ export function CodexResetCreditControl({
   owner: RuntimeClientTarget
   ownerLabel: string
   verified: boolean
+  active?: boolean
 }): React.JSX.Element | null {
   const [supported, setSupported] = useState(owner.kind === 'local')
   const [confirming, setConfirming] = useState<{
     scope: CodexResetCreditExpectedScope
     ownerKey: string
+    viewVersion: number
   } | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busyKey, setBusyKey] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  const inFlight = useRef(false)
+  const mounted = useRef(false)
   const ownerKey = owner.kind === 'local' ? 'local' : `environment:${owner.environmentId}`
   const environmentId = owner.kind === 'environment' ? owner.environmentId : null
-  const currentOwner = useRef(ownerKey)
-  currentOwner.current = ownerKey
   const credits = limits?.rateLimitResetCredits
   const count = credits?.availableCount
   const hasAccountProof =
@@ -72,6 +85,33 @@ export function CodexResetCreditControl({
         : null,
     [account, hasAccountProof, limits, rateLimitTarget]
   )
+  const scopeFingerprint = scope ? JSON.stringify(scope) : 'none'
+  const currentView = useRef({ ownerKey, scopeFingerprint, limits, version: 0 })
+  if (
+    currentView.current.ownerKey !== ownerKey ||
+    currentView.current.scopeFingerprint !== scopeFingerprint ||
+    currentView.current.limits !== limits
+  ) {
+    currentView.current = {
+      ownerKey,
+      scopeFingerprint,
+      limits,
+      version: currentView.current.version + 1
+    }
+  }
+  const pairingRevision =
+    environmentId === null ? undefined : getRuntimeEnvironmentRevision(environmentId)
+  const transactionKey = scope
+    ? codexResetCreditTransactionKey(ownerKey, pairingRevision, scope)
+    : null
+  const busy = busyKey !== null && busyKey === transactionKey
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
@@ -114,6 +154,7 @@ export function CodexResetCreditControl({
   const canUse =
     supported &&
     verified &&
+    active &&
     !!scope &&
     count > 0 &&
     !busy &&
@@ -126,21 +167,44 @@ export function CodexResetCreditControl({
       ? `${ownerLabel} · WSL ${rateLimitTarget.wslDistro ?? ''}`
       : ownerLabel
 
-  async function consume(confirmed: CodexResetCreditExpectedScope): Promise<void> {
-    if (inFlight.current || currentOwner.current !== ownerKey) {
+  async function consume(
+    confirmed: CodexResetCreditExpectedScope,
+    confirmedViewVersion: number
+  ): Promise<void> {
+    const requestKey = codexResetCreditTransactionKey(ownerKey, pairingRevision, confirmed)
+    if (
+      !mounted.current ||
+      currentView.current.version !== confirmedViewVersion ||
+      !claimCodexResetCreditTransaction(requestKey)
+    ) {
       return
     }
-    inFlight.current = true
-    setBusy(true)
+    setBusyKey(requestKey)
+    const sourceVersion = getProviderAccountsSnapshotVersion(owner)
+    const baselineCodex = owner.kind === 'local' ? useAppStore.getState().rateLimits.codex : null
+    const stillCurrent = (): boolean =>
+      mounted.current &&
+      currentView.current.version === confirmedViewVersion &&
+      (environmentId === null || getRuntimeEnvironmentRevision(environmentId) === pairingRevision)
     try {
+      if (owner.kind === 'local' && baselineCodex !== limits) {
+        throw new Error('The account quota changed. Refresh before using a reset.')
+      }
       if (owner.kind === 'environment') {
         const capability = await runtimeEnvironmentSupportsCapability(
           owner.environmentId,
           CODEX_RESET_CREDIT_RUNTIME_CAPABILITY
         )
-        if (!capability || currentOwner.current !== ownerKey) {
+        if (
+          !capability ||
+          !stillCurrent() ||
+          getProviderAccountsSnapshotVersion(owner) !== sourceVersion
+        ) {
           throw new Error('Reset unavailable on this host.')
         }
+      }
+      if (!stillCurrent()) {
+        return
       }
       const reply = await callRuntimeRpc<ResetReply>(
         owner,
@@ -149,9 +213,9 @@ export function CodexResetCreditControl({
           idempotencyKey: createBrowserUuid(),
           expectedScope: confirmed
         },
-        { timeoutMs: 90_000 }
+        { timeoutMs: 90_000, expectedEnvironmentPairingRevision: pairingRevision }
       )
-      if (currentOwner.current !== ownerKey) {
+      if (!stillCurrent()) {
         return
       }
       if (
@@ -162,8 +226,26 @@ export function CodexResetCreditControl({
       ) {
         throw new Error('The host returned a different account. Refresh Usage before trying again.')
       }
+      let applied = false
       if (owner.kind === 'local') {
-        useAppStore.setState({ rateLimits: reply.snapshot.rateLimits })
+        useAppStore.setState((state) => {
+          const rateLimits = mergeCodexResetCreditResult(
+            state.rateLimits,
+            baselineCodex,
+            confirmed,
+            reply.snapshot.rateLimits
+          )
+          applied = rateLimits !== null
+          return rateLimits ? { rateLimits } : state
+        })
+      } else if (getProviderAccountsSnapshotVersion(owner) === sourceVersion) {
+        applied = publishProviderAccountsSnapshotIfCurrent(owner, reply.snapshot, sourceVersion)
+      }
+      if (!applied) {
+        toast.error('Quota changed while the reset was pending', {
+          description: 'Review the latest account and quota before another attempt.'
+        })
+        return
       }
       if (reply.status === 'rejectedBeforeProvider') {
         toast.error('Reset details changed', {
@@ -181,14 +263,16 @@ export function CodexResetCreditControl({
         )
       }
     } catch (error) {
-      if (currentOwner.current === ownerKey) {
+      if (stillCurrent()) {
         toast.error('Reset outcome needs review', {
           description: `${error instanceof Error ? error.message : String(error)} Refresh this account before another attempt; the host will reconcile an uncertain result.`
         })
       }
     } finally {
-      inFlight.current = false
-      setBusy(false)
+      releaseCodexResetCreditTransaction(requestKey)
+      if (mounted.current) {
+        setBusyKey((current) => (current === requestKey ? null : current))
+      }
     }
   }
 
@@ -205,7 +289,7 @@ export function CodexResetCreditControl({
           disabled={!canUse}
           onClick={() => {
             if (scope) {
-              setConfirming({ scope, ownerKey })
+              setConfirming({ scope, ownerKey, viewVersion: currentView.current.version })
             }
           }}
         >
@@ -219,13 +303,15 @@ export function CodexResetCreditControl({
           ? ' · Reset unavailable on this host'
           : !verified
             ? ' · Host not verified'
-            : count === 0
-              ? ' · No resets left'
-              : !hasAccountProof
-                ? ' · Account quota unverified'
-                : !fresh || limits?.status !== 'ok'
-                  ? ' · Refresh stale usage'
-                  : ''}
+            : !active
+              ? ' · Select this account to use a reset'
+              : count === 0
+                ? ' · No resets left'
+                : !hasAccountProof
+                  ? ' · Account quota unverified'
+                  : !fresh || limits?.status !== 'ok'
+                    ? ' · Refresh stale usage'
+                    : ''}
       </p>
       <Dialog
         open={confirming !== null}
@@ -249,12 +335,20 @@ export function CodexResetCreditControl({
               Cancel
             </Button>
             <Button
-              disabled={busy || !canUse || confirming?.ownerKey !== ownerKey}
+              disabled={
+                busy ||
+                !canUse ||
+                confirming?.ownerKey !== ownerKey ||
+                confirming?.viewVersion !== currentView.current.version
+              }
               onClick={() => {
                 const pinned = confirming
                 setConfirming(null)
-                if (pinned?.ownerKey === ownerKey) {
-                  void consume(pinned.scope)
+                if (
+                  pinned?.ownerKey === ownerKey &&
+                  pinned.viewVersion === currentView.current.version
+                ) {
+                  void consume(pinned.scope, pinned.viewVersion)
                 }
               }}
             >

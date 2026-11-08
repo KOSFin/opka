@@ -54,7 +54,13 @@ export function UsageAccountRows({
             </p>
           ) : null}
           {rows?.map((row) => (
-            <div key={row.id ?? 'system'} className="space-y-1 py-1">
+            <div
+              key={row.id ?? 'system'}
+              className="group space-y-1 rounded-md py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              role="group"
+              aria-label={`${row.label} usage`}
+              tabIndex={0}
+            >
               <div className="flex items-start justify-between gap-2">
                 <span className="min-w-0 break-words text-xs">{row.label}</span>
                 <UsageAccountPinButton
@@ -119,15 +125,20 @@ export function UsageAccountRows({
                   {translate('usage.accounts.unknownLimits', 'Limits unavailable')}
                 </p>
               )}
-              {provider === 'codex' && row.active && row.id && snapshot ? (
-                <CodexResetCreditControl
-                  account={snapshot.codex.accounts.find((account) => account.id === row.id) ?? null}
-                  limits={row.limits}
-                  rateLimitTarget={owner.rateLimits.codexTarget}
-                  owner={owner.target}
-                  ownerLabel={owner.ownerLabel ?? 'This device'}
-                  verified={owner.verified}
-                />
+              {provider === 'codex' && row.id && snapshot ? (
+                <div className="hidden group-hover:block group-focus-within:block">
+                  <CodexResetCreditControl
+                    account={
+                      snapshot.codex.accounts.find((account) => account.id === row.id) ?? null
+                    }
+                    limits={row.limits}
+                    rateLimitTarget={owner.rateLimits.codexTarget}
+                    owner={owner.target}
+                    ownerLabel={owner.ownerLabel ?? 'This device'}
+                    verified={owner.verified}
+                    active={row.active}
+                  />
+                </div>
               ) : null}
             </div>
           ))}

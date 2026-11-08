@@ -114,6 +114,40 @@ it('reads and expands account rows without fetching another remote stream or sel
   expect(mocks.watch).not.toHaveBeenCalled()
   expect(mocks.fetch).not.toHaveBeenCalled()
 })
+it('reveals the selected account’s reset count and confirmation from its focused Usage row', () => {
+  mocks.watch.mockImplementation((_target, handlers) => {
+    handlers.onSnapshot(source('active'))
+    return { close: mocks.close }
+  })
+  const quota = {
+    provider: 'codex' as const,
+    session: null,
+    weekly: null,
+    rateLimitResetCredits: { availableCount: 2, nextExpiresAt: Date.now() + 3_600_000 },
+    usageMetadata: { authProvenance: 'profile:active' },
+    updatedAt: Date.now(),
+    error: null,
+    status: 'ok' as const
+  }
+  render(
+    <UsageAccountsProvider
+      target={local}
+      snapshot={source('active')}
+      verified
+      rateLimits={{ ...createEmptyRateLimitState(), codex: quota }}
+    >
+      <UsageAccountRows provider="codex" now={Date.now()} display="used" />
+    </UsageAccountsProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
+  const row = screen.getByRole('group', { name: 'active@example.test usage' })
+  expect(row.getAttribute('tabindex')).toBe('0')
+  expect(row.querySelector('.group-focus-within\\:block')).toBeTruthy()
+  fireEvent.focus(row)
+  expect(screen.getByText(/2 manual resets available/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Use reset' }))
+  expect(screen.getByRole('dialog').textContent).toContain('active@example.test')
+})
 function Probe({
   target,
   onRoster

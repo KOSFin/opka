@@ -5,6 +5,8 @@ import type {
 } from '../../../shared/managed-account-types'
 import {
   fetchProviderAccountsSnapshot,
+  getProviderAccountsSnapshotVersion,
+  publishProviderAccountsSnapshotIfCurrent,
   removeClaudeProviderAccount,
   removeCodexProviderAccount,
   selectClaudeProviderAccount,
@@ -264,7 +266,7 @@ describe('watchProviderAccounts', () => {
 
   it('surfaces remote subscription failures as errors', async () => {
     const errors: unknown[] = []
-    watchProviderAccounts(REMOTE, {
+    const watcher = watchProviderAccounts(REMOTE, {
       onSnapshot: () => {
         throw new Error('unexpected snapshot')
       },
@@ -279,6 +281,7 @@ describe('watchProviderAccounts', () => {
 
     expect(errors).toHaveLength(1)
     expect(String((errors[0] as Error).message)).toContain('denied')
+    watcher.close()
   })
 })
 
@@ -318,7 +321,7 @@ describe('fetchProviderAccountsSnapshot', () => {
 
     expect(runtimeEnvironmentSubscribe).toHaveBeenCalledTimes(2)
     const firstCallbacks = runtimeEnvironmentSubscribe.mock.calls[0]?.[1] as SubscriptionCallbacks
-    const secondCallbacks = runtimeEnvironmentSubscribe.mock.calls[1]?.[1] as SubscriptionCallbacks
+    const secondCallbacks: SubscriptionCallbacks = runtimeEnvironmentSubscribe.mock.calls[1]?.[1]
     firstCallbacks.onResponse({
       ok: true,
       result: { type: 'ready', snapshot: snapshotFixture('one') }
@@ -396,6 +399,47 @@ describe('fetchProviderAccountsSnapshot', () => {
       rateLimits: null,
       failedProviders: ['claude']
     })
+  })
+})
+
+describe('reset result publication', () => {
+  it('updates both remote account surfaces only until a newer host snapshot arrives', async () => {
+    const usage = vi.fn()
+    const settings = vi.fn()
+    const first = watchProviderAccounts(REMOTE, { onSnapshot: usage, onError: vi.fn() })
+    const second = watchProviderAccounts(REMOTE, { onSnapshot: settings, onError: vi.fn() })
+    await flushMicrotasks()
+    const callbacks = runtimeEnvironmentSubscribe.mock.calls[0]?.[1] as SubscriptionCallbacks
+    const secondCallbacks = runtimeEnvironmentSubscribe.mock.calls[1]?.[1] as SubscriptionCallbacks
+    callbacks.onResponse({
+      ok: true,
+      result: { type: 'ready', snapshot: snapshotFixture('initial') }
+    })
+    secondCallbacks.onResponse({
+      ok: true,
+      result: { type: 'ready', snapshot: snapshotFixture('initial') }
+    })
+    const version = getProviderAccountsSnapshotVersion(REMOTE)
+    expect(
+      publishProviderAccountsSnapshotIfCurrent(REMOTE, snapshotFixture('reset'), version)
+    ).toBe(true)
+    expect(usage).toHaveBeenLastCalledWith(snapshotFixture('reset'))
+    expect(settings).toHaveBeenLastCalledWith(snapshotFixture('reset'))
+    callbacks.onResponse({
+      ok: true,
+      result: { type: 'snapshot', snapshot: snapshotFixture('newer') }
+    })
+    secondCallbacks.onResponse({
+      ok: true,
+      result: { type: 'snapshot', snapshot: snapshotFixture('newer') }
+    })
+    expect(publishProviderAccountsSnapshotIfCurrent(REMOTE, snapshotFixture('old'), version)).toBe(
+      false
+    )
+    expect(usage).toHaveBeenLastCalledWith(snapshotFixture('newer'))
+    expect(settings).toHaveBeenLastCalledWith(snapshotFixture('newer'))
+    first.close()
+    second.close()
   })
 })
 

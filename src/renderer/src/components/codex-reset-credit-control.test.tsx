@@ -1,15 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { CodexResetCreditExpectedScope } from '../../../shared/codex-reset-credit-scope'
 import type { ProviderRateLimits } from '../../../shared/rate-limit-types'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import { createEmptyRateLimitState } from '../../../shared/rate-limit-state-factory'
 import { CodexResetCreditControl } from './codex-reset-credit-control'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
   capability: vi.fn(),
   setState: vi.fn(),
+  getState: vi.fn(),
   success: vi.fn(),
   error: vi.fn()
 }))
@@ -17,7 +19,7 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
   callRuntimeRpc: mocks.call,
   runtimeEnvironmentSupportsCapability: mocks.capability
 }))
-vi.mock('../store', () => ({ useAppStore: { setState: mocks.setState } }))
+vi.mock('../store', () => ({ useAppStore: { setState: mocks.setState, getState: mocks.getState } }))
 vi.mock('sonner', () => ({ toast: { success: mocks.success, error: mocks.error } }))
 vi.mock('@/lib/browser-uuid', () => ({
   createBrowserUuid: () => '11111111-1111-4111-8111-111111111111'
@@ -54,10 +56,12 @@ function limits(count: number): ProviderRateLimits {
 }
 
 function control(count: number, owner: RuntimeClientTarget = local) {
+  const offer = limits(count)
+  mocks.getState.mockReturnValue({ rateLimits: { codex: offer } })
   return (
     <CodexResetCreditControl
       account={account}
-      limits={limits(count)}
+      limits={offer}
       rateLimitTarget={target}
       owner={owner}
       ownerLabel="Desk"
@@ -76,6 +80,7 @@ beforeEach(() => {
   mocks.call.mockReset()
   mocks.capability.mockReset().mockResolvedValue(true)
   mocks.setState.mockReset()
+  mocks.getState.mockReset()
   mocks.success.mockReset()
   mocks.error.mockReset()
 })
@@ -156,5 +161,103 @@ describe('CodexResetCreditControl synthetic adapter', () => {
     view.rerender(control(2, { kind: 'environment', environmentId: 'host-two' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(mocks.call).not.toHaveBeenCalled()
+  })
+
+  it.each(['account', 'wsl', 'newer', 'unmount'])(
+    'does not apply a late %s reply',
+    async (change) => {
+      let settle: (value: unknown) => void = () => {}
+      mocks.call.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            settle = resolve
+          })
+      )
+      const view = render(control(2))
+      fireEvent.click(confirm())
+      await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(1))
+      if (change === 'unmount') {
+        view.unmount()
+      } else if (change === 'account') {
+        view.rerender(
+          <CodexResetCreditControl
+            account={{ ...account, id: 'account-two', email: 'two@example.test' }}
+            limits={{ ...limits(2), usageMetadata: { authProvenance: 'profile:account-two' } }}
+            rateLimitTarget={target}
+            owner={local}
+            ownerLabel="Desk"
+            verified
+          />
+        )
+      } else if (change === 'wsl') {
+        view.rerender(
+          <CodexResetCreditControl
+            account={{ ...account, managedHomeRuntime: 'wsl', wslDistro: 'Ubuntu' }}
+            limits={{
+              ...limits(2),
+              usageMetadata: { authProvenance: 'profile:account-one:wsl:Ubuntu' }
+            }}
+            rateLimitTarget={{ runtime: 'wsl', wslDistro: 'Ubuntu' }}
+            owner={local}
+            ownerLabel="Desk"
+            verified
+          />
+        )
+      } else {
+        view.rerender(control(1))
+      }
+      const expectedScope = mocks.call.mock.calls[0]?.[2].expectedScope
+      await act(async () =>
+        settle({
+          outcome: 'reset',
+          scope: expectedScope,
+          snapshot: { rateLimits: { codex: limits(1) } }
+        })
+      )
+      expect(mocks.setState).not.toHaveBeenCalled()
+    }
+  )
+
+  it('keeps a newer store quota that arrives before React re-renders', async () => {
+    const offer = limits(2)
+    let store = { ...createEmptyRateLimitState(), codex: offer }
+    mocks.getState.mockReturnValue({ rateLimits: store })
+    mocks.setState.mockImplementation((update) => {
+      store = update({ rateLimits: store }).rateLimits
+    })
+    let settle: (value: unknown) => void = () => {}
+    mocks.call.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve
+        })
+    )
+    render(
+      <CodexResetCreditControl
+        account={account}
+        limits={offer}
+        rateLimitTarget={target}
+        owner={local}
+        ownerLabel="Desk"
+        verified
+      />
+    )
+    fireEvent.click(confirm())
+    await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(1))
+    store = { ...store, codex: limits(3) }
+    const expectedScope = mocks.call.mock.calls[0]?.[2].expectedScope
+    await act(async () =>
+      settle({
+        outcome: 'reset',
+        scope: expectedScope,
+        snapshot: { rateLimits: { ...createEmptyRateLimitState(), codex: limits(1) } }
+      })
+    )
+    expect(store.codex?.rateLimitResetCredits?.availableCount).toBe(3)
+    expect(mocks.success).not.toHaveBeenCalled()
+    expect(mocks.error).toHaveBeenCalledWith(
+      'Quota changed while the reset was pending',
+      expect.anything()
+    )
   })
 })

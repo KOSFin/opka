@@ -35,6 +35,48 @@ const REMOTE_ACCOUNTS_FIRST_SNAPSHOT_TIMEOUT_MS = 15_000
 // room to finish instead of reporting failure for an applied switch.
 const REMOTE_ACCOUNT_MUTATION_TIMEOUT_MS = 30_000
 const pendingProviderAccountsSnapshots = new Map<string, Promise<ProviderAccountsSnapshot>>()
+const snapshotObservers = new Map<string, Set<(snapshot: ProviderAccountsSnapshot) => void>>()
+const snapshotVersions = new Map<string, number>()
+
+function noteProviderAccountsSnapshot(ownerKey: string): void {
+  snapshotVersions.set(ownerKey, (snapshotVersions.get(ownerKey) ?? 0) + 1)
+}
+
+export function getProviderAccountsSnapshotVersion(target: RuntimeClientTarget): number {
+  return snapshotVersions.get(getProviderAccountsOwnerKey(target)) ?? 0
+}
+
+export function publishProviderAccountsSnapshotIfCurrent(
+  target: RuntimeClientTarget,
+  snapshot: ProviderAccountsSnapshot,
+  expectedVersion: number
+): boolean {
+  const ownerKey = getProviderAccountsOwnerKey(target)
+  if (getProviderAccountsSnapshotVersion(target) !== expectedVersion) {
+    return false
+  }
+  noteProviderAccountsSnapshot(ownerKey)
+  for (const listener of snapshotObservers.get(ownerKey) ?? []) {
+    listener(snapshot)
+  }
+  return true
+}
+
+function observeProviderAccountsSnapshot(
+  ownerKey: string,
+  listener: (snapshot: ProviderAccountsSnapshot) => void
+): () => void {
+  const listeners = snapshotObservers.get(ownerKey) ?? new Set()
+  listeners.add(listener)
+  snapshotObservers.set(ownerKey, listeners)
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) {
+      snapshotObservers.delete(ownerKey)
+      snapshotVersions.delete(ownerKey)
+    }
+  }
+}
 
 export function getProviderAccountsOwnerKey(target: RuntimeClientTarget): string {
   // Why: environment ids are user-controlled strings; prefix the target kind
@@ -75,6 +117,8 @@ export function watchProviderAccounts(
     onClosedAfterSnapshot?: () => void
   }
 ): ProviderAccountsWatcher {
+  const ownerKey = getProviderAccountsOwnerKey(target)
+  const stopObserving = observeProviderAccountsSnapshot(ownerKey, handlers.onSnapshot)
   if (target.kind === 'local') {
     let closed = false
     void Promise.allSettled([
@@ -106,6 +150,7 @@ export function watchProviderAccounts(
       if (codexError) {
         failedProviders.push('codex')
       }
+      noteProviderAccountsSnapshot(ownerKey)
       handlers.onSnapshot({
         claude:
           claudeResult.status === 'fulfilled' ? claudeResult.value : emptyClaudeAccountsState(),
@@ -124,6 +169,7 @@ export function watchProviderAccounts(
     return {
       close: () => {
         closed = true
+        stopObserving()
       }
     }
   }
@@ -159,6 +205,7 @@ export function watchProviderAccounts(
           const message = typed.result
           if ((message.type === 'ready' || message.type === 'snapshot') && message.snapshot) {
             receivedSnapshot = true
+            noteProviderAccountsSnapshot(ownerKey)
             handlers.onSnapshot(message.snapshot)
           }
         },
@@ -194,6 +241,7 @@ export function watchProviderAccounts(
   return {
     close: () => {
       closed = true
+      stopObserving()
       window.clearTimeout(firstSnapshotTimer)
       unsubscribe?.()
     }

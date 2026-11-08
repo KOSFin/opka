@@ -75,6 +75,8 @@ import { useUsageHostSettings } from './use-usage-host-settings'
 import { ManagedDataAccountsSection } from './ManagedDataAccountsSection'
 import { RemoteAccountSignInSection } from './RemoteAccountSignInSection'
 import { renderAccountsRemovalDialogs } from './accounts-pane-removal-dialogs'
+import { ProviderAccountsDisclosure } from './ProviderAccountsDisclosure'
+import { ClaudeIcon, OpenAIIcon } from '../status-bar/icons'
 
 export { getAccountsPaneSearchEntries }
 
@@ -372,14 +374,6 @@ export function AccountsPane({
     recordOpenCodeSettingEdit
   }
   const visibleSections = [
-    isRemoteAccountScope && (!searchQuery || /account|codex|sign|login|pool/i.test(searchQuery)) ? (
-      <RemoteAccountSignInSection
-        key={`sign-in:${accountOwnerKey}`}
-        target={accountOwner}
-        hostLabel={remoteServerLabel ?? 'Server'}
-        onComplete={() => setEnrollmentRevision((revision) => revision + 1)}
-      />
-    ) : null,
     !searchQuery || /opencode|devin|account/i.test(searchQuery) ? (
       <div key={accountOwnerKey} className="space-y-8">
         <ManagedDataAccountsSection provider="opencode" target={accountOwner} />
@@ -392,12 +386,44 @@ export function AccountsPane({
     matchesSettingsSearch(searchQuery, getAccountsLocationSearchEntries())
       ? renderAccountsLocationSection(model)
       : null,
-    matchesSettingsSearch(searchQuery, getAccountsClaudeSearchEntries())
-      ? renderClaudeAccountsSection(model)
-      : null,
-    matchesSettingsSearch(searchQuery, getAccountsCodexSearchEntries())
-      ? renderCodexAccountsSection(model)
-      : null,
+    matchesSettingsSearch(searchQuery, getAccountsClaudeSearchEntries()) ? (
+      <ProviderAccountsDisclosure
+        key="claude-accounts"
+        title="Claude"
+        icon={<ClaudeIcon size={16} />}
+        searchQuery={searchQuery}
+      >
+        {isRemoteAccountScope ? (
+          <RemoteAccountSignInSection
+            key={`sign-in:claude:${accountOwnerKey}`}
+            provider="claude"
+            target={accountOwner}
+            hostLabel={remoteServerLabel ?? 'Server'}
+            onComplete={() => setEnrollmentRevision((revision) => revision + 1)}
+          />
+        ) : null}
+        {renderClaudeAccountsSection(model)}
+      </ProviderAccountsDisclosure>
+    ) : null,
+    matchesSettingsSearch(searchQuery, getAccountsCodexSearchEntries()) ? (
+      <ProviderAccountsDisclosure
+        key="codex-accounts"
+        title="Codex"
+        icon={<OpenAIIcon size={16} />}
+        searchQuery={searchQuery}
+      >
+        {isRemoteAccountScope ? (
+          <RemoteAccountSignInSection
+            key={`sign-in:codex:${accountOwnerKey}`}
+            provider="codex"
+            target={accountOwner}
+            hostLabel={remoteServerLabel ?? 'Server'}
+            onComplete={() => setEnrollmentRevision((revision) => revision + 1)}
+          />
+        ) : null}
+        {renderCodexAccountsSection(model)}
+      </ProviderAccountsDisclosure>
+    ) : null,
     matchesSettingsSearch(searchQuery, getAccountsGeminiSearchEntries())
       ? renderGeminiAccountsSection(model)
       : null,

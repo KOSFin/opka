@@ -3,7 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest'
 import { RemoteAccountSignInSection } from './RemoteAccountSignInSection'
 
-vi.mock('./RemoteClaudeSignInSection', () => ({ RemoteClaudeSignInSection: () => null }))
+vi.mock('./RemoteClaudeSignInSection', () => ({
+  RemoteClaudeSignInSection: () => <button>Add Claude account</button>
+}))
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: rpc }))
 vi.mock('@/i18n/i18n', () => ({
@@ -21,6 +23,30 @@ const waiting = {
 afterEach(() => {
   cleanup()
   vi.resetAllMocks()
+})
+
+it('renders only the selected provider’s addition within its Accounts section', () => {
+  const target = { kind: 'environment', environmentId: 'server-one' } as const
+  const view = render(
+    <RemoteAccountSignInSection
+      provider="claude"
+      target={target}
+      hostLabel="Server one"
+      onComplete={vi.fn()}
+    />
+  )
+  expect(screen.getByRole('button', { name: 'Add Claude account' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Add Codex account' })).toBeNull()
+  view.rerender(
+    <RemoteAccountSignInSection
+      provider="codex"
+      target={target}
+      hostLabel="Server one"
+      onComplete={vi.fn()}
+    />
+  )
+  expect(screen.getByRole('button', { name: 'Add Codex account' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Add Claude account' })).toBeNull()
 })
 
 it('starts on the chosen server and removes its code when cancelled', async () => {

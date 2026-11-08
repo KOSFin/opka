@@ -11,12 +11,14 @@ import { MobileClaudeSignInSection } from './MobileClaudeSignInSection'
 import { mobileAccountDeviceSignInRequest } from './mobile-account-enrollment-operations'
 import type { CodexRoutingSignInTarget } from '../../../src/shared/native-account-routing'
 import { useMobileSignInActivity } from './use-mobile-sign-in-activity'
+import type { ProviderKey } from '../components/AccountUsage'
 
 export function MobileAccountSignInSection({
   client,
   connected,
   hostName,
   hostId = '',
+  provider,
   onComplete,
   routingAccount
 }: {
@@ -24,6 +26,7 @@ export function MobileAccountSignInSection({
   connected: boolean
   hostName: string
   hostId?: string
+  provider?: ProviderKey
   onComplete: () => void
   routingAccount?: CodexRoutingSignInTarget
 }) {
@@ -96,6 +99,9 @@ export function MobileAccountSignInSection({
     }
   }
 
+  if (provider === 'claude') {
+    return <MobileClaudeSignInSection client={client} connected={connected} hostId={hostId} />
+  }
   return (
     <View style={routingAccount ? poolStyles.memberSettings : styles.section}>
       {!routingAccount ? <Text style={styles.sectionHeading}>Add an account</Text> : null}
@@ -161,7 +167,7 @@ export function MobileAccountSignInSection({
             {error || state?.error}
           </Text>
         ) : null}
-        {!routingAccount ? (
+        {!routingAccount && !provider ? (
           <MobileClaudeSignInSection client={client} connected={connected} hostId={hostId} />
         ) : null}
       </View>

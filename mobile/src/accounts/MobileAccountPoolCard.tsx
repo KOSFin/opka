@@ -85,6 +85,7 @@ export function MobileAccountPoolCard({
               Manual mode uses the selected account. Automatic pool mode chooses from the same
               accounts below. Save changes before starting new work.
             </Text>
+            {presentation?.renderProviderSignIn?.(policy.provider)}
             <MobileAccountPoolLaunchSettings
               policy={policy}
               disabled={disabled}
