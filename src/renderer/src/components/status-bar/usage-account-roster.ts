@@ -52,28 +52,31 @@ export function usageAccountRoster(
         ? snapshot.codex.systemDefault?.email
         : snapshot.claude.systemDefaultEmail
       : null
-  return (group?.targets ?? []).map((account) => {
-    const inactiveLimits = account.id
-      ? inactive.find((entry) => entry.accountId === account.id)?.rateLimits
-      : null
-    const saved = account.id ? usageManagedAccountDisplay(provider, snapshot, account.id) : null
-    const cliLabel = translate('accounts.cliLoginOnHost', 'CLI login on this host')
-    return {
-      id: account.id,
-      label:
-        account.id === null
-          ? systemEmail
-            ? `${cliLabel} · ${systemEmail}`
-            : cliLabel
-          : (saved?.email ?? account.label),
-      detail: saved?.detail ?? null,
-      active: account.active,
-      limits:
-        account.active && usageMatchesAccount(rateLimits[provider], group?.key ?? '', account.id)
-          ? rateLimits[provider]
-          : account.id && inactiveUsageMatchesAccount(inactiveLimits, group?.key ?? '', account.id)
-            ? (inactiveLimits ?? null)
-            : null
-    }
-  })
+  return (group?.targets ?? [])
+    .filter((account) => account.id !== null || account.active || Boolean(systemEmail))
+    .map((account) => {
+      const inactiveLimits = account.id
+        ? inactive.find((entry) => entry.accountId === account.id)?.rateLimits
+        : null
+      const saved = account.id ? usageManagedAccountDisplay(provider, snapshot, account.id) : null
+      const cliLabel = translate('accounts.cliLoginOnHost', 'CLI login on this host')
+      return {
+        id: account.id,
+        label:
+          account.id === null
+            ? systemEmail
+              ? `${cliLabel} · ${systemEmail}`
+              : cliLabel
+            : (saved?.email ?? account.label),
+        detail: saved?.detail ?? null,
+        active: account.active,
+        limits:
+          account.active && usageMatchesAccount(rateLimits[provider], group?.key ?? '', account.id)
+            ? rateLimits[provider]
+            : account.id &&
+                inactiveUsageMatchesAccount(inactiveLimits, group?.key ?? '', account.id)
+              ? (inactiveLimits ?? null)
+              : null
+      }
+    })
 }

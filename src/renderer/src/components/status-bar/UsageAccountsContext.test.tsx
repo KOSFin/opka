@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type * as I18nModule from '@/i18n/i18n'
 import type * as AccountsModule from '@/runtime/runtime-provider-accounts-client'
 import type { ProviderAccountsSnapshot } from '@/runtime/runtime-provider-accounts-client'
@@ -75,8 +77,7 @@ it('refreshes local inactive usage on popup mount and closes its local watcher',
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
-  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
-  await screen.findByText('local@example.test')
+  await screen.findByRole('group', { name: 'Codex local@example.test usage' })
   await waitFor(() => {
     expect(mocks.claude).toHaveBeenCalledTimes(1)
     expect(mocks.codex).toHaveBeenCalledTimes(1)
@@ -91,12 +92,12 @@ it('refreshes local inactive usage on popup mount and closes its local watcher',
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
-  expect(screen.queryByText('local@example.test')).toBeNull()
-  expect(screen.getByText('a@example.test')).toBeTruthy()
+  expect(screen.queryByRole('group', { name: 'Codex local@example.test usage' })).toBeNull()
+  expect(screen.getByRole('group', { name: 'Codex a@example.test usage' })).toBeTruthy()
   expect(mocks.watch).toHaveBeenCalledTimes(1)
   expect(mocks.close).toHaveBeenCalledTimes(1)
 })
-it('reads and expands account rows without fetching another remote stream or selecting a login', () => {
+it('shows account rows immediately and opens details without another remote read', () => {
   render(
     <UsageAccountsProvider
       target={a}
@@ -107,9 +108,13 @@ it('reads and expands account rows without fetching another remote stream or sel
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
-  expect(screen.queryByText('a@example.test')).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
-  expect(screen.getByText('a@example.test')).toBeTruthy()
+  const row = screen.getByRole('group', { name: 'Codex a@example.test usage' })
+  const toggle = row.querySelector('button[aria-expanded]')
+  expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+  if (toggle) {
+    fireEvent.click(toggle)
+  }
+  expect(toggle?.getAttribute('aria-expanded')).toBe('true')
   expect(screen.getAllByText('Limits unavailable').length).toBeGreaterThan(0)
   expect(mocks.watch).not.toHaveBeenCalled()
   expect(mocks.fetch).not.toHaveBeenCalled()
@@ -121,8 +126,18 @@ it('reveals the selected account’s reset count and confirmation from its focus
   })
   const quota = {
     provider: 'codex' as const,
-    session: null,
-    weekly: null,
+    session: {
+      usedPercent: 62,
+      windowMinutes: 300,
+      resetsAt: Date.now() + 45 * 60_000,
+      resetDescription: null
+    },
+    weekly: {
+      usedPercent: 81,
+      windowMinutes: 10_080,
+      resetsAt: Date.now() + 2 * 86_400_000,
+      resetDescription: null
+    },
     rateLimitResetCredits: { availableCount: 2, nextExpiresAt: Date.now() + 3_600_000 },
     usageMetadata: { authProvenance: 'profile:active' },
     updatedAt: Date.now(),
@@ -139,14 +154,98 @@ it('reveals the selected account’s reset count and confirmation from its focus
       <UsageAccountRows provider="codex" now={Date.now()} display="used" />
     </UsageAccountsProvider>
   )
-  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
-  const row = screen.getByRole('group', { name: 'active@example.test usage' })
-  expect(row.getAttribute('tabindex')).toBe('0')
+  const row = screen.getByRole('group', { name: 'Codex active@example.test usage' })
+  expect(row.textContent).toContain('62%')
+  expect(row.textContent).toContain('81%')
   expect(row.querySelector('.group-focus-within\\:block')).toBeTruthy()
-  fireEvent.focus(row)
+  const toggle = row.querySelector('button[aria-expanded]')
+  if (toggle) {
+    fireEvent.focus(toggle)
+  }
   expect(screen.getByText(/2 manual resets available/)).toBeTruthy()
+  if (process.env.OPKA_SYNTHETIC_EVIDENCE_DIR) {
+    writeFileSync(
+      join(process.env.OPKA_SYNTHETIC_EVIDENCE_DIR, 'attempt-c57-usage-active.html'),
+      `<html><head><meta charset="utf-8"><link rel="stylesheet" href="usage-evidence.css"></head><body><main style="width:360px;margin:48px auto;border:1px solid #ddd;background:#fff">${row.parentElement?.outerHTML}</main><script>document.querySelector('button[aria-expanded]')?.focus()</script></body></html>`
+    )
+  }
   fireEvent.click(screen.getByRole('button', { name: 'Use reset' }))
   expect(screen.getByRole('dialog').textContent).toContain('active@example.test')
+})
+it('selects a concrete inactive Codex profile without consuming its reset', () => {
+  const snapshot = source('active')
+  snapshot.codex.accounts.push({
+    id: 'reserve',
+    email: 'reserve@example.test',
+    createdAt: 1,
+    updatedAt: 1,
+    lastAuthenticatedAt: 1
+  })
+  const onSelectAccount = vi.fn()
+  render(
+    <UsageAccountsProvider
+      target={a}
+      snapshot={snapshot}
+      verified
+      rateLimits={{
+        ...createEmptyRateLimitState(),
+        inactiveCodexAccounts: [
+          {
+            accountId: 'reserve',
+            rateLimits: {
+              provider: 'codex',
+              session: {
+                usedPercent: 35,
+                windowMinutes: 300,
+                resetsAt: Date.now() + 90 * 60_000,
+                resetDescription: null
+              },
+              weekly: {
+                usedPercent: 55,
+                windowMinutes: 10_080,
+                resetsAt: Date.now() + 3 * 86_400_000,
+                resetDescription: null
+              },
+              rateLimitResetCredits: { availableCount: 2, nextExpiresAt: Date.now() + 3_600_000 },
+              usageMetadata: { authProvenance: 'profile:reserve' },
+              updatedAt: Date.now(),
+              status: 'ok',
+              error: null
+            },
+            updatedAt: Date.now(),
+            isFetching: false
+          }
+        ]
+      }}
+    >
+      <UsageAccountRows
+        provider="codex"
+        now={Date.now()}
+        display="used"
+        onSelectAccount={onSelectAccount}
+      />
+    </UsageAccountsProvider>
+  )
+  const row = screen.getByRole('group', { name: 'Codex reserve@example.test usage' })
+  expect(row.textContent).toContain('35%')
+  expect(row.textContent).toContain('55%')
+  const toggle = row.querySelector('button[aria-expanded]')
+  expect(toggle).not.toBeNull()
+  if (toggle) {
+    fireEvent.click(toggle)
+  }
+  if (process.env.OPKA_SYNTHETIC_EVIDENCE_DIR) {
+    writeFileSync(
+      join(process.env.OPKA_SYNTHETIC_EVIDENCE_DIR, 'attempt-c57-usage-inactive.html'),
+      `<html><head><meta charset="utf-8"><link rel="stylesheet" href="usage-evidence.css"></head><body><main style="width:360px;margin:48px auto;border:1px solid #ddd;background:#fff">${row.parentElement?.outerHTML}</main></body></html>`
+    )
+  }
+  const select = screen.getByRole('button', { name: 'Select account to use reset' })
+  fireEvent.click(select)
+  expect(onSelectAccount).toHaveBeenCalledTimes(1)
+  expect(onSelectAccount).toHaveBeenCalledWith('reserve')
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Use reset' }).hasAttribute('disabled')).toBe(true)
 })
 function Probe({
   target,
@@ -195,8 +294,7 @@ it('keeps a healthy partial snapshot verified when the failed provider reports i
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
-  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
-  await screen.findByText('healthy@example.test')
+  await screen.findByRole('group', { name: 'Codex healthy@example.test usage' })
   expect(screen.getByTestId('owner-verification').textContent).toBe('verified')
 })
 it('rejects late callbacks after switching away and returning to the local owner', async () => {
@@ -210,9 +308,8 @@ it('rejects late callbacks after switching away and returning to the local owner
       <UsageAccountRows provider="codex" now={1} display="used" />
     </UsageAccountsProvider>
   )
-  fireEvent.click(screen.getByRole('button', { name: /Accounts/ }))
   act(() => deliveries[0](source('old')))
-  await screen.findByText('old@example.test')
+  await screen.findByRole('group', { name: 'Codex old@example.test usage' })
   view.rerender(
     <UsageAccountsProvider target={a} snapshot={source('remote')} verified>
       <UsageAccountRows provider="codex" now={1} display="used" />
@@ -224,9 +321,9 @@ it('rejects late callbacks after switching away and returning to the local owner
     </UsageAccountsProvider>
   )
   act(() => deliveries[0](source('late')))
-  expect(screen.queryByText('late@example.test')).toBeNull()
-  expect(screen.queryByText('old@example.test')).toBeNull()
+  expect(screen.queryByRole('group', { name: 'Codex late@example.test usage' })).toBeNull()
+  expect(screen.queryByRole('group', { name: 'Codex old@example.test usage' })).toBeNull()
   act(() => deliveries[1](source('fresh')))
-  await screen.findByText('fresh@example.test')
+  await screen.findByRole('group', { name: 'Codex fresh@example.test usage' })
   expect(mocks.close).toHaveBeenCalledTimes(1)
 })

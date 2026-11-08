@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CodexResetCreditExpectedScope } from '../../../src/shared/codex-reset-credit-scope'
 import type { RpcClient } from '../transport/rpc-client'
 import type { AccountsSnapshot } from './account-usage-state'
@@ -66,6 +66,13 @@ export function useCodexResetCreditAction({
     hostId: string
   } | null>(null)
   const inFlightRef = useRef(false)
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
   const currentHostRef = useRef(hostId)
   currentHostRef.current = hostId
   const resetScope = useMemo(
@@ -85,7 +92,11 @@ export function useCodexResetCreditAction({
       confirmedHostId: string,
       confirmedGeneration: number
     ) => {
-      if (inFlightRef.current || currentHostRef.current !== confirmedHostId) {
+      if (
+        !mountedRef.current ||
+        inFlightRef.current ||
+        currentHostRef.current !== confirmedHostId
+      ) {
         return
       }
       inFlightRef.current = true
@@ -93,6 +104,7 @@ export function useCodexResetCreditAction({
       try {
         const result = await requestCodexResetCredit(confirmedClient, expectedScope)
         if (
+          !mountedRef.current ||
           currentHostRef.current !== confirmedHostId ||
           (confirmedClient.getGeneration?.() ?? 0) !== confirmedGeneration
         ) {
@@ -109,7 +121,7 @@ export function useCodexResetCreditAction({
         }
         onNotice(getCodexResetCreditOutcomeCopy(result.outcome))
       } catch (error) {
-        if (currentHostRef.current !== confirmedHostId) {
+        if (!mountedRef.current || currentHostRef.current !== confirmedHostId) {
           return
         }
         onNotice({
@@ -118,7 +130,9 @@ export function useCodexResetCreditAction({
         })
       } finally {
         inFlightRef.current = false
-        setResetting(false)
+        if (mountedRef.current) {
+          setResetting(false)
+        }
       }
     },
     [onNotice, onSnapshot]
@@ -126,6 +140,7 @@ export function useCodexResetCreditAction({
 
   const confirmReset = useCallback(() => {
     if (
+      !mountedRef.current ||
       !client ||
       !supported ||
       !connected ||
@@ -166,6 +181,7 @@ export function useCodexResetCreditAction({
 
   const acceptReset = useCallback(() => {
     if (
+      mountedRef.current &&
       confirming &&
       confirming.client === client &&
       confirming.generation === (client?.getGeneration?.() ?? 0) &&

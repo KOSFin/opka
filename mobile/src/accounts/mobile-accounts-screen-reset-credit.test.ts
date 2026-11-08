@@ -59,7 +59,9 @@ vi.mock('../platform/random-v4-uuid', () => ({ randomV4Uuid: dependencies.uuid }
 
 vi.mock('lucide-react-native', () => ({
   Check: 'Check',
+  ChevronDown: 'ChevronDown',
   ChevronLeft: 'ChevronLeft',
+  ChevronRight: 'ChevronRight',
   RefreshCw: 'RefreshCw',
   RotateCcw: 'RotateCcw',
   User: 'User'
@@ -118,8 +120,8 @@ vi.mock('./MobileAccountPoolSection', () => ({
       null,
       presentation.renderSystemAccount?.('claude', false),
       presentation.renderSystemAccount?.('codex', false),
-      presentation.renderAccount?.('codex', 'codex-1', null, false),
-      presentation.renderProviderFooter?.('codex')
+      presentation.renderAccount?.('codex', 'codex-1', false),
+      presentation.renderAccount?.('codex', 'reserve', false)
     )
 }))
 
@@ -204,17 +206,32 @@ function resetButtons(renderer: ReactTestRenderer) {
   return pressables(renderer, 'Use Codex rate-limit reset')
 }
 
-function systemDefaultButtons(renderer: ReactTestRenderer) {
+function systemDefaultRows(renderer: ReactTestRenderer) {
   return renderer.root.findAll(
     (node) =>
       String(node.type) === 'Pressable' &&
-      /^Use normal (claude|codex) CLI login for new manual chats$/.test(
-        node.props.accessibilityLabel ?? ''
-      )
+      /^Show Normal CLI login (claude|codex) usage$/.test(node.props.accessibilityLabel ?? '')
+  )
+}
+
+async function selectSystemDefault(renderer: ReactTestRenderer, provider: 'claude' | 'codex') {
+  await act(async () =>
+    pressables(renderer, `Show Normal CLI login ${provider} usage`)[0]?.props.onPress()
+  )
+  await act(async () =>
+    pressables(
+      renderer,
+      `Use Normal CLI login for new manual ${provider} chats`
+    )[0]?.props.onPress()
   )
 }
 
 async function findResetButton(renderer: ReactTestRenderer) {
+  if (resetButtons(renderer).length === 0) {
+    await act(async () =>
+      pressables(renderer, 'Show dev@example.com codex usage')[0]?.props.onPress()
+    )
+  }
   await vi.waitFor(() => expect(resetButtons(renderer)).toHaveLength(1))
   return resetButtons(renderer)[0]!
 }
@@ -310,6 +327,7 @@ describe('accounts route Codex reset credit', () => {
       await Promise.resolve()
     })
 
+    await findResetButton(renderer)
     expect(resetButtons(renderer)).toHaveLength(1)
     expect(resetButtons(renderer)[0]?.props.disabled).toBe(true)
     expect(dependencies.resetRequest).not.toHaveBeenCalled()
@@ -462,12 +480,8 @@ describe('accounts route Codex reset credit', () => {
     act(() => {
       dependencies.subscriptionListeners[0]?.({ type: 'snapshot', snapshot: wslSnapshot })
     })
-    const codexSystemDefault = systemDefaultButtons(renderer).at(-1)
-    expect(codexSystemDefault).toBeDefined()
-
-    await act(async () => {
-      await codexSystemDefault?.props.onPress()
-    })
+    expect(systemDefaultRows(renderer).at(-1)).toBeDefined()
+    await selectSystemDefault(renderer, 'codex')
 
     expect(dependencies.selectRequest).toHaveBeenCalledWith('accounts.selectCodexForTarget', {
       accountId: null,
@@ -525,12 +539,55 @@ describe('accounts route Codex reset credit', () => {
       error: { code: 'internal', message: 'Desktop refused the switch' }
     })
     const renderer = await renderAccountsRoute()
-    await act(async () => {
-      await systemDefaultButtons(renderer)[0]?.props.onPress()
-    })
+    await selectSystemDefault(renderer, 'codex')
 
     expectNotice(renderer, 'Could not switch account', 'Desktop refused the switch')
     dismissNotice(renderer)
+    expect(openDialog(renderer)).toBeNull()
+    act(() => renderer.unmount())
+  })
+
+  it('opens an inactive profile by tap and selects it without spending a reset', async () => {
+    const renderer = await renderAccountsRoute()
+    const reserve = {
+      ...AVAILABLE_SNAPSHOT,
+      codex: {
+        ...AVAILABLE_SNAPSHOT.codex,
+        accounts: [
+          ...AVAILABLE_SNAPSHOT.codex.accounts,
+          { ...AVAILABLE_SNAPSHOT.codex.accounts[0], id: 'reserve', email: 'reserve@example.com' }
+        ]
+      },
+      rateLimits: {
+        ...AVAILABLE_SNAPSHOT.rateLimits,
+        inactiveCodexAccounts: [
+          {
+            accountId: 'reserve',
+            rateLimits: {
+              ...AVAILABLE_SNAPSHOT.rateLimits.codex,
+              usageMetadata: { authProvenance: 'profile:reserve' },
+              rateLimitResetCredits: { availableCount: 2, nextExpiresAt: FIXTURE_NOW + 3_600_000 }
+            },
+            updatedAt: FIXTURE_NOW,
+            isFetching: false
+          }
+        ]
+      }
+    }
+    act(() => dependencies.subscriptionListeners[0]?.({ type: 'snapshot', snapshot: reserve }))
+    expect(pressables(renderer, 'Select reserve@example.com for reset')).toHaveLength(0)
+    await act(async () =>
+      pressables(renderer, 'Show reserve@example.com codex usage')[0]?.props.onPress()
+    )
+    expect(pressables(renderer, 'Select reserve@example.com for reset')).toHaveLength(1)
+    expect(JSON.stringify(renderer.toJSON())).toContain('2 resets available')
+    await act(async () =>
+      pressables(renderer, 'Select reserve@example.com for reset')[0]?.props.onPress()
+    )
+    expect(dependencies.selectRequest).toHaveBeenCalledWith('accounts.selectCodex', {
+      accountId: 'reserve'
+    })
+    expect(dependencies.resetRequest).not.toHaveBeenCalled()
     expect(openDialog(renderer)).toBeNull()
     act(() => renderer.unmount())
   })
@@ -548,8 +605,8 @@ describe('accounts route Codex reset credit', () => {
     const renderer = await renderAccountsRoute()
     expect(pressables(renderer, 'Pools & switching')).toHaveLength(0)
     expect(renderer.root.findAllByType('AccountPoolSection')).toHaveLength(1)
-    expect(systemDefaultButtons(renderer)).toHaveLength(2)
-    expect(pressables(renderer, 'Use dev@example.com for new manual codex chats')).toHaveLength(1)
+    expect(systemDefaultRows(renderer)).toHaveLength(2)
+    expect(pressables(renderer, 'Show dev@example.com codex usage')).toHaveLength(1)
     act(() => renderer.unmount())
   })
 })
