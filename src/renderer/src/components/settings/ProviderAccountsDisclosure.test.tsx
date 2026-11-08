@@ -7,7 +7,12 @@ afterEach(cleanup)
 
 it('starts collapsed and reveals Add account within its provider section', () => {
   render(
-    <ProviderAccountsDisclosure title="Codex" icon={<span />} searchQuery="">
+    <ProviderAccountsDisclosure
+      title="Codex"
+      icon={<span />}
+      description="Accounts and resets"
+      searchQuery=""
+    >
       <button>Add Codex account</button>
     </ProviderAccountsDisclosure>
   )
@@ -21,7 +26,12 @@ it('starts collapsed and reveals Add account within its provider section', () =>
 
 it('opens a matching section during account search', () => {
   render(
-    <ProviderAccountsDisclosure title="Claude" icon={<span />} searchQuery="profile">
+    <ProviderAccountsDisclosure
+      title="Claude"
+      icon={<span />}
+      description="Saved profiles"
+      searchQuery="profile"
+    >
       <button>Add Claude account</button>
     </ProviderAccountsDisclosure>
   )

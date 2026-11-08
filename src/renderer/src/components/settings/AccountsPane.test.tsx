@@ -1,4 +1,6 @@
 import React from 'react'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
@@ -38,6 +40,36 @@ describe('AccountsPane', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en')
     useAppStore.setState({ settingsSearchQuery: '', runtimeEnvironments: [] })
+  })
+
+  it('starts every available provider section collapsed with its summary visible', () => {
+    const markup = renderPane(getDefaultSettings('/tmp'))
+    if (process.env.OPKA_SYNTHETIC_EVIDENCE_DIR) {
+      writeFileSync(
+        join(process.env.OPKA_SYNTHETIC_EVIDENCE_DIR, 'attempt-c57-accounts.html'),
+        `<html><head><meta charset="utf-8"><link rel="stylesheet" href="usage-evidence.css"></head><body><main style="width:600px;margin:24px auto;padding:24px;border:1px solid #ddd;background:#fff">${markup}</main></body></html>`
+      )
+    }
+    for (const provider of [
+      'OpenCode',
+      'Devin',
+      'Claude',
+      'Codex',
+      'Gemini CLI',
+      'Antigravity',
+      'OpenCode Go',
+      'MiniMax',
+      'Grok',
+      'Cursor',
+      'Zcode'
+    ]) {
+      const start = markup.indexOf(`data-provider-accounts="${provider}"`)
+      expect(start).toBeGreaterThan(0)
+      expect(markup.slice(start, markup.indexOf('</button>', start))).toContain(
+        'aria-expanded="false"'
+      )
+    }
+    expect(markup).toContain('Saved logins, quotas, manual resets and pool settings.')
   })
 
   it('hides the WSL account location controls on platforms without WSL support', () => {

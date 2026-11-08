@@ -36,9 +36,13 @@ type AccountsNotice = { title: string; message: string }
  * `Alert.alert` (a no-op on React Native Web) and Back is the handoff's, which pops the shell.
  */
 export function MobileAccountsScreen() {
+  const { hostId } = useLocalSearchParams<{ hostId: string }>()
+  return <HostAccountsScreen key={hostId} hostId={hostId} />
+}
+
+function HostAccountsScreen({ hostId }: { hostId: string }) {
   const router = useRouteHandoff()
   const insets = useSafeAreaInsets()
-  const { hostId } = useLocalSearchParams<{ hostId: string }>()
 
   // Why: shared client per host. See docs/mobile-shared-client-per-host.md.
   const { client, state: connState } = useHostClient(hostId)
@@ -250,6 +254,12 @@ export function MobileAccountsScreen() {
         busyAccountId={busyAccountId}
         now={now}
         onSelect={(provider, id) => void selectAccount(provider, id)}
+        resetAction={
+          provider === 'codex' &&
+          getProviderAccountSelection(snapshot, provider).accountId === accountId
+            ? renderProviderFooter(provider)
+            : null
+        }
       />
     ) : null
 
@@ -307,7 +317,6 @@ export function MobileAccountsScreen() {
                   />
                 ),
                 renderAccount: (provider, id, blocked) => renderAccountRow(provider, id, blocked),
-                renderProviderFooter,
                 renderUnavailableAccounts: (blocked) =>
                   (['claude', 'codex'] as const).map((provider) => (
                     <MobileProviderAccountsDisclosure key={provider} provider={provider}>
@@ -328,7 +337,6 @@ export function MobileAccountsScreen() {
                           {renderAccountRow(provider, account.id, blocked)}
                         </View>
                       ))}
-                      {renderProviderFooter(provider)}
                     </MobileProviderAccountsDisclosure>
                   ))
               }}

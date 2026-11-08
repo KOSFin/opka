@@ -44,7 +44,11 @@ it('attributes active and inactive limits to exact accounts and keeps missing li
   const rows = usageAccountRoster('codex', snapshot(), rates)
   expect(rows?.find((row) => row.id === 'one')?.limits?.session?.usedPercent).toBe(70)
   expect(rows?.find((row) => row.id === 'two')?.limits?.session?.usedPercent).toBe(22)
-  expect(rows?.find((row) => row.id === null)?.limits).toBeNull()
+  expect(rows?.find((row) => row.id === null)).toBeUndefined()
+})
+it('omits an unverified system login while a saved profile is active', () => {
+  const rows = usageAccountRoster('codex', snapshot(), createEmptyRateLimitState())
+  expect(rows?.map((row) => row.id)).toEqual(['one', 'two'])
 })
 it('does not treat a failed provider as an authoritative empty account list', () => {
   const source = snapshot()

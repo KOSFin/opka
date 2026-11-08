@@ -1,6 +1,8 @@
 import React from 'react'
 import { UsageAccountRows } from './UsageAccountRows'
+import { UsageCodexAccountRows } from './UsageCodexAccountRows'
 import { useUsageAccounts } from './UsageAccountsContext'
+import { getProviderAccountsOwnerKey } from '@/runtime/runtime-provider-accounts-client'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { SettingsSegmentedControl } from '@/components/settings/SettingsFormControls'
@@ -253,36 +255,37 @@ export function UsageRosterPanel({
   const sorted = [...providers].sort(
     (a, b) => providerMaxUsed(usedSections(b)) - providerMaxUsed(usedSections(a))
   )
+  const accountProviders = accountsOwner
+    ? sorted.filter((provider) => provider.provider === 'claude' || provider.provider === 'codex')
+    : []
+  const otherProviders = accountsOwner
+    ? sorted.filter((provider) => provider.provider !== 'claude' && provider.provider !== 'codex')
+    : sorted
+  const ownerKey = accountsOwner ? getProviderAccountsOwnerKey(accountsOwner.target) : null
 
   return (
     <div className="w-[360px] text-xs">
-      <div className="flex items-center justify-between px-3.5 pb-2 pt-3">
-        <span className="text-[13px] font-semibold text-foreground">
+      <div className="flex items-center gap-2 px-3.5 py-2.5">
+        <span className="shrink-0 text-[13px] font-semibold text-foreground">
           {translate('auto.components.status.bar.UsageRosterPanel.title', 'Usage')}
         </span>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span className="text-[11px]">
-            {accountsOwner?.ownerLabel ??
-              translate('auto.components.status.bar.UsageRosterPanel.allAgents', 'all agents')}
-          </span>
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault()
-              onRefresh()
-            }}
-            aria-label={translate(
-              'auto.components.status.bar.StatusBar.3325d996cb',
-              'Refresh rate limits'
-            )}
-            className="size-5 justify-center p-0"
-          >
-            <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-          </DropdownMenuItem>
-        </div>
-      </div>
-      {/* Density picker lives at the top of the popover it controls (view-switcher
-          pattern) so both modes are named and discoverable on first open. */}
-      <div className="px-3.5 pb-2.5">
+        <span className="min-w-0 flex-1 truncate text-3xs text-muted-foreground">
+          {accountsOwner?.ownerLabel ??
+            translate('auto.components.status.bar.UsageRosterPanel.allAgents', 'all agents')}
+        </span>
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onRefresh()
+          }}
+          aria-label={translate(
+            'auto.components.status.bar.StatusBar.3325d996cb',
+            'Refresh rate limits'
+          )}
+          className="size-5 justify-center p-0"
+        >
+          <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+        </DropdownMenuItem>
         <SettingsSegmentedControl<StatusBarUsageMode>
           value={statusBarUsageMode}
           onChange={onStatusBarUsageModeChange}
@@ -291,7 +294,6 @@ export function UsageRosterPanel({
             'Usage footer detail'
           )}
           size="sm"
-          equalWidth
           options={[
             {
               value: 'verbose',
@@ -313,46 +315,81 @@ export function UsageRosterPanel({
         />
       </div>
       <div className="border-t border-border/70" />
-      {sorted.map((p) => {
-        const state = getUsageRosterRowState(p, usedSections(p).length > 0)
-        const showSignInAction = state.kind === 'sign-in' && canSignIn(p.provider)
-        const rowNode = (
-          <UsageRow
-            p={p}
-            display={display}
-            state={state}
-            showSignInAction={showSignInAction}
-            now={now}
-            mode={statusBarUsageMode}
-          />
-        )
-        const custom = showSignInAction ? null : renderRow?.(p, rowNode)
-        const item = custom ?? (
-          <DropdownMenuItem
-            onSelect={() => (showSignInAction ? onSignIn(p.provider) : onOpenProvider(p.provider))}
-            className="w-full cursor-pointer rounded-none px-3.5 py-2.5"
-          >
-            {rowNode}
-          </DropdownMenuItem>
-        )
-        return (
-          <React.Fragment key={p.provider}>
-            {item}
-            {p.provider === 'claude' || p.provider === 'codex' ? (
-              <UsageAccountRows provider={p.provider} now={now} display={display} />
-            ) : null}
-          </React.Fragment>
-        )
-      })}
-      {accountsOwner &&
-      sorted.some((entry) => entry.provider === 'claude' || entry.provider === 'codex') ? (
-        <p className="border-t border-border/50 px-3.5 py-2 text-2xs text-muted-foreground">
-          {translate(
-            'usage.accounts.sharedBudgetHint',
-            'Profiles are separate sign-in contexts and may share provider limits.'
-          )}
-        </p>
-      ) : null}
+      <div className="max-h-80 overflow-y-auto scrollbar-sleek">
+        {accountProviders.map((provider) => {
+          const target =
+            provider.provider === 'codex'
+              ? accountsOwner?.rateLimits.codexTarget
+              : accountsOwner?.rateLimits.claudeTarget
+          const actions =
+            accountsOwner?.verified && accountsOwner.snapshot
+              ? renderRow?.(
+                  provider,
+                  <span className="text-xs">
+                    {provider.provider === 'codex' ? 'Codex' : 'Claude'} ·{' '}
+                    {translate('usage.accounts.switchRuntime', 'Switch account or runtime')}
+                  </span>
+                )
+              : null
+          return (
+            <React.Fragment
+              key={`${ownerKey}:${provider.provider}:${target?.runtime}:${target?.wslDistro ?? ''}`}
+            >
+              {provider.provider === 'codex' ? (
+                <UsageCodexAccountRows
+                  codex={provider}
+                  now={now}
+                  display={display}
+                  mode={statusBarUsageMode}
+                  onManageProvider={() => onOpenProvider('codex')}
+                />
+              ) : (
+                <UsageAccountRows
+                  provider="claude"
+                  now={now}
+                  display={display}
+                  mode={statusBarUsageMode}
+                  onManageProvider={() => onOpenProvider('claude')}
+                />
+              )}
+              {actions ? (
+                <div
+                  data-usage-account-actions={provider.provider}
+                  className="border-b border-border/50"
+                >
+                  {actions}
+                </div>
+              ) : null}
+            </React.Fragment>
+          )
+        })}
+        {otherProviders.map((p) => {
+          const state = getUsageRosterRowState(p, usedSections(p).length > 0)
+          const showSignInAction = state.kind === 'sign-in' && canSignIn(p.provider)
+          const rowNode = (
+            <UsageRow
+              p={p}
+              display={display}
+              state={state}
+              showSignInAction={showSignInAction}
+              now={now}
+              mode={statusBarUsageMode}
+            />
+          )
+          const custom = showSignInAction ? null : renderRow?.(p, rowNode)
+          const item = custom ?? (
+            <DropdownMenuItem
+              onSelect={() =>
+                showSignInAction ? onSignIn(p.provider) : onOpenProvider(p.provider)
+              }
+              className="w-full cursor-pointer rounded-none px-3.5 py-2.5"
+            >
+              {rowNode}
+            </DropdownMenuItem>
+          )
+          return <React.Fragment key={p.provider}>{item}</React.Fragment>
+        })}
+      </div>
       <div className="border-t border-border/70" />
       <DropdownMenuItem
         onSelect={onUsageDetails}
