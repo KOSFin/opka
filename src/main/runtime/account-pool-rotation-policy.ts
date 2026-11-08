@@ -37,6 +37,9 @@ export function selectAccountPoolRotationMember(
   const current = policy.members.find((entry) => entry.accountId === currentAccountId)
   const healthy = isAccountPoolMemberHealthy(policy, candidates, currentAccountId)
   const currentIndex = policy.members.findIndex((entry) => entry.accountId === currentAccountId)
+  if (policy.strategy === 'quota-equalize' && healthy) {
+    return selectAccountPoolMember(db, { ...admission, preferredAccountId: currentAccountId })
+  }
   const ordered =
     policy.strategy === 'sequential' && policy.rotation === 'after-turn' && currentIndex !== -1
       ? [...policy.members.slice(currentIndex + 1), ...policy.members.slice(0, currentIndex)]

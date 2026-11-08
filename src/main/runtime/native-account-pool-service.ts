@@ -65,8 +65,9 @@ export function createNativeAccountPoolService(args: {
         boundary.childrenSettled &&
         boundary.lastCompletedTurn &&
         enrollment.lastRotatedTurn !== boundary.lastCompletedTurn.id &&
-        configured.rotation !== 'off' &&
+        (configured.rotation !== 'off' || configured.strategy === 'quota-equalize') &&
         (configured.rotation === 'after-turn' ||
+          configured.strategy === 'quota-equalize' ||
           configured.members.find((entry) => entry.accountId === enrollment.accountId)?.state !==
             'enabled' ||
           !isAccountPoolMemberHealthy(
@@ -245,16 +246,32 @@ export function createNativeAccountPoolService(args: {
         (entry) => entry.provider === record.provider
       )
       if (
-        policy.rotation === 'off' ||
+        (policy.rotation === 'off' && policy.strategy !== 'quota-equalize') ||
         (policy.rotation === 'on-limit' &&
+          policy.strategy !== 'quota-equalize' &&
           isAccountPoolMemberHealthy(policy, candidates, record.accountPool.accountId))
       ) {
         return false
       }
       try {
+        const db = runtime.getOrchestrationDb()
+        const previousOwner = record.lease.ownerProcess
+          ? ownerKey(
+              record.sessionId,
+              record.lease.runtimeFence,
+              record.lease.ownerProcess.spawnToken
+            )
+          : null
+        const replacesOwnerKey =
+          previousOwner &&
+          db
+            .listAccountPoolAssignments()
+            .some((assignment) => assignment.ownerKey === previousOwner)
+            ? previousOwner
+            : undefined
         const selected = selectAccountPoolRotationMember(
-          runtime.getOrchestrationDb().db,
-          { policy, candidates },
+          db.db,
+          { policy, candidates, replacesOwnerKey },
           record.accountPool.accountId
         )
         return selected.id !== record.accountPool.accountId

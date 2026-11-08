@@ -102,6 +102,12 @@ export function MobileAccountPoolCard({
                 Selection: {policy.strategy === 'manual' ? 'sequential' : policy.strategy}
               </Text>
             </Pressable>
+            {policy.strategy === 'quota-equalize' ? (
+              <Text style={styles.rowSubtitle}>
+                Fresh comparable limits choose the less used account between settled turns. Near
+                equal usage keeps the current account.
+              </Text>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${title} pool advanced settings`}

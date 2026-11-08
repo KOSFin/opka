@@ -108,6 +108,54 @@ it('saves the selected mode with host revision and refreshes host state', async 
     }
   })
 })
+it('offers quota equalization only when the owning host advertises it', async () => {
+  const client = new FakeSession('connected')
+  client.sendRequest.mockResolvedValue(rpcSuccess(snapshot))
+  await act(async () => {
+    tree = create(
+      createElement(MobileAccountPoolSection, { client, connected: true, hostName: 'Server' })
+    )
+  })
+  const open = async () => {
+    await act(async () =>
+      tree?.root
+        .findAllByType('Pressable')
+        .find((node) => node.props.accessibilityLabel === 'Codex pool settings')
+        ?.props.onPress()
+    )
+    await act(async () =>
+      tree?.root
+        .findAllByType('Pressable')
+        .find((node) => node.props.accessibilityLabel === 'codex pool mode')
+        ?.props.onPress()
+    )
+  }
+  await open()
+  const picker = () =>
+    tree?.root.findAllByType('Picker').find((node) => node.props.title === 'Pool mode')
+  expect(
+    picker()?.props.options.some((option: { value: string }) => option.value === 'quota-equalize')
+  ).toBe(false)
+  await act(async () => picker()?.props.onClose())
+  client.sendRequest.mockResolvedValue(
+    rpcSuccess({ ...snapshot, equalizeCapability: 'orchestration.account-pools.equalize.v1' })
+  )
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'Refresh pools')
+      ?.props.onPress()
+  )
+  await act(async () =>
+    tree?.root
+      .findAllByType('Pressable')
+      .find((node) => node.props.accessibilityLabel === 'codex pool mode')
+      ?.props.onPress()
+  )
+  expect(
+    picker()?.props.options.some((option: { value: string }) => option.value === 'quota-equalize')
+  ).toBe(true)
+})
 it('does not request or offer mutation controls while disconnected', async () => {
   const client = new FakeSession('connected')
   await act(async () => {

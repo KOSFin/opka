@@ -94,7 +94,11 @@ export function createCodexPoolTurnSession(args: {
           ?.quotaIdentity
       }
     }
-    if (binding?.policy?.id === policy.id && policy.rotation === 'off') {
+    if (
+      binding?.policy?.id === policy.id &&
+      policy.rotation === 'off' &&
+      policy.strategy !== 'quota-equalize'
+    ) {
       return { ...binding, policy: structuredClone(policy) }
     }
     if (
@@ -104,6 +108,7 @@ export function createCodexPoolTurnSession(args: {
         state.candidates.find((candidate) => candidate.accountId === binding?.accountId)
           ?.quotaIdentity &&
       policy.rotation === 'on-limit' &&
+      policy.strategy !== 'quota-equalize' &&
       binding.accountId !== null &&
       isAccountPoolMemberHealthy(policy, state.candidates, binding.accountId)
     ) {

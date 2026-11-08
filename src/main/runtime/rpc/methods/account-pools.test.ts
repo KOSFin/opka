@@ -53,6 +53,15 @@ it('persists host-local metadata with compare-and-swap revisions and no credenti
   expect(await f.update({ ...f.policy, strategy: 'balanced' }, 1)).toMatchObject({ revision: 2 })
   expect(f.policies()[0].strategy).toBe('balanced')
 })
+it('accepts equalization for Codex and refuses it for Claude', async () => {
+  const f = fixture()
+  await expect(f.update({ ...f.policy, strategy: 'quota-equalize' })).resolves.toMatchObject({
+    strategy: 'quota-equalize'
+  })
+  await expect(
+    f.update({ ...f.policy, provider: 'claude', strategy: 'quota-equalize' }, 1)
+  ).rejects.toThrow(/only for Codex/)
+})
 it('refuses foreign host registrations and duplicate membership before saving', async () => {
   const f = fixture()
   await expect(

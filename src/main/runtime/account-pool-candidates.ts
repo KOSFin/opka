@@ -11,7 +11,7 @@ import type { AccountsSnapshot } from './runtime-account-controller'
 
 function quotaState(
   usage: ProviderRateLimits | null | undefined
-): Pick<AccountPoolCandidate, 'quota' | 'usedPercent'> {
+): Pick<AccountPoolCandidate, 'quota' | 'usedPercent' | 'quotaWindows'> {
   if (!usage || usage.status !== 'ok' || Date.now() - usage.updatedAt > 10 * 60_000) {
     return { quota: 'unknown', usedPercent: null }
   }
@@ -22,7 +22,15 @@ function quotaState(
     return { quota: 'unknown', usedPercent: null }
   }
   const usedPercent = Math.max(...windows.map((window) => window.usedPercent))
-  return { quota: usedPercent >= 100 ? 'exhausted' : 'available', usedPercent }
+  return {
+    quota: usedPercent >= 100 ? 'exhausted' : 'available',
+    usedPercent,
+    quotaWindows: windows.map(({ windowMinutes, usedPercent, resetsAt }) => ({
+      windowMinutes,
+      usedPercent,
+      resetsAt
+    }))
+  }
 }
 function accountQuota(snapshot: AccountsSnapshot, provider: 'claude' | 'codex', accountId: string) {
   const active = snapshot.rateLimits[provider]
