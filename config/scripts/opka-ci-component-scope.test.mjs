@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   CI_LANES,
   classifyCiPaths,
+  describeCiScope,
   evaluateCiResults,
   detectCiScope
 } from './opka-ci-component-scope.mjs'
@@ -29,17 +30,81 @@ describe('component CI routing', () => {
     const scope = classifyCiPaths(['docs/architecture.md', 'fork-docs/iterations/009.md'])
     expect(scope.docs_only).toBe(true)
     expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static'])
+    expect(describeCiScope(scope)).toContain(
+      'skipped regression, desktop, electron, installers, android'
+    )
+    expect(describeCiScope(scope)).toContain('Reasons: documentation only')
   })
   it('checks mobile tests without native packaging but native/runtime inputs require Android', () => {
     expect(classifyCiPaths(['mobile/src/cache/x.test.ts']).android).toBe(false)
     expect(classifyCiPaths(['mobile/src/cache/x.ts']).android).toBe(true)
     expect(classifyCiPaths(['mobile/modules/updater/build.gradle']).android).toBe(true)
   })
+  it('keeps desktop Usage, mobile screens, routing, wire, packaging and unknown inputs distinct', () => {
+    const cases = [
+      [
+        'src/renderer/src/components/feature-wall/agents-orchestration/UsagePage.tsx',
+        ['static', 'regression', 'desktop', 'electron']
+      ],
+      ['mobile/src/accounts/MobileAccountsScreen.tsx', ['static', 'regression', 'android']],
+      ['src/main/runtime/rpc/dispatcher.ts', CI_LANES],
+      ['src/shared/rpc-contract/project-task-params.ts', CI_LANES],
+      ['config/scripts/build-orcad.mjs', CI_LANES],
+      ['new-dependency/entry.ts', CI_LANES]
+    ]
+    for (const [path, expected] of cases) {
+      const scope = classifyCiPaths([path])
+      expect(
+        CI_LANES.filter((lane) => scope[lane]),
+        path
+      ).toEqual(expected)
+      expect(scope.reasons.length, path).toBeGreaterThan(0)
+    }
+  })
+  it('retains both first-run regressions and narrows the Android-only repair', () => {
+    const firstRun = classifyCiPaths([
+      'mobile/src/accounts/MobileAccountsScreen.tsx',
+      'src/main/rate-limits/codex-fetcher.ts',
+      'src/renderer/src/components/settings/AccountPoolSection.tsx',
+      'tests/e2e/fork-account-pool-settings.spec.ts',
+      'config/scripts/opka-android-ui-journey.py'
+    ])
+    expect(firstRun.electron).toBe(true)
+    expect(firstRun.android).toBe(true)
+    const viewportRepair = classifyCiPaths([
+      'config/scripts/opka-ci-component-scope.mjs',
+      'config/scripts/opka-ci-followup-proof.mjs',
+      'config/scripts/opka_android_target_viewport.py',
+      'config/scripts/fixtures/android-webview-accessibility/accounts-offscreen.xml'
+    ])
+    expect(CI_LANES.filter((lane) => viewportRepair[lane])).toEqual([
+      'static',
+      'regression',
+      'android'
+    ])
+    expect(viewportRepair.full).toBe(false)
+    const deepScrollRepair = classifyCiPaths([
+      'config/scripts/opka-release-qualification.mjs',
+      'config/scripts/opka_android_target_viewport.py',
+      'config/scripts/fixtures/android-webview-accessibility/accounts-deep-offscreen.xml'
+    ])
+    expect(CI_LANES.filter((lane) => deepScrollRepair[lane])).toEqual([
+      'static',
+      'regression',
+      'android'
+    ])
+  })
   it('covers shared host behavior on desktop, mobile and packaged hosts', () => {
     const scope = classifyCiPaths(['src/shared/pairing.ts'])
     for (const lane of CI_LANES) {
       expect(scope[lane]).toBe(true)
     }
+  })
+  it('keeps the updater A-to-B journey and Android acceptance for updater code', () => {
+    const scope = classifyCiPaths(['src/main/updater-mac-install.ts'])
+    expect(CI_LANES.filter((lane) => scope[lane])).toEqual(CI_LANES)
+    const journey = classifyCiPaths(['tests/e2e/fork-beta-update.spec.ts'])
+    expect(journey.electron).toBe(true)
   })
   it('does not silently discard unknown paths or policy inputs', () => {
     for (const path of [
