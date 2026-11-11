@@ -343,13 +343,19 @@ try {
     lines.close()
     const exiting = child
     exiting.stdin.end()
+    let termSent = false
     if (!childDidClose) {
-      exiting.kill('SIGTERM')
+      termSent = exiting.kill('SIGTERM')
     }
     if (!childClosed) {
       throw new Error('First public app-server close promise was not installed')
     }
-    const force = setTimeout(() => exiting.kill('SIGKILL'), 2000)
+    let forceSent = false
+    const force = setTimeout(() => {
+      if (!childDidClose) {
+        forceSent = exiting.kill('SIGKILL')
+      }
+    }, 2000)
     let deadline
     const closed = await Promise.race([
       childClosed,
@@ -363,7 +369,21 @@ try {
       clearTimeout(force)
       clearTimeout(deadline)
     })
-    if (closed.code !== 0 && closed.signal !== 'SIGTERM') {
+    if (
+      closed.code !== 0 &&
+      !(closed.signal === 'SIGTERM' && termSent) &&
+      !(closed.signal === 'SIGKILL' && forceSent)
+    ) {
+      console.error(
+        'Synthetic first app-server close verdict:',
+        JSON.stringify({
+          code: closed.code,
+          signal: closed.signal,
+          termSent,
+          forceSent,
+          stderrBytes
+        })
+      )
       throw new Error('First public app-server did not exit after the compacted turn')
     }
     launchCodex()
@@ -410,6 +430,12 @@ try {
       completeProviderResponseSha256: upstream.completeResponseSha256(),
       threadIdPreserved: true,
       processRestarted: true,
+      firstProcessClose: {
+        code: closed.code,
+        signal: closed.signal,
+        ownedTermKill: termSent,
+        ownedForcedKill: forceSent
+      },
       nextAndResumedOpaqueContent: true,
       physicalLeaseUntilPositiveExit: 'UNPROVEN',
       retryByteIdentity: 'UNPROVEN'

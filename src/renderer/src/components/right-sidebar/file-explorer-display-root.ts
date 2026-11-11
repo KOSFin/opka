@@ -66,7 +66,9 @@ export function resolveExplorerDisplayRootChoice(
       options.some(
         (option) =>
           option.value !== FILE_EXPLORER_FULL_ROOT &&
-          (normalized === option.value || normalized.startsWith(`${option.value}/`))
+          (normalized === option.value ||
+            normalized.startsWith(`${option.value}/`) ||
+            option.value.startsWith(`${normalized}/`))
       ))
   ) {
     return normalized

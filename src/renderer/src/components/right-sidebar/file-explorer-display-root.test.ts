@@ -135,4 +135,15 @@ describe('navigable Explorer display roots', () => {
     expect(resolveExplorerDisplayRootChoice(options, 'app/src')).toBe('app/src')
     expect(resolveExplorerDisplayRootChoice(options, 'removed')).toBe('app')
   })
+
+  it('keeps a sparse ancestor and descendant but refuses unrelated branches', () => {
+    const options = getExplorerDisplayRootOptions({
+      isSparse: true,
+      sparseDirectories: ['apps/web']
+    })
+    expect(resolveExplorerDisplayRootChoice(options, 'apps')).toBe('apps')
+    expect(resolveExplorerDisplayRootChoice(options, 'apps/web/src')).toBe('apps/web/src')
+    expect(resolveExplorerDisplayRootChoice(options, 'app')).toBe('apps/web')
+    expect(resolveExplorerDisplayRootChoice(options, 'removed')).toBe('apps/web')
+  })
 })

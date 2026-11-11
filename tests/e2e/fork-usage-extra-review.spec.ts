@@ -24,31 +24,34 @@ async function capture(page: Page, name: string): Promise<void> {
 
 async function expectPopoverHitTarget(target: Locator): Promise<void> {
   await target.scrollIntoViewIfNeeded()
-  const result = await target.evaluate((element) => {
-    const popover = document.querySelector('[data-slot="popover-content"]')
-    if (!popover) {
-      return { within: false, hit: false }
-    }
-    const rect = element.getBoundingClientRect()
-    const outer = popover.getBoundingClientRect()
-    const x = rect.left + rect.width / 2
-    const y = rect.top + rect.height / 2
-    return {
-      within:
-        rect.width > 0 &&
-        rect.height > 0 &&
-        x >= outer.left &&
-        x <= outer.right &&
-        y >= outer.top &&
-        y <= outer.bottom &&
-        x >= 0 &&
-        x <= window.innerWidth &&
-        y >= 0 &&
-        y <= window.innerHeight,
-      hit: element.contains(document.elementFromPoint(x, y))
-    }
-  })
-  expect(result).toEqual({ within: true, hit: true })
+  await expect
+    .poll(() =>
+      target.evaluate((element) => {
+        const popover = element.closest('[data-slot="popover-content"]')
+        if (!popover) {
+          return { within: false, hit: false }
+        }
+        const rect = element.getBoundingClientRect()
+        const outer = popover.getBoundingClientRect()
+        const x = rect.left + rect.width / 2
+        const y = rect.top + rect.height / 2
+        return {
+          within:
+            rect.width > 0 &&
+            rect.height > 0 &&
+            x >= outer.left &&
+            x <= outer.right &&
+            y >= outer.top &&
+            y <= outer.bottom &&
+            x >= 0 &&
+            x <= window.innerWidth &&
+            y >= 0 &&
+            y <= window.innerHeight,
+          hit: element.contains(document.elementFromPoint(x, y))
+        }
+      })
+    )
+    .toEqual({ within: true, hit: true })
 }
 
 test('fresh hidden Electron Usage has reachable account details and nested dismissal', async ({

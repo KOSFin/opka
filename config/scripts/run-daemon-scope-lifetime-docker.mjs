@@ -170,7 +170,9 @@ function runCases(baseImage) {
     '/bin/sh',
     '-c',
     [
+      "timeout --kill-after=5s 30s sh -c 'until systemctl list-jobs --no-legend >/dev/null 2>&1; do sleep 0.1; done'",
       'systemctl start systemd-logind.service',
+      "timeout --kill-after=5s 30s sh -c 'until loginctl list-users --no-legend >/dev/null 2>&1; do sleep 0.1; done'",
       'loginctl enable-linger orca-repro',
       'systemctl start user@1100.service',
       'test -S /run/user/1100/bus'
