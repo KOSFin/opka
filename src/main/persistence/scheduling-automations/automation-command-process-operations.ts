@@ -32,7 +32,13 @@ export function bindAutomationCommandProcessIntent(
   const updated: AutomationCommandClaimV1 = {
     ...claim,
     observation: 'live',
-    processIntent: { ...intent, ...receipt, execMayHappen: true }
+    processIntent: {
+      ...intent,
+      childCgroupPath: receipt.childCgroupPath,
+      blockedChildPid: receipt.blockedChildPid,
+      blockedChildStartTime: receipt.blockedChildStartTime,
+      execMayHappen: true
+    }
   }
   operations.state.automationCommandsV1 = {
     ...domain,
@@ -125,7 +131,15 @@ export function bindAutomationAgentProcessIntent(
   const updated: AutomationCommandClaimV1 = {
     ...claim,
     observation: 'live',
-    agentIntent: { ...intent, ...receipt, execMayHappen: true }
+    agentIntent: {
+      ...intent,
+      childCgroupPath: receipt.childCgroupPath,
+      blockedChildPid: receipt.blockedChildPid,
+      blockedChildStartTime: receipt.blockedChildStartTime,
+      binaryPath: receipt.binaryPath,
+      binaryFingerprint: receipt.binaryFingerprint,
+      execMayHappen: true
+    }
   }
   operations.state.automationCommandsV1 = {
     ...domain,

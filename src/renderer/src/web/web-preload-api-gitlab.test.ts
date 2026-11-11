@@ -33,6 +33,25 @@ describe('web GitLab preload API', () => {
     installWebPreloadApi()
 
     expect(Object.keys(globals.window.api.gl).sort()).toEqual(Object.keys(glApi).sort())
+    await expect(
+      globals.window.api.gl.provisionNetworkProfile?.({
+        intentId: 'synthetic-intent',
+        host: 'gitlab.example.test',
+        user: 'synthetic-user',
+        token: ''
+      })
+    ).rejects.toThrow('GitLab network profile changes require the desktop app.')
+    await expect(
+      globals.window.api.gl.cancelNetworkProfileProvision?.('synthetic-intent')
+    ).rejects.toThrow('GitLab network profile changes require the desktop app.')
+    await expect(
+      globals.window.api.gl.removeNetworkProfile?.({
+        id: 'synthetic-id',
+        host: 'gitlab.example.test',
+        user: 'synthetic-user',
+        generation: 'synthetic-generation'
+      })
+    ).rejects.toThrow('GitLab network profile changes require the desktop app.')
   })
 
   it('routes every runtime-backed GitLab method through the expected RPC method', async () => {
@@ -68,6 +87,12 @@ describe('web GitLab preload API', () => {
       expectedMethod: string
       expectedParams: unknown
     }[] = [
+      {
+        key: 'listNetworkProfiles',
+        invoke: (gl) => gl.listNetworkProfiles(),
+        expectedMethod: 'gitlab.listNetworkProfiles',
+        expectedParams: undefined
+      },
       {
         key: 'diagnoseAuth',
         invoke: (gl) => gl.diagnoseAuth(),

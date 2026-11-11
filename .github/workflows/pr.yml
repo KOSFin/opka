@@ -322,6 +322,8 @@ jobs:
       - name: Exercise project navigation and task boards
         env:
           SKIP_BUILD: '1'
+          ORCA_GIT_HIDDEN_EVIDENCE_DIR: ${{ runner.temp }}/opka-git-hidden-evidence
+          ORCA_SPARSE_PROOF_DIR: ${{ runner.temp }}/opka-sparse-proof
         run: >-
           pnpm exec playwright test
           tests/e2e/fork-nested-project-tree.spec.ts
@@ -335,13 +337,23 @@ jobs:
           tests/e2e/fork-packaged-tasks.spec.ts
           tests/e2e/fork-account-pool-settings.spec.ts
           tests/e2e/fork-worker-capacity-settings.spec.ts
+          tests/e2e/fork-usage-extra-review.spec.ts
+          tests/e2e/fork-usage-corrected-review.spec.ts
+          tests/e2e/git-project-trackers-hidden.spec.ts
+          tests/e2e/sparse-explorer-proof.spec.ts
+          tests/e2e/sparse-preset-proof.spec.ts
+          tests/e2e/automation-command-ui.spec.ts
           --config tests/playwright.config.ts --project electron-headless --workers=1
       - name: Save task lifecycle visual evidence
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: task-ui-evidence-${{ github.sha }}
-          path: test-results/**/*.png
+          path: |
+            test-results/**/*.png
+            test-results/desktop-usage-independent-evidence/
+            ${{ runner.temp }}/opka-git-hidden-evidence/
+            ${{ runner.temp }}/opka-sparse-proof/
           if-no-files-found: error
           retention-days: 7
       - name: Install pinned Codex for the account-free terminal contract

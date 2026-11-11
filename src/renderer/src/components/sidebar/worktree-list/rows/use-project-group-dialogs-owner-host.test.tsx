@@ -113,9 +113,14 @@ describe('project group dialogs carry the owner host', () => {
       await latest!.handleSubmitProjectGroupName('Renamed')
     })
 
-    expect(mocks.toastError).toHaveBeenCalledWith('Failed to rename group', {
+    expect(mocks.updateProjectGroup).toHaveBeenCalledWith(
+      remoteGroup.id,
+      { name: 'Renamed' },
+      { hostId: 'runtime:env-1' }
+    )
+    expect(mocks.toastError).toHaveBeenCalledWith('Failed to rename project', {
       description:
-        "Orca could not confirm the new name with the group's host. Recheck the group after reconnecting."
+        "Orca could not confirm the new name with the project's host. Recheck the project after reconnecting."
     })
   })
 

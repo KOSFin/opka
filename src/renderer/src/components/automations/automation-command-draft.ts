@@ -1,11 +1,9 @@
 import { createUuidV4 } from '../../../../shared/uuid-v4'
 import {
   AutomationCommandDefinitionCreateV1,
-  type AutomationCommandDefinitionV1
-} from '../../../../shared/automation-command-domain'
-import type {
-  AutomationCommandReportTarget,
-  AutomationCommandReportTargetOption
+  type AutomationCommandDefinitionV1,
+  type AutomationCommandReportTarget,
+  type AutomationCommandReportTargetOption
 } from '../../../../shared/automation-command-domain'
 import type { AutomationCommandConditionV1 } from '../../../../shared/automation-command-execution'
 import type { ProjectHostSetup } from '../../../../shared/project-types'

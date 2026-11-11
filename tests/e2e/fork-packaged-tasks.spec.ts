@@ -44,6 +44,11 @@ async function rpc(page: Page, method: string, params: Record<string, unknown>) 
 }
 
 async function openReport(page: Page) {
+  const restored = page.getByRole('dialog', { name: 'Packaged task smoke', exact: true })
+  if (await restored.isVisible()) {
+    await expect(restored).toContainText('Packaged task project · This computer')
+    await restored.getByRole('button', { name: 'Close', exact: true }).click()
+  }
   await page.getByText('Tasks', { exact: true }).first().click()
   await selectTaskProject(page, /Packaged task project/)
   await page.getByRole('button', { name: /Packaged task smoke/ }).click()

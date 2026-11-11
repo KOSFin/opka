@@ -89,6 +89,36 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
   await expect(picker).toContainText('apps/web')
   const rows = orcaPage.locator('[data-file-explorer-row]')
   await expect(rows.filter({ hasText: 'package.json' })).toBeVisible()
+  const sourceFolder = rows.filter({ hasText: /^src$/ })
+  await expect(sourceFolder).toBeVisible()
+  await sourceFolder.click()
+  await expect(rows.filter({ hasText: 'App.tsx' })).toBeVisible()
+  await sourceFolder.click()
+  await expect(rows.filter({ hasText: 'App.tsx' })).toHaveCount(0)
+  const location = orcaPage.getByRole('navigation', { name: 'Explorer location' })
+  await location.getByRole('button', { name: 'Up one folder' }).click()
+  await expect(location.getByRole('button', { name: 'apps', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page'
+  )
+  await location.getByRole('button', { name: 'Back', exact: true }).click()
+  await expect(location.getByRole('button', { name: 'web', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page'
+  )
+  await location.getByRole('button', { name: 'Forward', exact: true }).click()
+  await expect(location.getByRole('button', { name: 'apps', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page'
+  )
+  await location.getByRole('button', { name: 'Back', exact: true }).click()
+  await location.getByRole('button', { name: 'apps', exact: true }).click()
+  await expect(location.getByRole('button', { name: 'apps', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page'
+  )
+  await location.getByRole('button', { name: 'Back', exact: true }).click()
+  await expect(picker).toContainText('apps/web')
   const proofDir = process.env.ORCA_SPARSE_PROOF_DIR
   const capture = async (name: string) => {
     const file = proofDir

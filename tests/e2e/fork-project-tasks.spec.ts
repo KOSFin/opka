@@ -184,6 +184,14 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
     launched = await session.launch({ executablePath })
     app = launched.app
     await openTaskPage(launched.page)
+    const restoredTask = launched.page.getByRole('dialog', {
+      name: 'Audit file-backed tasks',
+      exact: true
+    })
+    if (await restoredTask.isVisible()) {
+      await expect(restoredTask).toContainText('Task fixture · This computer')
+      await restoredTask.getByRole('button', { name: 'Close', exact: true }).click()
+    }
     await expect(
       launched.page.getByRole('button', { name: /Audit file-backed tasks/ })
     ).toBeVisible()

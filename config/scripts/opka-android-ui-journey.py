@@ -233,7 +233,7 @@ def main():
         host_list()
         capture('05-project-return')
         tap('Tasks')
-        tap(fixture['projectName'], contains=True)
+        tap(f"Open {fixture['projectName']} / Project session")
         find('Native QA starter', contains=True)
         capture('06-board')
         tap('Add project task')
@@ -261,7 +261,7 @@ def main():
         # Normal Back intentionally returns through the catalog; reopen the saved backend card.
         host_list()
         tap('Tasks')
-        tap(fixture['projectName'], contains=True)
+        tap(f"Open {fixture['projectName']} / Project session")
         find('Native QA edited card', contains=True)
         capture('10-board-reopened')
         report = {'schema': 1, 'steps': steps, 'realCandidateApk': True, 'realSyntheticHost': True,

@@ -237,6 +237,15 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
             projects={catalog.projects}
             selected={projectKeys}
             onChange={(keys) => {
+              if (
+                catalog.projects.some(
+                  (project) =>
+                    project.state !== 'configured' &&
+                    (keys.includes('*') || keys.includes(project.key))
+                )
+              ) {
+                refreshCatalog()
+              }
               setProjectKeys(keys)
               setRepo('*')
               setSource('*')
