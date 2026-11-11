@@ -334,6 +334,7 @@ jobs:
           tests/e2e/fork-five-projects.spec.ts
           tests/e2e/fork-beta-update.spec.ts
           tests/e2e/fork-project-tasks.spec.ts
+          tests/e2e/fork-delegation-controls.spec.ts
           tests/e2e/fork-task-rpc-discovery.spec.ts
           tests/e2e/fork-packaged-tasks.spec.ts
           tests/e2e/fork-account-pool-settings.spec.ts
