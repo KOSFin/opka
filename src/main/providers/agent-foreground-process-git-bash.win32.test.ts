@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import { WINDOWS_GIT_BASH_SHELL } from '../../shared/windows-terminal-shell'
+import { HeadlessEmulator } from '../daemon/headless-emulator'
 import { confirmPtyShellForeground } from '../daemon/pty-subprocess/pty-shell-foreground-confirmation'
 import { createPtyShellLaunchPlan } from '../daemon/pty-subprocess/shell-launch-plan'
 import { spawnNativeDaemonPty } from '../daemon/pty-subprocess/native-pty-spawn'
@@ -24,10 +25,32 @@ async function spawnPlannedPane(
   return spawnNativeDaemonPty({ ...plan, env, cols: opts.cols, rows: opts.rows })
 }
 
+function answerConptyStartupQueries(
+  spawned: Awaited<ReturnType<typeof spawnNativeDaemonPty>>,
+  opts: PtySubprocessOptions
+): () => void {
+  const proc = spawned.process
+  const emulator = new HeadlessEmulator({
+    cols: opts.cols,
+    rows: opts.rows,
+    onQueryReply: (reply) => proc.write(reply)
+  })
+  emulator.installConptyPrimaryDeviceAttributesOverride()
+  const outputListener = proc.onData((chunk) => {
+    void emulator.write(chunk, { forwardQueryReplies: true })
+  })
+  return () => {
+    outputListener.dispose()
+    emulator.disableQueryReplyForwarding()
+    emulator.dispose()
+  }
+}
+
 /** Drives a live pane through prompt -> foreground command -> interrupt -> background job. */
 async function proveIdlePromptCycle(
   spawned: Awaited<ReturnType<typeof spawnNativeDaemonPty>>,
-  expectedJobSize: number
+  expectedJobSize: number,
+  opts: PtySubprocessOptions
 ): Promise<void> {
   const proc = spawned.process
   let output = ''
@@ -38,6 +61,7 @@ async function proveIdlePromptCycle(
   proc.onExit(() => {
     dead = true
   })
+  const disposeQueryResponder = answerConptyStartupQueries(spawned, opts)
   const confirm = (): Promise<boolean> =>
     confirmPtyShellForeground({
       process: proc,
@@ -74,6 +98,7 @@ async function proveIdlePromptCycle(
     proc.write('sleep 60 &\r')
     await vi.waitFor(async () => expect(await confirm()).toBe(false), { timeout: 10_000 })
   } finally {
+    disposeQueryResponder()
     proc.kill()
   }
 }
@@ -117,7 +142,7 @@ describeOnWindows("Git Bash launcher shell proof with Orca's real launch", () =>
       expect(isGitForWindowsBashLauncherPath(plan.shellPath)).toBe(true)
       expect(plan.shellArgs.join(' ')).toContain('exec "$BASH"')
       // Launcher, exec stub, interactive bash: the shape that a size-1 or size-2 rule never matches.
-      await proveIdlePromptCycle(await spawnPlannedPane(plan, env, opts), 3)
+      await proveIdlePromptCycle(await spawnPlannedPane(plan, env, opts), 3, opts)
     },
     60_000
   )
@@ -145,7 +170,7 @@ describeOnWindows("Git Bash launcher shell proof with Orca's real launch", () =>
       expect(plan.shellPath).toBe(opts.shellOverride)
       expect(isGitForWindowsBashLauncherPath(plan.shellPath)).toBe(true)
       // No Git Bash startup args for an unrecognized folder, so no exec stub: launcher -> bash.
-      await proveIdlePromptCycle(await spawnPlannedPane(plan, env, opts), 2)
+      await proveIdlePromptCycle(await spawnPlannedPane(plan, env, opts), 2, opts)
     } finally {
       // rmdir, never a recursive remove: it detaches the junction and cannot reach the target.
       rmdirSync(stagedInstall)
@@ -168,6 +193,7 @@ describeOnWindows("Git Bash launcher shell proof with Orca's real launch", () =>
     proc.onData((chunk) => {
       output += chunk
     })
+    const disposeQueryResponder = answerConptyStartupQueries(spawned, opts)
     let agentPid = 0
     const inspect = (ignoreDetached: boolean) =>
       inspectSpawnFileWindowsChildProcesses(proc, spawned.shellPath, true, ignoreDetached)
@@ -194,6 +220,7 @@ describeOnWindows("Git Bash launcher shell proof with Orca's real launch", () =>
         proc.write(`kill %1; kill ${agentPid}\r`)
         await new Promise((resolve) => setTimeout(resolve, 500))
       }
+      disposeQueryResponder()
       proc.kill()
     }
   }, 60_000)
