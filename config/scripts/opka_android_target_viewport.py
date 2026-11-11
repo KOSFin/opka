@@ -24,7 +24,13 @@ def visible_bounds(root, node, for_tap=False):
             if area and ancestor.get('scrollable') == 'true':
                 regions.append(area)
             ancestor = parents.get(ancestor)
-        center_x, center_y = (rectangle[0] + rectangle[2]) / 2, (rectangle[1] + rectangle[3]) / 2
+        for area in regions:
+            clipped = [max(clipped[0], area[0]), max(clipped[1], area[1]),
+                       min(clipped[2], area[2]), min(clipped[3], area[3])]
+        # Keep an eight-pixel margin around the observed tap center.
+        if clipped[2] - clipped[0] < 16 or clipped[3] - clipped[1] < 16:
+            return None
+        center_x, center_y = (clipped[0] + clipped[2]) / 2, (clipped[1] + clipped[3]) / 2
         if any(not (area[0] <= center_x < area[2] and area[1] <= center_y < area[3]) for area in regions):
             return None
     return clipped if clipped[2] > clipped[0] and clipped[3] > clipped[1] else None

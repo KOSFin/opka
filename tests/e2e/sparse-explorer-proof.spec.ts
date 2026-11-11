@@ -78,6 +78,7 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
           )
         }
       })
+      store.getState().setActiveView('terminal')
     },
     { workspace }
   )

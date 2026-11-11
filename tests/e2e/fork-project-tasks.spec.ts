@@ -218,16 +218,10 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
       launched.page.getByText('Synthetic local report', { exact: false }).first()
     ).toBeVisible()
     await launched.page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
+    await closeRestoredProjectTaskDetail(launched.page, 'Audit file-backed tasks', 'Task fixture')
     await expect(
       launched.page.getByRole('heading', { name: 'Project tasks', exact: true })
     ).toBeVisible()
-    const taskSheet = launched.page.getByRole('dialog', {
-      name: 'Audit file-backed tasks',
-      exact: true
-    })
-    if (await taskSheet.isVisible()) {
-      await taskSheet.getByRole('button', { name: 'Close', exact: true }).click()
-    }
     await launched.page.getByRole('button', { name: 'External trackers', exact: true }).click()
     await expect(
       launched.page.getByRole('heading', { name: 'Project tasks', exact: true })

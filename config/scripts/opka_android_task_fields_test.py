@@ -185,6 +185,30 @@ class TargetViewportContract(unittest.TestCase):
                          now=lambda: next(clock), pause=lambda _: None, reveal_forward=True)
         self.assertEqual(len(gestures), 8)
 
+    def test_partly_covered_board_action_taps_inside_scroll_viewport(self):
+        # Captured Add project task: [42,139][1010,299], scroll viewport: [0,217][1080,1861].
+        root = ET.fromstring('<hierarchy><node bounds="[0,0][1080,1920]"><node bounds="[0,217][1080,1861]" scrollable="true"><node text="Add project task" clickable="true" bounds="[42,139][1010,299]"/></node></node></hierarchy>')
+        target = list(root.iter('node'))[-1]
+        self.assertEqual(visible_bounds(root, target, for_tap=True), [42, 217, 1010, 299])
+        revealed = find_visible(lambda: root, lambda _: target, 'Add project task', 1,
+                                lambda *args: self.fail('Visible action must not swipe'),
+                                now=lambda: 0, pause=lambda _: None, actionable=True)
+        self.assertEqual(revealed.get('bounds'), '[42,217][1010,299]')
+        target.set('bounds', '[42,139][1010,215]')
+        self.assertIsNone(visible_bounds(root, target, for_tap=True))
+        target.set('bounds', '[42,210][1010,225]')
+        self.assertIsNone(visible_bounds(root, target, for_tap=True))
+        target.set('bounds', '[42,1920][1010,2020]')
+        self.assertIsNone(visible_bounds(root, target, for_tap=True))
+        root[0][0].remove(target)
+        nested = ET.SubElement(root[0][0], 'node', {'bounds': '[100,400][900,800]',
+                                                    'scrollable': 'true'})
+        nested.append(target)
+        target.set('bounds', '[120,350][880,450]')
+        self.assertEqual(visible_bounds(root, target, for_tap=True), [120, 400, 880, 450])
+        target.set('bounds', '[120,350][880,405]')
+        self.assertIsNone(visible_bounds(root, target, for_tap=True))
+
     def test_clipped_targets_are_intersected_with_the_actual_window(self):
         root = ET.fromstring('<hierarchy><node bounds="[0,0][100,100]"><node bounds="[90,90][200,200]"/></node></hierarchy>')
         target = list(root.iter('node'))[-1]

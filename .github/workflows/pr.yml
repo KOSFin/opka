@@ -141,6 +141,7 @@ jobs:
         if: matrix.group != 'automation-containment'
       - name: Install the pinned headless renderer browser
         if: matrix.group == 'shared'
+        timeout-minutes: 8
         run: node node_modules/playwright-core/cli.js install --with-deps chromium webkit
       - name: Test host accounts, mobile state and generated pages
         if: matrix.group != 'automation-containment'

@@ -270,15 +270,27 @@ test('fresh hidden Electron Usage has reachable account details and nested dismi
   await alpha.getByRole('button').hover()
   await expect(details.getByRole('button', { name: 'Use reset' })).toBeDisabled()
   await page.keyboard.press('Escape')
+  await expect(usage).toHaveCount(0)
   await electronApp.evaluate(({ ipcMain }) => {
+    Reflect.set(globalThis, '__orcaU07CodexListCalls', 0)
     ipcMain.removeHandler('codexAccounts:list')
-    ipcMain.handle('codexAccounts:list', () => ({
-      accounts: [{ id: 'beta', email: 'beta@example.test', createdAt: 1, updatedAt: 1 }],
-      activeAccountId: 'beta',
-      activeAccountIdsByRuntime: { host: 'beta', wsl: {} }
-    }))
+    ipcMain.handle('codexAccounts:list', () => {
+      const calls = Number(Reflect.get(globalThis, '__orcaU07CodexListCalls')) + 1
+      Reflect.set(globalThis, '__orcaU07CodexListCalls', calls)
+      return {
+        accounts: [{ id: 'beta', email: 'beta@example.test', createdAt: 1, updatedAt: 1 }],
+        activeAccountId: 'beta',
+        activeAccountIdsByRuntime: { host: 'beta', wsl: {} }
+      }
+    })
   })
   await trigger.click()
+  await expect(usage).toBeVisible()
+  await expect
+    .poll(() =>
+      electronApp.evaluate(() => Number(Reflect.get(globalThis, '__orcaU07CodexListCalls')))
+    )
+    .toBeGreaterThan(0)
   await expect(beta).toBeVisible()
   await expect(alpha).toHaveCount(0)
   await expect(usage.getByRole('complementary', { name: /alpha@example\.test/ })).toHaveCount(0)
