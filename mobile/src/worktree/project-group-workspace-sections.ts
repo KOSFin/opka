@@ -62,6 +62,9 @@ export function groupProjectWorkspaceSections(
       key,
       title: entry.name,
       projectGroupHeader: true,
+      projectGroupId: entry.id,
+      projectGroupHostId: getProjectGroupExecutionHostIdForRows(entry, LOCAL_EXECUTION_HOST_ID),
+      groupIcon: entry.groupIcon,
       count: children.reduce((total, s) => total + (s.count ?? s.data.length), 0),
       data: collapsed.has(key) ? [] : folder.flatMap((s) => s.data)
     }

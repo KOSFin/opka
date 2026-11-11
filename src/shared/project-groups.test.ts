@@ -9,6 +9,8 @@ import {
   normalizeProjectGroups
 } from './project-groups'
 import type { Repo } from './repo-types'
+import { ProjectGroupSchema } from './project-section-catalog-schema'
+import { ProjectGroupUpdate } from './rpc-contract/repo-params'
 
 function repo(overrides: Partial<Repo>): Repo {
   return {
@@ -82,6 +84,34 @@ describe('project-groups', () => {
     expect(groups.find((group) => group.id === 'runtime')?.executionHostId).toBe('runtime:env-1')
     expect(groups.find((group) => group.id === 'local')?.executionHostId).toBe('local')
     expect(groups.find((group) => group.id === 'invalid')?.executionHostId).toBeUndefined()
+  })
+
+  it('preserves an optional group icon without copying a repository icon or rewriting legacy rows', () => {
+    const icon = { type: 'emoji' as const, emoji: '📁' }
+    const created = createProjectGroup({
+      name: 'Folder',
+      createdFrom: 'manual',
+      tabOrder: 1,
+      groupIcon: icon
+    })
+    expect(created.groupIcon).toEqual(icon)
+    const restored = normalizeProjectGroups([
+      created,
+      { ...created, id: 'reset', groupIcon: null },
+      { ...created, id: 'legacy', groupIcon: undefined },
+      { ...created, id: 'invalid', groupIcon: { type: 'emoji', emoji: 'x'.repeat(17) } }
+    ])
+    expect(restored.find((group) => group.id === created.id)?.groupIcon).toEqual(icon)
+    expect(restored.find((group) => group.id === 'reset')?.groupIcon).toBeNull()
+    expect(restored.find((group) => group.id === 'legacy')?.groupIcon).toBeUndefined()
+    expect(restored.find((group) => group.id === 'invalid')?.groupIcon).toBeUndefined()
+    expect(ProjectGroupSchema.parse(created).groupIcon).toEqual(icon)
+    expect(ProjectGroupSchema.parse({ ...created, groupIcon: null }).groupIcon).toBeNull()
+    expect(ProjectGroupSchema.parse({ ...created, groupIcon: undefined }).groupIcon).toBeUndefined()
+    expect(
+      ProjectGroupUpdate.parse({ groupId: created.id, updates: { groupIcon: null } }).updates
+        .groupIcon
+    ).toBeNull()
   })
 
   it('clears repo memberships whose group no longer exists', () => {

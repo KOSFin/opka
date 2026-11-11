@@ -285,10 +285,18 @@ export class FolderWorkspacePersistenceOperations {
     if (!repo) {
       return null
     }
-    const normalizedGroupId =
-      groupId && (this.state.projectGroups ?? []).some((group) => group.id === groupId)
-        ? groupId
-        : null
+    if (
+      groupId &&
+      !(this.state.projectGroups ?? []).some(
+        (group) =>
+          group.id === groupId &&
+          (group.connectionId ?? null) === (repo.connectionId ?? null) &&
+          getRepoExecutionHostId(group) === getRepoExecutionHostId(repo)
+      )
+    ) {
+      return null
+    }
+    const normalizedGroupId = groupId
     const siblingRepos = this.state.repos.filter((entry) => entry !== repo)
     repo.projectGroupId = normalizedGroupId
     repo.projectGroupOrder =

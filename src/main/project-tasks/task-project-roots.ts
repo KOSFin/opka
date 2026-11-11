@@ -21,7 +21,7 @@ export type TaskProjectRootsHost = {
   >[]
   listVisibleRepos(): Pick<
     Repo,
-    'id' | 'path' | 'displayName' | 'connectionId' | 'executionHostId'
+    'id' | 'path' | 'displayName' | 'projectGroupId' | 'connectionId' | 'executionHostId'
   >[]
   listVisibleProjectGroups(): Pick<
     ProjectGroup,
@@ -36,12 +36,23 @@ export function taskRootContains(parent: string, child: string): boolean {
 
 export function registeredTaskRoots(host: TaskProjectRootsHost) {
   const groups = host.listVisibleProjectGroups()
+  const localGroup = (groupId: string | null | undefined) => {
+    const matches = groups.filter((entry) => entry.id === groupId)
+    const group = matches.length === 1 ? matches[0] : undefined
+    return group &&
+      !group.connectionId &&
+      (!group.executionHostId || group.executionHostId === 'local')
+      ? group
+      : undefined
+  }
   const folders = host
     .listVisibleFolderWorkspaces()
     .filter((folder) => {
-      const group = groups.find((entry) => entry.id === folder.projectGroupId)
+      const matches = groups.filter((entry) => entry.id === folder.projectGroupId)
+      const group = matches.length === 1 ? matches[0] : undefined
       return (
         !folder.isArchived &&
+        matches.length <= 1 &&
         !folder.connectionId &&
         (!folder.executionHostId || folder.executionHostId === 'local') &&
         !group?.connectionId &&
@@ -49,22 +60,32 @@ export function registeredTaskRoots(host: TaskProjectRootsHost) {
         folder.folderPath
       )
     })
-    .map((folder) => ({
-      selector: `folder:${folder.id}`,
-      root: folder.folderPath,
-      name: groups.find((group) => group.id === folder.projectGroupId)?.name || folder.name
-    }))
+    .map((folder) => {
+      const group = localGroup(folder.projectGroupId)
+      return {
+        selector: `folder:${folder.id}`,
+        root: folder.folderPath,
+        name: group?.name || folder.name,
+        repositoryName: folder.name,
+        ...(group ? { groupId: group.id, groupName: group.name } : {})
+      }
+    })
   const repos = host
     .listVisibleRepos()
     .filter(
       (repo) => !repo.connectionId && (!repo.executionHostId || repo.executionHostId === 'local')
     )
-    .map((repo) => ({
-      selector: `path:${repo.path}`,
-      root: repo.path,
-      name: repo.displayName || repo.path
-    }))
-  const roots = new Map<string, { selector: string; root: string; name: string }>()
+    .map((repo) => {
+      const group = localGroup(repo.projectGroupId)
+      return {
+        selector: `path:${repo.path}`,
+        root: repo.path,
+        name: repo.displayName || repo.path,
+        repositoryName: repo.displayName || repo.path,
+        ...(group ? { groupId: group.id, groupName: group.name } : {})
+      }
+    })
+  const roots = new Map<string, (typeof repos)[number] | (typeof folders)[number]>()
   for (const entry of [...folders, ...repos]) {
     if (!roots.has(entry.root)) {
       roots.set(entry.root, entry)
@@ -77,6 +98,9 @@ async function inspectTaskRoot(entry: {
   selector: string
   root: string
   name: string
+  groupId?: string
+  groupName?: string
+  repositoryName?: string
 }): Promise<ProjectTaskProject> {
   try {
     const root = await realpath(entry.root)
@@ -109,14 +133,16 @@ export async function readTaskProjectCatalog(
   }
   return {
     truncated: roots.length > 256,
-    projects: projects.filter(
-      (entry, index) =>
-        projects.findIndex((candidate) => candidate.root === entry.root) === index &&
-        (entry.state === 'configured' ||
-          !projects.some(
-            (parent) => parent.root !== entry.root && taskRootContains(parent.root, entry.root)
-          ))
-    )
+    projects: projects
+      .filter(
+        (entry, index) =>
+          projects.findIndex((candidate) => candidate.root === entry.root) === index &&
+          (entry.state === 'configured' ||
+            !projects.some(
+              (parent) => parent.root !== entry.root && taskRootContains(parent.root, entry.root)
+            ))
+      )
+      .map((entry) => ({ ...entry, projectGroupsAvailable: true }))
   }
 }
 

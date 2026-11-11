@@ -14,7 +14,6 @@ import {
   type MobileProjectTask
 } from './project-task-rpc'
 import {
-  invalidateProjectTaskPresentation,
   projectTaskCacheKey,
   projectTaskPresentationIsFresh,
   readProjectTaskPresentation,
@@ -22,6 +21,9 @@ import {
   saveProjectTaskSelection,
   type ProjectTaskSelection
 } from './project-task-presentation-cache'
+import { useProjectTaskOverview } from './use-project-task-overview'
+import { useProjectTaskReportLoad } from './use-project-task-report-load'
+import { refreshProjectTaskPresentation } from './refresh-project-task-presentation'
 
 export function useProjectTaskPresentation(
   client: RpcClient | null,
@@ -41,6 +43,15 @@ export function useProjectTaskPresentation(
     setUi(readProjectTaskScreenState(client, hostId))
   }
   const { project, taskId, document } = ui.selection
+  const overview = useProjectTaskOverview(
+    client,
+    connection,
+    hostId,
+    project ? [] : ui.projects,
+    ui.selection.projects,
+    ui.selection.projectLimit ?? 16,
+    refresh
+  )
   const task = ui.tasks.find((item) => item.id === taskId) ?? null
   const owns = () =>
     owner.current.client === client &&
@@ -84,9 +95,10 @@ export function useProjectTaskPresentation(
         }
         saveProjectTaskPresentation(client, projectTaskCacheKey(hostId, 'catalog'), {
           kind: 'catalog',
-          projects: result.projects
+          projects: result.projects,
+          truncated: result.truncated
         })
-        patch({ projects: result.projects })
+        patch({ projects: result.projects, catalogTruncated: result.truncated })
       } else {
         const board = await loadProjectTaskBoard(
           client,
@@ -197,67 +209,47 @@ export function useProjectTaskPresentation(
     ui.verified,
     refresh
   ])
-  useEffect(() => {
-    if (!client || !project || !task || !document || !ui.verified || connection !== 'connected') {
-      return
-    }
-    let current = true
-    const valid = () => current && owns()
-    const key = projectTaskCacheKey(hostId, 'report', project, task.id, task.revision, document)
-    const retained = readProjectTaskPresentation(client, key)
-    if (retained?.kind === 'report') {
-      patch({ report: retained.report })
-    }
-    if (retained?.kind === 'report' && projectTaskPresentationIsFresh(client, key)) {
-      return
-    }
-    void documentsRead
-      .request(
-        client,
-        { worktree: project, id: task.id, path: document },
-        PROJECT_TASK_PRESENTATION_READ_OPTIONS
-      )
-      .then(documentsRead.interpret)
-      .then((result) => {
-        if (!valid()) {
-          return
-        }
-        const report = result.content ?? ''
-        saveProjectTaskPresentation(client, key, { kind: 'report', project, report })
-        patch({ report })
-      })
-      .catch((failure: unknown) => {
-        if (valid()) {
-          patch({ error: String(failure) })
-        }
-      })
-    return () => {
-      current = false
-    }
-  }, [
+  useProjectTaskReportLoad({
     client,
     connection,
     hostId,
     generation,
     project,
-    task?.id,
-    task?.revision,
+    task,
     document,
-    ui.verified,
-    refresh
-  ])
+    verified: ui.verified,
+    refresh,
+    owns,
+    patch
+  })
   function refreshTasks() {
     if (!owns()) {
       return
     }
-    if (client) {
-      invalidateProjectTaskPresentation(client, hostId, project)
-    }
+    refreshProjectTaskPresentation(client, hostId, project, ui.projects, ui.selection.projects)
     patch({ verified: false })
     setRefresh((value) => value + 1)
   }
   function setProject(next: string | null) {
     patch(selectProjectTaskPresentation(client, hostId, ui.selection, next))
+  }
+  function setProjectTask(nextProject: string, nextTask: MobileProjectTask) {
+    if (!owns()) {
+      return
+    }
+    setUi((previous) => {
+      const next = selectProjectTaskPresentation(client, hostId, previous.selection, nextProject)
+      return {
+        ...previous,
+        ...next,
+        selection: {
+          ...previous.selection,
+          project: nextProject,
+          taskId: nextTask.id,
+          document: null
+        }
+      }
+    })
   }
   function changeSelection(
     selection: Partial<ProjectTaskSelection>,
@@ -281,10 +273,12 @@ export function useProjectTaskPresentation(
     report: detailCurrent ? ui.report : '',
     verified: ui.verified && (!task || detailCurrent),
     task,
+    overview,
     project,
     document,
     refreshTasks,
     setProject,
+    setProjectTask,
     setTask: (next: MobileProjectTask | null) =>
       changeSelection(
         { taskId: next?.id ?? null, document: null },
@@ -293,6 +287,12 @@ export function useProjectTaskPresentation(
     setDocument: (next: string | null) => changeSelection({ document: next }, { report: '' }),
     setQuery: (query: string) => changeSelection({ query }),
     setPhase: (phase: string) => changeSelection({ phase }),
+    setSource: (source: string) => changeSelection({ source }),
+    setProjects: (projects: string[]) => changeSelection({ projects, projectLimit: 16 }),
+    loadMoreProjects: () =>
+      changeSelection({ projectLimit: (ui.selection.projectLimit ?? 16) + 16 }),
+    setScroll: (kind: 'catalogScroll' | 'boardScroll', value: number) =>
+      changeSelection({ [kind]: value }),
     setCreating: (creating: boolean) => patch({ creating }),
     setError: (error: string) => patch({ error })
   }

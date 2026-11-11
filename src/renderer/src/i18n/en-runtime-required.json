@@ -1,4 +1,10 @@
 {
+  "accounts": {
+    "claude": {
+      "profileSwitching": "Switching applies to the next Claude you start in any tab.",
+      "systemDefaultNamed": "System default: {{value0}}"
+    }
+  },
   "agentsSidebarIntro": {
     "migrated": {
       "action": "Open Agents"
@@ -812,6 +818,7 @@
           "GitHistoryPanel": {
             "111e1d0db4": "error",
             "62e685d5ec": "idle",
+            "6d1e0a7c3b": "Failed to load commit files",
             "9a8b85882d": "loading"
           },
           "HostedReviewActions": {
@@ -1080,12 +1087,15 @@
           "0023cc336e": "Paste either the raw token value (e.g.",
           "15e831350e": "Configure MiniMax usage tracking from platform.minimax.io.",
           "1fd1b1b6b4": "Cookie not set",
+          "26ef4b55be": "Claude",
           "338820326a": ") or the full cookie header (e.g.",
           "3455cf43fa": "Claude login.",
           "350b2a1aa7": "Use your current",
+          "3fe7862418": "No managed Claude accounts for {{value0}}. Orca will use that environment's system default Claude login until you add one here.",
           "4e32e030b2": "Stored locally. Orca sends it only to platform.minimax.io for usage refreshes.",
           "566d9a99ab": "_token=…; minimax_group_id_v2=…",
           "5e08b0fe57": "Stored locally and sent only to platform.minimax.io for usage refreshes.",
+          "72b36ea174": "Optional. Orca can use your normal Claude login; add accounts only if you want quick switching without moving chat sessions.",
           "79418c782a": "Open platform.minimax.io/console/usage in your browser, sign in, then copy the Cookie request header from DevTools (Network → any remains request → Cookie).",
           "7ce0e1907c": "). Find it in your browser's DevTools → Network → any opencode.ai request → Cookie header. OpenCode Go auth is web-based and shared across Windows and WSL terminals.",
           "8951c5309f": "auth=Fe26.2**…",
@@ -1096,7 +1106,13 @@
           "b11078a9c2": "wsl",
           "b2b1aa936d": "Paste your opencode.ai session cookie for rate limit fetching.",
           "b8c2905c2b": "Could not load Codex accounts.",
+          "cedfab35ab": "Optional. Orca can use your normal Codex login; add accounts only if you want quick switching in Orca.",
+          "d0d53b7eb0": "Manage which Codex account Orca uses for live rate limit fetching.",
+          "e74831fb6b": "Active",
+          "ef91cfa06b": "Codex",
+          "f2a265f8c7": "System default",
           "f5d8d2a6a1": "Open platform.minimax.io/console/usage in your browser and sign in.",
+          "remoteEmptyClaudeAccounts": "No managed Claude accounts on {{value0}}. It uses its system default Claude login; add accounts on that server.",
           "remoteScopeLocalAccountsKept": "Accounts managed on this desktop are unchanged. Switch the default runtime back to Local desktop to view them."
         },
         "AdvancedNetworkSettingsSection": {
@@ -1442,9 +1458,6 @@
           "925f9e0dc4": "text-foreground",
           "b5e3e77e89": "action",
           "c90b858573": "text-amber-700 dark:text-amber-300"
-        },
-        "RepositoryIconPicker": {
-          "2b7d27b93c": "Use {{value0}} repo color"
         },
         "RepositoryPane": {
           "createPendingSetup": "Track setup",
@@ -1904,7 +1917,6 @@
           "outcome": {
             "activeServer": "Not done: this server is the default host for new projects. Choose another one in Advanced before stopping it."
           },
-          "row": {},
           "title": "Orca on your SSH hosts"
         },
         "mobile": {
@@ -1936,7 +1948,6 @@
             }
           }
         },
-        "serverList": {},
         "settingOwnership": {
           "clientDefaultProjectScopes": "Client default + project scopes",
           "terminalQuickCommands": "Commands are saved on this client, then scoped globally or to a project setup so they run from the selected terminal context."
@@ -2142,6 +2153,10 @@
           "bc96dbd041": "Workspace options ({{value0}})",
           "c7591b6014": "repo"
         },
+        "WorkspaceKanbanDrawerHeader": {
+          "c6a77ab0f4": "Workspace board",
+          "e1a34450fc": "Moving a card changes the workspace status, not its Git branch. Plans and acceptance belong in Project tasks."
+        },
         "WorkspaceKanbanSettingsMenu": {
           "b45b350eb0": "Move {{value0}} left"
         },
@@ -2151,7 +2166,9 @@
         "WorktreeCard": {
           "01f45d3d8a": "sidebar",
           "021538e1d1": "SSH disconnected",
+          "0777de5970": "Primary worktree (original clone directory)",
           "1d66d84f0b": "string",
+          "7d517f82e2": "primary",
           "93aebe4529": "Folder",
           "automationCreated": "Created by automation",
           "branchFolderPathIdentity": "Branch or folder path",
@@ -2528,16 +2545,22 @@
           "StatusBar": {
             "06741a2f3d": "Open MiniMax usage details",
             "2483c60695": "···",
+            "25d8bbde69": "Using reset…",
             "3d79122c3f": "kimi",
             "4dff061aab": "·",
             "629251f4b6": "Open OpenCode Go usage details",
             "68efc0345c": "gemini",
+            "6d1042aa6f": "This uses one Codex rate-limit reset credit for the active account and resets any eligible usage windows immediately.",
             "76b06d4da5": "claude",
+            "972a1ff497": "Reset Codex limits?",
             "a28a5dd9b1": "error",
             "antigravityUsageDetails": "Open Antigravity usage details",
+            "c0e972d726": "Cancel",
             "d2375976eb": "Open Gemini usage details",
             "d79c3362c4": "5h",
             "d7a0668acc": "opencode-go",
+            "e159fc1fd7": "Reset now",
+            "f077f586db": "Don't ask again",
             "fda8146810": "Open Kimi usage details",
             "grokUsageAria": "Open Grok usage details"
           },
@@ -3262,8 +3285,8 @@
         "notDoneAnswer": "Your answer was not sent.",
         "notDoneCommand": "The command didn't run.",
         "notDoneGoal": "The goal wasn't changed.",
-        "notDoneQueuedEdit": "Your edit wasn't saved.",
         "notDoneOption": "The setting wasn't changed.",
+        "notDoneQueuedEdit": "Your edit wasn't saved.",
         "notDoneReadHistory": "This chat's history couldn't be loaded.",
         "notDoneSend": "Your message was not sent.",
         "notDoneStop": "The agent wasn't stopped.",
@@ -3368,6 +3391,12 @@
       "viewing": "Viewing: {{path}}"
     }
   },
+  "fork": {
+    "navigation": {
+      "collapse": "Collapse {{name}}",
+      "expand": "Expand {{name}}"
+    }
+  },
   "jira": {
     "workspace": {
       "open": "Open workspace linked to {{key}}"
@@ -3416,6 +3445,12 @@
       "reopened_other": "Reopened {{count}} terminals",
       "resumed_one": "{{count}} agent session resumed.",
       "resumed_other": "{{count}} agent sessions resumed."
+    }
+  },
+  "usage": {
+    "accounts": {
+      "manage": "Manage",
+      "staleLimits": "Last known"
     }
   },
   "workspaceSpace": {

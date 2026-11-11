@@ -1,3 +1,4 @@
+import { freezeNativeProjectTaskResult } from '../../../../project-tasks/task-native-result'
 import type { WorkerReportOutcome, WorkerReportSettlement } from '../../types'
 import type { OrchestrationDb } from '../orchestration-db'
 import { AGENT_PROMPT_STALLED_ERROR } from '../../../agent-prompt-submission-verification'
@@ -284,6 +285,7 @@ export function settleWorkerReportInTransaction(
     this.closeQuestionsForDispatch(sibling.id)
   }
   if (params.outcome === 'succeeded') {
+    freezeNativeProjectTaskResult(this, params.taskId, params.dispatchId, params.result)
     this.promoteReadyTasks(params.taskId)
   }
   recordAcceptedReportFact(this, params)

@@ -22,6 +22,7 @@ import {
   FileReadChunk,
   FileSearch,
   FileTreePath,
+  FileTreePage,
   FileUnwatch,
   ResolveTerminalPath,
   ServerDirectoryBrowse
@@ -162,6 +163,27 @@ export const FILE_METHODS = [
             }),
         remoteFileContentBudget(clientKind, requestId)
       )
+  }),
+  defineMethod({
+    name: 'files.readDirPage',
+    permission: 'workspace',
+    params: FileTreePage,
+    handler: async (params, { runtime, signal, clientKind, requestId }) => {
+      const page = await runtime.readFileExplorerDirPage(params.worktree, params.relativePath, {
+        cursor: params.cursor,
+        limit: params.limit,
+        followSymlinks: params.followSymlinks,
+        signal
+      })
+      const budget = remoteFileContentBudget(clientKind, requestId)
+      if (
+        budget !== undefined &&
+        Buffer.byteLength(JSON.stringify({ id: requestId, ok: true, result: page })) > budget
+      ) {
+        throw new Error('Directory page exceeds the remote reply budget')
+      }
+      return page
+    }
   }),
   defineMethod({
     name: 'files.browseServerDir',

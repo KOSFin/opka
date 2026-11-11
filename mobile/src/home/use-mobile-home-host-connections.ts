@@ -37,12 +37,20 @@ function wireMobileHomeHostSubscriptions(
 ): () => void {
   let unsubscribeNotifications: (() => void) | null = null
   let unsubscribeAccounts: (() => void) | null = null
+  let active = true
+  let generation = 0
   const refetchGate = createHostConnectRefetchGate()
   const wireState = (state: ConnectionState): void => {
+    if (!active) {
+      return
+    }
     const reconnected = refetchGate.observe(state)
     if (state === 'connected') {
       unsubscribeNotifications ??= subscribeToDesktopNotifications(entry.client, entry.hostId)
       unsubscribeAccounts ??= entry.client.subscribe('accounts.subscribe', null, (payload) => {
+        if (!active || entry.client.getState() !== 'connected') {
+          return
+        }
         if (!payload || typeof payload !== 'object') {
           return
         }
@@ -58,22 +66,16 @@ function wireMobileHomeHostSubscriptions(
         }
       })
       if (reconnected) {
-        fetchMobileHomeStats(entry.client, entry.hostId, setters.setStats, () => false)
-        void fetchHomeHostWorktreeInfo(
-          entry.client,
-          entry.hostId,
-          setters.setWorktreeInfo,
-          () => false
-        )
-        fetchMobileHomeTaskProviders(
-          entry.client,
-          entry.hostId,
-          setters.setTaskProviders,
-          () => false
-        )
+        const requestGeneration = generation
+        const isStale = () =>
+          !active || generation !== requestGeneration || entry.client.getState() !== 'connected'
+        fetchMobileHomeStats(entry.client, entry.hostId, setters.setStats, isStale)
+        void fetchHomeHostWorktreeInfo(entry.client, entry.hostId, setters.setWorktreeInfo, isStale)
+        fetchMobileHomeTaskProviders(entry.client, entry.hostId, setters.setTaskProviders, isStale)
       }
       return
     }
+    generation += 1
     unsubscribeNotifications?.()
     unsubscribeNotifications = null
     unsubscribeAccounts?.()
@@ -82,6 +84,8 @@ function wireMobileHomeHostSubscriptions(
   wireState(entry.state)
   const unsubscribeState = entry.client.onStateChange(wireState)
   return () => {
+    active = false
+    generation += 1
     unsubscribeState()
     unsubscribeNotifications?.()
     unsubscribeAccounts?.()

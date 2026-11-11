@@ -2,7 +2,7 @@ import { useAppStore } from '@/store'
 import { getRelativePathInsideRoot, joinPath } from '@/lib/path'
 import type { DirEntry } from '../../../../shared/filesystem-entry-types'
 import { sortDirEntries } from '../../../../shared/file-name-sort'
-import { readRuntimeDirectory } from '@/runtime/runtime-file-mutation-client'
+import { readRuntimeDirectoryPage } from '@/runtime/runtime-file-mutation-client'
 import type { FileExplorerOperationOwner, TreeNode } from './file-explorer-types'
 import { shouldIncludeFileExplorerEntry } from './file-explorer-entries'
 import {
@@ -13,6 +13,7 @@ import {
 
 export type FileExplorerDirectoryListing = {
   entries: DirEntry[]
+  nextCursor?: string | null
   operationOwner: FileExplorerOperationOwner
 }
 
@@ -40,14 +41,15 @@ export function fileExplorerEntriesToTreeNodes(
 export async function readFileExplorerDirectory(
   activeWorktreeId: string | null | undefined,
   worktreePath: string | null,
-  dirPath: string
+  dirPath: string,
+  cursor?: string
 ): Promise<FileExplorerDirectoryListing> {
   const operationOwner = getFileExplorerOperationOwner(activeWorktreeId)
   const route = getFileExplorerOperationRoute(operationOwner)
   if (!route) {
     throw new Error(getFileExplorerOwnerUnresolvedMessage())
   }
-  const entries = await readRuntimeDirectory(
+  const page = await readRuntimeDirectoryPage(
     {
       target: route.target,
       worktreeId: activeWorktreeId,
@@ -55,15 +57,19 @@ export async function readFileExplorerDirectory(
       connectionId: route.connectionId
     },
     dirPath,
-    useAppStore.getState().settings?.followSymlinkedDirectories
-      ? { followSymlinks: true }
-      : undefined
+    {
+      ...(useAppStore.getState().settings?.followSymlinkedDirectories
+        ? { followSymlinks: true }
+        : {}),
+      ...(cursor ? { cursor } : {})
+    }
   )
   // Why: remote-runtime and paired-web routes return the host's order verbatim,
   // and an older host may still sort lexicographically; re-sorting an already
   // sorted local listing is near-free (adaptive sort).
   return {
-    entries: sortDirEntries(entries),
+    entries: sortDirEntries(page.entries),
+    nextCursor: page.nextCursor,
     operationOwner
   }
 }

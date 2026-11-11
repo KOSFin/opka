@@ -21,6 +21,7 @@ import {
 import type { ProjectTaskAgentSettings } from '../../../../shared/project-task-agent-settings'
 import { projectTaskCall, type ProjectTaskClient } from './project-task-client'
 import { projectTaskError, type TaskProjectScope } from './project-task-projects'
+import { ProjectTaskDelegationControls } from './ProjectTaskDelegationControls'
 
 const STATUS_LABELS = {
   enabled: 'Enabled',
@@ -41,6 +42,7 @@ export function ProjectTaskBoardSettings({
   onChoose: (key: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [policyOpen, setPolicyOpen] = useState(false)
   const activeClient = useRef(client)
   const [loaded, setLoaded] = useState<{
     client: ProjectTaskClient
@@ -208,6 +210,12 @@ export function ProjectTaskBoardSettings({
                         </p>
                       </div>
                     </details>
+                  )}
+                  <Button variant="outline" onClick={() => setPolicyOpen((value) => !value)}>
+                    Task approval
+                  </Button>
+                  {open && policyOpen && (
+                    <ProjectTaskDelegationControls client={client} project={project} />
                   )}
                 </>
               )}

@@ -9,6 +9,12 @@ export function TaskPageGitLabTodoList({
   const { primaryRepo, gitlabTodos, gitlabTodosLoading } = model
   return (
     <div className="flex min-h-0 max-h-full flex-col rounded-md border border-t-0 border-border/50 bg-muted/50 overflow-hidden rounded-t-none shadow-sm">
+      <p className="border-b border-border/50 px-3 py-2 text-xs text-muted-foreground">
+        {translate(
+          'auto.components.TaskPage.gitlabTodosAccountScope',
+          'My Todos spans this GitLab account; project selection does not filter it.'
+        )}
+      </p>
       <div className="flex-none grid grid-cols-[110px_minmax(0,3fr)_minmax(120px,1.2fr)_110px_50px] gap-3 border-b border-border/50 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
         <span>{translate('auto.components.TaskPage.8396825a14', 'Action')}</span>
         <span>{translate('auto.components.TaskPage.16cba35bee', 'Title')}</span>

@@ -36,6 +36,19 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
 
   function createRuntime() {
     const repos = makeRepos()
+    const groups = [null, 'ssh-1'].map((connectionId) => ({
+      id: connectionId ? 'ssh-group' : 'group-1',
+      name: 'Group',
+      parentPath: null,
+      connectionId,
+      parentGroupId: null,
+      createdFrom: 'manual' as const,
+      tabOrder: 0,
+      isCollapsed: false,
+      color: null,
+      createdAt: 1,
+      updatedAt: 1
+    }))
     const removeProjectForHost = vi.fn((target: RepoHostTarget) => {
       const id = target.id
       const hostId = getRepoExecutionHostId(target)
@@ -51,6 +64,7 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the store stub covers every read and write repo.rm and repo.update drive.
     const runtime = new OrcaRuntimeService({
       getRepos: () => [...repos],
+      getProjectGroups: () => [...groups],
       getRepo: (id: string) => repos.find((repo) => repo.id === id) ?? null,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => null,
@@ -101,9 +115,9 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
     it('moves the SSH row a path selector picked, not its local sibling', async () => {
       const { runtime, repos } = createRuntime()
 
-      await runtime.moveProjectToGroup('path:/remote/dup', 'group-1')
+      await runtime.moveProjectToGroup('path:/remote/dup', 'ssh-group')
 
-      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'group-1'])
+      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'ssh-group'])
     })
 
     it('moves the local row a name selector picked, not its SSH sibling', async () => {
@@ -127,9 +141,9 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
     it('moves the SSH row a paired client names by its connection', async () => {
       const { runtime, repos } = createRuntime()
 
-      await runtime.moveProjectToGroup('dup', 'group-1', undefined, 'ssh-1')
+      await runtime.moveProjectToGroup('dup', 'ssh-group', undefined, 'ssh-1')
 
-      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'group-1'])
+      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'ssh-group'])
     })
 
     it('moves the local row a paired client names with no connection', async () => {

@@ -27,7 +27,7 @@ describe('sparse explorer projection', () => {
     ).toBe('packages/app')
     expect(resolveExplorerDisplayRootChoice(options, 'removed')).toBe('/')
     expect(getExplorerDisplayRootOptions({ sparseDirectories: ['src'] })).toBeNull()
-    expect(resolveExplorerDisplayRootChoice(null, 'src')).toBe('/')
+    expect(resolveExplorerDisplayRootChoice(null, 'src')).toBe('src')
   })
   it('rejects unsafe directories and deduplicates normalized options', () => {
     expect(
@@ -107,5 +107,32 @@ describe('sparse explorer projection', () => {
     ])
     expect(userExpanded.size).toBe(0)
     expect(getExplorerEffectiveExpanded(userExpanded, null)).toBe(userExpanded)
+  })
+})
+
+describe('navigable Explorer display roots', () => {
+  it.each(['/repo', 'C:\\repo', '\\\\server\\share\\repo'])(
+    'keeps an ordinary saved folder under its workspace on %s',
+    (root) => {
+      expect(resolveExplorerDisplayRootChoice(null, 'src\\nested')).toBe('src/nested')
+      expect(getExplorerDisplayRootPath(root, 'src/nested')).toBe(
+        getExplorerDisplayRootPath(root, 'src\\nested')
+      )
+      expect(getExplorerDisplayDepth(root, getExplorerDisplayRootPath(root, 'src/nested'))).toBe(2)
+    }
+  )
+
+  it.each(['../outside', 'src/../../outside', '/etc', 'C:\\outside', '\\\\server\\outside', ''])(
+    'refuses an unsafe saved root %s',
+    (choice) => {
+      expect(resolveExplorerDisplayRootChoice(null, choice)).toBe('/')
+      expect(getExplorerDisplayRootPath('/repo', choice)).toBe('/repo')
+    }
+  )
+
+  it('keeps a sparse descendant but refuses a removed sparse branch', () => {
+    const options = getExplorerDisplayRootOptions({ isSparse: true, sparseDirectories: ['app'] })
+    expect(resolveExplorerDisplayRootChoice(options, 'app/src')).toBe('app/src')
+    expect(resolveExplorerDisplayRootChoice(options, 'removed')).toBe('app')
   })
 })

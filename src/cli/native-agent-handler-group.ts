@@ -7,6 +7,8 @@ export const NATIVE_AGENT_HANDLER_GROUP: HandlerGroup = {
     'agent native-attach',
     'agent native-pool-hook',
     'agent native-pool-observe',
+    'agent native-home status',
+    'agent native-home apply',
     'agent native-shell status',
     'agent native-shell install',
     'agent native-shell uninstall'

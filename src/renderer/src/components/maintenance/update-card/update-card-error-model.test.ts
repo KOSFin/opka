@@ -66,4 +66,16 @@ describe('update card error model precedence', () => {
       onClick: onEnableHttp1Compatibility
     })
   })
+
+  it('explains an unsupported Mac beta without offering an impossible retry', () => {
+    const model = build({
+      state: 'error',
+      message: 'Unsupported Mac architecture',
+      manualInstaller: true,
+      retryable: false
+    })
+    expect(model?.title).toBe('Beta update unavailable')
+    expect(model?.summary).toContain('Keep the installed version')
+    expect(model?.primaryAction).toBeUndefined()
+  })
 })

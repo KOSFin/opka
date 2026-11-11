@@ -4,10 +4,22 @@ import { useAppStore } from '@/store'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, ExternalLink } from 'lucide-react'
+
+type GitLabItemListModel = Pick<
+  TaskPageComposerActionsModel,
+  | 'gitlabItems'
+  | 'gitlabLoading'
+  | 'gitlabError'
+  | 'gitlabEmptyState'
+  | 'displayedGitLabItems'
+  | 'openGitLabDetailPage'
+  | 'handleUseGitLabItem'
+>
+
 export function TaskPageGitLabItemList({
   model
 }: {
-  model: TaskPageComposerActionsModel
+  model: GitLabItemListModel
 }): React.JSX.Element | null {
   const {
     gitlabItems,
@@ -93,7 +105,14 @@ export function TaskPageGitLabItemList({
                 {item.type === 'mr' ? '!' : '#'}
                 {item.number}
               </span>
-              <span className="min-w-0 truncate text-sm">{item.title}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm">{item.title}</span>
+                {item.projectRef ? (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {item.projectRef.host}/{item.projectRef.path}
+                  </span>
+                ) : null}
+              </span>
               <span className="text-xs text-muted-foreground">
                 {item.type === 'mr'
                   ? translate('auto.components.TaskPage.e224d76876', 'MR')

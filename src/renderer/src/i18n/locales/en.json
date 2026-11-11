@@ -418,6 +418,30 @@
     "followSymlinkedDirectoriesDescription": "Search linked folders in Quick Open and expand local linked folders in File Explorer.",
     "accounts": {
       "claudeRemoveFolder": "Orca deletes this account's Claude folder and its sign-in from this computer. Chat history shared with System default stays. If it is selected, the next Claude you start uses System default."
+    },
+    "accountPools": {
+      "systemLoginExplanation": "Saved accounts can join this pool. The agent's existing login stays available for manual use; save a separate account to include it in automatic selection.",
+      "advancedEligibility": "Advanced eligibility",
+      "manualSelection": "Manual selection",
+      "sequential": "Sequential",
+      "balanced": "Balanced",
+      "savedCount": "{{count}} saved accounts",
+      "title": "Account pools",
+      "scope": "Execution host: {{host}}. Pools choose accounts for chats, workers and connected CLI commands on this host.",
+      "modes": "With the pool off, new launches use the manual default. Sequential prefers the lowest priority number. Balanced distributes eligible launches within a priority level.",
+      "searchDescription": "Manage host account selection, priorities and rotation."
+    },
+    "serverAccounts": {
+      "title": "Add accounts on this server",
+      "scope": "Sign in for {{host}} in your browser. The login stays on that server and appears in its account pools."
+    },
+    "orchestration": {
+      "limitWorkers": "Limit parallel workers",
+      "limitWorkersDescription": "Limit new worker launches on this computer. Existing work keeps running. Workers with an unconfirmed status still occupy a slot.",
+      "maxWorkers": "Maximum parallel workers",
+      "maxWorkersDescription": "When all slots are occupied, new launches report that capacity is full. Retry after a worker finishes.",
+      "parallelSearch": "parallel workers",
+      "capacitySearch": "concurrency limit"
     }
   },
   "menu": {
@@ -804,6 +828,9 @@
             }
           }
         }
+      },
+      "projectGroups": {
+        "unsupportedIcon": "This computer does not support project icons yet"
       }
     },
     "lib": {
@@ -1762,7 +1789,8 @@
         "32f8bef818": "No log output.",
         "4168eb2c51": "Resolve",
         "commentTooLarge": "Comment is too large to submit safely.",
-        "gitlabActionFailed": "GitLab action failed."
+        "gitlabActionFailed": "GitLab action failed.",
+        "copySourceBranch": "Copy source branch"
       },
       "JiraIssueWorkspace": {
         "b0b92666c9": "Comment",
@@ -2620,7 +2648,8 @@
         "linearEmptyHasWorktree": "No Linear tickets are linked to an Orca workspace yet. Start work from a Linear issue to see it here.",
         "linearOpenAttachedWorkspace": "Open workspace attached to {{value0}}",
         "linearWorktreesColumn": "Workspaces",
-        "jiraBoardEmptyColumn": "No issues"
+        "jiraBoardEmptyColumn": "No issues",
+        "gitlabTodosAccountScope": "My Todos spans this GitLab account; project selection does not filter it."
       },
       "Terminal": {
         "73768427cf": "Close",
@@ -5720,20 +5749,20 @@
           "ca65b78f78": "Cancel",
           "9be10d49ea": "and ungroup its projects.",
           "69f5cb97d0": "Delete",
-          "591f330288": "Delete Project Group",
+          "591f330288": "Delete project",
           "2c14ce677a": "Deleting...",
-          "0e0e6764af": "Contained projects",
+          "0e0e6764af": "Repositories in this project",
           "ad407c2d55": "more",
-          "removeContainedProjectSingular": "Remove 1 contained project",
-          "removeContainedProjectPlural": "Remove {{value0}} contained projects",
+          "removeContainedProjectSingular": "Remove 1 repository from Orca",
+          "removeContainedProjectPlural": "Remove {{value0}} repositories from Orca",
           "eeabb8e8e4": "Remove {{value0}} contained {{value1}} from Orca",
-          "55f75628c0": "Project folders on disk are not deleted.",
+          "55f75628c0": "Repository folders on disk are not deleted.",
           "897e5d3d4c": "Delete Group and Remove Projects",
-          "fec7e9c8ae": "Delete Group"
+          "fec7e9c8ae": "Delete project"
         },
         "ProjectGroupNameDialog": {
           "d99a034073": "Cancel",
-          "83dfbc5313": "Group Name",
+          "83dfbc5313": "Project name",
           "4a64e78822": "Saving..."
         },
         "RemoteFileBrowser": {
@@ -6161,10 +6190,10 @@
           "7a8b9c0d1e": "Update required",
           "hostAuthNeeded": "Authentication needed",
           "hostDisconnected": "Disconnected",
-          "d880ea0744": "Create a group and move this project into it.",
-          "bc1460beb3": "Update the group name shown in the sidebar.",
-          "13757c053c": "New Project Group",
-          "f9dc6cc5d3": "Rename Project Group",
+          "d880ea0744": "Create a project and place this repository inside it.",
+          "bc1460beb3": "Update the project name shown in the sidebar.",
+          "13757c053c": "New project",
+          "f9dc6cc5d3": "Rename project",
           "370c6a55dd": "Clear Filters",
           "b7acbf038b": "No workspaces found",
           "0c6ee14f23": "child",
@@ -6177,9 +6206,9 @@
           "2cdffbc728": "Project Settings",
           "2ef41bf9a7": "Project actions",
           "609633a9e6": "Project actions for {{value0}}",
-          "902115cdbe": "Delete group",
-          "4d7b73658c": "Rename group",
-          "79465e9034": "Group actions for {{value0}}",
+          "902115cdbe": "Delete project",
+          "4d7b73658c": "Rename project",
+          "79465e9034": "Project actions for {{value0}}",
           "bfbedc547b": "Worktrees",
           "45fbfe0335": "rename",
           "ebc5c7dcef": "Hide child workspaces",
@@ -6193,12 +6222,12 @@
           "e97297cb75": "Hide {{value0}} child workspace",
           "0cd15956d4": "Hide {{value0}} child workspaces",
           "bd37a57ac8": "Create workspace for {{value0}}",
-          "b667b59632": "Some projects could not be removed from Orca",
-          "f94466bc39": "{{value0}} of {{value1}} contained project{{value2}} remained after deleting the group.",
-          "groupDeleteFailed": "Failed to delete group",
-          "groupDeleteFailedDesc": "Something went wrong while deleting the group. No projects were removed.",
-          "groupRenameFailed": "Failed to rename group",
-          "groupRenameFailedDesc": "Orca could not confirm the new name with the group's host. Recheck the group after reconnecting.",
+          "b667b59632": "Some repositories could not be removed from Orca",
+          "f94466bc39": "{{value0}} of {{value1}} repository entries remain in Orca after deleting the project.",
+          "groupDeleteFailed": "Failed to delete project",
+          "groupDeleteFailedDesc": "Could not delete the project. Its repositories remain in Orca.",
+          "groupRenameFailed": "Failed to rename project",
+          "groupRenameFailedDesc": "Orca could not confirm the new name with the project's host. Recheck the project after reconnecting.",
           "failedNestWorkspace": "Failed to nest workspace",
           "sidebarRowMissing": "Target no longer exists",
           "failedUnnestWorkspace": "Failed to unnest workspace",
@@ -6412,6 +6441,14 @@
         "useAddRepoCloneFlow": {
           "4d0013cc93": "Repository cloned",
           "0dc4d1b657": "Enter a host path for the clone destination."
+        },
+        "cloneNetwork": {
+          "mode": "Git network account",
+          "description": "Choose a saved account on the execution host. Commit author is configured separately."
+        },
+        "gitlabProfile": {
+          "addTitle": "Add a named GitLab profile",
+          "addDescription": "The token is verified and stored on this execution host. It is separate from the commit author."
         },
         "useAddRepoLocalFolderFlow": {
           "7ab10e4974": "Use a host path to add projects from a remote host.",
@@ -12605,9 +12642,9 @@
           "invalidBinding": "That GitHub account binding is invalid.",
           "unavailable": "That GitHub account is unavailable on this runtime.",
           "saveFailed": "Could not save the GitHub account binding.",
-          "title": "GitHub Account",
-          "description": "Use a specific gh login for this project’s GitHub issue and pull request calls.",
-          "longDescription": "Orca injects a short-lived token from the selected keyring login into each gh call for this project. Project View stays on the ambient login.",
+          "title": "GitHub tracker account",
+          "description": "Choose the GitHub login for this project’s issues and pull requests. Git clone and sync use the separate Git network account.",
+          "longDescription": "This account reads GitHub issues and pull requests for the project. Clone, fetch, pull and push use the separate Git network account.",
           "retry": "Retry",
           "selectLabel": "Account",
           "ambient": "Default (ambient gh login)",
@@ -13237,6 +13274,9 @@
           "tailscale": "Tailscale · {{address}}",
           "lan": "Local network · {{address}}",
           "loopback": "This computer · {{address}}"
+        },
+        "RepositoryIconTabs": {
+          "useSubjectIcon": "Use {{value0}} {{value1}} icon"
         }
       },
       "right": {
@@ -17934,6 +17974,7 @@
               "noProjects": "No projects",
               "allProjects": "All projects",
               "hostCount": "{{value0}} hosts",
+              "selectProjects": "Select projects",
               "searchProjects": "Search projects...",
               "noMatches": "No projects match your search.",
               "chooseSource": "Choose task source"
@@ -20335,6 +20376,15 @@
       "findInFolder": "Find in {{path}}",
       "folderLoadError": "Could not load this folder:",
       "emptyFolder": "No files in this folder"
+    },
+    "location": {
+      "workspaceRoot": "Workspace root",
+      "label": "Explorer location",
+      "back": "Back",
+      "forward": "Forward",
+      "up": "Up one folder",
+      "viewOnly": "Explorer view only · terminal cwd unchanged",
+      "openHere": "Open here"
     }
   },
   "sparsePreset": {
@@ -20475,7 +20525,8 @@
         "settingKeep": "Never restart",
         "restartingOne": "Restarting 1 Claude session on {{account}}",
         "restartingOther": "Restarting {{count}} Claude sessions on {{account}}"
-      }
+      },
+      "defaultOutsidePools": "Choose the default login for new chats outside automatic pools. Saved accounts can also participate in account pools. Existing chats keep their assigned account."
     },
     "managedData": {
       "description": "Add accounts by running this command in a terminal on the Orca host. Selection applies to new explicit agent launches on that host; direct SSH relay and Windows-hosted WSL launches use their own credentials.",
@@ -20490,6 +20541,14 @@
       "removeTitle": "Remove managed account?",
       "removeDescription": "Stop agents using this profile first. Removal deletes its saved credentials and conversation data. Your system login stays unchanged.",
       "cancel": "Cancel"
+    },
+    "cliLoginOnHostNamed": "CLI login on this host: {{value0}}",
+    "cliLoginOnHost": "CLI login on this host",
+    "defaultForNewChats": "Default for new chats",
+    "useForNewChats": "Use for new chats",
+    "defaultSelectionScope": "Choose the manual default for new chats on this host. Automatic pools use their own selection policy.",
+    "codex": {
+      "defaultOutsidePools": "Choose the default login for new chats outside automatic pools. Saved accounts can also participate in account pools. Existing chats keep their assigned account."
     }
   },
   "fileSearch": {
@@ -20811,5 +20870,81 @@
       "unavailable": "This workspace is protected or unavailable."
     },
     "rowActions": "Actions for {{name}}"
+  },
+  "opka": {
+    "updates": {
+      "beta": {
+        "version": "Opka {{version}}",
+        "downloaded": "The installer passed its checksum check. Open it, quit Opka and confirm replacing Opka.app. Your profile stays on this Mac.",
+        "available": "This beta is not notarized by Apple. Download the installer, then confirm replacing Opka.app. macOS may ask you to allow it to open.",
+        "open": "Open installer",
+        "download": "Download installer"
+      }
+    }
+  },
+  "fork": {
+    "navigation": {
+      "repositorySourceControl": "Source Control · {{count}} repositories",
+      "noRegisteredRepositories": "No registered Git repositories in this project. Add repositories from the project folder using Add Project.",
+      "workingCopyFor": "Working copy for {{name}}",
+      "loadingRepository": "Loading repository…",
+      "retryRepository": "Retry",
+      "projectUnavailable": "Project folder unavailable. Reconnect its host and select the project again.",
+      "mainWorkspace": "Main workspace",
+      "workspace": "workspace",
+      "projectChats": "Chats & terminals · entire project",
+      "branch": "Branch",
+      "newProjectChat": "New chat in {{name}}",
+      "newChat": "New chat",
+      "openRepository": "Open repository {{name}}",
+      "openProject": "Open project {{name}}",
+      "expand": "Expand {{name}}",
+      "collapse": "Collapse {{name}}",
+      "project": "Project",
+      "repository": "Repository",
+      "connecting": "Connecting…",
+      "connectionError": "Connection error"
+    },
+    "workingCopies": {
+      "title": "Working copies",
+      "description": "Moving a card changes the workspace status, not its Git branch. Plans and acceptance belong in Project tasks."
+    }
+  },
+  "usage": {
+    "accounts": {
+      "unavailable": "Account list unavailable",
+      "localHost": "This computer",
+      "unpinAccount": "Unpin {{account}} from status bar",
+      "pinAccount": "Pin {{account}} to status bar",
+      "outsidePool": "CLI login · outside pool",
+      "poolUnknown": "Pool status unavailable",
+      "poolOff": "Pool off",
+      "poolManual": "Pool · manual selection",
+      "poolSequential": "Pool · sequential",
+      "poolEqualize": "Pool · equalize quota usage",
+      "poolBalanced": "Pool · balanced",
+      "poolExcluded": "Excluded",
+      "poolDisabled": "Disabled",
+      "poolDraining": "Draining",
+      "poolReserve": "Reserve",
+      "poolManualOnly": "Manual only",
+      "poolPrimary": "Primary",
+      "poolPriority": "Priority {{priority}}",
+      "poolWeight": "Weight {{weight}}",
+      "poolAssignments": "{{count}} assigned",
+      "poolLastKnown": "Last known pool settings",
+      "empty": "No accounts on this host",
+      "loading": "Loading accounts…",
+      "manage": "Manage",
+      "default": "Default for new chats",
+      "savedProfile": "Saved profile",
+      "staleLimits": "Last known",
+      "unknownLimits": "Limits unavailable",
+      "unverified": "Last known · host not verified",
+      "useCliLogin": "Use CLI login",
+      "inspect": "Hover or focus an account for details",
+      "otherPinned": "Other pinned accounts",
+      "pinnedUnavailable": "Account unavailable"
+    }
   }
 }

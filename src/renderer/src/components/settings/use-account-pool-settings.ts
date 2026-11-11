@@ -5,6 +5,7 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 import type { AccountPoolPolicy } from '../../../../shared/account-pool-policy'
 import { AccountPoolViewSchema, accountPoolDrafts } from '../../../../shared/account-pool-view'
 import type { AccountPoolView } from '../../../../shared/account-pool-view'
+import { invalidateUsageAccountPools } from '../status-bar/usage-account-pool-cache'
 
 function mergeAccountPoolDrafts(
   view: AccountPoolView,
@@ -139,6 +140,7 @@ export function useAccountPoolSettings(target: RuntimeClientTarget, refreshKey?:
     setError(null)
     try {
       await callRuntimeRpc(target, 'accounts.list', { refreshUsage: true })
+      invalidateUsageAccountPools(target)
       const next = AccountPoolViewSchema.parse(await callRuntimeRpc(target, 'accountPool.list'))
       if (ownerRef.current.revision !== revision || sequence !== readSequence.current) {
         return
@@ -178,6 +180,7 @@ export function useAccountPoolSettings(target: RuntimeClientTarget, refreshKey?:
         policy,
         expectedRevision: policy.revision
       })
+      invalidateUsageAccountPools(target)
       if (ownerRef.current.revision !== revision) {
         return
       }

@@ -7,6 +7,7 @@ import type { GitRemoteIdentity } from './git-remote-identity'
 import type { RepoSourceControlAiOverrides } from './source-control-ai-types'
 import type { RepoProjectHostSetupMethod } from './project-types'
 import type { JiraProjectReference } from './jira-project-reference'
+import type { GitNetworkBinding } from './git-network-binding'
 
 // ─── Repo ────────────────────────────────────────────────────────────
 export type RepoKind = 'git' | 'folder'
@@ -89,6 +90,8 @@ export type Repo = {
    * and injects it into that child env only.
    */
   ghAccount?: GhAccountBinding
+  /** Host-selected network identity; credentials stay on the owning execution host. */
+  gitNetworkBinding?: GitNetworkBinding
   /** Controls Orca's fork-default-branch sync offer for repos with upstream metadata. */
   forkSyncMode?: ForkSyncMode
   /** Canonical identity for the repo remote Orca should use for provider-level grouping. */

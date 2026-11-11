@@ -23,6 +23,7 @@ import {
   withPendingFileExplorerDirCacheEntries
 } from './file-explorer-dir-load-state'
 import { statUserOpenedPath, type UserOpenedPathStat } from '@/lib/user-opened-local-path'
+import { useFileExplorerDirectoryPaging } from './use-file-explorer-directory-paging'
 
 type UseFileExplorerTreeResult = {
   dirCache: Record<string, DirCache>
@@ -38,6 +39,7 @@ type UseFileExplorerTreeResult = {
     depth: number,
     options?: { force?: boolean; failOnError?: boolean }
   ) => Promise<boolean>
+  loadMoreDir: (dirPath: string, depth: number) => Promise<void>
   statPath: (path: string) => Promise<UserOpenedPathStat>
   markPathAsDirectory: (path: string) => void
   refreshTree: () => Promise<FileExplorerTreeRefreshOutcome>
@@ -51,7 +53,8 @@ type UseFileExplorerTreeResult = {
 export function useFileExplorerTree(
   worktreePath: string | null,
   expanded: Set<string>,
-  activeWorktreeId?: string | null
+  activeWorktreeId?: string | null,
+  displayRootPath?: string | null
 ): UseFileExplorerTreeResult {
   const [dirCache, setDirCache] = useState<Record<string, DirCache>>({})
   const [loadingDirPaths, setLoadingDirPaths] = useState<ReadonlySet<string>>(
@@ -61,6 +64,8 @@ export function useFileExplorerTree(
   const [sourceWorkspaceId, setSourceWorkspaceId] = useState<string | null>(null)
   const dirCacheRef = useRef(dirCache)
   dirCacheRef.current = dirCache
+  const displayRootPathRef = useRef(displayRootPath)
+  displayRootPathRef.current = displayRootPath
   // Why the ref is authoritative rather than a render mirror: writing it during render is unsafe
   // (React may discard that render), and a mirror would leave loadDir's in-flight guard reading a
   // set one commit stale — long enough for a second read of the same dir to slip through.
@@ -135,7 +140,11 @@ export function useFileExplorerTree(
         )
         setDirCache((prev) => ({
           ...prev,
-          [dirPath]: { children, operationOwner: listing.operationOwner }
+          [dirPath]: {
+            children,
+            operationOwner: listing.operationOwner,
+            nextCursor: listing.nextCursor
+          }
         }))
         updateLoadingDirPaths((prev) => clearFileExplorerDirsLoading(prev, [dirPath]))
         return true
@@ -166,6 +175,17 @@ export function useFileExplorerTree(
     },
     [activeWorktreeId, updateLoadingDirPaths, worktreePath]
   )
+
+  const loadMoreDir = useFileExplorerDirectoryPaging({
+    activeWorktreeId,
+    worktreePath,
+    dirCacheRef,
+    displayRootPathRef,
+    loadingDirPathsRef,
+    dirLoadTrackerRef,
+    setDirCache,
+    updateLoadingDirPaths
+  })
 
   const markPathAsDirectory = useCallback((path: string) => {
     setDirCache((prev) => {
@@ -315,6 +335,7 @@ export function useFileExplorerTree(
     rootCache,
     rootError,
     loadDir,
+    loadMoreDir,
     statPath,
     markPathAsDirectory,
     refreshTree,

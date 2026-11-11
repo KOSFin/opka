@@ -71,6 +71,10 @@ const {
 } = require('./scripts/appimage-node-runtime.cjs')
 const { signWindowsUninstallerViaSignPath } = require('./scripts/windows-uninstaller-signing.cjs')
 const { buildMacShipItScheduling } = require('./scripts/macos-shipit-scheduling.cjs')
+const {
+  assertReplayArtifact,
+  finalizeReplayArtifact
+} = require('./scripts/packaged-codex-replay-engine.cjs')
 
 // Why: dev-channel builds must carry the *release* identity — same bundle id,
 // Developer ID signature, and notarization ticket — or Squirrel.Mac refuses to
@@ -105,6 +109,14 @@ const appId = PRODUCT_IDENTITY.appId
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
   to: 'onboarding/feature-wall'
+}
+const macReplayEngineResource = {
+  from: '.build/codex-routing-replay/darwin-${arch}',
+  to: 'codex-routing-replay/darwin-${arch}'
+}
+const linuxReplayEngineResource = {
+  from: '.build/codex-routing-replay/linux-${arch}',
+  to: 'codex-routing-replay/linux-${arch}'
 }
 // Why: freshness detection needs immutable identity metadata from this exact
 // app build, but never needs the skill package bytes or a runtime network read.
@@ -404,7 +416,8 @@ module.exports = {
     mobileWebBundleDir = MOBILE_WEB_BUNDLE_DIR,
     ensureWaylandClipboard = ensureBundledWaylandClipboard,
     orcadTemplateDir = join(__dirname, '..', orcadTemplateExtraResource.from),
-    rebuildNative = electronBuilderNativeRebuild
+    rebuildNative = electronBuilderNativeRebuild,
+    verifyReplayAsset = assertReplayArtifact
   ) => {
     // The template is the server every SSH host gets, so a dark test template must never ship.
     assertNotDarkBuild([join(__dirname, '..', 'out', 'main'), mobileWebBundleDir, orcadTemplateDir])
@@ -417,6 +430,14 @@ module.exports = {
       arch: require('builder-util').Arch[context.arch]
     })
     assertPackagedNativeVariantsInstalled(context.electronPlatformName, context.arch)
+    if (context.electronPlatformName === 'darwin' || context.electronPlatformName === 'linux') {
+      const targetArch = { 1: 'x64', 3: 'arm64' }[context.arch]
+      if (!targetArch) {
+        throw new Error('Native replay engine target architecture is unsupported')
+      }
+      const target = `${context.electronPlatformName}-${targetArch}`
+      verifyReplayAsset(join(__dirname, '..', '.build', 'codex-routing-replay', target), target)
+    }
     if (context.electronPlatformName === 'linux') {
       ensureWaylandClipboard(context.arch)
     }
@@ -433,6 +454,18 @@ module.exports = {
         : join(context.appOutDir, 'resources')
     if (!existsSync(resourcesDir)) {
       throw new Error(`Missing packaged resources directory: ${resourcesDir}`)
+    }
+    if (context.electronPlatformName === 'darwin' || context.electronPlatformName === 'linux') {
+      const targetArch = { 1: 'x64', 3: 'arm64' }[context.arch]
+      if (!targetArch) {
+        throw new Error('Native replay engine target architecture is unsupported')
+      }
+      const target = `${context.electronPlatformName}-${targetArch}`
+      await finalizeReplayArtifact(
+        join(resourcesDir, 'codex-routing-replay', target),
+        target,
+        (binary) => signMacStandaloneHelper(binary, 'Codex replay engine', context.packager)
+      )
     }
     // FpmTarget replaces this with deb/rpm while building those artifacts from the shared app tree.
     if (context.electronPlatformName === 'linux') {
@@ -663,6 +696,7 @@ module.exports = {
     extraResources: [
       ...commonExtraResources,
       ...createPackagedRuntimeNodeModuleResources('darwin'),
+      macReplayEngineResource,
       macSpeechNativeResource,
       {
         from: 'resources/darwin/bin/opka',
@@ -731,6 +765,7 @@ module.exports = {
     extraResources: [
       ...commonExtraResources,
       ...createPackagedRuntimeNodeModuleResources('linux'),
+      linuxReplayEngineResource,
       linuxSpeechNativeResource,
       {
         from: 'native/wayland-clipboard/.build/${arch}/orca-wayland-clipboard',

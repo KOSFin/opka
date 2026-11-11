@@ -3,8 +3,12 @@ export type RateLimitWindow = {
   usedPercent: number
   /** Window duration in minutes: 300 (5h) or 10080 (7d). */
   windowMinutes: number
+  /** Canonical duration confirmed from the provider's raw window, when available. */
+  verifiedDurationMinutes?: 300 | 10080
   /** Unix ms timestamp when the window resets, if known. */
   resetsAt: number | null
+  /** A supplied provider reset value was malformed; distinct from an absent reset. */
+  resetMetadataInvalid?: true
   /** Human-readable reset description, e.g. "2:30 PM" or "Thu". */
   resetDescription: string | null
 }

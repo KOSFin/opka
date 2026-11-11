@@ -5,10 +5,12 @@ import { colors, radii, spacing } from '../theme/mobile-theme'
 /** Home's update notice, drawn in the host card's frame so it reads as part of that list. */
 export function AppUpdateCard(props: {
   busy?: boolean
+  canCancel?: boolean
   status?: string | null
   version: string
   onPress: () => void
   onDismiss: () => void
+  onCancel?: () => void
 }) {
   const title = `Orca ${props.version} is available`
   return (
@@ -33,15 +35,27 @@ export function AppUpdateCard(props: {
           </Text>
         </View>
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Dismiss Orca ${props.version} update`}
-        hitSlop={8}
-        style={({ pressed }) => [styles.dismissButton, pressed && styles.dismissPressed]}
-        onPress={props.onDismiss}
-      >
-        <X size={16} color={colors.textSecondary} />
-      </Pressable>
+      {props.canCancel ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel update download"
+          hitSlop={8}
+          style={({ pressed }) => [styles.cancelButton, pressed && styles.dismissPressed]}
+          onPress={props.onCancel}
+        >
+          <Text style={styles.cancelText}>Cancel</Text>
+        </Pressable>
+      ) : !props.busy ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Dismiss Orca ${props.version} update`}
+          hitSlop={8}
+          style={({ pressed }) => [styles.dismissButton, pressed && styles.dismissPressed]}
+          onPress={props.onDismiss}
+        >
+          <X size={16} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
     </View>
   )
 }
@@ -86,5 +100,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  dismissPressed: { backgroundColor: colors.bgRaised }
+  dismissPressed: { backgroundColor: colors.bgRaised },
+  cancelButton: {
+    minWidth: 56,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: spacing.xs,
+    borderRadius: radii.row
+  },
+  cancelText: { color: colors.textPrimary, fontSize: 12, fontWeight: '600' }
 })

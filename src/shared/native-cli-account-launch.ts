@@ -21,6 +21,12 @@ export const NativeCliAccountLaunchParams = z
   })
   .strict()
 
+export const NativeCliAccountLaunchV2Params = NativeCliAccountLaunchParams.extend({
+  parentTerminal: TerminalTaskCallerEvidence,
+  startup: z.object({ version: z.literal(1), launchToken: z.string().min(1).max(128) }).strict()
+}).strict()
+export type NativeCliAccountLaunchV2Request = z.infer<typeof NativeCliAccountLaunchV2Params>
+
 export type NativeCliAccountLaunchRequest = z.infer<typeof NativeCliAccountLaunchParams>
 
 export const NativeCliAccountReleaseParams = z.object({ launchId: z.uuid() }).strict()

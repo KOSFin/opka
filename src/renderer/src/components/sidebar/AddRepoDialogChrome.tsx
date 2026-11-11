@@ -3,6 +3,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { preventOutsideDismissWhenDirty } from '@/lib/outside-dismiss-guard'
 import type { AddRepoDialogStep } from './add-repo-dialog-types'
 import { AddRepoStepIndicator } from './AddRepoStepIndicator'
+import { cn } from '@/lib/utils'
 
 export function AddRepoDialogChrome({
   children,
@@ -27,11 +28,14 @@ export function AddRepoDialogChrome({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
         onCloseAutoFocus={onCloseAutoFocus}
+        scrollable={step === 'clone'}
         // Closing the dialog aborts the clone; require an explicit close while it runs.
         onInteractOutside={preventOutsideDismissWhenDirty(() => isCloning)}
-        className={`min-w-0 overflow-hidden sm:max-w-lg [&>*]:min-w-0 ${
-          step === 'nested' ? 'max-h-[calc(100vh-2rem)] grid-rows-[auto_auto_minmax(0,1fr)]' : ''
-        }`}
+        className={cn(
+          'min-w-0 sm:max-w-lg [&>*]:min-w-0',
+          step === 'clone' ? 'max-sm:[&_[data-slot=dialog-close]]:size-11' : 'overflow-hidden',
+          step === 'nested' && 'max-h-[calc(100vh-2rem)] grid-rows-[auto_auto_minmax(0,1fr)]'
+        )}
       >
         <AddRepoStepIndicator step={step} isAdding={isAdding} onBack={onBack} />
         {children}

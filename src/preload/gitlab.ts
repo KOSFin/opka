@@ -4,6 +4,7 @@
    file. Composed back into `api.gl` from `index.ts`. */
 import { ipcRenderer } from 'electron'
 import type { TaskSourceContext } from '../shared/task-source-context'
+import type { GitLabNetworkProfile } from '../shared/gitlab-network-profile'
 
 type GitLabRepoSelectorArgs = {
   repoPath: string
@@ -12,6 +13,18 @@ type GitLabRepoSelectorArgs = {
 }
 
 export const glApi = {
+  listNetworkProfiles: (): Promise<GitLabNetworkProfile[]> =>
+    ipcRenderer.invoke('gitlab:listNetworkProfiles'),
+  provisionNetworkProfile: (input: {
+    intentId: string
+    host: string
+    user: string
+    token: string
+  }): Promise<GitLabNetworkProfile> => ipcRenderer.invoke('gitlab:provisionNetworkProfile', input),
+  cancelNetworkProfileProvision: (intentId: string): Promise<void> =>
+    ipcRenderer.invoke('gitlab:cancelNetworkProfileProvision', intentId),
+  removeNetworkProfile: (profile: GitLabNetworkProfile): Promise<void> =>
+    ipcRenderer.invoke('gitlab:removeNetworkProfile', profile),
   viewer: () => ipcRenderer.invoke('gitlab:viewer'),
   diagnoseAuth: () => ipcRenderer.invoke('gitlab:diagnoseAuth'),
   rateLimit: (args?: { force?: boolean; host?: string | null }) =>

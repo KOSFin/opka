@@ -14,19 +14,26 @@ afterEach(async () => {
   }
 })
 
-it('explicitly revokes the model capability and drains an accepted request without claiming process exit', async () => {
+it('revokes capability but holds the accepted lease until writer exit is proven', async () => {
   const f = fixture()
   const launch = await f.launch()
   f.stats.holdResponse = true
   f.stats.safe = false
+  f.stats.stopVerdict = 'unverifiable'
   const pending = syntheticTurn(launch).catch(() => null)
   await expect.poll(() => f.stats.models.length).toBe(1)
   expect(f.db.listAccountPoolAssignments()).toHaveLength(1)
-  await launch.revoke()
+  const revoking = launch.revoke()
   await pending
-  expect(f.db.listAccountPoolAssignments()).toHaveLength(0)
+  await expect.poll(() => f.stats.stopAttempts).toBe(1)
+  expect(f.db.listAccountPoolAssignments()).toHaveLength(1)
   expect(f.stats).toMatchObject({ safe: false, residents: 1 })
   expect((await syntheticTurn(launch)).status).toBe(502)
+  f.stats.stopVerdict = 'exited'
+  await f.host.stop()
+  await revoking
+  expect(f.db.listAccountPoolAssignments()).toHaveLength(0)
+  expect(f.stats.residents).toBe(0)
 })
 
 it('reclaims bounded capability slots after explicit revocation while keeping one engine', async () => {

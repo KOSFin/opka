@@ -164,7 +164,8 @@ export async function refreshFileExplorerExpandedDirs({
               worktreePath,
               listing.operationOwner
             ),
-            operationOwner: listing.operationOwner
+            operationOwner: listing.operationOwner,
+            nextCursor: listing.nextCursor
           }
         }
       } catch (error) {

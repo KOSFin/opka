@@ -7,15 +7,24 @@ export type ProjectTaskSelection = {
   document: string | null
   query: string
   phase: string
+  source: string
+  projects: string[]
+  projectLimit: number
+  catalogScroll: number
+  boardScroll: number
 }
 export type ProjectTaskCatalogRow = {
   selector: string
   name: string
   state: string
   message?: string
+  groupId?: string
+  groupName?: string
+  repositoryName?: string
+  projectGroupsAvailable?: boolean
 }
 export type ProjectTaskEntry =
-  | { kind: 'catalog'; projects: ProjectTaskCatalogRow[] }
+  | { kind: 'catalog'; projects: ProjectTaskCatalogRow[]; truncated: boolean }
   | { kind: 'board'; project: string; board: Awaited<ReturnType<typeof loadProjectTaskBoard>> }
   | {
       kind: 'detail'
@@ -39,7 +48,12 @@ const EMPTY_SELECTION: ProjectTaskSelection = {
   taskId: null,
   document: null,
   query: '',
-  phase: 'all'
+  phase: 'all',
+  source: '*',
+  projects: ['*'],
+  projectLimit: 16,
+  catalogScroll: 0,
+  boardScroll: 0
 }
 function owner(client: RpcClient): Owner {
   const generation = client.getGeneration?.() ?? 0
@@ -123,7 +137,7 @@ export function readProjectTaskSelection(
   client: RpcClient | null,
   hostId: string
 ): ProjectTaskSelection {
-  return (client ? owner(client).selections.get(hostId) : null) ?? EMPTY_SELECTION
+  return { ...EMPTY_SELECTION, ...(client ? owner(client).selections.get(hostId) : null) }
 }
 export function saveProjectTaskSelection(
   client: RpcClient,

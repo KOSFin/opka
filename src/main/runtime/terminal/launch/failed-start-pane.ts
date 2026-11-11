@@ -67,6 +67,10 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     return super.createTerminal(worktreeSelector, opts, created)
   }
 
+  noteNativeCliStartupRefusal(paneKey: string, reason: string): void {
+    this.paneStartStatuses?.set(paneKey, { status: 'failed', reason })
+  }
+
   protected notePaneSleeping(paneKey: string): void {
     if (this.paneStartStatuses && !this.paneStartStatuses.peek(paneKey)) {
       this.paneStartStatuses.set(paneKey, { status: 'sleeping' })

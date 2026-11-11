@@ -2,6 +2,13 @@ import { GLOBAL_FLAGS, type CommandSpec } from '../args'
 
 const common = [...GLOBAL_FLAGS, 'worktree']
 export const PROJECT_TASK_COMMAND_SPECS: CommandSpec[] = [
+  {
+    path: ['project-task', 'delegated'],
+    summary: 'Use an installed project grant for exact plan or reviewed-result decisions',
+    usage:
+      'orca project-task delegated --action <approve-plan|snapshot|assign-review|submit-review|decide|resume> --file <request.json> [--worktree <selector>] [--json]',
+    allowedFlags: [...common, 'action', 'file']
+  },
   ...(['claim', 'progress', 'complete'] as const).map((operation) => ({
     path: ['project-task', operation],
     summary:
@@ -15,6 +22,7 @@ export const PROJECT_TASK_COMMAND_SPECS: CommandSpec[] = [
       ...common,
       'id',
       'revision',
+      'delegated',
       ...(operation === 'claim' ? [] : ['attempt', 'checkpoint', 'checkpoint-file', 'blocker']),
       ...(operation === 'progress' ? ['release'] : []),
       ...(operation === 'complete' ? ['file'] : [])
@@ -36,7 +44,11 @@ export const PROJECT_TASK_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags:
       operation === 'board'
         ? [...common, 'offset', 'limit']
-        : [...common, 'id', ...(operation === 'start' ? ['revision', 'file'] : [])]
+        : [
+            ...common,
+            'id',
+            ...(operation === 'start' ? ['revision', 'file', 'delegated', 'request-id'] : [])
+          ]
   })),
   {
     path: ['project-task', 'init'],

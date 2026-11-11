@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { translate } from '@/i18n/i18n'
 import { RemoteFileBrowser } from './RemoteFileBrowser'
+import type { BoundGitCloneChoice } from '../../../../shared/git-network-binding'
+import { CloneNetworkAccountPicker } from './CloneNetworkAccountPicker'
 
 type CloneStepProps = {
   cloneUrl: string
   cloneDestination: string
+  cloneChoice: BoundGitCloneChoice | null
   cloneError: string | null
   cloneProgress: { phase: string; percent: number } | null
   isCloning: boolean
@@ -18,6 +21,7 @@ type CloneStepProps = {
   /** No host resolved yet (its server is still coming up): never clone onto this computer. */
   submitDisabled?: boolean
   onUrlChange: (value: string) => void
+  onChoiceChange: (choice: BoundGitCloneChoice | null) => void
   onDestChange: (value: string) => void
   onPickDestination: () => void
   onClone: () => void
@@ -26,6 +30,7 @@ type CloneStepProps = {
 export function CloneStep({
   cloneUrl,
   cloneDestination,
+  cloneChoice,
   cloneError,
   cloneProgress,
   isCloning,
@@ -33,14 +38,21 @@ export function CloneStep({
   runtimeEnvironmentId,
   cloneTargetLabel,
   onUrlChange,
+  onChoiceChange,
   onDestChange,
   onPickDestination,
   onClone,
   submitDisabled = false
 }: CloneStepProps): React.JSX.Element {
   const [browsingDestination, setBrowsingDestination] = useState(false)
+  const [choiceRequired, setChoiceRequired] = useState(false)
   const canBrowseRemoteDestination = Boolean(runtimeEnvironmentId)
-  const canClone = !!cloneUrl.trim() && !!cloneDestination.trim() && !isCloning
+  const canClone =
+    !!cloneUrl.trim() &&
+    !!cloneDestination.trim() &&
+    !isCloning &&
+    !submitDisabled &&
+    (!choiceRequired || cloneChoice !== null)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault()
@@ -173,13 +185,18 @@ export function CloneStep({
           </div>
         </div>
 
+        <CloneNetworkAccountPicker
+          url={cloneUrl}
+          runtimeEnvironmentId={runtimeEnvironmentId}
+          selected={cloneChoice}
+          onSelect={onChoiceChange}
+          onModeChange={setChoiceRequired}
+          disabled={isCloning || submitDisabled}
+        />
+
         {cloneError && <p className="text-[11px] text-destructive">{cloneError}</p>}
 
-        <Button
-          onClick={onClone}
-          disabled={!cloneUrl.trim() || !cloneDestination.trim() || isCloning || submitDisabled}
-          className="w-full"
-        >
+        <Button onClick={onClone} disabled={!canClone} className="w-full max-sm:min-h-11">
           {isCloning
             ? translate('auto.components.sidebar.AddRepoSteps.69f5b5380d', 'Cloning...')
             : translate('auto.components.sidebar.AddRepoSteps.32a7256d85', 'Clone')}

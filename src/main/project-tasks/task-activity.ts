@@ -1,3 +1,4 @@
+import { runLifecycleWriteTransaction } from '../runtime/orchestration/db/lifecycle-write-transaction-runner'
 import type Database from '../sqlite/sync-database'
 import { dirname } from 'node:path'
 import { PROJECT_TASK_WORKFLOW_SQL } from './task-workflow-schema'
@@ -9,7 +10,7 @@ const schedules = new WeakMap<Database.Database, { pending: boolean; closed: boo
 const exports = new WeakMap<Database.Database, Map<string, Promise<void>>>()
 
 export function installProjectTaskActivity(db: Database.Database): void {
-  db.exec(PROJECT_TASK_WORKFLOW_SQL)
+  runLifecycleWriteTransaction(db, 'project_task_schema', () => db.exec(PROJECT_TASK_WORKFLOW_SQL))
   schedules.set(db, { pending: false, closed: false })
   scheduleProjectTaskActivity(db)
 }

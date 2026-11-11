@@ -29,6 +29,14 @@ describe('mobile RPC method routing census', () => {
   it('sends a targeted status to the server, whose features a server workspace gates on', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get('status.get')).toBe('execution-host')
   })
+  it('admits only the reviewed group edits on the execution host', () => {
+    expect(MOBILE_RPC_METHOD_ROUTES.get('projectGroup.list')).toBe('execution-host')
+    expect(MOBILE_RPC_METHOD_ROUTES.get('projectGroup.update')).toBe('execution-host')
+    expect(MOBILE_RPC_METHOD_ROUTES.get('projectGroup.moveProject')).toBe('execution-host')
+    expect(MOBILE_RPC_METHOD_ROUTES.has('projectGroup.create')).toBe(false)
+    expect(MOBILE_RPC_METHOD_ROUTES.has('projectGroup.delete')).toBe(false)
+    expect(MOBILE_RPC_METHOD_ROUTES.has('projectGroup.merge')).toBe(false)
+  })
 })
 
 it.each([

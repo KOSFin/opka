@@ -34,6 +34,8 @@ export function renderMobileTasksItemDetailContent(model: ConnectionPresentation
     actionItem,
     addHostedItemComment,
     addLinearComment,
+    copiedLinkKey,
+    copyTextToClipboard,
     createLinearSubIssue,
     detailCommentGroups,
     detailError,
@@ -130,6 +132,10 @@ export function renderMobileTasksItemDetailContent(model: ConnectionPresentation
           <GitLabMergeRequestSummary
             item={actionItem.source}
             approval={detailPayload.approvalState}
+            sourceBranchCopied={copiedLinkKey === `gitlab-branch:${actionItem.source.id}`}
+            onCopySourceBranch={(branch) =>
+              void copyTextToClipboard(`gitlab-branch:${actionItem.source.id}`, branch)
+            }
           />
           <GitLabMergeRequestMetadata detail={detailPayload} />
         </>

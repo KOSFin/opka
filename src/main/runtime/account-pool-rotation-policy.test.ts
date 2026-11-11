@@ -43,11 +43,23 @@ it('keeps a near-equal Codex account and switches when comparable usage separate
     candidate.quota = 'available'
     candidate.usedPercent = index === 0 ? 49 : 50
     candidate.quotaWindows = [
-      { windowMinutes: 300, usedPercent: candidate.usedPercent, resetsAt: 1_800_000 }
+      {
+        windowMinutes: 300,
+        verifiedDurationMinutes: 300,
+        usedPercent: candidate.usedPercent,
+        resetsAt: Date.now() + 60_000
+      }
     ]
   })
   expect(selectAccountPoolRotationMember(f.database, f, 'b').id).toBe('b')
-  f.candidates[1].quotaWindows = [{ windowMinutes: 300, usedPercent: 65, resetsAt: 1_800_000 }]
+  f.candidates[1].quotaWindows = [
+    {
+      windowMinutes: 300,
+      verifiedDurationMinutes: 300,
+      usedPercent: 65,
+      resetsAt: Date.now() + 60_000
+    }
+  ]
   expect(selectAccountPoolRotationMember(f.database, f, 'b').id).toBe('a')
 })
 it('does not count the current reservation against its own capacity at a settled boundary', () => {
@@ -57,7 +69,14 @@ it('does not count the current reservation against its own capacity at a settled
   f.candidates.forEach((candidate) => {
     candidate.quota = 'available'
     candidate.usedPercent = 20
-    candidate.quotaWindows = [{ windowMinutes: 300, usedPercent: 20, resetsAt: 1_800_000 }]
+    candidate.quotaWindows = [
+      {
+        windowMinutes: 300,
+        verifiedDurationMinutes: 300,
+        usedPercent: 20,
+        resetsAt: Date.now() + 60_000
+      }
+    ]
   })
   db!.acquireAccountPoolAssignment({
     ...f,

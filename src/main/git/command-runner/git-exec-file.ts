@@ -27,6 +27,7 @@ import { classifyGitCommand } from '../../../shared/git-command-classification'
 import { createAbortError } from './abort-error'
 import { readCapturedGitBuffer, readCapturedGitString } from './captured-git-output'
 import { runUnlessGitCwdKnownMissing } from './missing-git-spawn-cwd'
+import { runBoundGitNetworkCommand } from './bound-git-network-executor'
 
 /**
  * Async git command execution. Drop-in replacement for
@@ -178,6 +179,12 @@ export function gitExecFileAsync(
   args: string[],
   options: GitExecOptions
 ): Promise<{ stdout: string; stderr: string }> {
+  const bound = options.boundOperation
+  if (bound) {
+    return runUnlessGitCwdKnownMissing(options, () =>
+      runBoundGitNetworkCommand(args, options, bound)
+    )
+  }
   const command = resolveGitFetchHeadCommand(args, options.cwd)
   // Why outside the lock and span: a known-missing folder starts no process, so it records no git.exec.
   return runUnlessGitCwdKnownMissing(options, () =>

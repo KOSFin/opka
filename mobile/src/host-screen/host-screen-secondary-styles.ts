@@ -34,6 +34,12 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
   sectionRepoIcon: {
     marginRight: spacing.xs
   },
+  groupManageButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   sectionTitle: {
     fontSize: 11,
     fontWeight: '600',

@@ -27,8 +27,18 @@ export default function GitLabItemDialog({
   onClose,
   onCreateWorkspace
 }: GitLabItemDialogProps) {
-  const itemId = item?.id ?? null
-  const state = useGitLabItemDialogState(itemId)
+  const itemScopeKey = item
+    ? JSON.stringify([
+        item.id,
+        item.type,
+        item.number,
+        item.repoId,
+        repoPath,
+        repoId,
+        sourceContext
+      ])
+    : null
+  const state = useGitLabItemDialogState(itemScopeKey)
   const { setRefreshNonce } = state
   const repoSelector = useMemo<GitLabDialogRepoSelector | null>(() => {
     if (!repoPath) {
@@ -43,7 +53,7 @@ export default function GitLabItemDialog({
   const updateCommentDraft = state.updateCommentDraft
 
   useGitLabItemDetailsEffect(item, repoSelector, state)
-  useGitLabItemScopeResetEffect(itemId, state)
+  useGitLabItemScopeResetEffect(itemScopeKey, state)
 
   const handleRefresh = useCallback(() => {
     setRefreshNonce((n) => n + 1)
@@ -51,7 +61,13 @@ export default function GitLabItemDialog({
   const detailsEditing = useGitLabDetailsEditing(item, repoSelector, state)
   const pipelineActions = useGitLabPipelineActions(item, repoSelector, state, handleRefresh)
   const reviewActions = useGitLabReviewActions(item, repoSelector, state)
-  const primaryActions = useGitLabPrimaryActions(item, itemId, repoSelector, state, handleRefresh)
+  const primaryActions = useGitLabPrimaryActions(
+    item,
+    itemScopeKey,
+    repoSelector,
+    state,
+    handleRefresh
+  )
 
   return (
     <GitLabItemDialogView

@@ -102,6 +102,31 @@ export function registerReposProjectGroupsOwnerRoutingTests(): void {
       })
     })
 
+    it('does not claim a group icon or reset saved when an old host strips the optional patch', async () => {
+      const runtimeGroup: ProjectGroup = { ...folderScanGroup, executionHostId: 'runtime:env-1' }
+      runtimeEnvironmentCall.mockResolvedValue(runtimeRpcResponse({ group: runtimeGroup }))
+      const store = createTestStore()
+      store.setState({ projectGroups: [runtimeGroup] })
+
+      await expect(
+        store
+          .getState()
+          .updateProjectGroup(runtimeGroup.id, { groupIcon: { type: 'emoji', emoji: '📁' } })
+      ).resolves.toBe(false)
+      await expect(
+        store.getState().updateProjectGroup(runtimeGroup.id, { groupIcon: null })
+      ).resolves.toBe(false)
+      expect(store.getState().projectGroups[0].groupIcon).toBeUndefined()
+
+      runtimeEnvironmentCall.mockResolvedValue(
+        runtimeRpcResponse({ group: { ...runtimeGroup, groupIcon: null } })
+      )
+      await expect(
+        store.getState().updateProjectGroup(runtimeGroup.id, { groupIcon: null })
+      ).resolves.toBe(true)
+      expect(store.getState().projectGroups[0].groupIcon).toBeNull()
+    })
+
     it('deletes a local folder-scan group while a runtime host is focused', async () => {
       projectGroupsDelete.mockResolvedValue(true)
       const store = createTestStore()

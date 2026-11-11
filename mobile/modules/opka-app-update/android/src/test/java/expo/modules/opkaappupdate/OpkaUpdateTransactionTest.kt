@@ -39,4 +39,41 @@ class OpkaUpdateTransactionTest {
     OpkaUpdateTransaction.whenIdle { cleaned = true }
     assertTrue(cleaned)
   }
+
+  @Test fun cancellationCannotUndoInstallerHandoff() {
+    val attempt = OpkaUpdateTransaction.begin()
+    try {
+      var opened = false
+      attempt.handoff { opened = true }
+      assertTrue(opened)
+      assertFalse(attempt.cancel())
+      attempt.checkActive()
+    } finally { OpkaUpdateTransaction.finish(attempt) }
+  }
+
+  @Test fun staleCancellationCannotReachTheNextDownload() {
+    val first = OpkaUpdateTransaction.begin("first")
+    try {
+      assertFalse(OpkaUpdateTransaction.cancelMatching("second"))
+      first.checkActive()
+      assertTrue(OpkaUpdateTransaction.cancelMatching("first"))
+      assertThrows(CancellationException::class.java) { first.checkActive() }
+    } finally { OpkaUpdateTransaction.finish(first) }
+    assertFalse(first.cancel())
+    val second = OpkaUpdateTransaction.begin("second")
+    try {
+      assertFalse(OpkaUpdateTransaction.cancelMatching("first"))
+      second.checkActive()
+    } finally { OpkaUpdateTransaction.finish(second) }
+  }
+
+  @Test fun installerLaunchFailureIsNotReportedAsCancellation() {
+    val attempt = OpkaUpdateTransaction.begin("launch")
+    try {
+      assertThrows(IllegalStateException::class.java) {
+        attempt.handoff { error("Android installer unavailable") }
+      }
+      assertFalse(OpkaUpdateTransaction.cancelMatching("launch"))
+    } finally { OpkaUpdateTransaction.finish(attempt) }
+  }
 }

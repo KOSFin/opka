@@ -76,7 +76,10 @@ const fileNode: TreeNode = {
 
 function renderRevealItem(
   owner: Partial<
-    Pick<React.ComponentProps<typeof FileExplorerRowContextMenu>, 'connectionId' | 'node'>
+    Pick<
+      React.ComponentProps<typeof FileExplorerRowContextMenu>,
+      'connectionId' | 'node' | 'onOpenHere'
+    >
   > = {}
 ): ItemProps | undefined {
   renderToStaticMarkup(
@@ -107,6 +110,25 @@ function renderRevealItem(
     React.Children.toArray(item.children).includes('Reveal in Finder')
   )
 }
+
+it('offers Open here only for a directory and invokes its existing view-root action', () => {
+  const onOpenHere = vi.fn()
+  renderRevealItem({
+    node: { ...fileNode, name: 'src', path: '/repo/src', relativePath: 'src', isDirectory: true },
+    onOpenHere
+  })
+  const openHere = items.list.find((item) =>
+    React.Children.toArray(item.children).includes('Open here')
+  )
+  expect(openHere).toBeDefined()
+  openHere?.onSelect?.()
+  expect(onOpenHere).toHaveBeenCalledOnce()
+  items.list = []
+  renderRevealItem({ onOpenHere })
+  expect(
+    items.list.some((item) => React.Children.toArray(item.children).includes('Open here'))
+  ).toBe(false)
+})
 
 function showsLocalOnlyHint(item: ItemProps | undefined): boolean {
   return renderToStaticMarkup(<>{item?.children}</>).includes('Local only')

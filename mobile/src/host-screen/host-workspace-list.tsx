@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Platform,
@@ -8,11 +8,14 @@ import {
   Text,
   View
 } from 'react-native'
-import { ChevronDown, ChevronRight, Pin } from 'lucide-react-native'
+import { ChevronDown, ChevronRight, MoreHorizontal, Pin } from 'lucide-react-native'
+import { getProjectGroupExecutionHostIdForRows } from '../../../src/shared/sidebar-list/host-filtering'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../src/shared/execution-host'
 import { AuthFailedBanner } from '../components/AuthFailedBanner'
 import { HostDiagnosticsLink } from '../components/HostDiagnosticsLink'
 import { HostRouteNoticeBanner } from '../components/HostRouteNoticeBanner'
 import { MobileRepoIcon } from '../components/MobileRepoIcon'
+import { readMobileRepoIcon } from './host-screen-reply-schema'
 import { MobileSearchField } from '../components/MobileSearchField'
 import { NewWorkspaceFab, FAB_SIZE } from '../components/NewWorkspaceFab'
 import { WorktreeListRow } from '../components/WorktreeListRow'
@@ -27,14 +30,21 @@ import { repoColor } from '../worktree/repo-color'
 import { getWorktreeCardDetails } from '../../../src/shared/worktree/card-properties'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import { buildRepoLookById } from './host-repo-looks'
+import { MobileProjectGroupManager } from './MobileProjectGroupManager'
+import type { ManagedProjectGroup } from './use-mobile-project-group-manager'
 import { HostPendingCreationRow } from './host-pending-creation-row'
 import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostWorkspaceList({ controller }: { controller: HostScreenController }) {
+  return <HostWorkspaceListContent key={controller.hostId ?? 'none'} controller={controller} />
+}
+
+function HostWorkspaceListContent({ controller }: { controller: HostScreenController }) {
   const {
     actions,
     activeWorktreeScroll,
     catalog,
+    client,
     connState,
     contentMaxWidth,
     displayWorktrees,
@@ -56,6 +66,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
     state
   } = controller
   const { rawSections, sections, repoById } = sectionsResult
+  const [managedGroup, setManagedGroup] = useState<ManagedProjectGroup | null>(null)
   const { pending } = settings.pendingViewChanges
   // A collapse the desktop has not answered spins on its header.
   const pendingCollapseKeys = useMemo(
@@ -185,7 +196,18 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
                 ? repoLookById.get(section.repo.id)
                 : null
             const repoSectionColor = repoSectionLook?.color ?? null
-            const repoSectionIcon = repoSectionLook?.icon ?? null
+            const repoSectionIcon = section.projectGroupHeader
+              ? readMobileRepoIcon(section.groupIcon)
+              : (repoSectionLook?.icon ?? null)
+            const manageableGroup =
+              section.projectGroupId &&
+              section.projectGroupHostId &&
+              state.hostProjectGroups.filter(
+                (group) =>
+                  group.id === section.projectGroupId &&
+                  getProjectGroupExecutionHostIdForRows(group, LOCAL_EXECUTION_HOST_ID) ===
+                    section.projectGroupHostId
+              ).length === 1
             return (
               <>
                 <Pressable
@@ -224,6 +246,26 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
                     {section.title}
                   </Text>
                   <Text style={styles.sectionCount}>{count}</Text>
+                  {manageableGroup && hostId && connState === 'connected' && !isReadOnly ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Manage project ${section.title}`}
+                      style={styles.groupManageButton}
+                      onPress={(event) => {
+                        event.stopPropagation()
+                        if (section.projectGroupId && section.projectGroupHostId) {
+                          setManagedGroup({
+                            id: section.projectGroupId,
+                            hostId: section.projectGroupHostId,
+                            clientHostId: hostId,
+                            title: section.title
+                          })
+                        }
+                      }}
+                    >
+                      <MoreHorizontal size={18} color={colors.textSecondary} />
+                    </Pressable>
+                  ) : null}
                   {pendingCollapseKeys.has(section.key) && (
                     <ActivityIndicator
                       size="small"
@@ -276,6 +318,19 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           disabled={connState !== 'connected'}
         />
       )}
+      {managedGroup && managedGroup.clientHostId === hostId ? (
+        <MobileProjectGroupManager
+          key={`${managedGroup.clientHostId}:${managedGroup.hostId}:${managedGroup.id}`}
+          client={client}
+          connection={connState}
+          target={managedGroup}
+          onClose={() => setManagedGroup(null)}
+          onSaved={() => {
+            catalog.onRefresh()
+            setManagedGroup(null)
+          }}
+        />
+      ) : null}
     </>
   )
 }

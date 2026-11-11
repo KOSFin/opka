@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
-const readRuntimeDirectory = vi.fn()
+const readRuntimeDirectoryPage = vi.fn()
 vi.mock('@/runtime/runtime-file-mutation-client', () => ({
-  readRuntimeDirectory: (...args: unknown[]) => readRuntimeDirectory(...args)
+  readRuntimeDirectoryPage: (...args: unknown[]) => readRuntimeDirectoryPage(...args)
 }))
 vi.mock('./file-explorer-operation-owner', () => ({
   getFileExplorerOperationOwner: () => ({ kind: 'local' }),
@@ -14,12 +14,15 @@ import { readFileExplorerDirectory } from './file-explorer-directory-listing'
 
 describe('readFileExplorerDirectory', () => {
   it('re-sorts backend order — remote-runtime and paired-web routes return the host order verbatim', async () => {
-    readRuntimeDirectory.mockResolvedValueOnce([
-      { name: '100 - b.txt', isDirectory: false, isSymlink: false },
-      { name: '9 - c.txt', isDirectory: false, isSymlink: false },
-      { name: '10 - dir', isDirectory: true, isSymlink: false },
-      { name: '99 - a.txt', isDirectory: false, isSymlink: false }
-    ])
+    readRuntimeDirectoryPage.mockResolvedValueOnce({
+      entries: [
+        { name: '100 - b.txt', isDirectory: false, isSymlink: false },
+        { name: '9 - c.txt', isDirectory: false, isSymlink: false },
+        { name: '10 - dir', isDirectory: true, isSymlink: false },
+        { name: '99 - a.txt', isDirectory: false, isSymlink: false }
+      ],
+      nextCursor: null
+    })
 
     const { entries } = await readFileExplorerDirectory('wt-1', '/w', '/w/dir')
     expect(entries.map((e) => e.name)).toEqual([
@@ -32,10 +35,11 @@ describe('readFileExplorerDirectory', () => {
 })
 
 it('preserves the host directory classification with default Quick Open preferences', async () => {
-  readRuntimeDirectory.mockResolvedValueOnce([
-    { name: 'linked', isDirectory: true, isSymlink: true }
-  ])
+  readRuntimeDirectoryPage.mockResolvedValueOnce({
+    entries: [{ name: 'linked', isDirectory: true, isSymlink: true }],
+    nextCursor: null
+  })
   const { entries } = await readFileExplorerDirectory('wt-1', '/w', '/w')
   expect(entries).toEqual([{ name: 'linked', isDirectory: true, isSymlink: true }])
-  expect(readRuntimeDirectory).toHaveBeenLastCalledWith(expect.anything(), '/w', undefined)
+  expect(readRuntimeDirectoryPage).toHaveBeenLastCalledWith(expect.anything(), '/w', {})
 })

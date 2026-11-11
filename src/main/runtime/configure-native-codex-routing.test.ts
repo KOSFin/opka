@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { configureNativeCodexRouting } from './configure-native-codex-routing'
 import { installRuntimeCodexEngineHost } from './runtime-codex-engine-host'
 import { assertEngineWriterIdle } from '../codex-routing/engine-writer-ownership'
+import { ensurePackagedReplayEngineAsset } from '../codex-routing/engine-replay-package'
 
 const lock = vi.hoisted(() => ({ pid: process.pid, nonce: 'initial-owner' }))
 vi.mock('../orcad/orcad-instance-lock', () => ({
@@ -57,13 +58,15 @@ it('installs lazily in the selected profile and preserves configured egress and 
     userDataPath: f.profile,
     codexAccounts: f.services,
     memoryMiB: 128,
-    maxRequestBytes: 4 * 1024 * 1024,
+    maxRequestBytes: 16 * 1024 * 1024,
+    replaySpoolDirectory: join(f.profile, 'codex-routing', 'replay-spool'),
     networkProxySettings: {
       httpProxyUrl: 'http://127.0.0.1:19877',
       httpProxyBypassRules: 'localhost'
     }
   })
   expect(assertEngineWriterIdle).not.toHaveBeenCalled()
+  expect(f.installed.ensureAsset).toBe(ensurePackagedReplayEngineAsset)
   expect(() => f.installed.assertExclusiveProfile()).not.toThrow()
 })
 

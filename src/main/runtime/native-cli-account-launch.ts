@@ -47,10 +47,10 @@ const ownerKey = (launchId: string) => `native-cli:${launchId}`
 export async function prepareNativeCliAccountLaunch(
   runtime: Runtime,
   params: NativeCliAccountLaunchRequest,
-  context: { pendingTerminal?: boolean; pendingStdio?: boolean } = {}
+  context: { pendingTerminal?: boolean; pendingStdio?: boolean; assertCurrent?: () => void } = {}
 ): Promise<NativeCliAccountLaunch> {
   const { provider, launchId } = params
-  if (provider === 'claude' && params.stdio && !context.pendingStdio) {
+  if (provider === 'claude' && params.stdio && !context.pendingStdio && !params.parentTerminal) {
     return {
       env: {},
       envToDelete: [],
@@ -75,15 +75,18 @@ export async function prepareNativeCliAccountLaunch(
   }
   const policy = params.accountId ? undefined : getDefaultAccountPool(runtime, provider)
   const pool = policy?.strategy !== 'manual' ? policy : undefined
-  const routed = await prepareNativeCodexRoutingLaunch(runtime, params, pool)
+  const routed = await prepareNativeCodexRoutingLaunch(runtime, params, pool, context.assertCurrent)
+  context.assertCurrent?.()
   if (routed) {
     return routed
   }
   const claudeRouted = await prepareNativeClaudeRoutingLaunch(
     runtime,
     params,
-    context.pendingTerminal || context.pendingStdio
+    context.pendingTerminal || context.pendingStdio,
+    context.assertCurrent
   )
+  context.assertCurrent?.()
   if (claudeRouted) {
     return claudeRouted
   }
@@ -152,6 +155,7 @@ export async function prepareNativeCliAccountLaunch(
         throw new Error('Native account selection is unavailable on this execution host')
       }
     }
+    context.assertCurrent?.()
     if (pool) {
       const current = getDefaultAccountPool(runtime, provider)
       if (current?.id !== pool.id || current.revision !== pool.revision) {

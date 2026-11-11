@@ -15,6 +15,7 @@ import { CodexEngineMutations } from './codex-engine-mutation'
 import { CodexEngineAdmission } from './codex-engine-admission'
 import { readEngineGrantConnection, removeEngineGrantConnection } from './engine-grant-files'
 import type { CodexEngineHostOptions } from './codex-engine-host-options'
+import { CodexReplaySpoolBudget } from './codex-replay-spool'
 export type { CodexEngineHostOptions } from './codex-engine-host-options'
 
 /** One execution-host/profile owner; roster, policy and canonical agent status remain external. */
@@ -48,13 +49,21 @@ export class CodexEngineHost {
     )
     this.lifecycle = lifetime.lifecycle
     this.sessions = lifetime.sessions
+    const replayBudget = options.replaySpoolDirectory
+      ? new CodexReplaySpoolBudget(
+          options.replaySpoolDirectory,
+          512 * 1024 * 1024,
+          options.assertExclusiveProfile
+        )
+      : undefined
     this.front = new CodexEngineHttpListener(
       options.maxRequestBytes,
       this.sessions.prepare,
       () => {
-        void this.beginShutdown()
+        void this.stop().catch(() => {})
       },
-      () => this.getNativeClientKey()
+      () => this.getNativeClientKey(),
+      replayBudget
     )
     this.releaseProfile = claimCodexEngineProfile(this.profile)
   }
@@ -234,6 +243,7 @@ export class CodexEngineHost {
       undefined,
       async () => {
         await this.lifecycle.stop()
+        this.sessions.engineExited()
         await this.sessions.revokeAll()
         await this.front.close()
         this.releaseProfile()

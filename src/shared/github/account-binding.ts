@@ -10,6 +10,24 @@ export type GhAccountBinding = {
   user: string
 }
 
+export type GitHubNetworkBinding = GhAccountBinding & { generation: string }
+
+export function isGitHubNetworkBinding(value: unknown): value is GitHubNetworkBinding {
+  const account = normalizeGhAccountBinding(value)
+  return Boolean(
+    account &&
+    value &&
+    typeof value === 'object' &&
+    'generation' in value &&
+    typeof value.generation === 'string' &&
+    /^[a-f0-9-]{36}$/.test(value.generation) &&
+    'host' in value &&
+    value.host === account.host &&
+    'user' in value &&
+    value.user === account.user
+  )
+}
+
 const HOST_RE = /^[a-z0-9][a-z0-9.-]*(?::\d+)?$/i
 // Why: GHES/LDAP logins often contain `_` or `.`; github.com's hyphen grammar is too strict here.
 const USER_RE = /^\S{1,255}$/

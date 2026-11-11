@@ -74,7 +74,7 @@ export async function nativeRoutingFixture() {
     hostScope: { kind: 'local' },
     terminalHandle: parentProof.terminalHandle,
     paneKey: parentProof.paneKey,
-    processIncarnation: 'incarnation-native',
+    processIncarnation: 'pty-native:incarnation-native',
     launchTokenHash: 'f'.repeat(64)
   })
   routingHooks.boundary.mockReset().mockImplementation(() => ({
@@ -136,7 +136,7 @@ export async function nativeRoutingFixture() {
       terminalHandle: parentProof.terminalHandle,
       ptyId: 'pty-native',
       worktreeId: 'work-native',
-      processIncarnation: terminal.incarnation,
+      processIncarnation: `pty-native:${terminal.incarnation}`,
       paneKey: parentProof.paneKey,
       launchTokenHash: 'f'.repeat(64),
       hostScope: { kind: 'local' }

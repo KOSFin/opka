@@ -1,4 +1,8 @@
-import { appUpdateInstallBusy, publishAppUpdateInstall } from './app-update-install-state'
+import {
+  appUpdateInstallBusy,
+  getAppUpdateInstallSnapshot,
+  publishAppUpdateInstall
+} from './app-update-install-state'
 import Constants from 'expo-constants'
 import { requireOptionalNativeModule } from 'expo-modules-core'
 import { opkaReleaseUpdateSource } from './opka-release-update-source'
@@ -71,8 +75,46 @@ export function openAppUpdate(url: string): void {
   void installAppUpdate(url)
 }
 
+type NativeInstaller = {
+  install(url: string): Promise<void>
+  installTracked?(url: string, operationId: string): Promise<void>
+  cancel?(operationId: string): Promise<boolean>
+  addListener?(
+    name: string,
+    listener: (event: { phase?: string; downloadedBytes?: number; totalBytes?: number }) => void
+  ): { remove(): void }
+}
+
+type ActiveInstall = {
+  cancel: () => Promise<boolean>
+  cancelPromise: Promise<boolean> | null
+  settled: boolean
+}
+
+let activeInstall: ActiveInstall | null = null
+let installSequence = 0
+
+export function cancelAppUpdate(): void {
+  const operation = activeInstall
+  const previous = getAppUpdateInstallSnapshot()
+  if (!operation || !previous.canCancel) {
+    return
+  }
+  publishAppUpdateInstall('cancelling', 'Cancelling update…')
+  operation.cancelPromise = Promise.resolve()
+    .then(() => operation.cancel())
+    .catch(() => false)
+    .then((cancelled) => {
+      if (!cancelled && !operation.settled && activeInstall === operation) {
+        publishAppUpdateInstall(previous.phase, previous.label, previous.canCancel)
+      }
+      return cancelled
+    })
+}
+
 async function installAppUpdate(url: string): Promise<void> {
   let progress: { remove(): void } | undefined
+  let operation: ActiveInstall | null = null
   try {
     const opka =
       Platform.OS === 'android' &&
@@ -82,40 +124,69 @@ async function installAppUpdate(url: string): Promise<void> {
       publishAppUpdateInstall('idle', null)
       return
     }
-    const installer = requireOptionalNativeModule<{
-      install(url: string): Promise<void>
-      addListener?(
-        name: string,
-        listener: (event: { phase?: string; downloadedBytes?: number; totalBytes?: number }) => void
-      ): { remove(): void }
-    }>('OpkaAppUpdate')
+    const installer = requireOptionalNativeModule<NativeInstaller>('OpkaAppUpdate')
     if (!installer) {
       throw new Error('This build has no Android installer. Download the current Opka release.')
     }
+    const trackedInstall = installer.installTracked
+    const cancelTracked = installer.cancel
+    const canCancel = typeof trackedInstall === 'function' && typeof cancelTracked === 'function'
+    const operationId = `${Date.now()}-${++installSequence}-${Math.random()}`
+    const currentOperation: ActiveInstall = {
+      cancel: () =>
+        trackedInstall && cancelTracked ? cancelTracked(operationId) : Promise.resolve(false),
+      cancelPromise: null,
+      settled: false
+    }
+    operation = currentOperation
+    activeInstall = currentOperation
     progress = installer.addListener?.('onInstallProgress', (event) => {
+      if (activeInstall !== currentOperation || currentOperation.cancelPromise) {
+        return
+      }
       if (event.phase === 'downloading') {
         const total = event.totalBytes ?? 0
         const downloaded = event.downloadedBytes ?? 0
         const percent = total > 0 ? Math.min(100, Math.floor((downloaded * 100) / total)) : null
+        const label = percent === null ? 'Downloading update…' : `Downloading update… ${percent}%`
         publishAppUpdateInstall(
           'downloading',
-          percent === null ? 'Downloading update…' : `Downloading update… ${percent}%`
+          canCancel ? label : `${label} Cancel is unavailable in this build.`,
+          canCancel
         )
       } else if (event.phase === 'verifying') {
-        publishAppUpdateInstall('verifying', 'Verifying update…')
+        publishAppUpdateInstall('verifying', 'Verifying update…', canCancel)
       }
     })
-    await installer.install(url)
-    publishAppUpdateInstall('installer', 'Confirm installation in Android')
+    await (trackedInstall && cancelTracked
+      ? trackedInstall(url, operationId)
+      : installer.install(url))
+    const cancelled = currentOperation.cancelPromise ? await currentOperation.cancelPromise : false
+    currentOperation.settled = true
+    publishAppUpdateInstall(
+      cancelled ? 'cancelled' : 'installer',
+      cancelled ? 'Download cancelled' : 'Confirm installation in Android'
+    )
   } catch (error: unknown) {
+    const cancelled = operation?.cancelPromise ? await operation.cancelPromise : false
+    if (operation) {
+      operation.settled = true
+    }
     const message =
       error instanceof Error ? error.message : 'Please check your connection and retry.'
+    if (cancelled && message.includes('Update download cancelled.')) {
+      publishAppUpdateInstall('cancelled', 'Download cancelled')
+      return
+    }
     publishAppUpdateInstall('failed', 'Update failed — tap to retry')
     Alert.alert('Update could not be opened', message, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Retry', onPress: () => openAppUpdate(url) }
     ])
   } finally {
+    if (activeInstall === operation) {
+      activeInstall = null
+    }
     progress?.remove()
   }
 }

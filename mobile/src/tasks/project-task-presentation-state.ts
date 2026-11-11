@@ -10,6 +10,7 @@ import {
 
 export type ProjectTaskScreenState = {
   projects: ProjectTaskCatalogRow[]
+  catalogTruncated: boolean
   selection: ProjectTaskSelection
   tasks: MobileProjectTask[]
   executionHostId: string
@@ -58,6 +59,7 @@ export function readProjectTaskScreenState(
       : null
   return {
     projects: catalog?.kind === 'catalog' ? catalog.projects : [],
+    catalogTruncated: catalog?.kind === 'catalog' ? catalog.truncated : false,
     selection,
     tasks: board?.kind === 'board' ? board.board.tasks : [],
     executionHostId: board?.kind === 'board' ? board.board.executionHostId : '',

@@ -10,6 +10,7 @@ import { runKeyedSerializedOperation } from '../cli/keyed-promise-queue'
 import { parseProjectTask, parseTaskProject, taskRevision } from './task-document'
 import { isTaskFileMissing, readTaskText, taskFilePath } from './task-file-io'
 import { TaskFileIndex } from './task-file-index'
+import { verifyTaskFileBoundary } from './task-file-boundary'
 import { validateTaskGraph } from './task-graph'
 import { buildTaskContext } from './task-context'
 import { initializeTaskFiles } from './task-workspace-init'
@@ -147,6 +148,21 @@ export class TaskWorkspace {
     this.idle.unref()
   }
 
+  fileBoundary(snapshot: ProjectTaskSnapshot): () => void {
+    const configRevision = this.configRevision
+    return () => verifyTaskFileBoundary(this.root, configRevision, snapshot.tasks)
+  }
+
+  async withSnapshot<T>(operation: (snapshot: ProjectTaskSnapshot) => Promise<T>): Promise<T> {
+    return this.writeLocked(async () => {
+      const snapshot = await this.snapshot()
+      if (snapshot.diagnostics.length) {
+        throw new Error('Repair project task diagnostics before acting')
+      }
+      return operation(snapshot)
+    })
+  }
+
   async withTaskRevision<T>(
     id: string,
     revision: string,
@@ -156,11 +172,16 @@ export class TaskWorkspace {
     ) => Promise<T>
   ): Promise<T> {
     return this.writeLocked(async () => {
-      const task = await this.show(id)
-      if (task.revision !== revision) {
+      const { task, project } = await this.selectedTask(id)
+      const snapshot = await this.snapshot()
+      if (
+        task.revision !== revision ||
+        snapshot.project.id !== project.id ||
+        snapshot.tasks.find((entry) => entry.id === id)?.revision !== revision
+      ) {
         throw new Error('Task revision conflict; re-read before acting')
       }
-      return operation(task, await this.snapshot())
+      return operation(task, snapshot)
     })
   }
 

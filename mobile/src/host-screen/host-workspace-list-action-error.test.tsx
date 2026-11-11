@@ -25,6 +25,7 @@ vi.mock('../components/NewWorkspaceFab', () => ({
   FAB_SIZE: 56
 }))
 vi.mock('../components/WorktreeListRow', () => ({ WorktreeListRow: 'WorktreeListRow' }))
+vi.mock('./MobileProjectGroupManager', () => ({ MobileProjectGroupManager: () => null }))
 vi.mock('../worktree/host-workspace-list-states', () => ({
   HostWorkspaceListStates: 'HostWorkspaceListStates'
 }))

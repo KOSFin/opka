@@ -19,6 +19,16 @@ export class RuntimeTerminalWaiterRegistry {
   }
 
   resolve(waiter: TerminalWaiter, result: RuntimeTerminalWait): void {
+    if (
+      waiter.condition === 'tui-idle' &&
+      result.handle === waiter.handle &&
+      result.condition === waiter.condition &&
+      result.satisfied &&
+      result.status === 'running' &&
+      !result.blockedReason
+    ) {
+      waiter.onLaunchReady?.()
+    }
     this.remove(waiter)
     waiter.resolve(result)
   }

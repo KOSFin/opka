@@ -10,6 +10,7 @@ vi.mock('./runner', () => ({
 
 import { REBASE_SOURCE_FETCH_TIMEOUT_MS } from '../../shared/git-rebase-source'
 import { clearGitCapabilityStateForTests } from './git-capability-state'
+import type { BoundGitExecution } from './command-runner/bound-git-network-executor'
 import { gitFastForward, gitFetch, gitPull, gitPullRebaseFromBase, gitPush } from './remote'
 
 const REBASE_OPERATION_OPTIONS = {
@@ -766,6 +767,36 @@ describe('git remote operations', () => {
     await gitFetch('/repo')
 
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['fetch', '--prune'], { cwd: '/repo' })
+  })
+
+  it('uses only the selected remote when a host-bound fetch is supplied', async () => {
+    const boundOperation: BoundGitExecution = {
+      identity: {
+        operation: 'fetch',
+        repoId: 'repo-a',
+        worktreeId: 'worktree-a',
+        worktreePath: '/repo',
+        commonGitDir: '/repo/.git',
+        remoteName: 'origin',
+        executionHostId: 'local',
+        connectionGeneration: 'generation-1',
+        profileId: 'profile-a',
+        profileGeneration: 'generation-1',
+        profileHost: 'gitlab.com',
+        username: 'alice'
+      },
+      launcherPath: '/synthetic/orca',
+      readCurrentIdentity: async () => null,
+      readPassword: async () => 'synthetic-token'
+    }
+    gitExecFileAsyncMock.mockResolvedValue({ stdout: '', stderr: '' })
+
+    await gitFetch('/repo', undefined, { boundOperation })
+
+    expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['fetch', '--prune', 'origin'], {
+      cwd: '/repo',
+      boundOperation
+    })
   })
 
   it('passes the selected WSL distro through fetch validation and execution', async () => {

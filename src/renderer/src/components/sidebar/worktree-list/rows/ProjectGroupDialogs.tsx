@@ -35,25 +35,25 @@ export function SidebarWorktreeListDialogs({
         open={nameDialog !== null}
         title={
           nameDialog?.type === 'rename'
-            ? translate('auto.components.sidebar.WorktreeList.f9dc6cc5d3', 'Rename Project Group')
-            : translate('auto.components.sidebar.WorktreeList.13757c053c', 'New Project Group')
+            ? translate('auto.components.sidebar.WorktreeList.f9dc6cc5d3', 'Rename project')
+            : translate('auto.components.sidebar.WorktreeList.13757c053c', 'New project')
         }
         description={
           nameDialog?.type === 'rename'
             ? translate(
                 'auto.components.sidebar.WorktreeList.bc1460beb3',
-                'Update the group name shown in the sidebar.'
+                'Update the project name shown in the sidebar.'
               )
             : translate(
                 'auto.components.sidebar.WorktreeList.d880ea0744',
-                'Create a group and move this project into it.'
+                'Create a project and place this repository inside it.'
               )
         }
         initialName={
           nameDialog?.type === 'rename'
             ? nameDialog.currentName
             : nameDialog
-              ? `${nameDialog.repo.displayName} group`
+              ? nameDialog.repo.displayName
               : ''
         }
         confirmLabel={nameDialog?.type === 'rename' ? 'Rename' : 'Create'}

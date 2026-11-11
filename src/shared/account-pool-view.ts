@@ -29,7 +29,8 @@ export const AccountPoolViewSchema = z.object({
       ownerKey: z.string(),
       provider: z.enum(['claude', 'codex']),
       accountId: z.string(),
-      poolId: z.string().nullable()
+      poolId: z.string().nullable(),
+      selectionReason: z.string().nullable().optional()
     })
   )
 })

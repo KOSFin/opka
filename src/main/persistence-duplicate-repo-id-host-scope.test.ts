@@ -186,6 +186,29 @@ describe('deleting one host copy of a repo id shared by two hosts', () => {
     expect(store.getRepos().every((repo) => !repo.projectGroupId)).toBe(true)
   })
 
+  it('refuses a missing or foreign-host destination without ungrouping either twin', async () => {
+    const store = await createStoreWithDuplicateRepoId()
+    const localGroup = store.createProjectGroup({ name: 'Local', createdFrom: 'manual' })
+    const remoteGroup = store.createProjectGroup({
+      name: 'Remote',
+      connectionId: 'ssh-1',
+      createdFrom: 'manual'
+    })
+    const local = store.getRepos().find((repo) => repo.path === '/laptop/dup')!
+    const remote = store.getRepos().find((repo) => repo.path === '/remote/dup')!
+    expect(store.moveProjectToGroup(local, localGroup.id)?.projectGroupId).toBe(localGroup.id)
+    expect(store.moveProjectToGroup(remote, remoteGroup.id)?.projectGroupId).toBe(remoteGroup.id)
+    expect(store.moveProjectToGroup(local, 'deleted-group')).toBeNull()
+    expect(store.moveProjectToGroup(local, remoteGroup.id)).toBeNull()
+    expect(store.moveProjectToGroup(remote, localGroup.id)).toBeNull()
+    expect(store.getRepos().find((repo) => repo.path === '/laptop/dup')?.projectGroupId).toBe(
+      localGroup.id
+    )
+    expect(store.getRepos().find((repo) => repo.path === '/remote/dup')?.projectGroupId).toBe(
+      remoteGroup.id
+    )
+  })
+
   it('deleteProjectHostSetup drops only the row it reports, never the sibling host', async () => {
     // Repo-derived setups reuse the repo id, so a duplicated id yields two setups with the
     // same setup id and the lookup can only resolve one. Whichever it resolves, the other

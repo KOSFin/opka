@@ -1,5 +1,14 @@
 import { ImeTextarea } from '@/lib/ime-text-field'
-import { CircleDot, ExternalLink, GitMerge, LoaderCircle, RefreshCw, Send, X } from 'lucide-react'
+import {
+  CircleDot,
+  Copy,
+  ExternalLink,
+  GitMerge,
+  LoaderCircle,
+  RefreshCw,
+  Send,
+  X
+} from 'lucide-react'
 import * as VisuallyHidden from 'radix-ui/visually-hidden'
 import { Button } from '@/components/ui/button'
 import {
@@ -104,6 +113,30 @@ export function GitLabItemDialogView({
                   <h2 className="mt-1.5 text-lg font-semibold leading-tight text-foreground">
                     {visibleTitle}
                   </h2>
+                  {item.projectRef ? (
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {item.projectRef.host}/{item.projectRef.path}
+                    </p>
+                  ) : null}
+                  {isMR && item.branchName ? (
+                    <div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                      <span className="min-w-0 truncate font-mono">
+                        {item.branchName}
+                        {item.baseRefName ? ` → ${item.baseRefName}` : ''}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={translate(
+                          'auto.components.GitLabItemDialog.copySourceBranch',
+                          'Copy source branch'
+                        )}
+                        onClick={() => void window.api.ui.writeClipboardText(item.branchName ?? '')}
+                      >
+                        <Copy className="size-3" />
+                      </Button>
+                    </div>
+                  ) : null}
                   {visibleLabels.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {visibleLabels.map((label) => (

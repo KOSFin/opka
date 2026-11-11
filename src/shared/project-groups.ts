@@ -2,6 +2,7 @@ import { normalizeExecutionHostId } from './execution-host'
 import type { ProjectGroup, ProjectGroupCreatedFrom } from './project-group-types'
 import type { Repo } from './repo-types'
 import { createNonSecureContextUuid } from './non-secure-context-uuid'
+import { sanitizeRepoIcon } from './repo-icon'
 
 export const UNGROUPED_PROJECT_GROUP_KEY = 'project-group:ungrouped'
 
@@ -17,6 +18,7 @@ export function createProjectGroup(input: {
   parentGroupId?: string | null
   createdFrom: ProjectGroupCreatedFrom
   tabOrder: number
+  groupIcon?: ProjectGroup['groupIcon']
   now?: number
 }): ProjectGroup {
   const now = input.now ?? Date.now()
@@ -30,6 +32,9 @@ export function createProjectGroup(input: {
     tabOrder: input.tabOrder,
     isCollapsed: false,
     color: null,
+    ...(sanitizeRepoIcon(input.groupIcon) !== undefined
+      ? { groupIcon: sanitizeRepoIcon(input.groupIcon) }
+      : {}),
     createdAt: now,
     updatedAt: now
   }
@@ -73,6 +78,9 @@ export function normalizeProjectGroups(value: unknown): ProjectGroup[] {
         typeof raw.tabOrder === 'number' && Number.isFinite(raw.tabOrder) ? raw.tabOrder : 0,
       isCollapsed: raw.isCollapsed === true,
       color: typeof raw.color === 'string' ? raw.color : null,
+      ...(sanitizeRepoIcon(raw.groupIcon) !== undefined
+        ? { groupIcon: sanitizeRepoIcon(raw.groupIcon) }
+        : {}),
       createdAt:
         typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt) ? raw.createdAt : now,
       updatedAt:

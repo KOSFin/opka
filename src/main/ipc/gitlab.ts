@@ -19,8 +19,10 @@ import {
   repoConnectionId
 } from './gitlab-repo-access'
 import { registerGitLabWorkItemHandlers } from './gitlab-work-item-handlers'
+import { registerGitLabNetworkProfileHandlers } from './gitlab-network-profile-handlers'
 
 export function registerGitLabHandlers(store: Store): void {
+  registerGitLabNetworkProfileHandlers()
   ipcMain.handle('gitlab:viewer', async () => {
     return getAuthenticatedViewer()
   })

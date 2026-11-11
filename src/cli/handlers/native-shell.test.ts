@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest'
 import type { RuntimeClient } from '../runtime-client'
 import { NATIVE_AGENT_EXEC_HANDLERS } from './native-agent-exec'
 import { printResult } from '../format'
+import { RuntimeClientError } from '../runtime-client'
 
 vi.mock('../native-agent-exec', () => ({ runNativeAgentExec: vi.fn() }))
 vi.mock('../native-agent-terminal', () => ({ attachNativeAgentTerminal: vi.fn() }))
@@ -41,4 +42,37 @@ it('refuses remote setup before sending a request', async () => {
     })
   ).rejects.toThrow('execution host')
   expect(call).not.toHaveBeenCalled()
+})
+
+it('routes native HOME status to the owning host without reading caller config', async () => {
+  const call = vi.fn(async () => ({ result: { state: 'prepared' } }))
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The handler only uses the mocked call and isRemote fields.
+  const client = { isRemote: false, call } as unknown as RuntimeClient
+  await NATIVE_AGENT_EXEC_HANDLERS['agent native-home status']({
+    client,
+    json: true,
+    cwd: '/synthetic',
+    flags: new Map(),
+    rawArgs: ['work']
+  })
+  expect(call).toHaveBeenCalledExactlyOnceWith('accounts.inspectNativeCodexHome', {
+    profile: 'work'
+  })
+})
+
+it('explains the manual fallback on an older host without mutating its HOME', async () => {
+  const call = vi.fn(async () => {
+    throw new RuntimeClientError('method_not_found', 'Unknown method')
+  })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The handler only uses the mocked call and isRemote fields.
+  const client = { isRemote: false, call } as unknown as RuntimeClient
+  await expect(
+    NATIVE_AGENT_EXEC_HANDLERS['agent native-home status']({
+      client,
+      json: true,
+      cwd: '/synthetic',
+      flags: new Map()
+    })
+  ).rejects.toThrow('manual native Codex')
+  expect(call).toHaveBeenCalledOnce()
 })

@@ -8,9 +8,11 @@ import { styles } from './mobile-accounts-screen-styles'
 
 export function MobileProviderAccountsDisclosure({
   provider,
+  summary,
   children
 }: {
   provider: ProviderKey
+  summary?: string
   children: ReactNode
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -26,7 +28,10 @@ export function MobileProviderAccountsDisclosure({
         style={styles.row}
       >
         <Icon size={20} />
-        <Text style={[styles.rowTitle, styles.rowMain]}>{title}</Text>
+        <View style={styles.rowMain}>
+          <Text style={styles.rowTitle}>{title}</Text>
+          {summary ? <Text style={styles.rowSubtitle}>{summary}</Text> : null}
+        </View>
         {expanded ? (
           <ChevronDown size={18} color={colors.textSecondary} />
         ) : (

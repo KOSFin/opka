@@ -1,3 +1,5 @@
+import { reserveProjectTaskLaunch } from '../project-tasks/task-launch-reservation'
+import { optionalProjectTaskDelegationContext } from './project-task-delegation'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import type { z } from 'zod'
 import { WorkerStartParams } from '../../shared/rpc-contract/orchestration-worker-start-params'
@@ -71,16 +73,56 @@ export async function startProjectTask(
   const attempt = await workspace.withTaskRevision(
     params.id,
     params.revision,
-    async (current, snapshot) =>
-      store.transaction(() =>
-        store.prepare(
-          projectId,
-          current,
-          run.id,
-          snapshot.tasks.filter((entry) => current.depends_on.includes(entry.id))
+    async (current, snapshot) => {
+      if (snapshot.project.id !== projectId) {
+        throw new Error('Project identity changed before reservation')
+      }
+      return store.transaction(() => {
+        store.syncGraph(projectId, root, snapshot.tasks)
+        const delegation = optionalProjectTaskDelegationContext(
+          context,
+          resources,
+          params.launch.from,
+          params.delegationCapability
         )
-      )
+        const dependencies = snapshot.tasks.filter((entry) => current.depends_on.includes(entry.id))
+        if (delegation) {
+          if (!params.requestId) {
+            throw new Error(
+              'Delegated worker start requires a stable requestId for lost-response recovery'
+            )
+          }
+          return reserveProjectTaskLaunch(
+            store,
+            projectId,
+            current,
+            run.id,
+            dependencies,
+            delegation,
+            params.requestId,
+            params.launch
+          )
+        }
+        return { ...store.prepare(projectId, current, run.id, dependencies), replayed: false }
+      }, workspace.fileBoundary(snapshot))
+    }
   )
+  if (attempt.replayed) {
+    const dispatch = store.native.db
+      .prepare(
+        'SELECT id,status FROM dispatch_contexts WHERE task_id=? ORDER BY rowid DESC LIMIT 1'
+      )
+      .get(attempt.nativeTask.id)
+    return {
+      attemptId: attempt.id,
+      replayed: true,
+      nativeTaskId: attempt.nativeTask.id,
+      dispatch: dispatch ?? null,
+      recovery: dispatch
+        ? 'Inspect the exact Dispatch; no second worker was started'
+        : 'Reservation exists without a Dispatch; inspect launch recovery before a fresh request'
+    }
+  }
   try {
     const result = await ORCHESTRATION_WORKER_START_METHODS[0].handler(
       WorkerStartParams.parse({

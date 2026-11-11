@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { normalizeExecutionHostId } from './execution-host'
 import type { ProjectHostSetupMethod } from './project-types'
 import type { ProjectGroup, ProjectGroupCreatedFrom } from './project-group-types'
+import { sanitizeRepoIcon } from './repo-icon'
 import type { RepoKind } from './repo-types'
 import type { ProjectOrderBy } from './ui-chrome-types'
 import { hostUnionArms, salvagedOptional, salvagingArray } from './zod-salvage'
@@ -74,6 +75,7 @@ export const ProjectGroupSchema = z.object({
   tabOrder: z.number(),
   isCollapsed: z.boolean(),
   color: z.string().nullable(),
+  groupIcon: z.unknown().transform(sanitizeRepoIcon).optional(),
   createdAt: z.number(),
   updatedAt: z.number()
 }) satisfies z.ZodType<ProjectGroup, unknown>

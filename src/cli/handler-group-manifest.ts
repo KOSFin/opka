@@ -80,6 +80,7 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
   {
     name: 'project-task',
     keys: [
+      'project-task delegated',
       'project-task init',
       'project-task list',
       'project-task show',

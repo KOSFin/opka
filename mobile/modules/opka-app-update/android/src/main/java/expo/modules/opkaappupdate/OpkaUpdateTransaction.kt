@@ -4,15 +4,24 @@ import java.net.HttpURLConnection
 import java.util.concurrent.CancellationException
 
 internal object OpkaUpdateTransaction {
-  private var active: Attempt? = null
+  private data class Active(val id: String?, val attempt: Attempt)
+  private var active: Active? = null
 
-  @Synchronized fun begin(): Attempt {
+  @Synchronized fun begin(operationId: String? = null): Attempt {
     check(active == null) { "An update download is already running." }
-    return Attempt().also { active = it }
+    return Attempt().also { active = Active(operationId, it) }
   }
 
   @Synchronized fun finish(attempt: Attempt) {
-    if (active === attempt) active = null
+    if (active?.attempt === attempt) {
+      attempt.markFinished()
+      active = null
+    }
+  }
+
+  fun cancelMatching(operationId: String): Boolean {
+    val attempt = synchronized(this) { active?.takeIf { it.id == operationId }?.attempt }
+    return attempt?.cancel() ?: false
   }
 
   @Synchronized fun whenIdle(cleanup: () -> Unit) {
@@ -21,6 +30,8 @@ internal object OpkaUpdateTransaction {
 
   class Attempt {
     private var cancelled = false
+    private var finished = false
+    private var handoffStarted = false
     private var connection: HttpURLConnection? = null
 
     @Synchronized fun checkActive() {
@@ -36,15 +47,22 @@ internal object OpkaUpdateTransaction {
       if (connection === previous) connection = null
     }
 
-    @Synchronized fun cancel() {
+    @Synchronized fun cancel(): Boolean {
+      if (finished || handoffStarted) return false
       cancelled = true
       connection?.disconnect()
       connection = null
+      return true
     }
 
     @Synchronized fun handoff(action: () -> Unit) {
       checkActive()
+      handoffStarted = true
       action()
+    }
+
+    @Synchronized fun markFinished() {
+      finished = true
     }
   }
 }

@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  Text,
-  View,
-  type ListRenderItem
-} from 'react-native'
+import { ActivityIndicator, FlatList, Text, View, type ListRenderItem } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ChevronLeft, X } from 'lucide-react-native'
 import { useWorkspaceRouteHandoff } from '../navigation/workspace-route-handoff'
 import { useForceReconnect } from '../transport/host-client-hooks'
 import { useWorkspaceClient } from '../transport/use-workspace-client'
@@ -18,7 +10,8 @@ import {
   flattenDirectoryCache,
   getDirectoryCacheState,
   type DirectoryCache,
-  type FileExplorerRow
+  type FileExplorerRow,
+  type MobileDirEntry
 } from './file-tree'
 import type { RpcFailure } from '../transport/types'
 import { colors } from '../theme/mobile-theme'
@@ -29,21 +22,33 @@ import {
   resetDirectoryLoadRevisions,
   type DirectoryLoadRevisions
 } from './directory-load-revisions'
-import { isMobileMethodUnavailableError } from '../transport/mobile-method-unavailable'
 import { directoryCacheFromFileList } from './file-list-fallback'
-import { fileDirectoryRead, legacyFileListRead } from './mobile-file-explorer-operations'
+import { fileDirectoryPageRead, legacyFileListRead } from './mobile-file-explorer-operations'
 import { fileExplorerStyles as styles } from './mobile-file-explorer-styles'
 import { MobileFileExplorerRow } from './mobile-file-explorer-row'
+import { MobileFileExplorerHeader } from './MobileFileExplorerHeader'
+import { useMobileFileExplorerNavigation } from './use-mobile-file-explorer-navigation'
 import { navigateToMobileFilePreview } from './mobile-file-preview-navigation'
 import { MobileLoadErrorState } from '../components/MobileLoadErrorState'
 
-export function MobileFileExplorerPanel(props: {
+type MobileFileExplorerPanelProps = {
   hostId: string
   worktreeId: string
   name?: string
   embedded?: boolean
   onRequestClose?: () => void
-}) {
+}
+
+export function MobileFileExplorerPanel(props: MobileFileExplorerPanelProps) {
+  return (
+    <MobileFileExplorerPanelContent
+      key={JSON.stringify([props.hostId, props.worktreeId])}
+      {...props}
+    />
+  )
+}
+
+function MobileFileExplorerPanelContent(props: MobileFileExplorerPanelProps) {
   const { hostId, worktreeId, name, embedded, onRequestClose } = props
   const router = useWorkspaceRouteHandoff()
   const { client, state: connState } = useWorkspaceClient(hostId)
@@ -59,11 +64,21 @@ export function MobileFileExplorerPanel(props: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [legacyListTruncated, setLegacyListTruncated] = useState(false)
+  const {
+    displayRoot,
+    displayRootRef,
+    history: navigation,
+    navigateTo,
+    goBack,
+    goForward,
+    goUp
+  } = useMobileFileExplorerNavigation()
   const worktreeLabel = getWorktreeLabel(name, worktreeId)
 
   const loadDirectory = useCallback(
-    async (relativePath: string) => {
+    async (relativePath: string, cursor?: string) => {
       const scope = scopeRef.current
+      const requestedDisplayRoot = displayRootRef.current
       const loadToken = beginDirectoryLoad(directoryLoadRevisionsRef.current, scope, relativePath)
       const rootLoad = relativePath === ''
 
@@ -102,69 +117,80 @@ export function MobileFileExplorerPanel(props: {
         ...prev,
         [relativePath]: {
           entries: getDirectoryCacheState(prev, relativePath)?.entries ?? [],
+          nextCursor: getDirectoryCacheState(prev, relativePath)?.nextCursor,
           loading: true
         }
       }))
 
       try {
-        const response = await fileDirectoryRead.request(client, {
+        const pageResponse = await fileDirectoryPageRead.request(client, {
           worktree: `id:${worktreeId}`,
-          relativePath
+          relativePath,
+          ...(cursor ? { cursor } : {})
         })
-        const directory = fileDirectoryRead.interpret(response)
-        if (!directory.accepted) {
+        const page = fileDirectoryPageRead.interpret(pageResponse)
+        let entries: MobileDirEntry[]
+        let nextCursor: string | null = null
+        if (page.accepted) {
+          entries = page.value.entries
+          nextCursor = page.value.nextCursor
+        } else {
           // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this policy skips only a refusal, so an unaccepted reply is a failure envelope.
-          const refusal = (response as RpcFailure).error
-          // Why: desktops that predate the files.readDir mobile allowlist
-          // entry still serve the capped files.list; fall back so the Files
-          // tab keeps working until the desktop updates.
-          if (rootLoad && isMobileMethodUnavailableError(refusal?.code, refusal?.message)) {
-            const legacyReply = await legacyFileListRead.request(client, {
-              worktree: `id:${worktreeId}`
-            })
-            const legacy = legacyFileListRead.interpret(legacyReply)
-            if (legacy.accepted) {
-              if (
-                !isCurrentDirectoryLoad(
-                  directoryLoadRevisionsRef.current,
-                  scopeRef.current,
-                  loadToken
-                )
-              ) {
-                return
-              }
-              const legacyResult = legacy.value
-              setDirectoryCache(directoryCacheFromFileList(legacyResult.files))
-              // Why: the capped list silently omits files past the cap — keep
-              // the legacy explorer's "Showing first 5000" note.
-              setLegacyListTruncated(legacyResult.truncated)
-              return
-            }
+          const pageRefusal = (pageResponse as RpcFailure).error
+          if (pageRefusal?.code !== 'method_not_found' || cursor) {
+            throw new Error(pageRefusal?.message || 'Unable to load files')
+          }
+          if (!rootLoad) {
+            throw new Error('Directory paging requires a newer Orca execution host')
+          }
+          const legacyReply = await legacyFileListRead.request(client, {
+            worktree: `id:${worktreeId}`
+          })
+          const legacy = legacyFileListRead.interpret(legacyReply)
+          if (!legacy.accepted) {
             throw new Error(
-              // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this policy skips only a refusal, so an unaccepted reply is a failure envelope.
-              (legacyReply as RpcFailure).error?.message ||
-                refusal?.message ||
-                'Unable to load files'
+              // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a skipped result is a failure envelope.
+              (legacyReply as RpcFailure).error?.message || 'Unable to load files'
             )
           }
-          throw new Error(refusal?.message || 'Unable to load files')
+          if (
+            !isCurrentDirectoryLoad(directoryLoadRevisionsRef.current, scopeRef.current, loadToken)
+          ) {
+            return
+          }
+          setDirectoryCache(directoryCacheFromFileList(legacy.value.files))
+          setLegacyListTruncated(legacy.value.truncated)
+          return
         }
         if (
-          !isCurrentDirectoryLoad(directoryLoadRevisionsRef.current, scopeRef.current, loadToken)
+          !isCurrentDirectoryLoad(directoryLoadRevisionsRef.current, scopeRef.current, loadToken) ||
+          (cursor && displayRootRef.current !== requestedDisplayRoot)
         ) {
           return
         }
-        const entries = directory.value
         if (rootLoad) {
           setLegacyListTruncated(false)
         }
-        setDirectoryCache((prev) => ({
-          ...prev,
-          [relativePath]: { entries }
-        }))
+        setDirectoryCache((prev) => {
+          const previous = getDirectoryCacheState(prev, relativePath)
+          if (
+            cursor &&
+            (previous?.nextCursor !== cursor || displayRootRef.current !== requestedDisplayRoot)
+          ) {
+            return prev
+          }
+          return {
+            ...prev,
+            [relativePath]: {
+              entries: cursor ? [...(previous?.entries ?? []), ...entries] : entries,
+              nextCursor
+            }
+          }
+        })
       } catch (err) {
         if (
-          !isCurrentDirectoryLoad(directoryLoadRevisionsRef.current, scopeRef.current, loadToken)
+          !isCurrentDirectoryLoad(directoryLoadRevisionsRef.current, scopeRef.current, loadToken) ||
+          (cursor && displayRootRef.current !== requestedDisplayRoot)
         ) {
           return
         }
@@ -226,8 +252,24 @@ export function MobileFileExplorerPanel(props: {
   }, [connState, loadDirectory])
 
   const rows = useMemo(
-    () => flattenDirectoryCache(directoryCache, expanded),
-    [directoryCache, expanded]
+    () => flattenDirectoryCache(directoryCache, expanded, displayRoot),
+    [directoryCache, expanded, displayRoot]
+  )
+
+  useEffect(() => {
+    if (displayRoot && !getDirectoryCacheState(directoryCacheRef.current, displayRoot)) {
+      void loadDirectory(displayRoot)
+    }
+  }, [displayRoot, loadDirectory])
+
+  const loadMore = useCallback(
+    (relativePath: string) => {
+      const state = getDirectoryCacheState(directoryCacheRef.current, relativePath)
+      if (state?.nextCursor && !state.loading) {
+        void loadDirectory(relativePath, state.nextCursor)
+      }
+    },
+    [loadDirectory]
   )
 
   const toggleDirectory = useCallback(
@@ -288,42 +330,27 @@ export function MobileFileExplorerPanel(props: {
         onPreviewFile={previewFile}
         onRetryDirectory={retryDirectory}
         onToggleDirectory={toggleDirectory}
+        onLoadMore={loadMore}
+        onOpenHere={navigateTo}
       />
     )
   }
 
   const headerBar = (
-    <View style={styles.topBar}>
-      {embedded ? (
-        <Pressable
-          style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
-          onPress={() => onRequestClose?.()}
-          hitSlop={8}
-          accessibilityLabel="Close files"
-        >
-          <X size={20} color={colors.textSecondary} strokeWidth={2.2} />
-        </Pressable>
-      ) : (
-        <Pressable
-          style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
-          onPress={() => router.back()}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Back to session"
-        >
-          <ChevronLeft size={22} color={colors.textSecondary} strokeWidth={2.2} />
-        </Pressable>
-      )}
-      <View style={styles.titleBlock}>
-        <Text style={styles.title} numberOfLines={1}>
-          Files
-        </Text>
-        <Text style={styles.meta} numberOfLines={1}>
-          {worktreeLabel}
-          {legacyListTruncated ? ' - Showing first 5000' : ''}
-        </Text>
-      </View>
-    </View>
+    <MobileFileExplorerHeader
+      embedded={embedded}
+      worktreeLabel={worktreeLabel}
+      legacyListTruncated={legacyListTruncated}
+      displayRoot={displayRoot}
+      canGoBack={navigation.back.length > 0}
+      canGoForward={navigation.forward.length > 0}
+      onClose={onRequestClose}
+      onBackToSession={() => router.back()}
+      onBack={goBack}
+      onForward={goForward}
+      onUp={goUp}
+      onNavigate={navigateTo}
+    />
   )
 
   // Why: while disconnected, re-sending the request is useless — revive the parked transport
@@ -340,6 +367,13 @@ export function MobileFileExplorerPanel(props: {
     </View>
   ) : error ? (
     <MobileLoadErrorState message={error} onRetry={rootRetry} />
+  ) : getDirectoryCacheState(directoryCache, displayRoot)?.error && rows.length === 0 ? (
+    <MobileLoadErrorState
+      message={
+        getDirectoryCacheState(directoryCache, displayRoot)?.error ?? 'Unable to load folder'
+      }
+      onRetry={() => retryDirectory(displayRoot)}
+    />
   ) : rows.length === 0 ? (
     <View style={styles.state}>
       <Text style={styles.emptyText}>No files found</Text>
@@ -351,6 +385,13 @@ export function MobileFileExplorerPanel(props: {
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
       style={styles.list}
+      ListFooterComponent={
+        getDirectoryCacheState(directoryCache, displayRoot)?.error ? (
+          <Text style={styles.inlineErrorText}>
+            {getDirectoryCacheState(directoryCache, displayRoot)?.error}
+          </Text>
+        ) : null
+      }
     />
   )
 

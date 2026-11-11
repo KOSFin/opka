@@ -32,11 +32,14 @@ function reportProjectGroupDeleteFailures(result: {
   // Why: a missing group is already the desired end state, so only a real delete failure warrants a toast.
   if (result.status === 'group-delete-failed') {
     toast.error(
-      translate('auto.components.sidebar.WorktreeList.groupDeleteFailed', 'Failed to delete group'),
+      translate(
+        'auto.components.sidebar.WorktreeList.groupDeleteFailed',
+        'Failed to delete project'
+      ),
       {
         description: translate(
           'auto.components.sidebar.WorktreeList.groupDeleteFailedDesc',
-          'Something went wrong while deleting the group. No projects were removed.'
+          'Could not delete the project. Its repositories remain in Orca.'
         )
       }
     )
@@ -47,16 +50,15 @@ function reportProjectGroupDeleteFailures(result: {
     toast.error(
       translate(
         'auto.components.sidebar.WorktreeList.b667b59632',
-        'Some projects could not be removed from Orca'
+        'Some repositories could not be removed from Orca'
       ),
       {
         description: translate(
           'auto.components.sidebar.WorktreeList.f94466bc39',
-          '{{value0}} of {{value1}} contained project{{value2}} remained after deleting the group.',
+          '{{value0}} of {{value1}} repository entries remain in Orca after deleting the project.',
           {
             value0: result.failedProjectRemovals.length,
-            value1: requestedCount,
-            value2: requestedCount === 1 ? '' : 's'
+            value1: requestedCount
           }
         )
       }
@@ -129,13 +131,13 @@ export function useProjectGroupDialogs(args: {
         toast.error(
           translate(
             'auto.components.sidebar.WorktreeList.groupRenameFailed',
-            'Failed to rename group'
+            'Failed to rename project'
           ),
           {
             description: translate(
               'auto.components.sidebar.WorktreeList.groupRenameFailedDesc',
               // Why: a falsy result also covers RPC timeout/disconnect, so the copy must not assert the host refused.
-              "Orca could not confirm the new name with the group's host. Recheck the group after reconnecting."
+              "Orca could not confirm the new name with the project's host. Recheck the project after reconnecting."
             )
           }
         )

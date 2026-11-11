@@ -3,6 +3,7 @@ import {
   createCodexRoutingHttpServer,
   type CodexRoutingHttpOptions
 } from './codex-routing-http-server'
+import type { CodexReplaySpoolBudget } from './codex-replay-spool'
 
 export class CodexEngineHttpListener {
   private server: Server | undefined
@@ -11,20 +12,22 @@ export class CodexEngineHttpListener {
     private readonly maxRequestBytes: number,
     private readonly prepare: CodexRoutingHttpOptions['prepare'],
     private readonly onCleanup: () => void,
-    private readonly readNativeClientKey?: () => string
+    private readonly readNativeClientKey?: () => string,
+    private readonly replayBudget?: CodexReplaySpoolBudget
   ) {}
   async listen(): Promise<void> {
     if (this.server) {
       return
     }
     const server = createCodexRoutingHttpServer({
-      maxConcurrent: 8,
+      maxConcurrent: 4,
       nativeClientKey: this.readNativeClientKey?.(),
       maxRequestBytes: this.maxRequestBytes,
       maxResponseBytes: 32 * 1024 * 1024,
       responseHeaderTimeoutMs: 120000,
       prepare: this.prepare,
-      onCleanupUnverifiable: this.onCleanup
+      onCleanupUnverifiable: this.onCleanup,
+      replayBudget: this.replayBudget
     })
     try {
       await new Promise<void>((resolve, reject) => {

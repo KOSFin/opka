@@ -34,6 +34,7 @@ export function createCodexHostQuotaRetry(options: {
   onAccountSelected?: (binding: CodexQuotaReplacement) => void
   signal: AbortSignal
   finish: () => void
+  holdUntilOwnerExit?: CodexHttpAccountRoute['holdUntilOwnerExit']
   prepareReplacement?: (signal: AbortSignal, budget: CodexTranscriptReadBudget) => Promise<void>
 }): CodexHttpAccountRoute['retryRejectedQuota'] {
   const { accountId, quotaIdentity } = options.initial
@@ -123,6 +124,7 @@ export function createCodexHostQuotaRetry(options: {
         ...current,
         signal: options.signal,
         finish: options.finish,
+        ...(options.holdUntilOwnerExit ? { holdUntilOwnerExit: options.holdUntilOwnerExit } : {}),
         retryRejectedQuota: retry
       }
     } catch (error) {

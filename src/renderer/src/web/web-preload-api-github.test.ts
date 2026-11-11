@@ -39,6 +39,7 @@ describe('web GitHub preload API', () => {
         'listAssignableUsers',
         'listAssignableUsersBySlug',
         'listBindableAccounts',
+        'listCloneAccounts',
         'listIssueTypesBySlug',
         'listIssues',
         'listLabels',
@@ -377,6 +378,12 @@ describe('web GitHub preload API', () => {
         args: { repoPath, refreshCapability: true },
         expectedMethod: 'github.listBindableAccounts',
         expectedParams: withRepo({ repoPath, refreshCapability: true })
+      },
+      {
+        key: 'listCloneAccounts',
+        args: { url: 'https://github.com/acme/repo.git', refreshCapability: true },
+        expectedMethod: 'github.listCloneAccounts',
+        expectedParams: { url: 'https://github.com/acme/repo.git', refreshCapability: true }
       },
       {
         key: 'validateAccountBinding',

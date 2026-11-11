@@ -36,6 +36,7 @@ export class RuntimeFileCommands {
   readonly copyFileExplorerPath: RuntimeFileMutations['copyFileExplorerPath']
   readonly deleteFileExplorerPath: RuntimeFileMutations['deleteFileExplorerPath']
   readonly readFileExplorerDir: RuntimeFileWatches['readFileExplorerDir']
+  readonly readFileExplorerDirPage: RuntimeFileWatches['readFileExplorerDirPage']
   readonly watchFileExplorer: RuntimeFileWatches['watchFileExplorer']
   readonly closeFileExplorerWatchersForPath: RuntimeFileWatches['closeFileExplorerWatchersForPath']
   readonly restoreFileExplorerWatchersAfterFailedRemoval: RuntimeFileWatches['restoreFileExplorerWatchersAfterFailedRemoval']
@@ -76,6 +77,7 @@ export class RuntimeFileCommands {
     this.copyFileExplorerPath = this.mutations.copyFileExplorerPath.bind(this.mutations)
     this.deleteFileExplorerPath = this.mutations.deleteFileExplorerPath.bind(this.mutations)
     this.readFileExplorerDir = this.watches.readFileExplorerDir.bind(this.watches)
+    this.readFileExplorerDirPage = this.watches.readFileExplorerDirPage.bind(this.watches)
     this.watchFileExplorer = this.watches.watchFileExplorer.bind(this.watches)
     this.closeFileExplorerWatchersForPath = this.watches.closeFileExplorerWatchersForPath.bind(
       this.watches

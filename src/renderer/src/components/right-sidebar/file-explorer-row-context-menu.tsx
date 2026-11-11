@@ -7,6 +7,7 @@ import {
   File,
   FilePlus,
   Files,
+  FolderOpen,
   FolderPlus,
   Globe,
   ListCollapse,
@@ -82,6 +83,7 @@ type FileExplorerRowContextMenuProps = Pick<
   | 'onRequestDelete'
   | 'onCollapseFolderSubtree'
   | 'onFindInFolder'
+  | 'onOpenHere'
 >
 
 export function FileExplorerRowContextMenu({
@@ -106,7 +108,8 @@ export function FileExplorerRowContextMenu({
   onOpenInTerminal,
   onRequestDelete,
   onCollapseFolderSubtree,
-  onFindInFolder
+  onFindInFolder,
+  onOpenHere
 }: FileExplorerRowContextMenuProps): React.JSX.Element {
   const openMarkdownPreview = useAppStore((s) => s.openMarkdownPreview)
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
@@ -153,6 +156,12 @@ export function FileExplorerRowContextMenu({
       onPointerUpCapture={stopRightButtonMenuSelection}
       onCloseAutoFocus={(e) => e.preventDefault()}
     >
+      {node.isDirectory && onOpenHere && (
+        <ContextMenuItem onSelect={onOpenHere}>
+          <FolderOpen />
+          {translate('fileExplorer.location.openHere', 'Open here')}
+        </ContextMenuItem>
+      )}
       <ContextMenuItem onSelect={() => onStartNew('file', targetDir, targetDepth)}>
         <FilePlus />
         {translate('auto.components.right.sidebar.FileExplorerRow.37c875d827', 'New File')}

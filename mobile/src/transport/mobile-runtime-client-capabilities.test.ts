@@ -15,6 +15,7 @@ import {
 } from '../../../src/shared/agent-launch-runtime-capability'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../src/shared/agent-session-optional-model-capability'
 import { MOBILE_RUNTIME_CLIENT_CAPABILITIES } from './mobile-runtime-client-capabilities'
+import { PROJECT_TASK_DELEGATION_CAPABILITY } from '../../../src/shared/project-task-delegation'
 
 /** Mirrors the host's `parseRuntimeClientCapabilities`, which returns an EMPTY list — silently
  *  dropping every capability, not just the excess — when the array is longer than this or any
@@ -23,6 +24,9 @@ const HOST_CAPABILITY_LIMIT = 64
 const HOST_CAPABILITY_NAME_LIMIT = 128
 
 describe('mobile runtime client capabilities', () => {
+  it('advertises the reviewed project delegation contract for paired owner controls', () => {
+    expect(MOBILE_RUNTIME_CLIENT_CAPABILITIES).toContain(PROJECT_TASK_DELEGATION_CAPABILITY)
+  })
   it('advertises structured agent sessions, the Claude lane, and the turn item', () => {
     expect(MOBILE_RUNTIME_CLIENT_CAPABILITIES).toEqual(
       expect.arrayContaining([

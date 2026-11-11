@@ -22,6 +22,10 @@ import type { RuntimeStore } from './runtime-store-contract'
 import { runtimeRepoIsRegistrationCandidate } from './runtime-worktree-selection'
 import { resolveClonedFolderConversion } from '../folder-repo-git-conversion'
 import { findExtraFolderWorkspaceIds } from '../folder-workspace-meta-presence'
+import { prepareBoundGitClone } from '../git/command-runner/bound-git-clone'
+import { ownsBoundGitCloneRepoRow } from '../git/command-runner/bound-git-clone-owned-row'
+import { validateBoundGitCloneSelection } from '../git/command-runner/bound-git-clone-selection'
+import type { BoundGitCloneChoice } from '../../shared/git-network-binding'
 
 type RuntimeRepositoryCloneDependencies = {
   getStore: () => RuntimeStore | null
@@ -38,7 +42,8 @@ export class RuntimeRepositoryCloneController {
   async clone(
     url: string,
     destination: string,
-    executionHostId?: ExecutionHostId | null
+    executionHostId?: ExecutionHostId | null,
+    gitNetworkChoice?: BoundGitCloneChoice
   ): Promise<Repo> {
     if (!this.deps.getStore()) {
       throw new Error('runtime_unavailable')
@@ -68,7 +73,8 @@ export class RuntimeRepositoryCloneController {
           trimmedDestination,
           clonePath,
           clonePathKey,
-          executionHostId
+          executionHostId,
+          gitNetworkChoice
         )
       )
     } finally {
@@ -84,7 +90,8 @@ export class RuntimeRepositoryCloneController {
     trimmedDestination: string,
     clonePath: string,
     clonePathKey: string,
-    executionHostId?: ExecutionHostId | null
+    executionHostId?: ExecutionHostId | null,
+    gitNetworkChoice?: BoundGitCloneChoice
   ): Promise<Repo> {
     const store = this.deps.getStore()
     if (!store) {
@@ -100,23 +107,50 @@ export class RuntimeRepositoryCloneController {
       })
     const reused = await reuseSavedCloneTarget(findSaved, trimmedUrl, LOCAL_EXECUTION_HOST_ID)
     if (reused) {
+      if (gitNetworkChoice) {
+        throw new Error('Select the Git network account in the existing repository settings.')
+      }
       return reused
     }
+    if (
+      gitNetworkChoice &&
+      (findSaved() ||
+        (executionHostId != null && executionHostId !== LOCAL_EXECUTION_HOST_ID) ||
+        !store.setRepoGitNetworkBinding ||
+        !store.removeProjectForHost ||
+        !store.flushPendingOrThrowAsync)
+    ) {
+      throw new Error('Selected Git network profile is unavailable on this host or client.')
+    }
+    const selection = gitNetworkChoice
+      ? await validateBoundGitCloneSelection(trimmedUrl, gitNetworkChoice)
+      : null
 
     await mkdir(trimmedDestination, { recursive: true })
     const claimedTarget = await claimCloneTarget(clonePath)
+    let boundClone: Awaited<ReturnType<typeof prepareBoundGitClone>> | null = null
     let proc: Awaited<ReturnType<typeof gitSpawnAfterWindowsEnvironmentReady>>
     try {
+      if (selection) {
+        boundClone = await prepareBoundGitClone({
+          url: trimmedUrl,
+          destination: trimmedDestination,
+          clonePath,
+          claimedTarget,
+          selection
+        })
+      }
       proc = await gitSpawnAfterWindowsEnvironmentReady(
-        ['clone', '--progress', '--', trimmedUrl, clonePath],
+        boundClone?.args ?? ['clone', '--progress', '--', trimmedUrl, clonePath],
         {
           cwd: trimmedDestination,
           admissionTier: 'interactive',
-          env: promptGuardGitEnv(),
+          env: boundClone?.env ?? promptGuardGitEnv(),
           stdio: ['ignore', 'ignore', 'pipe']
         }
       )
     } catch (error) {
+      await boundClone?.close()
       await cleanupClaimedCloneTarget(clonePath, claimedTarget)
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Clone failed: ${message}`)
@@ -147,9 +181,22 @@ export class RuntimeRepositoryCloneController {
       }
       proc.on('error', (error) => void finish(null, null, error))
       proc.on('close', (code, signal) => void finish(code, signal))
+    }).finally(async () => {
+      await boundClone?.close()
     })
 
     const existing = findSaved()
+    if (boundClone) {
+      try {
+        await boundClone.assertCurrent()
+        if (existing) {
+          throw new Error('A repository already owns this clone path.')
+        }
+      } catch (error) {
+        await cleanupClaimedCloneTarget(clonePath, claimedTarget)
+        throw error
+      }
+    }
     if (existing) {
       const conversion = await resolveClonedFolderConversion(store, existing)
       const current = findSaved()
@@ -185,6 +232,19 @@ export class RuntimeRepositoryCloneController {
       kind: 'git',
       executionHostId: LOCAL_EXECUTION_HOST_ID
     })
+    if (boundClone) {
+      try {
+        await boundClone.assertCurrent()
+        if (findSaved()) {
+          throw new Error('A repository already owns this clone path.')
+        }
+      } catch (error) {
+        if (!findSaved()) {
+          await cleanupClaimedCloneTarget(clonePath, claimedTarget)
+        }
+        throw error
+      }
+    }
     const repo: Repo = {
       id: randomUUID(),
       path: clonePath,
@@ -197,10 +257,52 @@ export class RuntimeRepositoryCloneController {
       externalWorktreeVisibilityLegacy: false
     }
     store.addRepo(repo)
-    await prepareLocalWorktreeRootForRepo(store, repo)
+    let saved = repo
+    try {
+      if (boundClone) {
+        if (!store.setRepoGitNetworkBinding) {
+          throw new Error('Protected Git binding unavailable.')
+        }
+        saved = store.setRepoGitNetworkBinding(
+          repo,
+          repo.path,
+          repo.addedAt,
+          null,
+          boundClone.binding
+        )
+        if (!ownsBoundGitCloneRepoRow(store, repo, boundClone.binding)) {
+          throw new Error('Protected GitLab binding did not persist.')
+        }
+        if (!store.flushPendingOrThrowAsync) {
+          throw new Error('Protected GitLab save unavailable.')
+        }
+        await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
+        await boundClone.assertCurrent()
+        if (!ownsBoundGitCloneRepoRow(store, repo, boundClone.binding)) {
+          throw new Error('Protected GitLab binding changed during save.')
+        }
+      }
+      await prepareLocalWorktreeRootForRepo(store, saved)
+      if (boundClone) {
+        await boundClone.assertCurrent()
+        if (!ownsBoundGitCloneRepoRow(store, repo, boundClone.binding)) {
+          throw new Error('Selected Git network binding changed before clone completion.')
+        }
+      }
+    } catch (error) {
+      if (boundClone) {
+        if (ownsBoundGitCloneRepoRow(store, repo, boundClone.binding, true)) {
+          store.removeProjectForHost?.(repo)
+        }
+        if (!findSaved()) {
+          await cleanupClaimedCloneTarget(clonePath, claimedTarget)
+        }
+      }
+      throw error
+    }
     invalidateAuthorizedRootsCache()
     this.invalidate(repo.id)
-    return store.getRepo(repo.id) ?? repo
+    return store.getRepo(repo.id) ?? saved
   }
 
   private invalidate(repoId: string): void {

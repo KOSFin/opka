@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 import type { AccountsSnapshot } from '../components/AccountUsage'
+import type { MobileAccountsUsageIntent } from '../accounts/mobile-accounts-route'
 import { MobileHomeQuickActions } from '../components/MobileHomeQuickActions'
 import { PickerModal } from '../components/PickerModal'
 import { useConnectedHostPicker } from '../components/use-connected-host-picker'
@@ -19,7 +20,7 @@ export function MobileHomeListFooter(props: {
   resumeCard: HomeResumeCard | null
   taskProvidersByHost: Record<string, TaskProvider[]>
   onCreateWorkspace: (hostId: string) => void
-  onOpenAccounts: (hostId: string) => void
+  onOpenAccounts: (hostId: string, usage?: MobileAccountsUsageIntent) => void
   onOpenResume: (card: HomeResumeCard) => void
   onOpenTasks: (hostId: string, provider?: TaskProvider) => void
   onPairDesktop: () => void

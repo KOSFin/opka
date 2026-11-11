@@ -22,6 +22,7 @@ export type TreeNode = {
 
 export type DirectoryState = {
   entries: MobileDirEntry[]
+  nextCursor?: string | null
   loading?: boolean
   error?: string
 }
@@ -32,7 +33,7 @@ export type InlineStatusNode = {
   id: string
   relativePath: string
   depth: number
-  kind: 'loading' | 'error'
+  kind: 'loading' | 'error' | 'more'
   message?: string
 }
 
@@ -59,10 +60,11 @@ const BINARY_EXTENSIONS = new Set([
 
 export function flattenDirectoryCache(
   cache: DirectoryCache,
-  expanded: ReadonlySet<string>
+  expanded: ReadonlySet<string>,
+  displayRoot = ''
 ): FileExplorerRow[] {
   const rows: FileExplorerRow[] = []
-  visitDirectory('', 0, cache, expanded, rows)
+  visitDirectory(displayRoot, 0, cache, expanded, rows)
   return rows
 }
 
@@ -103,6 +105,14 @@ function visitDirectory(
         visitDirectory(childPath, depth + 1, cache, expanded, rows)
       }
     }
+  }
+  if (state?.nextCursor) {
+    rows.push({
+      id: `more:${relativePath}`,
+      relativePath,
+      depth,
+      kind: 'more'
+    })
   }
 }
 

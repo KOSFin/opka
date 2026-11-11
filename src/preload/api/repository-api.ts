@@ -1,5 +1,6 @@
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { GhAccountBinding } from '../../shared/github/account-binding'
+import type { BoundGitCloneChoice } from '../../shared/git-network-binding'
 import type {
   NestedRepoScanResult,
   ProjectGroup,
@@ -20,6 +21,7 @@ import type {
   ProjectUpdateArgs
 } from '../../shared/project-types'
 import type { BaseRefDefaultResult, BaseRefSearchResult, Repo } from '../../shared/repo-types'
+import type { RepoGitAuthor, RepoGitAuthorUpdate } from '../../shared/repo-git-author'
 
 export type RepositoryApi = {
   list: () => Promise<Repo[]>
@@ -72,8 +74,26 @@ export type RepositoryApi = {
   pickFolder: () => Promise<string | null>
   pickFolders: () => Promise<string[]>
   pickDirectory: () => Promise<string | null>
-  clone: (args: { url: string; destination: string }) => Promise<Repo>
+  clone: (args: {
+    url: string
+    destination: string
+    gitNetworkChoice?: BoundGitCloneChoice
+  }) => Promise<Repo>
   cloneAbort: () => Promise<void>
+  bindGitLabNetworkProfile: (args: {
+    repoId: string
+    hostId: ExecutionHostId
+    expectedPath: string
+    profileId: string | null
+    remoteName?: string
+  }) => Promise<Repo>
+  bindGitHubNetworkAccount: (args: {
+    repoId: string
+    hostId: ExecutionHostId
+    expectedPath: string
+    account: GhAccountBinding | null
+    remoteName?: string
+  }) => Promise<Repo>
   // Why: error union matches the IPC handler's return shape; renderer callers branch on `'error' in result`.
   create: (args: {
     parentPath: string
@@ -84,6 +104,18 @@ export type RepositoryApi = {
   getDefaultCreateProjectParent: () => Promise<string>
   onCloneProgress: (callback: (data: { phase: string; percent: number }) => void) => () => void
   getGitUsername: (args: { repoId: string }) => Promise<string>
+  getGitAuthor: (args: {
+    repoId: string
+    hostId: ExecutionHostId
+    expectedPath: string
+  }) => Promise<RepoGitAuthor>
+  updateGitAuthor: (
+    args: {
+      repoId: string
+      hostId: ExecutionHostId
+      expectedPath: string
+    } & RepoGitAuthorUpdate
+  ) => Promise<RepoGitAuthor>
   getBaseRefDefault: (args: {
     repoId: string
     hostId?: ExecutionHostId

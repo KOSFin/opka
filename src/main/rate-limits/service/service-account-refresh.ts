@@ -1,5 +1,6 @@
 import { usageMatchesAccount } from '../../../shared/usage-account-provenance'
 import { consumeCodexRateLimitResetCredit } from '../codex-fetcher'
+import { CodexResetCreditSourcePreflightRejection } from '../../codex-accounts/codex-reset-credit-scope-validation'
 import { RateLimitServiceInactiveAccounts } from './service-inactive-accounts'
 import {
   normalizeCodexAccountSelectionTarget,
@@ -120,15 +121,31 @@ export abstract class RateLimitServiceAccountRefresh extends RateLimitServiceIna
     idempotencyKey: string
     target: RateLimitRuntimeTarget
     codexHomePath: string | null
+    preflightProof?: symbol
   }): Promise<CodexRateLimitResetResult> {
     const codexTarget = normalizeCodexAccountSelectionTarget(options.target)
     const codexHomePath = options.codexHomePath
     const scopedStateBeforeReset = this.getState()
     const sourceBeforeReset = await this.resolveCodexHome(codexTarget)
-    const authProvenance =
-      !sourceBeforeReset.skip && sourceBeforeReset.homePath === codexHomePath
-        ? sourceBeforeReset.authProvenance
-        : undefined
+    const offeredProvenance = scopedStateBeforeReset.codex?.usageMetadata?.authProvenance
+    if (
+      sourceBeforeReset.skip ||
+      (codexTarget.runtime === 'host' && sourceBeforeReset.homePath !== codexHomePath) ||
+      (offeredProvenance && sourceBeforeReset.authProvenance !== offeredProvenance)
+    ) {
+      throw new CodexResetCreditSourcePreflightRejection(
+        'accountChanged',
+        scopedStateBeforeReset,
+        'The selected Codex account changed before reset.',
+        options.preflightProof
+      )
+    }
+    const sameSelectedSource =
+      sourceBeforeReset.homePath === codexHomePath ||
+      (codexTarget.runtime === 'wsl' &&
+        offeredProvenance !== undefined &&
+        sourceBeforeReset.authProvenance === offeredProvenance)
+    const authProvenance = sameSelectedSource ? sourceBeforeReset.authProvenance : undefined
     const missingWslCodexHome = codexHomePath
       ? null
       : this.getMissingWslCodexHomeResult(codexTarget)

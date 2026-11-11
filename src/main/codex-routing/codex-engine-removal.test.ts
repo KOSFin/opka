@@ -97,6 +97,36 @@ it('refuses deletion while an accepted request survives uncertain native contact
   await expect(f.host.removeNativeAccount(f.a.id, commit)).rejects.toThrow(/native CLI still uses/)
   expect(commit).not.toHaveBeenCalled()
   expect(f.host.readConnection(f.a.id)?.adopted).toBe(true)
+  launch.close('exited')
   await launch.revoke()
   await pending
+})
+
+it('keeps an aborted provider lease until the execution host proves exit', async () => {
+  const f = fixture()
+  const launch = await f.launch()
+  f.stats.holdResponse = true
+  f.stats.stopVerdict = 'unverifiable'
+  const controller = new AbortController()
+  const pending = fetch(`${launch.baseUrl}/responses`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${launch.apiKey}`,
+      'content-type': 'application/json',
+      'x-codex-turn-metadata': JSON.stringify({ thread_id: 'synthetic-thread', turn_id: '1' })
+    },
+    body: '{"model":"native-model"}',
+    signal: controller.signal
+  }).catch(() => null)
+  await expect.poll(() => f.stats.models.length).toBe(1)
+  const held = f.db.listAccountPoolAssignments()
+  expect(held).toHaveLength(1)
+  controller.abort()
+  await pending
+  await expect.poll(() => f.stats.stopAttempts).toBe(1)
+  expect(f.host.readConnection(f.a.id)).not.toBeNull()
+  expect(f.db.listAccountPoolAssignments()).toEqual(held)
+  f.stats.stopVerdict = 'exited'
+  await f.host.stop()
+  await expect.poll(() => f.db.listAccountPoolAssignments()).toEqual([])
 })

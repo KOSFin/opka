@@ -159,6 +159,10 @@ export const ghMutationsAndProjectsApi = {
     ipcRenderer.invoke('gh:rateLimit', args),
   diagnoseAuth: (args?: { host?: string }): Promise<GhAuthDiagnostic> =>
     ipcRenderer.invoke('gh:diagnoseAuth', args),
+  listCloneAccounts: (args: {
+    url: string
+    refreshCapability?: boolean
+  }): Promise<GhAccountBindingInventory> => ipcRenderer.invoke('gh:listCloneAccounts', args),
   listBindableAccounts: (args: {
     repoPath: string
     repoId?: string

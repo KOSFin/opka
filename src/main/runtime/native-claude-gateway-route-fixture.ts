@@ -86,6 +86,7 @@ export function fixture() {
         ownerKey,
         accountId: candidate.accountId,
         quotaIdentity: candidate.quotaIdentity,
+        selectionReason: null,
         provider: 'claude',
         poolId: policy.id,
         policyRevision: policy.revision,

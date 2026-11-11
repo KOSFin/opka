@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text, View } from 'react-native'
 import { Check, ChevronDown, ChevronRight } from 'lucide-react-native'
 import {
@@ -15,6 +15,7 @@ import {
   getProviderAccountSelection
 } from '../components/provider-account-usage'
 import { colors } from '../theme/mobile-theme'
+import { BottomDrawer } from '../components/BottomDrawer'
 import { poolStyles } from './mobile-account-pool-styles'
 import { styles } from './mobile-accounts-screen-styles'
 
@@ -27,7 +28,8 @@ export function MobileProviderAccountRow({
   busyAccountId,
   now,
   onSelect,
-  resetAction
+  renderResetAction,
+  initiallyExpanded = false
 }: {
   snapshot: AccountsSnapshot
   provider: ProviderKey
@@ -37,9 +39,21 @@ export function MobileProviderAccountRow({
   busyAccountId: string | null
   now: number
   onSelect: (provider: ProviderKey, accountId: string | null) => void
-  resetAction?: ReactNode
+  renderResetAction?: (closeThen: (action: () => void) => void) => ReactNode
+  initiallyExpanded?: boolean
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initiallyExpanded)
+  const afterClose = useRef<(() => void) | null>(null)
+  useEffect(
+    () => () => {
+      afterClose.current = null
+    },
+    []
+  )
+  const closeThen = (action: () => void): void => {
+    afterClose.current = action
+    setExpanded(false)
+  }
   const { accountId: selected } = getProviderAccountSelection(snapshot, provider)
   const account = snapshot[provider].accounts.find((entry) => entry.id === accountId)
   if (accountId !== null && !account) {
@@ -69,10 +83,22 @@ export function MobileProviderAccountRow({
         <View style={styles.rowMain}>
           <Text style={styles.rowTitle}>{label}</Text>
           <Text style={styles.rowSubtitle}>
-            {isActive
-              ? 'Default for new manual chats'
-              : 'Saved account · tap for usage and actions'}
+            {isActive ? 'Default for new manual chats' : 'Saved account'}
           </Text>
+          <View style={styles.usageRow}>
+            <UsageBar
+              label="5h"
+              usedPercent={session.usedPercent}
+              unavailable={session.unavailable}
+              loading={session.loading}
+            />
+            <UsageBar
+              label="7d"
+              usedPercent={weekly.usedPercent}
+              unavailable={weekly.unavailable}
+              loading={weekly.loading}
+            />
+          </View>
         </View>
         <View style={styles.rowTrailing}>
           {busyAccountId === (accountId ?? `${provider}:default`) ? (
@@ -84,8 +110,28 @@ export function MobileProviderAccountRow({
           )}
         </View>
       </Pressable>
-      {expanded ? (
+      <BottomDrawer
+        visible={expanded}
+        onClose={() => setExpanded(false)}
+        onAfterClose={() => {
+          const action = afterClose.current
+          afterClose.current = null
+          action?.()
+        }}
+        contentScrollable
+      >
         <View style={poolStyles.content}>
+          <Text style={styles.rowTitle}>
+            {provider === 'codex' ? 'Codex' : 'Claude'} · {label}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close account details"
+            onPress={() => setExpanded(false)}
+            style={poolStyles.action}
+          >
+            <Text style={poolStyles.actionText}>Back to accounts</Text>
+          </Pressable>
           {accountId === null ? (
             <Text style={styles.rowSubtitle}>
               Existing CLI login on this host · outside the saved pool
@@ -110,6 +156,9 @@ export function MobileProviderAccountRow({
             </View>
           ) : null}
           {usage?.error ? <Text style={styles.errorText}>{usage.error}</Text> : null}
+          {usage && now - usage.updatedAt > 10 * 60_000 ? (
+            <Text style={styles.rowSubtitle}>Last known quota · refresh before acting</Text>
+          ) : null}
           {resetSummary ? (
             <Text style={styles.rowSubtitle}>
               {[resetSummary.availabilityLabel, resetSummary.expiryLabel]
@@ -129,7 +178,7 @@ export function MobileProviderAccountRow({
               accessibilityState={{ disabled }}
               disabled={disabled}
               style={poolStyles.action}
-              onPress={() => onSelect(provider, accountId)}
+              onPress={() => closeThen(() => onSelect(provider, accountId))}
             >
               <Text style={poolStyles.actionText}>
                 {selectForReset ? 'Select account for reset' : 'Use for new manual chats'}
@@ -145,9 +194,9 @@ export function MobileProviderAccountRow({
               <Check size={16} color={colors.accentBlue} />
             </View>
           ) : null}
-          {isActive ? resetAction : null}
+          {isActive ? renderResetAction?.(closeThen) : null}
         </View>
-      ) : null}
+      </BottomDrawer>
     </View>
   )
 }

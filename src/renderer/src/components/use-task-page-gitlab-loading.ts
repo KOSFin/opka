@@ -105,6 +105,13 @@ export function useTaskPageGitLabLoading<Model extends GitLabLoadingInput>(model
                     message: string
                   }
                 }
+                if (!typed || !Array.isArray(typed.items)) {
+                  return {
+                    repoId: repo.id,
+                    items: [],
+                    error: { message: 'GitLab host returned an incompatible issue list.' }
+                  }
+                }
                 // Why: not_found just means the repo isn't a GitLab project (mixed selection); drop it so the list shows no false errors.
                 const error = typed.error?.type === 'not_found' ? undefined : typed.error
                 return {
@@ -129,6 +136,13 @@ export function useTaskPageGitLabLoading<Model extends GitLabLoadingInput>(model
                   error?: {
                     type?: string
                     message: string
+                  }
+                }
+                if (!typed || !Array.isArray(typed.items)) {
+                  return {
+                    repoId: repo.id,
+                    items: [],
+                    error: { message: 'GitLab host returned an incompatible MR list.' }
                   }
                 }
                 const error = typed.error?.type === 'not_found' ? undefined : typed.error
@@ -166,8 +180,8 @@ export function useTaskPageGitLabLoading<Model extends GitLabLoadingInput>(model
         }
         merged.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
         setGitlabItems(merged)
-        // Why: only banner when every eligible repo failed; a partial one would hide working rows in a mixed (non-GitLab) selection.
-        if (errs.length > 0 && merged.length === 0) {
+        // Why: a failed selected project must stay visible even when another project returned rows.
+        if (errs.length > 0) {
           setGitlabError(errs[0])
         }
       })

@@ -48,6 +48,12 @@ type CallerParam = 'from' | 'terminal' | 'callerTerminalHandle'
  * validated, then they run exactly as they do for a terminal caller.
  */
 export const PROJECT_TASK_SESSION_CALLER_PARAM: Readonly<Record<string, CallerParam>> = {
+  'projectTask.resumeDelegated': 'from',
+  'projectTask.approveDelegated': 'from',
+  'projectTask.resultSnapshot': 'from',
+  'projectTask.reviewAssign': 'from',
+  'projectTask.reviewSubmit': 'from',
+  'projectTask.decideDelegated': 'from',
   'projectTask.claim': 'from',
   'projectTask.progress': 'from',
   'projectTask.complete': 'from'

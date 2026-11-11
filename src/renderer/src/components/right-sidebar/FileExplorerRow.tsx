@@ -72,6 +72,7 @@ export type FileExplorerRowProps = {
   onRequestDelete: () => void
   onCollapseFolderSubtree: () => void
   onFindInFolder: () => void
+  onOpenHere?: () => void
   onMoveDrop: (sourcePath: string, destDir: string) => void
   onDragTargetChange: (dir: string | null) => void
   onDragSourceChange: (path: string | null) => void
@@ -118,6 +119,7 @@ export function FileExplorerRow({
   onRequestDelete,
   onCollapseFolderSubtree,
   onFindInFolder,
+  onOpenHere,
   onMoveDrop,
   onDragTargetChange,
   onDragSourceChange,
@@ -311,6 +313,7 @@ export function FileExplorerRow({
         onRequestDelete={onRequestDelete}
         onCollapseFolderSubtree={onCollapseFolderSubtree}
         onFindInFolder={onFindInFolder}
+        onOpenHere={onOpenHere}
       />
     </ContextMenu>
   )

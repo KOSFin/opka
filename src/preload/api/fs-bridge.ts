@@ -17,6 +17,7 @@ import type {
 } from '../../shared/agent-session-attachments'
 import type { SearchResult } from '../../shared/code-search-types'
 import type { FsChangedPayload } from '../../shared/filesystem-entry-types'
+import type { FileExplorerDirectoryPage } from '../../shared/file-explorer-directory-page'
 import type {
   ImportItemResult,
   ResolveDroppedPathsResult,
@@ -47,6 +48,14 @@ export const fsApi = {
     followSymlinks?: boolean
   }): Promise<{ name: string; isDirectory: boolean; isSymlink: boolean }[]> =>
     ipcRenderer.invoke('fs:readDir', args),
+  readDirPage: (args: {
+    dirPath: string
+    connectionId?: string
+    selector: string
+    followSymlinks?: boolean
+    cursor?: string
+    limit?: number
+  }): Promise<FileExplorerDirectoryPage> => ipcRenderer.invoke('fs:readDirPage', args),
   readFile: (args: {
     filePath: string
     connectionId?: string

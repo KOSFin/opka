@@ -1,3 +1,8 @@
+import {
+  PROJECT_TASK_DELEGATION_SQL,
+  PROJECT_TASK_DELEGATION_IMMUTABILITY_SQL
+} from './task-delegation-schema'
+
 export const PROJECT_TASK_WORKFLOW_SQL = `
 CREATE TABLE IF NOT EXISTS project_task_homes (
   project_id TEXT PRIMARY KEY, root_path TEXT NOT NULL UNIQUE
@@ -8,6 +13,14 @@ CREATE TABLE IF NOT EXISTS project_task_items (
   phase TEXT NOT NULL DEFAULT 'draft', archived INTEGER NOT NULL DEFAULT 0,
   exported_sequence INTEGER NOT NULL DEFAULT 0, export_error TEXT,
   PRIMARY KEY(project_id, task_id)
+);
+CREATE TABLE IF NOT EXISTS project_task_graph (
+  project_id TEXT NOT NULL, task_id TEXT NOT NULL, parent_id TEXT, dependencies_json TEXT NOT NULL,
+  PRIMARY KEY(project_id,task_id)
+);
+CREATE INDEX IF NOT EXISTS idx_project_task_graph_parent ON project_task_graph(project_id,parent_id);
+CREATE TABLE IF NOT EXISTS project_task_attempt_placements (
+  attempt_id TEXT PRIMARY KEY REFERENCES project_task_attempts(id), evidence_json TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS project_task_attempts (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL,
@@ -62,4 +75,4 @@ BEGIN
   FROM project_task_attempts a JOIN dispatch_contexts d ON d.task_id = a.native_task_id
   WHERE d.id = NEW.dispatch_id;
 END;
-`
+${PROJECT_TASK_DELEGATION_SQL}${PROJECT_TASK_DELEGATION_IMMUTABILITY_SQL}`

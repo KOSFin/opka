@@ -1,3 +1,5 @@
+import type { RepoIcon } from './repo-icon'
+
 export type ProjectGroupCreatedFrom = 'manual' | 'folder-scan' | 'migration'
 
 export type ProjectGroup = {
@@ -13,6 +15,7 @@ export type ProjectGroup = {
   tabOrder: number
   isCollapsed: boolean
   color: string | null
+  groupIcon?: RepoIcon | null
   createdAt: number
   updatedAt: number
 }

@@ -20,6 +20,9 @@ export type AgentLaunchPane = { worktreeId: string; paneKey: string }
 
 type RunningLaunch = {
   pane: AgentLaunchPane
+  startup?: Promise<AgentLaunchPaneVerdict>
+  nativeStartup?: boolean
+  settleStartup?: (verdict: AgentLaunchPaneVerdict) => void
   /** The launch's agent holds the pane (`proceed`), or the launch is over: whichever comes first. */
   settled: Promise<AgentLaunchPaneVerdict>
   /** What the launch left for the pane once over, if no process holds it. */
@@ -64,31 +67,71 @@ export function trackRunningAgentLaunchPane(pane: AgentLaunchPane): RunningAgent
     }),
     closedByUser: false
   }
+  running.settleStartup = settle
   runningLaunchesByPane.set(key, running)
   failedLaunchesByPane.delete(key)
   let finished = false
   return {
-    agentBound: () => settle(PROCEED),
+    agentBound: () => {
+      if (!running.startup) {
+        settle(PROCEED)
+      }
+    },
     finish: (verdict) => {
-      if (finished) {
+      if (verdict.kind === 'proceed' && running.startup) {
+        const startup = running.startup
+        void startup.then((outcome) => {
+          if (running.startup === startup) {
+            running.startup = undefined
+          }
+          complete(outcome)
+        })
         return
       }
-      finished = true
-      if (runningLaunchesByPane.get(key) === running) {
-        runningLaunchesByPane.delete(key)
-        // A pane the user closed meanwhile is gone: nothing is left for its failure to answer.
-        if (
-          !running.closedByUser &&
-          (verdict.kind === 'not-started' || verdict.kind === 'unconfirmed')
-        ) {
-          failedLaunchesByPane.set(key, { pane, verdict })
-        }
-      }
-      settle(verdict)
-      resolve(verdict)
+      complete(verdict)
     },
     closedByUser: () => running.closedByUser
   }
+  function complete(verdict: AgentLaunchPaneVerdict): void {
+    if (finished) {
+      return
+    }
+    finished = true
+    if (runningLaunchesByPane.get(key) === running) {
+      runningLaunchesByPane.delete(key)
+      // A pane the user closed meanwhile is gone: nothing is left for its failure to answer.
+      if (
+        !running.closedByUser &&
+        (verdict.kind === 'not-started' || verdict.kind === 'unconfirmed')
+      ) {
+        failedLaunchesByPane.set(key, { pane, verdict })
+      }
+    }
+    settle(verdict)
+    resolve(verdict)
+  }
+}
+
+export function holdAgentLaunchPaneStartup(
+  pane: AgentLaunchPane,
+  outcome: Promise<AgentLaunchPaneVerdict>
+): void {
+  const running = runningLaunchesByPane.get(paneKeyOf(pane))
+  if (running) {
+    running.nativeStartup = true
+    running.startup = outcome
+    void outcome.then((verdict) => running.settleStartup?.(verdict))
+  }
+}
+
+export function agentLaunchPaneStartupVerdict(
+  pane: AgentLaunchPane
+): Promise<AgentLaunchPaneVerdict> | null {
+  const key = paneKeyOf(pane)
+  const failed = failedLaunchesByPane.get(key)
+  return (
+    runningLaunchesByPane.get(key)?.startup ?? (failed ? Promise.resolve(failed.verdict) : null)
+  )
 }
 
 /** `null` targets every pane of the workspace. */
@@ -163,8 +206,9 @@ async function settleVerdict(
     running;
     running = runningLaunchesByPane.get(paneKeyOf(pane))
   ) {
-    if ((await running.settled).kind === 'withdrawn') {
-      return { kind: 'withdrawn' }
+    const settled = await running.settled
+    if (settled.kind === 'withdrawn' || (running.nativeStartup && settled.kind !== 'proceed')) {
+      return settled
     }
     if (isPaneLive(pane.paneKey)) {
       return PROCEED
@@ -174,7 +218,10 @@ async function settleVerdict(
       return verdict
     }
   }
-  if (!isPaneLive(pane.paneKey)) {
+  if (
+    (verdict.kind === 'not-started' && verdict.code.startsWith('native_cli_')) ||
+    !isPaneLive(pane.paneKey)
+  ) {
     return verdict
   }
   // A process holds the pane now: it is an ordinary pane again.

@@ -14,10 +14,6 @@ import type {
   AgentLaunchTabPublished,
   AgentLaunchTabPublishRequest
 } from '../../shared/agent-launch-tab-publication'
-import type {
-  AgentLaunchPaneAddress,
-  AgentLaunchPaneVerdict
-} from '../../shared/agent-launch-pane-verdict'
 import { registerWorktreeChangeInvalidator } from '../ipc/worktree-change-invalidators'
 import type { AgentSessionRecordStore } from './agent-session-record-store'
 import { peekOpenedAgentSessionRecordStore } from './agent-session-record-store-slot'
@@ -206,15 +202,6 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
       return null
     }
     return this.notifier.publishAgentLaunchTab(request)
-  }
-
-  /** Tells the window a launch pane's fate: it keeps a final one on the tab, clears a settled one,
-   *  and takes a withdrawn pane back (the pane alone when the user split the tab). */
-  reportAgentLaunchPaneVerdict(
-    pane: AgentLaunchPaneAddress,
-    verdict: AgentLaunchPaneVerdict
-  ): void {
-    this.notifier?.agentLaunchPaneVerdict?.({ ...pane, verdict })
   }
 
   private readonly agentLaunchRecordWarmup = createAgentLaunchRecordWarmupGate({

@@ -1,3 +1,4 @@
+import type { DelegationContext } from '../project-tasks/task-delegation-policy'
 import { stringify } from 'yaml'
 import type { RpcContext } from './rpc/core'
 import type { OrcaRuntimeService } from './orca-runtime'
@@ -30,9 +31,7 @@ export async function projectTaskResources(
     store = new TaskWorkflowStore(native)
     stores.set(native, store)
   }
-  for (const task of snapshot.tasks) {
-    store.register(snapshot.project.id, target.root, task)
-  }
+  store.syncGraph(snapshot.project.id, target.root, snapshot.tasks)
   return { ...target, snapshot, store, projectId: snapshot.project.id }
 }
 
@@ -42,7 +41,10 @@ export async function taskWorkflowAction(
   operation: (
     resources: Awaited<ReturnType<typeof projectTaskResources>>,
     task: ProjectTaskEntry
-  ) => void
+  ) => void,
+  authorizationContext?: (
+    resources: Awaited<ReturnType<typeof projectTaskResources>>
+  ) => DelegationContext
 ) {
   const resources = await projectTaskResources(
     runtime,
@@ -50,19 +52,22 @@ export async function taskWorkflowAction(
     params.expectedExecutionHostId
   )
   await resources.workspace.withTaskRevision(params.id, params.revision, async (task, snapshot) => {
+    if (snapshot.project.id !== resources.projectId) {
+      throw new Error('Project identity changed before mutation')
+    }
     resources.store.transaction(() => {
-      for (const entry of snapshot.tasks) {
-        resources.store.register(resources.projectId, resources.root, entry)
-      }
+      resources.store.syncGraph(resources.projectId, resources.root, snapshot.tasks)
       operation({ ...resources, snapshot }, task)
-    })
+    }, resources.workspace.fileBoundary(snapshot))
   })
   await exportProjectTaskActivity(resources.store.native.db)
   resources.workspace.notifyChanged()
   return projectTaskWorkflow(
     resources.store,
     resources.projectId,
-    await resources.workspace.show(params.id)
+    await resources.workspace.show(params.id),
+    false,
+    authorizationContext?.(resources)
   )
 }
 

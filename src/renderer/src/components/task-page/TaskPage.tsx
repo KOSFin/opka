@@ -42,10 +42,24 @@ import { useTaskPageComposerActions } from '../use-task-page-composer-actions'
 import { TaskPageSurface } from './Surface'
 import { ProjectTasksPage } from './ProjectTasksPage'
 import { Button } from '@/components/ui/button'
-import { TOGGLE_WORKSPACE_BOARD_EVENT } from '../sidebar/useWorkspaceBoardPanel'
+import WorkspaceKanbanDrawer from '../sidebar/WorkspaceKanbanDrawer'
 
 export default function TaskPage(): React.JSX.Element {
-  const [source, setSource] = React.useState<'files' | 'providers'>('files')
+  const [source, setSource] = React.useState<'files' | 'working' | 'providers'>(() => {
+    try {
+      const saved = window.localStorage.getItem('orca.taskPage.source')
+      return saved === 'working' || saved === 'providers' ? saved : 'files'
+    } catch {
+      return 'files'
+    }
+  })
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem('orca.taskPage.source', source)
+    } catch {
+      // Presentation state is optional.
+    }
+  }, [source])
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <nav
@@ -59,8 +73,8 @@ export default function TaskPage(): React.JSX.Element {
           Project tasks
         </Button>
         <Button
-          variant="ghost"
-          onClick={() => window.dispatchEvent(new Event(TOGGLE_WORKSPACE_BOARD_EVENT))}
+          variant={source === 'working' ? 'secondary' : 'ghost'}
+          onClick={() => setSource('working')}
         >
           Working copies
         </Button>
@@ -71,7 +85,25 @@ export default function TaskPage(): React.JSX.Element {
           External trackers
         </Button>
       </nav>
-      {source === 'files' ? <ProjectTasksPage /> : <ProviderTaskPage />}
+      {source === 'files' ? (
+        <ProjectTasksPage />
+      ) : source === 'working' ? (
+        <WorkspaceKanbanDrawer
+          embedded
+          open
+          statusBarVisible={false}
+          dragPreview={false}
+          preserveOpenForMenu={false}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSource('files')
+            }
+          }}
+          onMenuOpenChange={() => undefined}
+        />
+      ) : (
+        <ProviderTaskPage />
+      )}
     </div>
   )
 }

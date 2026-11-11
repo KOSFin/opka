@@ -81,4 +81,19 @@ describe('manual Mac beta update integration', () => {
     expect(beta.download).toHaveBeenCalledTimes(2)
     expect(updater.getUpdateStatus().state).toBe('downloaded')
   })
+  it('reports unsupported Mac architecture and refuses a repeated download', async () => {
+    const updater = await availableUpdater()
+    beta.download.mockRejectedValueOnce(new Error('Unsupported Mac architecture'))
+    updater.downloadUpdate()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updater.getUpdateStatus()).toMatchObject({
+      state: 'error',
+      manualInstaller: true,
+      retryable: false,
+      message: 'Unsupported Mac architecture'
+    })
+    updater.downloadUpdate()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(beta.download).toHaveBeenCalledOnce()
+  })
 })

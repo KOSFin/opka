@@ -76,7 +76,11 @@ describe('retained project task navigation', () => {
     await act(async () => first.state().setProject('folder:/test'))
     await act(async () => first.state().setQuery('Fix'))
     await act(async () => first.state().setPhase('review'))
+    await act(async () => first.state().setSource('tasks'))
+    await act(async () => first.state().setProjects(['folder:/test']))
+    await act(async () => first.state().setScroll('catalogScroll', 84))
     await act(async () => first.state().setTask(task))
+    await act(async () => first.state().setScroll('boardScroll', 128))
     await act(async () => first.state().setDocument('report.md'))
     expect(first.state()).toMatchObject({ content: 'Content', report: 'Report', verified: true })
     await act(async () => first.tree.unmount())
@@ -89,7 +93,14 @@ describe('retained project task navigation', () => {
       content: 'Content',
       report: 'Report',
       verified: true,
-      selection: { query: 'Fix', phase: 'review' }
+      selection: {
+        query: 'Fix',
+        phase: 'review',
+        source: 'tasks',
+        projects: ['folder:/test'],
+        catalogScroll: 84,
+        boardScroll: 128
+      }
     })
     expect(second.state().task?.id).toBe(task.id)
     expect(client.sendRequest).not.toHaveBeenCalled()
@@ -147,6 +158,38 @@ describe('retained project task navigation', () => {
       content: '',
       executionHostId: ''
     })
+  })
+  it('drops a late multi-project overview when the host owner generation changes', async () => {
+    let generation = 0
+    const client = Object.assign(transport(), { getGeneration: () => generation })
+    const original = client.sendRequest.getMockImplementation()!
+    let finish!: (value: ReturnType<typeof rpcSuccess>) => void
+    client.sendRequest.mockImplementation((method, params) =>
+      method === 'projectTask.board'
+        ? new Promise((resolve) => {
+            finish = resolve
+          })
+        : original(method, params)
+    )
+    const fixture = await mount(client)
+    expect(client.sendRequest.mock.calls.some(([method]) => method === 'projectTask.board')).toBe(
+      true
+    )
+    const finishOld = finish
+    generation += 1
+    await fixture.rerender()
+    await act(async () =>
+      finishOld(
+        rpcSuccess({
+          project: { id: 'old' },
+          executionHostId: 'runtime:old',
+          total: 1,
+          tasks: [task]
+        })
+      )
+    )
+    expect(fixture.state().overview.rows).toEqual([])
+    expect(fixture.state().selection.projects).toEqual(['*'])
   })
 })
 

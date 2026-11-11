@@ -6,6 +6,11 @@ export const BindableAccounts = RepoSelector.extend({
   refreshCapability: z.boolean().optional()
 })
 
+export const CloneAccounts = z.object({
+  url: requiredString('Missing HTTPS clone URL'),
+  refreshCapability: z.boolean().optional()
+})
+
 export const ValidateAccountBinding = RepoSelector.extend({
   host: requiredString('Missing host'),
   user: requiredString('Missing user')

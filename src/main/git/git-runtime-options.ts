@@ -1,9 +1,21 @@
 import type { GitAdmissionTier } from './command-runner/git-exec-options'
+import type { BoundGitExecution } from './command-runner/bound-git-network-executor'
 
 export type GitRuntimeOptions = {
   wslDistro?: string
   signal?: AbortSignal
   admissionTier?: GitAdmissionTier
+  boundOperation?: BoundGitExecution
+}
+
+export function gitNetworkOptionsForWorktree(
+  cwd: string,
+  options: GitRuntimeOptions = {}
+): ReturnType<typeof gitOptionsForWorktree> & { boundOperation?: BoundGitExecution } {
+  return {
+    ...gitOptionsForWorktree(cwd, options),
+    ...(options.boundOperation ? { boundOperation: options.boundOperation } : {})
+  }
 }
 
 export function gitOptionsForWorktree(

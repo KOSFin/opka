@@ -1,3 +1,6 @@
+import { PROJECT_TASK_RESULT_METHODS } from './project-task-results'
+import { PROJECT_TASK_DELEGATION_METHODS } from './project-task-delegation'
+import { taskResultAccepted } from '../../../project-tasks/task-authorization'
 import { defineMethod, defineStreamingMethod } from '../core'
 import {
   ProjectTaskIdentity,
@@ -28,6 +31,8 @@ import { PROJECT_TASK_SESSION_METHODS } from './project-task-session'
 
 export const PROJECT_TASK_WORKFLOW_METHODS = [
   ...PROJECT_TASK_SESSION_METHODS,
+  ...PROJECT_TASK_DELEGATION_METHODS,
+  ...PROJECT_TASK_RESULT_METHODS,
   defineMethod({
     name: 'projectTask.move',
     permission: 'workspace',
@@ -40,8 +45,7 @@ export const PROJECT_TASK_WORKFLOW_METHODS = [
           snapshot.tasks.some(
             (entry) =>
               (entry.parent === task.id || task.depends_on.includes(entry.id)) &&
-              (store.item(projectId, entry.id).phase !== 'done' ||
-                store.item(projectId, entry.id).approved_revision !== entry.revision)
+              !taskResultAccepted(store, projectId, entry)
           )
         ) {
           throw new Error(
@@ -158,10 +162,7 @@ export const PROJECT_TASK_WORKFLOW_METHODS = [
         if (
           params.action === 'accept' &&
           snapshot.tasks.some(
-            (child) =>
-              child.parent === task.id &&
-              (store.item(projectId, child.id).phase !== 'done' ||
-                store.item(projectId, child.id).approved_revision !== child.revision)
+            (child) => child.parent === task.id && !taskResultAccepted(store, projectId, child)
           )
         ) {
           throw new Error('Accept the current child-task results before accepting their parent')

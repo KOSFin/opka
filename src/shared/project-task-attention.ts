@@ -28,3 +28,45 @@ export function projectTaskNeedsDecision(workflow: ProjectTaskWorkflow): boolean
       ))
   )
 }
+
+export function projectTaskNextAction(workflow: {
+  archived: boolean
+  revisionChanged: boolean
+  phase: string
+  exportError?: string | null
+  attempts: readonly {
+    nativeStatus: string
+    workerState?: string | null
+    session?: { blocker: string | null } | null
+  }[]
+}): string | null {
+  if (workflow.archived) {
+    return null
+  }
+  if (workflow.revisionChanged) {
+    return 'Review the changed plan before dispatching again'
+  }
+  if (workflow.exportError) {
+    return 'Retry the task export'
+  }
+  if (workflow.attempts[0]?.session?.blocker) {
+    return 'Review the blocker and provide the missing decision'
+  }
+  if (workflow.phase === 'draft') {
+    return 'Review and approve the plan'
+  }
+  if (workflow.phase === 'review' || workflow.phase === 'integration') {
+    return 'Review the report and record a decision'
+  }
+  if (
+    workflow.phase === 'active' &&
+    (['failed', 'blocked', 'unknown'].includes(workflow.attempts[0]?.nativeStatus ?? '') ||
+      workflow.attempts[0]?.workerState === null ||
+      ['failed', 'stopped', 'abandoned', 'start_unknown', 'stop_unknown'].includes(
+        workflow.attempts[0]?.workerState ?? ''
+      ))
+  ) {
+    return 'Inspect the attempt and decide how to resume'
+  }
+  return null
+}

@@ -1,3 +1,9 @@
+import {
+  currentTaskSessionWorkspaceId,
+  projectTaskSessionPlacement
+} from './project-task-attempt-source'
+import { captureTaskSessionPlacement } from '../project-tasks/task-attempt-placement'
+import { optionalProjectTaskDelegationContext } from './project-task-delegation'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
 import type { z } from 'zod'
@@ -10,7 +16,7 @@ import type {
 import { resolveOrchestrationCaller } from './rpc/methods/orchestration/runs/run-scope'
 import { projectTaskResources } from './project-task-workflow-service'
 import {
-  claimTaskSession,
+  claimTaskSessionInTransaction,
   readTaskSessionAttempt,
   isTaskSessionReleased,
   requireTaskSessionOwner,
@@ -23,7 +29,7 @@ import { exportProjectTaskActivity } from '../project-tasks/task-activity'
 import { resumeProjectTask } from './project-task-resume'
 import { verifyProjectTaskTerminalProof } from './project-task-terminal-proof'
 
-function taskSessionCaller(context: RpcContext, from: string | undefined) {
+export function taskSessionCaller(context: RpcContext, from: string | undefined) {
   if (context.pairedDeviceId) {
     throw new Error(
       'Take the task from the agent on its owning execution host, not a paired client'
@@ -89,43 +95,72 @@ export async function claimProjectTaskSession(
     params.worktree,
     params.expectedExecutionHostId
   )
+  const placement = await projectTaskSessionPlacement(context, params.from).catch(() => null)
   const attempt = await resources.workspace.withTaskRevision(
     params.id,
     params.revision,
     async (task, snapshot) => {
-      if (resources.store.active(resources.projectId, task.id)) {
-        const prior = readTaskSessionAttempt(resources.store, resources.projectId, task.id)
-        if (!prior || ['completed', 'failed', 'unknown'].includes(prior.nativeStatus)) {
-          throw new Error('An active or unverified attempt already owns this task')
+      if (snapshot.project.id !== resources.projectId) {
+        throw new Error('Project identity changed before mutation')
+      }
+      return resources.store.transaction(() => {
+        resources.store.syncGraph(resources.projectId, resources.root, snapshot.tasks)
+        if (
+          placement &&
+          currentTaskSessionWorkspaceId(context, params.from) !== placement.workspaceId
+        ) {
+          throw new Error('Attempt execution placement changed before reservation')
         }
-        return requireTaskSessionOwner(
+        if (taskSessionCaller(context, params.from).ownerKey !== ownerKey) {
+          throw new Error('Task caller incarnation changed before reservation')
+        }
+        const delegation = optionalProjectTaskDelegationContext(
+          context,
+          resources,
+          params.from,
+          params.delegationCapability
+        )
+        if (resources.store.active(resources.projectId, task.id)) {
+          const prior = readTaskSessionAttempt(resources.store, resources.projectId, task.id)
+          if (!prior || ['completed', 'failed', 'unknown'].includes(prior.nativeStatus)) {
+            throw new Error('An active or unverified attempt already owns this task')
+          }
+          return requireTaskSessionOwner(
+            resources.store,
+            resources.projectId,
+            task,
+            prior.id,
+            ownerKey,
+            false,
+            delegation
+          )
+        }
+        const dependencies = snapshot.tasks.filter((entry) => task.depends_on.includes(entry.id))
+        resources.store.requireReady(resources.projectId, task, dependencies, delegation)
+        const db = resources.store.native
+        const run =
+          db.getCurrentRunForCoordinator(caller) ??
+          db.createRun({
+            objective: task.title,
+            coordinatorHandle: caller.terminalHandle,
+            coordinatorPaneKey: caller.paneKey,
+            coordinatorOrcaSessionId: caller.orcaSessionId
+          })
+        const reserved = claimTaskSessionInTransaction(
           resources.store,
           resources.projectId,
           task,
-          prior.id,
-          ownerKey
+          run.id,
+          ownerKey,
+          dependencies,
+          caller.address,
+          delegation ? { ...delegation, runId: run.id } : undefined
         )
-      }
-      const dependencies = snapshot.tasks.filter((entry) => task.depends_on.includes(entry.id))
-      resources.store.requireReady(resources.projectId, task, dependencies)
-      const db = resources.store.native
-      const run =
-        db.getCurrentRunForCoordinator(caller) ??
-        db.createRun({
-          objective: task.title,
-          coordinatorHandle: caller.terminalHandle,
-          coordinatorPaneKey: caller.paneKey,
-          coordinatorOrcaSessionId: caller.orcaSessionId
-        })
-      return claimTaskSession(
-        resources.store,
-        resources.projectId,
-        task,
-        run.id,
-        ownerKey,
-        dependencies,
-        caller.address
-      )
+        if (delegation && placement) {
+          captureTaskSessionPlacement(resources.store, reserved.id, placement)
+        }
+        return reserved
+      }, resources.workspace.fileBoundary(snapshot))
     }
   )
   await exportProjectTaskActivity(resources.store.native.db)
@@ -146,14 +181,24 @@ export async function progressProjectTaskSession(
   const attempt = await resources.workspace.withTaskRevision(
     params.id,
     params.revision,
-    async (task) => {
+    async (task, snapshot) => {
+      if (snapshot.project.id !== resources.projectId) {
+        throw new Error('Project identity changed before mutation')
+      }
+      const delegation = optionalProjectTaskDelegationContext(
+        context,
+        resources,
+        params.from,
+        params.delegationCapability
+      )
       const prior = requireTaskSessionOwner(
         resources.store,
         resources.projectId,
         task,
         params.attempt,
         ownerKey,
-        params.release
+        params.release,
+        delegation
       )
       if (params.release && isTaskSessionReleased(resources.store, prior.id)) {
         return prior
@@ -191,11 +236,20 @@ export async function progressProjectTaskSession(
           )
         }
       } catch (error) {
-        recordTaskSessionProgress(resources.store, resources.projectId, task, prior.id, ownerKey, {
-          checkpointPath: prior.checkpointPath,
-          blocker:
-            'Task documents could not be saved. Repair storage on the owning host and retry; no result was submitted.'
-        })
+        recordTaskSessionProgress(
+          resources.store,
+          resources.projectId,
+          task,
+          prior.id,
+          ownerKey,
+          {
+            checkpointPath: prior.checkpointPath,
+            blocker:
+              'Task documents could not be saved. Repair storage on the owning host and retry; no result was submitted.'
+          },
+          delegation,
+          resources.workspace.fileBoundary(snapshot)
+        )
         await exportProjectTaskActivity(resources.store.native.db)
         resources.workspace.notifyChanged()
         throw error
@@ -214,7 +268,15 @@ export async function progressProjectTaskSession(
           blocker: params.blocker ?? null,
           reportPath,
           resultHash,
+          reportText: report,
           release: params.release
+        },
+        delegation,
+        () => {
+          if (taskSessionCaller(context, params.from).ownerKey !== ownerKey) {
+            throw new Error('Task caller incarnation changed before settlement')
+          }
+          resources.workspace.fileBoundary(snapshot)()
         }
       )
     }

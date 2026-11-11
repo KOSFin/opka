@@ -11,6 +11,10 @@ import {
 import type { RuntimeFileCommandHost } from '../file-command-host'
 import { stat } from 'node:fs/promises'
 import type { DirEntry, FsChangeEvent } from '../../../../shared/filesystem-entry-types'
+import type {
+  FileExplorerDirectoryPage,
+  FileExplorerDirectoryPageOptions
+} from '../../../../shared/file-explorer-directory-page'
 import { sortDirEntries } from '../../../../shared/file-name-sort'
 import { resolveAuthorizedPath } from '../../../ipc/filesystem-auth'
 import { resolveRuntimeAuthorizedPath } from '../chat-scratch-file-root'
@@ -38,6 +42,23 @@ export class RuntimeFileWatches {
     // Why: providers do not promise this order, so sort before returning.
     return sortDirEntries(
       await requireRuntimeFileProvider(target, this.host).readDir(target.path, options)
+    )
+  }
+
+  async readFileExplorerDirPage(
+    worktreeSelector: string,
+    relativePath: string,
+    options: FileExplorerDirectoryPageOptions = {}
+  ): Promise<FileExplorerDirectoryPage> {
+    const target = await resolveFileExplorerPath(this.host, worktreeSelector, relativePath)
+    const provider = requireRuntimeFileProvider(target, this.host)
+    if (!provider.readDirPage) {
+      throw new Error('Directory paging is unavailable on this execution host')
+    }
+    return provider.readDirPage(
+      target.path,
+      `${this.host.getRuntimeId()}:${worktreeSelector}`,
+      options
     )
   }
 

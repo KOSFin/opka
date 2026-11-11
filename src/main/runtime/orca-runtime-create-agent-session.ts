@@ -1,3 +1,4 @@
+import { nativeCliControlErrorReply } from '../../shared/native-cli-control-error'
 import type { BrowserWindow } from 'electron'
 import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
 import { OrcaRuntimeWithGetAgentSessionExecutionNamespace } from './session-construction/agent-session/get-agent-session-execution-namespace'
@@ -93,6 +94,9 @@ export abstract class OrcaRuntimeWithCreateAgentSession extends OrcaRuntimeWithG
       try {
         replayed = await existing.promise
       } catch (error) {
+        if (nativeCliControlErrorReply(error)) {
+          throw error
+        }
         const reclaimed = await this.reclaimFencedAgentSessionSpawn(existing.reclaim.identity)
         if (!reclaimed) {
           throw error
@@ -197,6 +201,22 @@ export abstract class OrcaRuntimeWithCreateAgentSession extends OrcaRuntimeWithG
             retainReplayFence = true
           }
         })
+        const startup = this.getNativeCliStartupForHandle(terminal.handle)
+        if (startup) {
+          const verdict = await startup.settled
+          if (this.getNativeCliStartupForHandle(terminal.handle) !== startup) {
+            throw new Error('terminal_handle_stale')
+          }
+          if (startup.refusal) {
+            throw startup.refusal
+          }
+          if (verdict.kind !== 'proceed') {
+            throw Object.assign(
+              new Error('Native startup preparation is unconfirmed on its execution host.'),
+              { agentSessionOperationOutcome: 'unknown' }
+            )
+          }
+        }
       } catch (error) {
         if (error instanceof AgentLaunchUnbuildableError) {
           throw new Error('agent_session_identity_required')

@@ -78,7 +78,7 @@ describe('useTaskPageGitLabLoading', () => {
     }))
   }
 
-  function renderIssuesHook(repos: Repo[], setGitlabItems = vi.fn()) {
+  function renderIssuesHook(repos: Repo[], setGitlabItems = vi.fn(), setGitlabError = vi.fn()) {
     return renderHook(() =>
       useTaskPageGitLabLoading({
         selectedRepos: repos,
@@ -87,7 +87,7 @@ describe('useTaskPageGitLabLoading', () => {
         taskSource: 'gitlab',
         setGitlabItems,
         setGitlabLoading: vi.fn(),
-        setGitlabError: vi.fn(),
+        setGitlabError,
         gitlabRefreshNonce: 0,
         gitlabView: 'issues',
         setGitlabTodos: vi.fn(),
@@ -143,5 +143,109 @@ describe('useTaskPageGitLabLoading', () => {
 
     expect(rpc.call).toHaveBeenCalledTimes(GITLAB_TASK_FETCH_CONCURRENCY)
     expect(setGitlabItems).not.toHaveBeenCalled()
+  })
+
+  it('shows a selected project failure alongside another project’s valid rows', async () => {
+    const repos = manyServerRepos(2)
+    rpc.call.mockImplementation(async (_target, _method, params: { repo: string }) =>
+      params.repo === 'id:server-repo-0'
+        ? { items: [{ id: 'visible', updatedAt: '2026-10-01' }] }
+        : { items: [], error: { type: 'auth', message: 'Project 2 requires sign in' } }
+    )
+    const setGitlabItems = vi.fn()
+    const setGitlabError = vi.fn()
+
+    renderIssuesHook(repos, setGitlabItems, setGitlabError)
+
+    await waitFor(() => expect(setGitlabItems).toHaveBeenCalled())
+    expect(rpc.call).toHaveBeenCalledTimes(2)
+    expect(setGitlabItems).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'visible', repoId: 'server-repo-0' })
+    ])
+    expect(setGitlabError).toHaveBeenLastCalledWith('Project 2 requires sign in')
+  })
+
+  it('refuses an old host reply without items while preserving another project’s rows', async () => {
+    const repos = manyServerRepos(2)
+    rpc.call.mockImplementation(async (_target, _method, params: { repo: string }) =>
+      params.repo === 'id:server-repo-0'
+        ? { items: [{ id: 'visible', updatedAt: '2026-10-01' }] }
+        : { legacyCount: 1 }
+    )
+    const setGitlabItems = vi.fn()
+    const setGitlabError = vi.fn()
+
+    renderIssuesHook(repos, setGitlabItems, setGitlabError)
+
+    await waitFor(() => expect(setGitlabItems).toHaveBeenCalled())
+    expect(setGitlabItems).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'visible', repoId: 'server-repo-0' })
+    ])
+    expect(setGitlabError).toHaveBeenLastCalledWith(
+      'GitLab host returned an incompatible issue list.'
+    )
+  })
+
+  it('queries only selected host projects and discards their late results after a switch', async () => {
+    const foreignRepo = { ...serverRepo, id: 'foreign', path: '/srv/foreign' }
+    const repos = [
+      { ...serverRepo, id: 'tracker-a', path: '/srv/tracker-a' },
+      { ...serverRepo, id: 'tracker-b', path: '/srv/tracker-b' },
+      foreignRepo
+    ]
+    const pending = new Map<string, (result: { items: unknown[] }) => void>()
+    rpc.call.mockImplementation(
+      (
+        _target,
+        method: string,
+        params: { repo: string; state: 'opened'; page: number; perPage: number }
+      ) => {
+        expect(method).toBe('gitlab.listMRs')
+        return new Promise((resolve) => {
+          pending.set(params.repo, resolve)
+        })
+      }
+    )
+    const setGitlabItems = vi.fn()
+    const { rerender } = renderHook(
+      ({ selected }: { selected: Repo[] }) =>
+        useTaskPageGitLabLoading({
+          selectedRepos: selected,
+          selectedReposKey: selected.map((repo) => repo.id).join(','),
+          primaryRepo: selected[0],
+          taskSource: 'gitlab',
+          setGitlabItems,
+          setGitlabLoading: vi.fn(),
+          setGitlabError: vi.fn(),
+          gitlabRefreshNonce: 0,
+          gitlabView: 'mrs',
+          setGitlabTodos: vi.fn(),
+          setGitlabTodosLoading: vi.fn(),
+          activeGitlabFilter: 'opened'
+        }),
+      { initialProps: { selected: repos.slice(0, 2) } }
+    )
+    await waitFor(() => expect(rpc.call).toHaveBeenCalledTimes(2))
+    expect(rpc.call.mock.calls.map((call) => call[2].repo)).toEqual([
+      'id:tracker-a',
+      'id:tracker-b'
+    ])
+    rerender({ selected: [foreignRepo] })
+    await waitFor(() => expect(rpc.call).toHaveBeenCalledTimes(3))
+    pending.get('id:tracker-a')?.({ items: [{ id: 'old-a', updatedAt: '2026-11-10' }] })
+    pending.get('id:tracker-b')?.({ items: [{ id: 'old-b', updatedAt: '2026-11-10' }] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(setGitlabItems).not.toHaveBeenCalled()
+    pending.get('id:foreign')?.({ items: [{ id: 'current', updatedAt: '2026-11-10' }] })
+    await waitFor(() =>
+      expect(setGitlabItems).toHaveBeenLastCalledWith([
+        expect.objectContaining({ id: 'current', repoId: 'foreign' })
+      ])
+    )
+    expect(rpc.call.mock.calls.map((call) => call[2].repo)).toEqual([
+      'id:tracker-a',
+      'id:tracker-b',
+      'id:foreign'
+    ])
   })
 })

@@ -1,27 +1,94 @@
 /* oxlint-disable react-doctor/no-adjust-state-on-prop-change -- Why: GitLab item dialogs reset draft/provider state and hydrate details from GitLab IPC when the selected item identity changes. */
-import { useCallback, useState } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction
+} from 'react'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import type { GitLabAssignableUser, GitLabWorkItemDetails } from '../../../../shared/gitlab-types'
 import type { JobTraceState } from '../gitlab-item-dialog-parts'
 
-export function useGitLabItemDialogState(itemId: string | null) {
-  const [details, setDetails] = useState<GitLabWorkItemDetails | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+type ScopedDetails = {
+  scope: { key: string | null }
+  details: GitLabWorkItemDetails | null
+  loading: boolean
+  error: string | null
+}
+
+export function useGitLabItemDialogState(itemScopeKey: string | null) {
+  const scope = useMemo(() => ({ key: itemScopeKey }), [itemScopeKey])
+  const [detailState, setDetailState] = useState<ScopedDetails>({
+    scope,
+    details: null,
+    loading: false,
+    error: null
+  })
+  const currentScopeRef = useRef(scope)
+  useLayoutEffect(() => {
+    currentScopeRef.current = scope
+  }, [scope])
+  const currentDetails = detailState.scope === scope
+  const details = currentDetails ? detailState.details : null
+  const loading = currentDetails ? detailState.loading : itemScopeKey !== null
+  const error = currentDetails ? detailState.error : null
+  const updateDetails = useCallback(
+    (update: (current: ScopedDetails) => ScopedDetails) => {
+      setDetailState((previous) => {
+        if (currentScopeRef.current !== scope) {
+          return previous
+        }
+        const current =
+          previous.scope === scope
+            ? previous
+            : { scope, details: null, loading: false, error: null }
+        return update(current)
+      })
+    },
+    [scope]
+  )
+  const setDetails: Dispatch<SetStateAction<GitLabWorkItemDetails | null>> = useCallback(
+    (value) =>
+      updateDetails((current) => ({
+        ...current,
+        details: typeof value === 'function' ? value(current.details) : value
+      })),
+    [updateDetails]
+  )
+  const setLoading: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) =>
+      updateDetails((current) => ({
+        ...current,
+        loading: typeof value === 'function' ? value(current.loading) : value
+      })),
+    [updateDetails]
+  )
+  const setError: Dispatch<SetStateAction<string | null>> = useCallback(
+    (value) =>
+      updateDetails((current) => ({
+        ...current,
+        error: typeof value === 'function' ? value(current.error) : value
+      })),
+    [updateDetails]
+  )
   const [refreshNonce, setRefreshNonce] = useState(0)
   const [commentDraftState, setCommentDraftState] = useState<{
-    itemId: string | null
+    scopeKey: string | null
     value: string
-  }>(() => ({ itemId, value: '' }))
-  const commentDraft = commentDraftState.itemId === itemId ? commentDraftState.value : ''
-  if (commentDraftState.itemId !== itemId) {
+  }>(() => ({ scopeKey: itemScopeKey, value: '' }))
+  const commentDraft = commentDraftState.scopeKey === itemScopeKey ? commentDraftState.value : ''
+  if (commentDraftState.scopeKey !== itemScopeKey) {
     // Why: comment drafts are tied to one GitLab item, so switching the sheet
     // target must not leave a draft that could post to the wrong MR/issue.
-    setCommentDraftState({ itemId, value: '' })
+    setCommentDraftState({ scopeKey: itemScopeKey, value: '' })
   }
   const [commentSubmitting, setCommentSubmitting] = useState(false)
   const [resolvingThreadId, setResolvingThreadId] = useState<string | null>(null)
-  const [editingDetails, setEditingDetails] = useState(false)
+  const [editingDetailsState, setEditingDetails] = useState(false)
+  const editingDetails = currentDetails ? editingDetailsState : false
   const [titleDraft, setTitleDraft] = useState('')
   const [bodyDraft, setBodyDraft] = useState('')
   const [labelDraft, setLabelDraft] = useState('')
@@ -43,9 +110,9 @@ export function useGitLabItemDialogState(itemId: string | null) {
   const mountedRef = useMountedRef()
   const updateCommentDraft = useCallback(
     (value: string): void => {
-      setCommentDraftState({ itemId, value })
+      setCommentDraftState({ scopeKey: itemScopeKey, value })
     },
-    [itemId]
+    [itemScopeKey]
   )
 
   return {

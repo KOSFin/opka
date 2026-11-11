@@ -52,6 +52,27 @@ function section(r: SectionRepo): Section {
 }
 
 describe('project group workspace sections', () => {
+  it('keeps the group icon separate from its repository icon and host twin', () => {
+    const localRepo = { ...repo('web'), repoIcon: { type: 'emoji', emoji: '🌊' } }
+    const localGroup = {
+      ...group(),
+      groupIcon: { type: 'lucide' as const, name: 'Rocket' }
+    }
+    const remoteGroup = { ...group('ssh:remote'), groupIcon: null }
+    const sections = groupProjectWorkspaceSections(
+      [section(localRepo)],
+      [localRepo],
+      [remoteGroup, localGroup],
+      new Set()
+    )
+    expect(sections[0]?.groupIcon).toEqual(localGroup.groupIcon)
+    expect(sections[0]).toMatchObject({
+      projectGroupId: localGroup.id,
+      projectGroupHostId: 'local'
+    })
+    expect(sections[0]?.repo).toBeUndefined()
+    expect(sections[1]?.repo?.repoIcon).toEqual(localRepo.repoIcon)
+  })
   it('places project sessions above nested repos without duplicating a project folder header', () => {
     const app = repo('web')
     const folder = repo(folderWorkspaceRepoId('g'), false)

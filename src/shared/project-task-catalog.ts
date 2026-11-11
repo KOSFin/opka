@@ -5,6 +5,10 @@ export type ProjectTaskProject = {
   state: 'configured' | 'unconfigured' | 'unavailable'
   projectId?: string
   message?: string
+  groupId?: string
+  groupName?: string
+  repositoryName?: string
+  projectGroupsAvailable?: boolean
 }
 
 export type ProjectTaskCatalog = {

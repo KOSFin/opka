@@ -32,6 +32,7 @@ import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import type { Repo } from '../../../shared/repo-types'
 import { isWslMoveWorktreeBlocked } from '../../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import { worktreeRowTarget } from '../../persistence/host-qualified-worktree-meta'
+import { resolveRuntimeBoundGitOperation } from '../runtime-bound-git-operation'
 import type { RuntimeRepoSelector } from '../runtime-repo-selector'
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
@@ -197,6 +198,8 @@ export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreserv
 
   protected readonly gitCommands = new RuntimeGitCommands({
     resolveRuntimeGitTarget: (selector) => this.resolveRuntimeGitTarget(selector),
+    resolveBoundGitOperation: (target, operation, remoteName, pushTarget) =>
+      resolveRuntimeBoundGitOperation(this.store, target, operation, remoteName, pushTarget),
     getRuntimeSettings: () => this.requireStore().getSettings(),
     getCommitMessageAgentEnvironment: () => this.accounts.getCommitMessageAgentEnvironment(),
     // Why: resolved worktrees are cached for a second, so link/unlink would lag

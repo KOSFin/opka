@@ -37,20 +37,22 @@ import type { NativeCodexRoutingRuntime } from './native-codex-routing-launch'
 export async function prepareNativeClaudeRoutingLaunch(
   runtime: NativeCodexRoutingRuntime,
   params: NativeCliAccountLaunchRequest,
-  pendingTerminal = false
+  pendingTerminal = false,
+  assertCurrent?: () => void
 ): Promise<NativeCliAccountLaunch | null> {
   if (params.provider !== 'claude') {
     return null
   }
   return withNativeClaudeLaunchPreparation(runtime, params.launchId, () =>
-    prepareNativeClaudeRoutingLaunchOnce(runtime, params, pendingTerminal)
+    prepareNativeClaudeRoutingLaunchOnce(runtime, params, pendingTerminal, assertCurrent)
   )
 }
 
 async function prepareNativeClaudeRoutingLaunchOnce(
   runtime: NativeCodexRoutingRuntime,
   params: NativeCliAccountLaunchRequest,
-  pendingTerminal: boolean
+  pendingTerminal: boolean,
+  assertCurrent?: () => void
 ): Promise<NativeCliAccountLaunch | null> {
   const startedAt = Date.now(),
     sources = getRuntimeClaudeNativeSources(runtime),
@@ -75,12 +77,15 @@ async function prepareNativeClaudeRoutingLaunchOnce(
   }
   if (!automatic) {
     const selected = params.accountId ?? runtime.getAccountsSnapshot().claude.activeAccountId
-    if (!selected || (await sources.state(selected)).state !== 'ready') {
+    const state = selected ? await sources.state(selected) : null
+    assertCurrent?.()
+    if (!selected || state?.state !== 'ready') {
       return null
     }
   }
   try {
     await sources.assertNativeCommand(params.claudeExecutable)
+    assertCurrent?.()
   } catch (error) {
     if (!automatic) {
       return null
@@ -104,6 +109,7 @@ async function prepareNativeClaudeRoutingLaunchOnce(
       : getDefaultAccountPool(runtime, 'claude')
   const pooled = policy && policy.strategy !== 'manual'
   const ready = await sources.readyAccountIds()
+  assertCurrent?.()
   const selected =
     previous?.accountId ?? params.accountId ?? runtime.getAccountsSnapshot().claude.activeAccountId
   if (!pooled && (!selected || !ready.has(selected))) {
@@ -155,6 +161,7 @@ async function prepareNativeClaudeRoutingLaunchOnce(
   let moduleDirectory: string | undefined
   try {
     const access = await sources.refresh(accountId)
+    assertCurrent?.()
     sources.assertAccountOwned(accountId)
     if (pooled) {
       const current = previous
@@ -183,6 +190,7 @@ async function prepareNativeClaudeRoutingLaunchOnce(
       projectSettings: (settings) =>
         projectClaudeNativePoolPreferences(hooks?.remove(settings) ?? settings)
     })
+    assertCurrent?.()
     const profile = facade
     if (live && hooks && hookLaunch) {
       const liveRouting = await createNativeClaudeLaunchLiveMode({
@@ -209,6 +217,7 @@ async function prepareNativeClaudeRoutingLaunchOnce(
         bindCurrent,
         assertExclusive: context.assertExclusive
       })
+      assertCurrent?.()
       moduleDirectory = liveRouting.moduleDirectory
       gatewayBaseUrl = liveRouting.baseUrl
       boundary = liveRouting.boundary

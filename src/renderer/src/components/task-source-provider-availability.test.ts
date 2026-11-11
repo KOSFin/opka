@@ -51,6 +51,20 @@ describe('task source provider availability', () => {
     ).toEqual([{ hostId: 'local', reason: 'unavailable-source-tool' }])
   })
 
+  it('keeps an installed but unauthenticated GitLab source blocked', () => {
+    expect(
+      getRepoBackedProviderAvailability({
+        provider: 'gitlab',
+        contexts: [source('local')],
+        preflightReady: true,
+        preflightStatus: {
+          ...readyPreflight,
+          glab: { installed: true, authenticated: false }
+        }
+      })
+    ).toEqual([{ hostId: 'local', reason: 'missing-provider-auth' }])
+  })
+
   it('marks GitLab unsupported when a host preflight payload predates GitLab support', () => {
     const { glab: _glab, ...preGitLabPreflight } = readyPreflight
 

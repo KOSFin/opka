@@ -4,6 +4,7 @@ import { getDefaultRepoHookSettings } from '../../../shared/constants'
 import { isFolderRepo } from '../../../shared/repo-kind'
 import { sanitizeRepoIcon } from '../../../shared/repo-icon'
 import { normalizeGhAccountBinding } from '../../../shared/github/account-binding'
+import { isGitNetworkBinding, type GitNetworkBinding } from '../../../shared/git-network-binding'
 import { normalizeJiraProjectReference } from '../../../shared/jira-project-reference'
 import { normalizeRepoSourceControlAiOverrides } from '../../../shared/source-control-ai'
 import {
@@ -38,6 +39,7 @@ export function hydrateRepo(repo: Repo, gitUsernameCache: ReadonlyMap<string, st
     projectHostSetupMethod: rawProjectHostSetupMethod,
     forkSyncMode: rawForkSyncMode,
     ghAccount: rawGhAccount,
+    gitNetworkBinding: rawGitNetworkBinding,
     defaultJiraProject: rawDefaultJiraProject,
     customWorktreeVisibilitySources: rawCustomWorktreeVisibilitySources,
     worktreeVisibilitySourcePreferences: rawWorktreeVisibilitySourcePreferences,
@@ -50,6 +52,22 @@ export function hydrateRepo(repo: Repo, gitUsernameCache: ReadonlyMap<string, st
   const projectHostSetupMethod = sanitizeRepoProjectHostSetupMethod(rawProjectHostSetupMethod)
   const forkSyncMode = sanitizeForkSyncMode(rawForkSyncMode)
   const ghAccount = normalizeGhAccountBinding(rawGhAccount)
+  const gitNetworkBinding: GitNetworkBinding | null = isGitNetworkBinding(rawGitNetworkBinding)
+    ? rawGitNetworkBinding.provider === 'gitlab'
+      ? {
+          provider: 'gitlab',
+          id: rawGitNetworkBinding.id,
+          host: rawGitNetworkBinding.host,
+          user: rawGitNetworkBinding.user,
+          generation: rawGitNetworkBinding.generation
+        }
+      : {
+          provider: 'github',
+          host: rawGitNetworkBinding.host,
+          user: rawGitNetworkBinding.user,
+          generation: rawGitNetworkBinding.generation
+        }
+    : null
   const defaultJiraProject = normalizeJiraProjectReference(rawDefaultJiraProject)
   const customWorktreeVisibilitySources = normalizeCustomWorktreeVisibilitySources(
     rawCustomWorktreeVisibilitySources
@@ -74,6 +92,7 @@ export function hydrateRepo(repo: Repo, gitUsernameCache: ReadonlyMap<string, st
     ...(projectHostSetupMethod !== undefined ? { projectHostSetupMethod } : {}),
     ...(forkSyncMode !== undefined ? { forkSyncMode } : {}),
     ...(ghAccount ? { ghAccount } : {}),
+    ...(gitNetworkBinding ? { gitNetworkBinding } : {}),
     ...(defaultJiraProject !== undefined ? { defaultJiraProject } : {}),
     ...(customWorktreeVisibilitySources !== undefined ? { customWorktreeVisibilitySources } : {}),
     ...(worktreeVisibilitySourcePreferences !== undefined

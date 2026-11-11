@@ -39,3 +39,21 @@ describe('removePromotedSettingsFromContent', () => {
     expect(removePromotedSettingsFromContent(content, new Set(['tui.theme']))).toBe(content)
   })
 })
+
+it('removes complete multiline values and preserves CRLF, comments and nested copies', () => {
+  const content = [
+    '# preamble',
+    '"model" = """',
+    '[features]',
+    'service_tier = "text inside model"',
+    '"""',
+    'service_tier = "flex"',
+    '# keep this comment',
+    '[features]',
+    'model = "nested"',
+    ''
+  ].join('\r\n')
+  expect(removePromotedSettingsFromContent(content, new Set(['model', 'service_tier']))).toBe(
+    '# preamble\r\n# keep this comment\r\n[features]\r\nmodel = "nested"\r\n'
+  )
+})

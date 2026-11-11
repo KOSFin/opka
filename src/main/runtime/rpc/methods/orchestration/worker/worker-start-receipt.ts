@@ -1,3 +1,4 @@
+import { nativeCliControlErrorReply } from '../../../../../../shared/native-cli-control-error'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import { isUnknownWorkerStartOutcome, type WorkerSetupReceipt } from './worker-topology'
 import type { OrchestrationWorkerLaunchReceipt } from './worker-launch-preferences'
@@ -34,6 +35,9 @@ export function failWorkerStartWithReceipt(args: {
     stage: worker.stage,
     failedStage: args.failedStage,
     lastError: reason,
+    ...(nativeCliControlErrorReply(args.error)
+      ? { failureCode: nativeCliControlErrorReply(args.error)?.code }
+      : {}),
     setup: args.setup,
     launch: args.launch,
     mode: args.mode,

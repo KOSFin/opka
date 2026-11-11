@@ -49,3 +49,36 @@ it('does not manufacture a return target when already at the repository root', (
   expect(result.current.returnRoot).toBeNull()
   expect(actions.setExplorerDisplayRootForWorktree).not.toHaveBeenCalled()
 })
+
+it('navigates ordinary folders with bounded back, forward and up without crossing workspaces', () => {
+  const { result, rerender } = renderHook(
+    ({ id, choice }) => useFileExplorerRootNavigation(id, choice, null),
+    { initialProps: { id: 'first', choice: '/' } }
+  )
+  act(() => result.current.selectRoot('src'))
+  expect(actions.setExplorerDisplayRootForWorktree).toHaveBeenLastCalledWith('first', 'src')
+  rerender({ id: 'first', choice: 'src' })
+  act(() => result.current.selectRoot('src/lib'))
+  rerender({ id: 'first', choice: 'src/lib' })
+  expect(result.current.canGoBack).toBe(true)
+  act(() => result.current.goBack())
+  expect(actions.setExplorerDisplayRootForWorktree).toHaveBeenLastCalledWith('first', 'src')
+  rerender({ id: 'first', choice: 'src' })
+  expect(result.current.canGoForward).toBe(true)
+  act(() => result.current.goForward())
+  expect(actions.setExplorerDisplayRootForWorktree).toHaveBeenLastCalledWith('first', 'src/lib')
+  rerender({ id: 'first', choice: 'src/lib' })
+  act(() => result.current.goUp())
+  expect(actions.setExplorerDisplayRootForWorktree).toHaveBeenLastCalledWith('first', 'src')
+  rerender({ id: 'second', choice: '/' })
+  expect(result.current.canGoBack).toBe(false)
+  act(() => result.current.goBack())
+  expect(actions.setExplorerDisplayRootForWorktree).not.toHaveBeenCalledWith('second', 'src/lib')
+})
+
+it('refuses root escapes before recording history or changing the view', () => {
+  const { result } = renderHook(() => useFileExplorerRootNavigation('wt', '/', null))
+  act(() => result.current.selectRoot('../etc'))
+  expect(result.current.canGoBack).toBe(false)
+  expect(actions.setExplorerDisplayRootForWorktree).not.toHaveBeenCalled()
+})

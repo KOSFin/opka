@@ -1,4 +1,5 @@
 import type { PathExistenceResult } from '../../shared/path-existence-batch'
+import type { FileExplorerDirectoryPage } from '../../shared/file-explorer-directory-page'
 import type { RuntimeFileReadChunkResult } from '../../shared/runtime-types'
 import type { SearchOptions, SearchResult } from '../../shared/code-search-types'
 import type {
@@ -65,6 +66,14 @@ export type FilesystemApi = {
       connectionId?: string
       followSymlinks?: boolean
     }) => Promise<DirEntry[]>
+    readDirPage?: (args: {
+      dirPath: string
+      connectionId?: string
+      selector: string
+      followSymlinks?: boolean
+      cursor?: string
+      limit?: number
+    }) => Promise<FileExplorerDirectoryPage>
     readFile: (args: {
       filePath: string
       connectionId?: string

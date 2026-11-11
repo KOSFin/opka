@@ -8,6 +8,7 @@ import { AddRepoServerPathStartStep } from './AddRepoServerStartStep'
 import { AddRepoNestedImportStep } from './AddRepoNestedImportStep'
 import type { AddRepoDialogStep } from './add-repo-dialog-types'
 import type { NestedRepoScanResult } from '../../../../shared/project-group-types'
+import type { BoundGitCloneChoice } from '../../../../shared/git-network-binding'
 import type { SshConnectionState, SshTarget } from '../../../../shared/ssh-types'
 import type { GitAvailability } from './create-project-defaults'
 
@@ -26,6 +27,7 @@ type AddRepoDialogStepContentProps = {
   isAddingServerPath: boolean
   cloneUrl: string
   cloneDestination: string
+  cloneChoice: BoundGitCloneChoice | null
   cloneError: string | null
   cloneProgress: { phase: string; percent: number } | null
   isCloning: boolean
@@ -62,6 +64,7 @@ type AddRepoDialogStepContentProps = {
   onAddRemoteRepo: () => void
   onConnectTarget: (id: string) => Promise<void>
   onCloneUrlChange: (url: string) => void
+  onCloneChoiceChange: (choice: BoundGitCloneChoice | null) => void
   onCloneDestinationChange: (destination: string) => void
   onPickCloneDestination: () => void
   onClone: () => void
@@ -89,6 +92,7 @@ export function AddRepoDialogStepContent({
   isAddingServerPath,
   cloneUrl,
   cloneDestination,
+  cloneChoice,
   cloneError,
   cloneProgress,
   isCloning,
@@ -125,6 +129,7 @@ export function AddRepoDialogStepContent({
   onAddRemoteRepo,
   onConnectTarget,
   onCloneUrlChange,
+  onCloneChoiceChange,
   onCloneDestinationChange,
   onPickCloneDestination,
   onClone,
@@ -205,6 +210,7 @@ export function AddRepoDialogStepContent({
       <CloneStep
         cloneUrl={cloneUrl}
         cloneDestination={cloneDestination}
+        cloneChoice={cloneChoice}
         cloneError={cloneError}
         cloneProgress={cloneProgress}
         isCloning={isCloning}
@@ -212,6 +218,7 @@ export function AddRepoDialogStepContent({
         runtimeEnvironmentId={activeRuntimeEnvironmentId}
         cloneTargetLabel={isRuntimeEnvironmentActive ? selectedHostLabel : null}
         onUrlChange={onCloneUrlChange}
+        onChoiceChange={onCloneChoiceChange}
         onDestChange={onCloneDestinationChange}
         onPickDestination={onPickCloneDestination}
         onClone={onClone}

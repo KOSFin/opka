@@ -1,0 +1,1862 @@
+--- a/internal/api/middleware/request_logging.go
++++ b/internal/api/middleware/request_logging.go
+@@ -11,0 +12 @@
++	"net"
+@@ -39,0 +41,8 @@
++		}
++		if c.Request != nil && c.Request.Header.Get("X-Orca-Native-Replay-V1") == "1" {
++			host, _, splitErr := net.SplitHostPort(c.Request.RemoteAddr)
++			if splitErr == nil && net.ParseIP(host).IsLoopback() && c.Request.Method == http.MethodPost &&
++				(c.Request.URL.Path == "/v1/responses" || c.Request.URL.Path == "/v1/responses/compact") {
++				c.Next()
++				return
++			}
+--- a/internal/api/server_middleware.go
++++ b/internal/api/server_middleware.go
+@@ -316,0 +317,8 @@
++		if c.Request.Header.Get(handlers.SeekableReplayHeader) == "1" && c.Request.Method == http.MethodPost &&
++			(c.Request.URL.Path == "/v1/responses" || c.Request.URL.Path == "/v1/responses/compact") {
++			host, _, splitErr := net.SplitHostPort(c.Request.RemoteAddr)
++			if splitErr == nil && net.ParseIP(host).IsLoopback() {
++				c.Next()
++				return
++			}
++		}
+--- a/internal/pluginhost/snapshot.go
++++ b/internal/pluginhost/snapshot.go
+@@ -56,0 +57,4 @@
++}
++
++func (h *Host) HasActivePlugins() bool {
++	return h != nil && len(h.activeRecords()) > 0
+--- a/internal/runtime/executor/codex_executor_execute.go
++++ b/internal/runtime/executor/codex_executor_execute.go
+@@ -20,0 +21,3 @@
++	if opts.Alt != "responses/compact" && (req.SeekablePayload != nil || opts.OriginalSeekableRequest != nil) {
++		return resp, statusErr{code: http.StatusUnprocessableEntity, msg: "seekable non-stream Responses needs a bounded upstream translator before provider execution"}
++	}
+@@ -141 +144,8 @@
+-		b, _ := io.ReadAll(httpResp.Body)
++		bodyReader := io.Reader(httpResp.Body)
++		if req.SeekablePayload != nil {
++			bodyReader = io.LimitReader(bodyReader, 1<<20+1)
++		}
++		b, _ := io.ReadAll(bodyReader)
++		if req.SeekablePayload != nil && len(b) > 1<<20 {
++			return resp, statusErr{code: http.StatusBadGateway, msg: "seekable upstream error exceeds its diagnostic budget"}
++		}
+@@ -235,0 +246,11 @@
++	ctx = cliproxyexecutor.BeginSeekableProviderAttempt(ctx)
++	var seekableShadow cliproxyexecutor.SeekableJSONShadow
++	if req.SeekablePayload != nil || opts.OriginalSeekableRequest != nil {
++		seekableShadow, err = prepareSeekableCodexPayload(ctx, &req, &opts)
++		if err != nil {
++			return resp, err
++		}
++		if opts.SeekableBudget == nil {
++			return resp, statusErr{code: http.StatusUnprocessableEntity, msg: "seekable compact response budget is missing"}
++		}
++	}
+@@ -293,0 +315,5 @@
++	if req.SeekablePayload != nil {
++		if err = attachSeekableCodexBody(ctx, req.SeekablePayload, seekableShadow, upstreamBody, httpReq); err != nil {
++			return resp, err
++		}
++	}
+@@ -302,0 +329,7 @@
++	var cancelCompactRequest context.CancelFunc
++	if req.SeekablePayload != nil {
++		requestCtx, cancel := context.WithCancel(httpReq.Context())
++		httpReq = httpReq.WithContext(requestCtx)
++		cancelCompactRequest = cancel
++		defer cancel()
++	}
+@@ -322 +355,9 @@
+-	httpResp, err := doCodexRequest(httpClient, httpReq, upstreamBody, prepareHeaders, nil)
++	var rawCompactProviderBody io.ReadCloser
++	var httpResp *http.Response
++	if req.SeekablePayload != nil {
++		httpResp, err = doCodexRequestWithDecoder(httpClient, httpReq, upstreamBody, prepareHeaders, func(response *http.Response) {
++			rawCompactProviderBody = response.Body
++		}, decodeCodexSeekableCompactUpstreamResponse)
++	} else {
++		httpResp, err = doCodexRequest(httpClient, httpReq, upstreamBody, prepareHeaders, nil)
++	}
+@@ -334 +375,17 @@
+-		b, _ := io.ReadAll(httpResp.Body)
++		bodyReader := io.Reader(httpResp.Body)
++		if req.SeekablePayload != nil {
++			bodyReader = io.LimitReader(bodyReader, 1<<20+1)
++		}
++		b, readErr := io.ReadAll(bodyReader)
++		if req.SeekablePayload != nil && len(b) > 1<<20 {
++			return resp, statusErr{code: http.StatusBadGateway, msg: "seekable upstream error exceeds its diagnostic budget"}
++		}
++		if req.SeekablePayload != nil && readErr != nil {
++			return resp, readErr
++		}
++		if req.SeekablePayload != nil {
++			if rawErr := requireCodexRawProviderEOF(rawCompactProviderBody, cancelCompactRequest); rawErr != nil {
++				return resp, statusErr{code: http.StatusBadGateway, msg: "seekable upstream error did not reach provider EOF"}
++			}
++			cliproxyexecutor.MarkSeekableProviderTerminalProof(ctx)
++		}
+@@ -338,0 +396,33 @@
++	}
++	if req.SeekablePayload != nil {
++		upstream, ingestErr := opts.SeekableBudget.IngestSeekableResponse(ctx, httpResp.Body)
++		if ingestErr != nil {
++			return resp, ingestErr
++		}
++		defer upstream.Close()
++		if terminalErr := requireCodexRawProviderEOF(rawCompactProviderBody, cancelCompactRequest); terminalErr != nil {
++			return resp, statusErr{code: http.StatusBadGateway, msg: "seekable compact response did not end with its decoded window"}
++		}
++		responseShadow, shadowErr := cliproxyexecutor.BuildSeekableJSONShadow(ctx, upstream)
++		if shadowErr != nil {
++			return resp, shadowErr
++		}
++		upstreamData := helps.RestoreCodexMultiAgentV2Response(responseShadow.JSON, optimizeMultiAgentV2)
++		var param any
++		out := sdktranslator.TranslateNonStream(ctx, to, responseFormat, req.Model, originalPayload, body, upstreamData, &param)
++		if helps.ApplyPatchTranslationError(param) != nil || len(out) == 0 {
++			return resp, statusErr{code: http.StatusBadGateway, msg: helps.ApplyPatchUpstreamErrorMessage}
++		}
++		reporter.Publish(ctx, helps.ParseOpenAIUsage(responseShadow.JSON))
++		if responseFormat == sdktranslator.FormatOpenAIResponse {
++			out = helps.EnsureResponsesUsageDetails(out)
++		}
++		complete, responseErr := reconstituteSeekableCodexResponse(ctx, opts.SeekableBudget, upstream, responseShadow, out)
++		if responseErr != nil {
++			return resp, responseErr
++		}
++		cliproxyexecutor.MarkSeekableProviderTerminalProof(ctx)
++		headers := httpResp.Header.Clone()
++		headers.Del("Content-Encoding")
++		headers.Del("Content-Length")
++		return cliproxyexecutor.Response{SeekablePayload: complete, Headers: headers}, nil
+--- /dev/null
++++ b/internal/runtime/executor/codex_executor_raw_provider_eof_test.go
+@@ -0,0 +1,106 @@
++package executor
++
++import (
++	"bytes"
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"sync"
++	"testing"
++	"time"
++
++	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
++)
++
++func TestSeekableCompactRawProviderEOFBeforeTerminalProof(t *testing.T) {
++	for _, status := range []int{http.StatusOK, http.StatusTooManyRequests} {
++		t.Run(http.StatusText(status), func(t *testing.T) {
++			const content = `{"output":[{"type":"compaction","encrypted_content":"synthetic"}]}`
++			release := make(chan struct{})
++			var releaseOnce sync.Once
++			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++				w.Header().Set("Content-Type", "application/json")
++				w.WriteHeader(status)
++				_, _ = io.WriteString(w, content)
++				w.(http.Flusher).Flush()
++				<-release
++			}))
++			defer func() {
++				releaseOnce.Do(func() { close(release) })
++				server.Close()
++			}()
++			requestCtx, cancel := context.WithCancel(context.Background())
++			defer cancel()
++			proofCtx, proof := cliproxyexecutor.WithSeekableProviderTerminalProof(requestCtx)
++			attempt := cliproxyexecutor.BeginSeekableProviderAttempt(proofCtx)
++			request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, server.URL, bytes.NewReader([]byte(`{"model":"synthetic"}`)))
++			if err != nil {
++				t.Fatal(err)
++			}
++			var raw io.ReadCloser
++			response, err := doCodexRequestWithDecoder(server.Client(), request, []byte(`{"model":"synthetic"}`), func(*http.Request) {}, func(received *http.Response) {
++				raw = received.Body
++			}, func(received *http.Response) error {
++				received.Body = io.NopCloser(io.LimitReader(received.Body, int64(len(content))))
++				return nil
++			})
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer response.Body.Close()
++			defer raw.Close()
++			body, err := io.ReadAll(response.Body)
++			if err != nil || string(body) != content || proof.Complete() {
++				t.Fatalf("decoded window or initial proof invalid: read=%v complete=%v", err, proof.Complete())
++			}
++			terminal := make(chan error, 1)
++			go func() { terminal <- requireCodexRawProviderEOF(raw, cancel) }()
++			select {
++			case err := <-terminal:
++				t.Fatalf("raw provider reported EOF while its owner was held: %v", err)
++			case <-time.After(50 * time.Millisecond):
++			}
++			if proof.Complete() {
++				t.Fatal("decoded JSON alone certified provider terminal state")
++			}
++			releaseOnce.Do(func() { close(release) })
++			select {
++			case err := <-terminal:
++				if err != nil {
++					t.Fatal(err)
++				}
++			case <-time.After(2 * time.Second):
++				t.Fatal("raw provider EOF did not settle")
++			}
++			cliproxyexecutor.MarkSeekableProviderTerminalProof(attempt)
++			if !proof.Complete() {
++				t.Fatal("proven provider terminal state was not recorded")
++			}
++		})
++	}
++}
++
++func TestSeekableCompactRawProviderTailIsRefused(t *testing.T) {
++	if err := requireCodexRawProviderEOF(io.NopCloser(bytes.NewReader([]byte("extra"))), func() {}); err == nil {
++		t.Fatal("raw provider tail was discarded")
++	}
++	if err := requireCodexRawProviderEOF(io.NopCloser(bytes.NewReader(nil)), func() {}); err != nil {
++		t.Fatal(err)
++	}
++}
++
++func TestSeekableCompactRawProviderEOFDeadlineClosesBody(t *testing.T) {
++	reader, writer := io.Pipe()
++	defer writer.Close()
++	cancelled := make(chan struct{})
++	err := requireCodexRawProviderEOFWithin(reader, func() { close(cancelled) }, 20*time.Millisecond)
++	select {
++	case <-cancelled:
++	default:
++		t.Fatal("held raw provider did not cancel")
++	}
++	if err == nil {
++		t.Fatal("held raw provider was accepted after deadline")
++	}
++}
+--- a/internal/runtime/executor/codex_executor_request.go
++++ b/internal/runtime/executor/codex_executor_request.go
+@@ -12,0 +13 @@
++	"time"
+@@ -276,0 +278,14 @@
++	return decodeCodexUpstreamResponseWith(resp, helps.DecodeResponseBody)
++}
++
++func decodeCodexSeekableCompactUpstreamResponse(resp *http.Response) error {
++	if resp != nil && resp.Uncompressed {
++		if resp.Body != nil {
++			_ = resp.Body.Close()
++		}
++		return fmt.Errorf("seekable compact requires undecoded provider body")
++	}
++	return decodeCodexUpstreamResponseWith(resp, helps.DecodeSeekableCompactResponseBody)
++}
++
++func decodeCodexUpstreamResponseWith(resp *http.Response, decode func(io.ReadCloser, http.Header) (io.ReadCloser, error)) error {
+@@ -280 +295 @@
+-	decoded, errDecode := helps.DecodeResponseBody(resp.Body, resp.Header)
++	decoded, errDecode := decode(resp.Body, resp.Header)
+@@ -290,0 +306,23 @@
++func requireCodexRawProviderEOF(body io.ReadCloser, cancel context.CancelFunc) error {
++	return requireCodexRawProviderEOFWithin(body, cancel, 30*time.Second)
++}
++
++func requireCodexRawProviderEOFWithin(body io.ReadCloser, cancel context.CancelFunc, wait time.Duration) error {
++	if body == nil || cancel == nil {
++		return fmt.Errorf("seekable provider body or cancel owner is missing")
++	}
++	deadline := time.AfterFunc(wait, func() {
++		cancel()
++		_ = body.Close()
++	})
++	var probe [1]byte
++	count, errRead := body.Read(probe[:])
++	if !deadline.Stop() {
++		return fmt.Errorf("seekable provider EOF deadline elapsed")
++	}
++	if count != 0 || errRead != io.EOF {
++		return fmt.Errorf("seekable provider body did not reach EOF")
++	}
++	return nil
++}
++
+@@ -292,0 +331,4 @@
++	return doCodexRequestWithDecoder(client, req, upstreamBody, prepareHeaders, responseReady, decodeCodexUpstreamResponse)
++}
++
++func doCodexRequestWithDecoder(client *http.Client, req *http.Request, upstreamBody []byte, prepareHeaders func(*http.Request), responseReady func(*http.Response), decode func(*http.Response) error) (*http.Response, error) {
+@@ -302 +344 @@
+-	if errDecode := decodeCodexUpstreamResponse(resp); errDecode != nil {
++	if errDecode := decode(resp); errDecode != nil {
+@@ -326 +368 @@
+-	if errDecode := decodeCodexUpstreamResponse(resp); errDecode != nil {
++	if errDecode := decode(resp); errDecode != nil {
+--- /dev/null
++++ b/internal/runtime/executor/codex_executor_seekable.go
+@@ -0,0 +1,74 @@
++package executor
++
++import (
++	"bytes"
++	"context"
++	"io"
++	"net/http"
++
++	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
++	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
++)
++
++func prepareSeekableCodexPayload(ctx context.Context, req *cliproxyexecutor.Request, opts *cliproxyexecutor.Options) (cliproxyexecutor.SeekableJSONShadow, error) {
++	if req.SeekablePayload == nil || opts.OriginalSeekableRequest == nil ||
++		!bytes.Equal(opts.SeekableShadow.JSON, opts.SeekableShadowJSON) || opts.SourceFormat != sdktranslator.FormatOpenAIResponse {
++		return cliproxyexecutor.SeekableJSONShadow{}, statusErr{code: http.StatusUnprocessableEntity, msg: "seekable request changed before provider selection"}
++	}
++	shadow := opts.SeekableShadow
++	if _, err := cliproxyexecutor.WriteReconstitutedJSON(ctx, req.SeekablePayload, shadow, req.Payload, io.Discard); err != nil {
++		return shadow, statusErr{code: http.StatusUnprocessableEntity, msg: err.Error()}
++	}
++	return shadow, nil
++}
++
++func attachSeekableCodexBody(ctx context.Context, body cliproxyexecutor.SeekableBody, shadow cliproxyexecutor.SeekableJSONShadow, transformed []byte, request *http.Request) error {
++	if _, err := cliproxyexecutor.WriteReconstitutedJSON(ctx, body, shadow, transformed, io.Discard); err != nil {
++		return statusErr{code: http.StatusUnprocessableEntity, msg: err.Error()}
++	}
++	length, err := shadow.ReconstitutedLength(transformed)
++	if err != nil {
++		return statusErr{code: http.StatusUnprocessableEntity, msg: err.Error()}
++	}
++	open := func() (io.ReadCloser, error) {
++		reader, writer := io.Pipe()
++		go func() {
++			_, copyErr := cliproxyexecutor.WriteReconstitutedJSON(ctx, body, shadow, transformed, writer)
++			_ = writer.CloseWithError(copyErr)
++		}()
++		return reader, nil
++	}
++	_ = request.Body.Close()
++	request.Body, _ = open()
++	request.GetBody = open
++	request.ContentLength = length
++	request.Header.Del("Content-Encoding")
++	return nil
++}
++
++func reconstituteSeekableCodexResponse(ctx context.Context, budget *cliproxyexecutor.SeekableBodyBudget, source cliproxyexecutor.SeekableBody, shadow cliproxyexecutor.SeekableJSONShadow, transformed []byte) (cliproxyexecutor.SeekableBody, error) {
++	if budget == nil {
++		return nil, statusErr{code: http.StatusUnprocessableEntity, msg: "seekable response budget is missing"}
++	}
++	if _, err := cliproxyexecutor.WriteReconstitutedJSON(ctx, source, shadow, transformed, io.Discard); err != nil {
++		return nil, err
++	}
++	reader, writer := io.Pipe()
++	done := make(chan error, 1)
++	go func() {
++		_, err := cliproxyexecutor.WriteReconstitutedJSON(ctx, source, shadow, transformed, writer)
++		_ = writer.CloseWithError(err)
++		done <- err
++	}()
++	complete, ingestErr := budget.IngestSeekableResponse(ctx, reader)
++	_ = reader.CloseWithError(ingestErr)
++	writeErr := <-done
++	if ingestErr != nil {
++		return nil, ingestErr
++	}
++	if writeErr != nil {
++		_ = complete.Close()
++		return nil, writeErr
++	}
++	return complete, nil
++}
+--- /dev/null
++++ b/internal/runtime/executor/codex_executor_seekable_test.go
+@@ -0,0 +1,144 @@
++package executor
++
++import (
++	"context"
++	"crypto/sha256"
++	"encoding/hex"
++	"io"
++	"net/http"
++	"strings"
++	"testing"
++
++	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
++	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
++)
++
++func TestSeekableCompactResponseRetainsOpaqueAndVisibleItems(t *testing.T) {
++	budget, err := cliproxyexecutor.NewSeekableBodyBudget(512 << 20)
++	if err != nil {
++		t.Fatal(err)
++	}
++	const before = `{"id":"synthetic","object":"response","output":[{"type":"compaction","encrypted_content":"`
++	const after = `"},{"type":"message","content":[{"type":"output_text","text":"retain this item"}]}],"usage":{"input_tokens":2,"output_tokens":1}}`
++	const largeBytes = 72 << 20
++	makeReader := func() io.Reader {
++		return io.MultiReader(strings.NewReader(before), io.LimitReader(repeatedSyntheticByte{}, largeBytes), strings.NewReader(after))
++	}
++	want := sha256.New()
++	if _, err = io.Copy(want, makeReader()); err != nil {
++		t.Fatal(err)
++	}
++	upstream, err := budget.IngestSeekableResponse(context.Background(), makeReader())
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer upstream.Close()
++	shadow, err := cliproxyexecutor.BuildSeekableJSONShadow(context.Background(), upstream)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(shadow.Markers) != 1 || len(shadow.JSON) >= 1<<20 {
++		t.Fatalf("compact shadow bytes=%d markers=%d", len(shadow.JSON), len(shadow.Markers))
++	}
++	request := []byte(`{"model":"native","input":[]}`)
++	var param any
++	out := sdktranslator.TranslateNonStream(context.Background(), sdktranslator.FormatOpenAIResponse, sdktranslator.FormatOpenAIResponse, "native", request, request, shadow.JSON, &param)
++	if len(out) == 0 {
++		t.Fatal("compact translator discarded the response")
++	}
++	complete, err := reconstituteSeekableCodexResponse(context.Background(), budget, upstream, shadow, out)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer complete.Close()
++	stream, err := complete.Open()
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer stream.Close()
++	actual := sha256.New()
++	if _, err = io.Copy(actual, stream); err != nil {
++		t.Fatal(err)
++	}
++	if hex.EncodeToString(actual.Sum(nil)) != hex.EncodeToString(want.Sum(nil)) {
++		t.Fatal("compact output did not retain the complete canonical window")
++	}
++}
++
++func TestSeekableRequestPreservesOpaqueHistoryAfterHandlerMutation(t *testing.T) {
++	budget, err := cliproxyexecutor.NewSeekableBodyBudget(256 << 20)
++	if err != nil {
++		t.Fatal(err)
++	}
++	const before = `{"model":"native","input":[{"content":"`
++	const after = `"}],"metadata":{"user":"synthetic"}}`
++	reader := io.MultiReader(strings.NewReader(before), io.LimitReader(repeatedSyntheticByte{}, 20<<20), strings.NewReader(after))
++	body, err := budget.IngestSeekableResponse(context.Background(), reader)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer body.Close()
++	shadow, err := cliproxyexecutor.BuildSeekableJSONShadow(context.Background(), body)
++	if err != nil {
++		t.Fatal(err)
++	}
++	mutated := []byte(strings.Replace(string(shadow.JSON), `"synthetic"`, `"changed"`, 1))
++	req := cliproxyexecutor.Request{Payload: mutated, SeekablePayload: body}
++	opts := cliproxyexecutor.Options{
++		OriginalSeekableRequest: body,
++		SeekableShadowJSON:      shadow.JSON,
++		SeekableShadow:          shadow,
++		SourceFormat:            sdktranslator.FormatOpenAIResponse,
++	}
++	prepared, err := prepareSeekableCodexPayload(context.Background(), &req, &opts)
++	if err != nil {
++		t.Fatal(err)
++	}
++	httpRequest, err := http.NewRequest(http.MethodPost, "http://127.0.0.1/v1/responses", strings.NewReader("{}"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := attachSeekableCodexBody(context.Background(), body, prepared, mutated, httpRequest); err != nil {
++		t.Fatal(err)
++	}
++	defer httpRequest.Body.Close()
++	want := sha256.New()
++	_, _ = io.WriteString(want, before)
++	_, _ = io.Copy(want, io.LimitReader(repeatedSyntheticByte{}, 20<<20))
++	_, _ = io.WriteString(want, `"}],"metadata":{"user":"changed"}}`)
++	actual := sha256.New()
++	if _, err := io.Copy(actual, httpRequest.Body); err != nil {
++		t.Fatal(err)
++	}
++	if hex.EncodeToString(actual.Sum(nil)) != hex.EncodeToString(want.Sum(nil)) {
++		t.Fatal("request replay lost an opaque history item or bounded mutation")
++	}
++}
++
++func TestSeekableNonstreamRefusesBeforeProviderExecution(t *testing.T) {
++	budget, err := cliproxyexecutor.NewSeekableBodyBudget(256 << 20)
++	if err != nil {
++		t.Fatal(err)
++	}
++	body, err := budget.IngestSeekableResponse(context.Background(), strings.NewReader(`{"model":"native","input":[]}`))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer body.Close()
++	_, err = NewCodexExecutor(nil).Execute(context.Background(), nil, cliproxyexecutor.Request{
++		Payload: []byte(`{"model":"native","input":[]}`), SeekablePayload: body,
++	}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FormatOpenAIResponse})
++	status, ok := err.(statusErr)
++	if !ok || status.StatusCode() != http.StatusUnprocessableEntity {
++		t.Fatalf("seekable nonstream should refuse before provider execution: %v", err)
++	}
++}
++
++type repeatedSyntheticByte struct{}
++
++func (repeatedSyntheticByte) Read(chunk []byte) (int, error) {
++	for index := range chunk {
++		chunk[index] = 'A'
++	}
++	return len(chunk), nil
++}
+--- a/internal/runtime/executor/codex_executor_stream.go
++++ b/internal/runtime/executor/codex_executor_stream.go
+@@ -22,0 +23,8 @@
++	ctx = cliproxyexecutor.BeginSeekableProviderAttempt(ctx)
++	var seekableShadow cliproxyexecutor.SeekableJSONShadow
++	if req.SeekablePayload != nil || opts.OriginalSeekableRequest != nil {
++		seekableShadow, err = prepareSeekableCodexPayload(ctx, &req, &opts)
++		if err != nil {
++			return nil, err
++		}
++	}
+@@ -111,0 +120,5 @@
++	}
++	if req.SeekablePayload != nil {
++		if err = attachSeekableCodexBody(ctx, req.SeekablePayload, seekableShadow, upstreamBody, httpReq); err != nil {
++			return nil, err
++		}
+@@ -161 +174,9 @@
+-		data, readErr := io.ReadAll(httpResp.Body)
++		bodyReader := io.Reader(httpResp.Body)
++		if req.SeekablePayload != nil {
++			bodyReader = io.LimitReader(bodyReader, 1<<20+1)
++		}
++		data, readErr := io.ReadAll(bodyReader)
++		if req.SeekablePayload != nil && len(data) > 1<<20 {
++			_ = httpResp.Body.Close()
++			return nil, statusErr{code: http.StatusBadGateway, msg: "seekable upstream error exceeds its diagnostic budget"}
++		}
+@@ -167,0 +189,3 @@
++		}
++		if req.SeekablePayload != nil {
++			cliproxyexecutor.MarkSeekableProviderTerminalProof(ctx)
+@@ -416,0 +441 @@
++		cliproxyexecutor.MarkSeekableProviderTerminalProof(ctx)
+@@ -519,0 +545 @@
++				cliproxyexecutor.MarkSeekableProviderTerminalProof(ctx)
+--- a/internal/runtime/executor/helps/response_decode.go
++++ b/internal/runtime/executor/helps/response_decode.go
+@@ -50,0 +51,18 @@
++	return decodeResponseBody(body, header, 0)
++}
++
++// DecodeSeekableCompactResponseBody keeps the existing decoders within one
++// bounded replay window before a compact result can be published.
++func DecodeSeekableCompactResponseBody(body io.ReadCloser, header http.Header) (io.ReadCloser, error) {
++	if body == nil {
++		return nil, fmt.Errorf("response body is nil")
++	}
++	encodings := strings.Join(header.Values("Content-Encoding"), ",")
++	if len(encodings) > 128 || len(strings.Split(encodings, ",")) > 4 {
++		_ = body.Close()
++		return nil, fmt.Errorf("seekable compact response has too many encoding layers")
++	}
++	return decodeResponseBody(body, header, 32<<20)
++}
++
++func decodeResponseBody(body io.ReadCloser, header http.Header, maxZstdWindow uint64) (io.ReadCloser, error) {
+@@ -64 +82 @@
+-		return &sniffedResponseBody{body: &peekableBody{Reader: bufio.NewReader(body), closer: body}}, nil
++		return &sniffedResponseBody{body: &peekableBody{Reader: bufio.NewReader(body), closer: body}, maxZstdWindow: maxZstdWindow}, nil
+@@ -103 +121 @@
+-			decoder, errZstd := newResponseZstdReader(reader)
++			decoder, errZstd := newResponseZstdReader(reader, maxZstdWindow)
+@@ -153,2 +171,6 @@
+-func newResponseZstdReader(reader io.Reader) (*zstd.Decoder, error) {
+-	return zstd.NewReader(reader, zstd.WithDecoderConcurrency(1))
++func newResponseZstdReader(reader io.Reader, maxWindow uint64) (*zstd.Decoder, error) {
++	options := []zstd.DOption{zstd.WithDecoderConcurrency(1)}
++	if maxWindow > 0 {
++		options = append(options, zstd.WithDecoderMaxMemory(maxWindow), zstd.WithDecoderMaxWindow(maxWindow))
++	}
++	return zstd.NewReader(reader, options...)
+@@ -161,6 +183,7 @@
+-	body    *peekableBody
+-	once    sync.Once
+-	mu      sync.Mutex
+-	reader  io.Reader
+-	decoder func() error
+-	err     error
++	body          *peekableBody
++	maxZstdWindow uint64
++	once          sync.Once
++	mu            sync.Mutex
++	reader        io.Reader
++	decoder       func() error
++	err           error
+@@ -194 +217 @@
+-		decoder, errZstd := newResponseZstdReader(s.body)
++		decoder, errZstd := newResponseZstdReader(s.body, s.maxZstdWindow)
+--- a/internal/runtime/executor/helps/response_decode_test.go
++++ b/internal/runtime/executor/helps/response_decode_test.go
+@@ -103,0 +104,88 @@
++func TestDecodeSeekableCompactResponseBody(t *testing.T) {
++	plain := []byte(`{"output":[{"type":"compaction","encrypted_content":"` + string(bytes.Repeat([]byte("A"), 1<<20)) + `"},{"type":"message","content":"retained"}]}`)
++	for _, tt := range []struct {
++		name      string
++		encodings []string
++		header    http.Header
++	}{
++		{name: "plain"},
++		{name: "gzip", encodings: []string{"gzip"}, header: http.Header{"Content-Encoding": {"gzip"}}},
++		{name: "gzip-sniff", encodings: []string{"gzip"}},
++		{name: "deflate", encodings: []string{"deflate"}, header: http.Header{"Content-Encoding": {"deflate"}}},
++		{name: "brotli", encodings: []string{"br"}, header: http.Header{"Content-Encoding": {"br"}}},
++		{name: "zstd", encodings: []string{"zstd"}, header: http.Header{"Content-Encoding": {"zstd"}}},
++		{name: "zstd-sniff", encodings: []string{"zstd"}},
++		{name: "stacked", encodings: []string{"gzip", "br", "zstd"}, header: http.Header{"Content-Encoding": {"gzip, br, zstd"}}},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			wire := plain
++			for _, encoding := range tt.encodings {
++				wire = encodeResponseDecodeTestBody(t, encoding, wire)
++			}
++			body := &responseDecodeTestBody{Reader: bytes.NewReader(wire)}
++			decoded, errDecode := DecodeSeekableCompactResponseBody(body, tt.header)
++			if errDecode != nil {
++				t.Fatal(errDecode)
++			}
++			got, errRead := io.ReadAll(decoded)
++			errClose := decoded.Close()
++			if errRead != nil || errClose != nil || !bytes.Equal(got, plain) || body.closeCount != 1 {
++				t.Fatalf("compact decode mismatch: read=%v close=%v length=%d closed=%d", errRead, errClose, len(got), body.closeCount)
++			}
++		})
++	}
++}
++
++func TestDecodeSeekableCompactResponseBodyRejectsEncodingBomb(t *testing.T) {
++	body := &responseDecodeTestBody{Reader: bytes.NewReader([]byte("invalid"))}
++	if _, err := DecodeSeekableCompactResponseBody(body, http.Header{"Content-Encoding": {"gzip, br, zstd, gzip, br"}}); err == nil {
++		t.Fatal("too many layers accepted")
++	}
++	if body.closeCount != 1 {
++		t.Fatalf("rejected response closed source %d times", body.closeCount)
++	}
++	malformed := &responseDecodeTestBody{Reader: bytes.NewReader([]byte("invalid"))}
++	decoded, err := DecodeSeekableCompactResponseBody(malformed, http.Header{"Content-Encoding": {"zstd"}})
++	if err == nil {
++		_, err = io.Copy(io.Discard, decoded)
++		_ = decoded.Close()
++	}
++	if err == nil || malformed.closeCount != 1 {
++		t.Fatalf("malformed compressed compact accepted or leaked: err=%v closed=%d", err, malformed.closeCount)
++	}
++	sniffed := &responseDecodeTestBody{Reader: bytes.NewReader([]byte{0x28, 0xb5, 0x2f, 0xfd, 0x00})}
++	decoded, err = DecodeSeekableCompactResponseBody(sniffed, nil)
++	if err == nil {
++		_, err = io.Copy(io.Discard, decoded)
++		_ = decoded.Close()
++	}
++	if err == nil || sniffed.closeCount != 1 {
++		t.Fatalf("malformed sniffed compact accepted or leaked: err=%v closed=%d", err, sniffed.closeCount)
++	}
++}
++
++func TestDecodeSeekableCompactResponseBodyRejectsLargeZstdWindow(t *testing.T) {
++	var wire bytes.Buffer
++	encoder, err := zstd.NewWriter(&wire, zstd.WithWindowSize(64<<20), zstd.WithEncoderConcurrency(1))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err = encoder.Write(bytes.Repeat([]byte("W"), 64<<20)); err != nil {
++		t.Fatal(err)
++	}
++	if err = encoder.Close(); err != nil {
++		t.Fatal(err)
++	}
++	for _, header := range []http.Header{{"Content-Encoding": {"zstd"}}, nil} {
++		body := &responseDecodeTestBody{Reader: bytes.NewReader(wire.Bytes())}
++		decoded, errDecode := DecodeSeekableCompactResponseBody(body, header)
++		if errDecode == nil {
++			_, errDecode = io.Copy(io.Discard, decoded)
++			_ = decoded.Close()
++		}
++		if errDecode == nil || body.closeCount != 1 {
++			t.Fatalf("oversized zstd window accepted or leaked: err=%v closed=%d", errDecode, body.closeCount)
++		}
++	}
++}
++
+--- a/sdk/api/handlers/handlers.go
++++ b/sdk/api/handlers/handlers.go
+@@ -601,0 +602,7 @@
++		parentCtx = coreexecutor.InheritSeekableProviderTerminalProof(parentCtx, requestCtx)
++		if seekable, ok := seekableRequestFromContext(requestCtx); ok {
++			parentCtx = WithSeekableRequest(parentCtx, seekable)
++		}
++		if capture := seekableResponseCaptureFromContext(requestCtx); capture != nil {
++			parentCtx = WithSeekableResponseCapture(parentCtx, capture)
++		}
+--- a/sdk/api/handlers/handlers_execution.go
++++ b/sdk/api/handlers/handlers_execution.go
+@@ -56,0 +57,3 @@
++		if _, seekable := seekableRequestFromContext(ctx); seekable {
++			return nil, nil, &interfaces.ErrorMessage{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Errorf("seekable native replay cannot use a plugin executor")}
++		}
+@@ -101,0 +105,9 @@
++	if seekable, ok := seekableRequestFromContext(ctx); ok {
++		req.SeekablePayload = seekable.Body
++		opts.OriginalSeekableRequest = seekable.Body
++		opts.SeekableBudget = seekable.Budget
++		opts.SeekableModelStart = seekable.ModelStart
++		opts.SeekableModelEnd = seekable.ModelEnd
++		opts.SeekableShadowJSON = seekable.ShadowJSON
++		opts.SeekableShadow = seekable.Shadow
++	}
+@@ -121,0 +134,12 @@
++	if resp.SeekablePayload != nil {
++		capture := seekableResponseCaptureFromContext(ctx)
++		if capture == nil || !h.SeekableReplayInterceptorsDisabled() {
++			_ = resp.SeekablePayload.Close()
++			errMsg := &interfaces.ErrorMessage{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Errorf("seekable response cannot enter a byte-only response interceptor")}
++			lifecycle.completeError(ctx, errMsg)
++			return nil, nil, errMsg
++		}
++		capture.Set(resp.SeekablePayload)
++		lifecycle.complete(pluginapi.RequestCompletionSucceeded, http.StatusOK, nil)
++		return nil, responseHeaders, nil
++	}
+--- a/sdk/api/handlers/handlers_interceptors.go
++++ b/sdk/api/handlers/handlers_interceptors.go
+@@ -354,0 +355,9 @@
++}
++
++func (h *BaseAPIHandler) SeekableReplayInterceptorsDisabled() bool {
++	host := h.interceptorHost()
++	if host == nil {
++		return true
++	}
++	detector, ok := host.(interface{ HasActivePlugins() bool })
++	return ok && !detector.HasActivePlugins()
+--- a/sdk/api/handlers/handlers_stream.go
++++ b/sdk/api/handlers/handlers_stream.go
+@@ -299,0 +300,6 @@
++		if _, seekable := seekableRequestFromContext(ctx); seekable {
++			errs := make(chan *interfaces.ErrorMessage, 1)
++			errs <- &interfaces.ErrorMessage{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Errorf("seekable native replay cannot use a plugin executor")}
++			close(errs)
++			return nil, nil, errs
++		}
+@@ -348,0 +355,9 @@
++	if seekable, ok := seekableRequestFromContext(ctx); ok {
++		req.SeekablePayload = seekable.Body
++		opts.OriginalSeekableRequest = seekable.Body
++		opts.SeekableBudget = seekable.Budget
++		opts.SeekableModelStart = seekable.ModelStart
++		opts.SeekableModelEnd = seekable.ModelEnd
++		opts.SeekableShadowJSON = seekable.ShadowJSON
++		opts.SeekableShadow = seekable.Shadow
++	}
+--- a/sdk/api/handlers/openai/openai_responses_handlers.go
++++ b/sdk/api/handlers/openai/openai_responses_handlers.go
+@@ -892,0 +893,4 @@
++	if c.Request.Header.Get(handlers.SeekableReplayHeader) == "1" {
++		h.responsesSeekable(c)
++		return
++	}
+@@ -917,0 +922,4 @@
++	if c.Request.Header.Get(handlers.SeekableReplayHeader) == "1" {
++		h.compactSeekable(c)
++		return
++	}
+@@ -962,0 +971,4 @@
++	if handlers.HasSeekableResponse(cliCtx) {
++		cliCancel()
++		return
++	}
+--- /dev/null
++++ b/sdk/api/handlers/openai/openai_responses_seekable.go
+@@ -0,0 +1,61 @@
++package openai
++
++import (
++	"bytes"
++	"errors"
++	"io"
++
++	"github.com/gin-gonic/gin"
++	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
++	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
++)
++
++// These wrappers retain the ordinary Responses route, auth manager and hooks.
++// The seekable body remains separate from the bounded routing shadow.
++func (h *OpenAIResponsesAPIHandler) responsesSeekable(c *gin.Context) {
++	h.withSeekableBody(c, false, h.Responses)
++}
++
++func (h *OpenAIResponsesAPIHandler) compactSeekable(c *gin.Context) {
++	h.withSeekableBody(c, true, h.Compact)
++}
++
++func (h *OpenAIResponsesAPIHandler) withSeekableBody(c *gin.Context, compact bool, next func(*gin.Context)) {
++	if !h.SeekableReplayInterceptorsDisabled() {
++		handlers.SeekableRequestError(c, errors.New("seekable replay does not support active interceptors"))
++		return
++	}
++	request, err := handlers.ReadSeekableRequest(c, compact)
++	if err != nil {
++		handlers.SeekableRequestError(c, err)
++		return
++	}
++	defer request.Body.Close()
++	capture := &handlers.SeekableResponseCapture{}
++	c.Request.Header.Del(handlers.SeekableReplayHeader)
++	c.Request.Header.Del("Content-Encoding")
++	ctx := handlers.WithSeekableRequest(c.Request.Context(), request)
++	ctx = handlers.WithSeekableResponseCapture(ctx, capture)
++	ctx, proof := cliproxyexecutor.WithSeekableProviderTerminalProof(ctx)
++	c.Request = c.Request.WithContext(ctx)
++	c.Request.Body = io.NopCloser(bytes.NewReader(request.ShadowJSON))
++	c.Request.ContentLength = int64(len(request.ShadowJSON))
++	c.Header("Trailer", "X-Orca-Provider-Terminal-V1")
++	next(c)
++	if proof.Complete() {
++		c.Writer.Header().Set("X-Orca-Provider-Terminal-V1", "1")
++	}
++	if response := capture.Take(); response != nil {
++		defer response.Close()
++		c.Writer.Header().Del("Content-Length")
++		stream, openErr := response.Open()
++		if openErr != nil {
++			handlers.SeekableRequestError(c, openErr)
++			return
++		}
++		defer stream.Close()
++		if _, copyErr := io.Copy(c.Writer, stream); copyErr != nil {
++			c.Header("Connection", "close")
++		}
++	}
++}
+--- /dev/null
++++ b/sdk/api/handlers/seekable_request.go
+@@ -0,0 +1,144 @@
++package handlers
++
++import (
++	"context"
++	"errors"
++	"net/http"
++	"strconv"
++	"strings"
++	"sync"
++
++	"github.com/MoeForge/moego/ojson"
++	"github.com/gin-gonic/gin"
++	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
++)
++
++const SeekableReplayHeader = "X-Orca-Native-Replay-V1"
++
++type seekableRequestKey struct{}
++type seekableResponseKey struct{}
++
++type SeekableResponseCapture struct {
++	mu   sync.Mutex
++	body coreexecutor.SeekableBody
++}
++
++func WithSeekableResponseCapture(ctx context.Context, capture *SeekableResponseCapture) context.Context {
++	return context.WithValue(ctx, seekableResponseKey{}, capture)
++}
++
++func seekableResponseCaptureFromContext(ctx context.Context) *SeekableResponseCapture {
++	capture, _ := ctx.Value(seekableResponseKey{}).(*SeekableResponseCapture)
++	return capture
++}
++
++func (c *SeekableResponseCapture) Set(body coreexecutor.SeekableBody) {
++	c.mu.Lock()
++	c.body = body
++	c.mu.Unlock()
++}
++
++func (c *SeekableResponseCapture) Take() coreexecutor.SeekableBody {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	body := c.body
++	c.body = nil
++	return body
++}
++
++func HasSeekableResponse(ctx context.Context) bool {
++	capture := seekableResponseCaptureFromContext(ctx)
++	if capture == nil {
++		return false
++	}
++	capture.mu.Lock()
++	defer capture.mu.Unlock()
++	return capture.body != nil
++}
++
++type SeekableRequest struct {
++	Body       coreexecutor.SeekableBody
++	Budget     *coreexecutor.SeekableBodyBudget
++	ShadowJSON []byte
++	Shadow     coreexecutor.SeekableJSONShadow
++	ModelStart int64
++	ModelEnd   int64
++}
++
++func WithSeekableRequest(ctx context.Context, request SeekableRequest) context.Context {
++	return context.WithValue(ctx, seekableRequestKey{}, request)
++}
++
++func seekableRequestFromContext(ctx context.Context) (SeekableRequest, bool) {
++	request, ok := ctx.Value(seekableRequestKey{}).(SeekableRequest)
++	return request, ok && request.Body != nil
++}
++
++var seekableBudgetOnce sync.Once
++var seekableBudget *coreexecutor.SeekableBodyBudget
++var seekableBudgetError error
++
++// ReadSeekableRequest admits a body only after the existing API-key middleware.
++// The authenticated local routing peer supplies bounded fields and a full-body
++// digest; the body stays private and is verified before any provider execution.
++func ReadSeekableRequest(c *gin.Context, compact bool) (SeekableRequest, error) {
++	if c == nil || c.Request == nil || c.Request.Header.Get(SeekableReplayHeader) != "1" {
++		return SeekableRequest{}, errors.New("seekable replay marker is missing")
++	}
++	if c.GetString("userApiKey") == "" {
++		return SeekableRequest{}, errors.New("seekable replay needs an authenticated local peer")
++	}
++	if encoding := c.Request.Header.Get("Content-Encoding"); encoding != "" && !strings.EqualFold(encoding, "identity") {
++		return SeekableRequest{}, errors.New("seekable replay does not support compressed ingress")
++	}
++	stream := c.Request.Header.Get("X-Orca-Native-Replay-Stream")
++	if stream != "true" && stream != "false" {
++		return SeekableRequest{}, errors.New("seekable replay stream mode is invalid")
++	}
++	if compact && stream != "false" {
++		return SeekableRequest{}, errors.New("compact replay cannot stream")
++	}
++	start, err := strconv.ParseInt(c.Request.Header.Get("X-Orca-Native-Replay-Model-Start"), 10, 64)
++	if err != nil || start < 0 {
++		return SeekableRequest{}, errors.New("seekable replay model offset is invalid")
++	}
++	end, err := strconv.ParseInt(c.Request.Header.Get("X-Orca-Native-Replay-Model-End"), 10, 64)
++	if err != nil || end <= start {
++		return SeekableRequest{}, errors.New("seekable replay model extent is invalid")
++	}
++	seekableBudgetOnce.Do(func() {
++		seekableBudget, seekableBudgetError = coreexecutor.NewSeekableBodyBudget(2 << 30)
++	})
++	if seekableBudgetError != nil {
++		return SeekableRequest{}, seekableBudgetError
++	}
++	body, err := seekableBudget.IngestSeekableBody(c.Request.Context(), c.Request.Body, c.Request.Header.Get("X-Orca-Native-Replay-SHA256"))
++	if err != nil {
++		return SeekableRequest{}, err
++	}
++	model, err := body.ReadJSONStringRange(start, end)
++	if err != nil || len(model) < 1 || len(model) > 300 || strings.ContainsAny(model, "\r\n") {
++		_ = body.Close()
++		return SeekableRequest{}, errors.New("seekable replay model range is invalid")
++	}
++	shadow, err := coreexecutor.BuildSeekableJSONShadow(c.Request.Context(), body)
++	if err != nil {
++		_ = body.Close()
++		return SeekableRequest{}, err
++	}
++	if ojson.GetBytesNoCopy(shadow.JSON, "model").String() != model ||
++		(ojson.GetBytesNoCopy(shadow.JSON, "stream").Type == ojson.True) != (stream == "true") {
++		_ = body.Close()
++		return SeekableRequest{}, errors.New("seekable replay routing metadata changed inside the body")
++	}
++	previous := ojson.GetBytesNoCopy(shadow.JSON, "previous_response_id")
++	if previous.Exists() && previous.Type != ojson.Null {
++		_ = body.Close()
++		return SeekableRequest{}, errors.New("seekable replay requires the complete local conversation history")
++	}
++	return SeekableRequest{Body: body, Budget: seekableBudget, ShadowJSON: shadow.JSON, Shadow: shadow, ModelStart: start, ModelEnd: end}, nil
++}
++
++func SeekableRequestError(c *gin.Context, err error) {
++	c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: ErrorDetail{Message: err.Error(), Type: "invalid_request_error"}})
++}
+--- a/sdk/cliproxy/auth/conductor_execution.go
++++ b/sdk/cliproxy/auth/conductor_execution.go
+@@ -624,0 +625,3 @@
++			if execReq.SeekablePayload != nil && executor.Identifier() != "codex" {
++				return cliproxyexecutor.Response{}, &Error{Code: "seekable_route_unsupported", Message: "seekable native replay requires the Codex executor", HTTPStatus: http.StatusUnprocessableEntity}
++			}
+--- a/sdk/cliproxy/auth/conductor_stream.go
++++ b/sdk/cliproxy/auth/conductor_stream.go
+@@ -428,0 +429,3 @@
++		if execReq.SeekablePayload != nil && executor.Identifier() != "codex" {
++			return nil, &Error{Code: "seekable_route_unsupported", Message: "seekable native replay requires the Codex executor", HTTPStatus: http.StatusUnprocessableEntity}
++		}
+--- /dev/null
++++ b/sdk/cliproxy/executor/seekable_body.go
+@@ -0,0 +1,283 @@
++package executor
++
++import (
++	"context"
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"os"
++	"runtime"
++	"sync"
++	"sync/atomic"
++)
++
++// SeekableBody is a request-scoped, replayable body owned by the execution host.
++// Each Open starts at byte zero; Close releases private storage after all attempts end.
++type SeekableBody interface {
++	Open() (io.ReadCloser, error)
++	Size() int64
++	ReadJSONStringRange(start, end int64) (string, error)
++	CopySpan(ctx context.Context, output io.Writer, start, end int64) (int64, error)
++	Close() error
++}
++
++const seekableChunkBytes = 64 * 1024
++
++type seekableProviderTerminalKey struct{}
++type seekableProviderAttemptKey struct{}
++
++type SeekableProviderTerminalProof struct {
++	current  atomic.Uint64
++	complete atomic.Uint64
++}
++
++func WithSeekableProviderTerminalProof(ctx context.Context) (context.Context, *SeekableProviderTerminalProof) {
++	proof := &SeekableProviderTerminalProof{}
++	return context.WithValue(ctx, seekableProviderTerminalKey{}, proof), proof
++}
++
++func InheritSeekableProviderTerminalProof(parent, request context.Context) context.Context {
++	if proof, ok := request.Value(seekableProviderTerminalKey{}).(*SeekableProviderTerminalProof); ok {
++		return context.WithValue(parent, seekableProviderTerminalKey{}, proof)
++	}
++	return parent
++}
++
++func BeginSeekableProviderAttempt(ctx context.Context) context.Context {
++	if proof, ok := ctx.Value(seekableProviderTerminalKey{}).(*SeekableProviderTerminalProof); ok {
++		return context.WithValue(ctx, seekableProviderAttemptKey{}, proof.current.Add(1))
++	}
++	return ctx
++}
++
++func MarkSeekableProviderTerminalProof(ctx context.Context) {
++	proof, hasProof := ctx.Value(seekableProviderTerminalKey{}).(*SeekableProviderTerminalProof)
++	attempt, hasAttempt := ctx.Value(seekableProviderAttemptKey{}).(uint64)
++	if hasProof && hasAttempt && attempt != 0 && ctx.Err() == nil && proof.current.Load() == attempt {
++		proof.complete.Store(attempt)
++	}
++}
++
++func (p *SeekableProviderTerminalProof) Complete() bool {
++	return p != nil && p.current.Load() != 0 && p.complete.Load() == p.current.Load()
++}
++
++// SeekableBodyBudget bounds all host-owned request and response replay files.
++// A reserve is charged before each write, including room for one transformed copy.
++type SeekableBodyBudget struct {
++	mu       sync.Mutex
++	capacity int64
++	reserved int64
++	active   int
++	large    int
++}
++
++func NewSeekableBodyBudget(capacity int64) (*SeekableBodyBudget, error) {
++	if capacity < 256<<20 {
++		return nil, errors.New("seekable body needs a finite aggregate disk budget")
++	}
++	return &SeekableBodyBudget{capacity: capacity}, nil
++}
++
++func (b *SeekableBodyBudget) reserve(body *privateSeekableBody, next int64) error {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	becomesLarge := !body.large && body.size+next > 16<<20
++	if becomesLarge && b.large >= 4 {
++		return errors.New("seekable body large admission is busy")
++	}
++	ceiling := b.capacity
++	if body.large || becomesLarge {
++		ceiling -= 64 << 20
++	}
++	if next <= 0 || next > (ceiling-b.reserved)/2 {
++		return errors.New("seekable body aggregate disk budget is busy")
++	}
++	if becomesLarge {
++		body.large = true
++		b.large++
++	}
++	b.reserved += 2 * next
++	return nil
++}
++
++func (b *SeekableBodyBudget) release(body *privateSeekableBody) {
++	b.mu.Lock()
++	b.reserved -= 2 * body.size
++	b.active--
++	if body.large {
++		b.large--
++	}
++	b.mu.Unlock()
++}
++
++func (b *SeekableBodyBudget) Snapshot() (active int, reserved int64) {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	return b.active, b.reserved
++}
++
++// IngestSeekableBody retains bytes on a private unlinked file. A process crash
++// closes the only descriptor, so request data cannot survive as an orphan file.
++func (b *SeekableBodyBudget) IngestSeekableBody(ctx context.Context, source io.Reader, expectedSHA256 string) (SeekableBody, error) {
++	if len(expectedSHA256) != sha256.Size*2 {
++		return nil, errors.New("seekable body digest is missing")
++	}
++	return b.ingest(ctx, source, expectedSHA256)
++}
++
++func (b *SeekableBodyBudget) IngestSeekableResponse(ctx context.Context, source io.Reader) (SeekableBody, error) {
++	return b.ingest(ctx, source, "")
++}
++
++func (b *SeekableBodyBudget) ingest(ctx context.Context, source io.Reader, expectedSHA256 string) (SeekableBody, error) {
++	if runtime.GOOS == "windows" {
++		return nil, errors.New("seekable body needs verified Windows owner-only ACLs")
++	}
++	b.mu.Lock()
++	if b.active >= 8 {
++		b.mu.Unlock()
++		return nil, errors.New("seekable body admission is busy")
++	}
++	b.active++
++	b.mu.Unlock()
++	body := &privateSeekableBody{budget: b}
++	defer func() {
++		if body.file == nil {
++			b.release(body)
++		}
++	}()
++	dir, err := os.MkdirTemp("", "cliproxy-native-replay-")
++	if err != nil {
++		return nil, err
++	}
++	file, err := os.CreateTemp(dir, "body-")
++	if err != nil {
++		_ = os.Remove(dir)
++		return nil, err
++	}
++	if err = os.Chmod(file.Name(), 0600); err == nil {
++		err = os.Remove(file.Name())
++	}
++	if err == nil {
++		err = os.Remove(dir)
++	}
++	if err != nil {
++		_ = file.Close()
++		_ = os.Remove(file.Name())
++		_ = os.Remove(dir)
++		return nil, err
++	}
++	body.file = file
++	digest := sha256.New()
++	chunk := make([]byte, seekableChunkBytes)
++	noProgress := 0
++	for {
++		if err = ctx.Err(); err != nil {
++			break
++		}
++		var count int
++		count, err = source.Read(chunk)
++		if count > 0 {
++			noProgress = 0
++			if reserveErr := b.reserve(body, int64(count)); reserveErr != nil {
++				err = reserveErr
++				break
++			}
++			body.size += int64(count)
++			if _, writeErr := file.Write(chunk[:count]); writeErr != nil {
++				err = writeErr
++				break
++			}
++			_, _ = digest.Write(chunk[:count])
++		} else if err == nil {
++			noProgress++
++			if noProgress >= 100 {
++				err = io.ErrNoProgress
++			}
++		}
++		if err != nil {
++			break
++		}
++	}
++	if err == io.EOF {
++		err = nil
++	}
++	if err == nil && expectedSHA256 != "" && hex.EncodeToString(digest.Sum(nil)) != expectedSHA256 {
++		err = errors.New("seekable body digest mismatch")
++	}
++	if err == nil {
++		err = file.Sync()
++	}
++	if err != nil {
++		_ = body.Close()
++		return nil, fmt.Errorf("seekable body admission: %w", err)
++	}
++	return body, nil
++}
++
++type privateSeekableBody struct {
++	mu     sync.Mutex
++	budget *SeekableBodyBudget
++	file   *os.File
++	size   int64
++	large  bool
++	closed bool
++}
++
++func (b *privateSeekableBody) Open() (io.ReadCloser, error) {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	if b.closed || b.file == nil {
++		return nil, errors.New("seekable body is closed")
++	}
++	return io.NopCloser(io.NewSectionReader(b.file, 0, b.size)), nil
++}
++
++func (b *privateSeekableBody) Size() int64 { return b.size }
++
++func (b *privateSeekableBody) ReadJSONStringRange(start, end int64) (string, error) {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	if b.closed || b.file == nil || start < 0 || end > b.size || end <= start || end-start > 4096 {
++		return "", errors.New("seekable model range is invalid")
++	}
++	raw := make([]byte, end-start)
++	if _, err := b.file.ReadAt(raw, start); err != nil {
++		return "", err
++	}
++	var actual string
++	if err := json.Unmarshal(raw, &actual); err != nil {
++		return "", errors.New("seekable model range is not a JSON string")
++	}
++	return actual, nil
++}
++
++func (b *privateSeekableBody) CopySpan(ctx context.Context, output io.Writer, start, end int64) (int64, error) {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	if b.closed || b.file == nil || start < 0 || end < start || end > b.size {
++		return 0, errors.New("seekable span is invalid")
++	}
++	return copySeekableBytes(ctx, output, io.NewSectionReader(b.file, start, end-start), end-start)
++}
++
++func (b *privateSeekableBody) Close() error {
++	b.mu.Lock()
++	if b.closed {
++		b.mu.Unlock()
++		return nil
++	}
++	b.closed = true
++	file := b.file
++	b.mu.Unlock()
++	var err error
++	if file != nil {
++		err = file.Close()
++	}
++	b.budget.release(b)
++	return err
++}
+--- /dev/null
++++ b/sdk/cliproxy/executor/seekable_body_test.go
+@@ -0,0 +1,202 @@
++package executor
++
++import (
++	"bytes"
++	"context"
++	"crypto/sha256"
++	"encoding/hex"
++	"io"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func TestSeekableBodyReplaysLargeOpaqueJSONWithoutResidentCopy(t *testing.T) {
++	budget, err := NewSeekableBodyBudget(512 << 20)
++	if err != nil {
++		t.Fatal(err)
++	}
++	const head = `{"model":"pool/native","input":[{"content":"`
++	const tail = `"}]}`
++	const largeBytes = 72 << 20
++	reader := func() io.Reader {
++		return io.MultiReader(strings.NewReader(head), io.LimitReader(repeatingA{}, largeBytes), strings.NewReader(tail))
++	}
++	originalDigest := sha256.New()
++	if _, err := io.Copy(originalDigest, reader()); err != nil {
++		t.Fatal(err)
++	}
++	body, err := budget.IngestSeekableBody(context.Background(), reader(), hex.EncodeToString(originalDigest.Sum(nil)))
++	if err != nil {
++		t.Fatal(err)
++	}
++	private := body.(*privateSeekableBody)
++	dir := filepath.Dir(private.file.Name())
++	if _, err := os.Stat(dir); !os.IsNotExist(err) {
++		t.Fatalf("private directory remained while the body was open: %v", err)
++	}
++	start := int64(len(`{"model":`))
++	end := start + int64(len(`"pool/native"`))
++	if model, err := body.ReadJSONStringRange(start, end); err != nil || model != "pool/native" {
++		t.Fatalf("model=%q, err=%v", model, err)
++	}
++	want := sha256.New()
++	_, _ = io.WriteString(want, `{"model":"native","input":[{"content":"`)
++	_, _ = io.Copy(want, io.LimitReader(repeatingA{}, largeBytes))
++	_, _ = io.WriteString(want, tail)
++	for attempt := 0; attempt < 2; attempt++ {
++		got := sha256.New()
++		count, err := WriteSeekableModel(context.Background(), body, start, end, "native", got)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if count != int64(len(head)+largeBytes+len(tail)-len(`"pool/native"`)+len(`"native"`)) {
++			t.Fatalf("attempt %d length=%d", attempt, count)
++		}
++		if hex.EncodeToString(got.Sum(nil)) != hex.EncodeToString(want.Sum(nil)) {
++			t.Fatalf("attempt %d changed opaque history", attempt)
++		}
++	}
++	shadow, err := BuildSeekableJSONShadow(context.Background(), body)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(shadow.Markers) != 1 || len(shadow.JSON) > 1<<20 {
++		t.Fatalf("shadow retained large content: markers=%d bytes=%d", len(shadow.Markers), len(shadow.JSON))
++	}
++	transformed := bytes.Replace(shadow.JSON, []byte(`"pool/native"`), []byte(`"native"`), 1)
++	rebuilt := sha256.New()
++	if _, err := WriteReconstitutedJSON(context.Background(), body, shadow, transformed, rebuilt); err != nil {
++		t.Fatal(err)
++	}
++	if hex.EncodeToString(rebuilt.Sum(nil)) != hex.EncodeToString(want.Sum(nil)) {
++		t.Fatal("reconstructed mutation lost opaque history")
++	}
++	if err := body.Close(); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := os.Stat(dir); !os.IsNotExist(err) {
++		t.Fatalf("private directory remained: %v", err)
++	}
++	if active, reserved := budget.Snapshot(); active != 0 || reserved != 0 {
++		t.Fatalf("budget active=%d reserved=%d", active, reserved)
++	}
++}
++
++func TestSeekableShadowRejectsInvalidOpaqueString(t *testing.T) {
++	for _, invalid := range []string{`\q`, `\u12xz`, string([]byte{0xc0, 0xaf}), string([]byte{0xed, 0xa0, 0x80}), "\n"} {
++		budget, err := NewSeekableBodyBudget(256 << 20)
++		if err != nil {
++			t.Fatal(err)
++		}
++		payload := []byte(`{"model":"native","input":[{"content":"` + strings.Repeat("a", 64<<10) + invalid + `"}]}`)
++		digest := sha256.Sum256(payload)
++		body, err := budget.IngestSeekableBody(context.Background(), bytes.NewReader(payload), hex.EncodeToString(digest[:]))
++		if err != nil {
++			t.Fatal(err)
++		}
++		if _, err := BuildSeekableJSONShadow(context.Background(), body); err == nil {
++			t.Fatalf("invalid opaque string was accepted: %q", invalid)
++		}
++		if err := body.Close(); err != nil {
++			t.Fatal(err)
++		}
++	}
++}
++
++func TestSeekableBodyCancelledAdmissionReleasesBudget(t *testing.T) {
++	budget, err := NewSeekableBodyBudget(256 << 20)
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx, cancel := context.WithCancel(context.Background())
++	reader := &cancelAfterFirstRead{cancel: cancel}
++	if _, err := budget.IngestSeekableResponse(ctx, reader); err == nil {
++		t.Fatal("cancelled admission completed")
++	}
++	if active, reserved := budget.Snapshot(); active != 0 || reserved != 0 {
++		t.Fatalf("cancelled body retained capacity: active=%d reserved=%d", active, reserved)
++	}
++}
++
++func TestSeekableSmallAdmissionUsesReservedHeadroom(t *testing.T) {
++	budget, err := NewSeekableBodyBudget(512 << 20)
++	if err != nil {
++		t.Fatal(err)
++	}
++	budget.mu.Lock()
++	budget.reserved = 448 << 20
++	budget.active = 1
++	budget.mu.Unlock()
++	payload := []byte(`{"model":"small","input":[]}`)
++	digest := sha256.Sum256(payload)
++	body, err := budget.IngestSeekableBody(context.Background(), bytes.NewReader(payload), hex.EncodeToString(digest[:]))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if active, reserved := budget.Snapshot(); active != 2 || reserved != 448<<20+2*int64(len(payload)) {
++		t.Fatalf("small work could not use reserved headroom: active=%d reserved=%d", active, reserved)
++	}
++	if err := body.Close(); err != nil {
++		t.Fatal(err)
++	}
++	if active, reserved := budget.Snapshot(); active != 1 || reserved != 448<<20 {
++		t.Fatalf("small work did not release its headroom: active=%d reserved=%d", active, reserved)
++	}
++}
++
++type cancelAfterFirstRead struct {
++	cancel context.CancelFunc
++	read   bool
++}
++
++func (r *cancelAfterFirstRead) Read(chunk []byte) (int, error) {
++	if r.read {
++		return 0, io.EOF
++	}
++	r.read = true
++	r.cancel()
++	chunk[0] = 'A'
++	return 1, nil
++}
++
++type repeatingA struct{}
++
++func (repeatingA) Read(chunk []byte) (int, error) {
++	for i := range chunk {
++		chunk[i] = 'A'
++	}
++	return len(chunk), nil
++}
++
++func TestSeekableProviderTerminalProofRequiresExplicitCurrentCompletion(t *testing.T) {
++	request, proof := WithSeekableProviderTerminalProof(context.Background())
++	if proof.Complete() {
++		t.Fatal("local response cannot prove provider termination")
++	}
++	parent := InheritSeekableProviderTerminalProof(context.Background(), request)
++	first := BeginSeekableProviderAttempt(parent)
++	cancelled, cancel := context.WithCancel(first)
++	cancel()
++	MarkSeekableProviderTerminalProof(cancelled)
++	if proof.Complete() {
++		t.Fatal("cancelled provider attempt cannot become terminal proof")
++	}
++	MarkSeekableProviderTerminalProof(first)
++	if !proof.Complete() {
++		t.Fatal("completed provider attempt did not propagate to its handler")
++	}
++	second := BeginSeekableProviderAttempt(parent)
++	if proof.Complete() {
++		t.Fatal("an earlier attempt cannot prove a new attempt is complete")
++	}
++	MarkSeekableProviderTerminalProof(first)
++	if proof.Complete() {
++		t.Fatal("a late earlier attempt cannot prove the current attempt is complete")
++	}
++	MarkSeekableProviderTerminalProof(second)
++	if !proof.Complete() {
++		t.Fatal("current attempt completion was not recorded")
++	}
++}
+--- /dev/null
++++ b/sdk/cliproxy/executor/seekable_json_shadow.go
+@@ -0,0 +1,232 @@
++package executor
++
++import (
++	"bufio"
++	"bytes"
++	"context"
++	"crypto/rand"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++)
++
++const (
++	seekableInlineStringBytes = 64 << 10
++	seekableShadowBytes       = 8 << 20
++	seekableShadowMarkers     = 4096
++)
++
++type SeekableJSONMarker struct {
++	Literal []byte
++	Start   int64
++	End     int64
++}
++
++type SeekableJSONShadow struct {
++	JSON    []byte
++	Markers []SeekableJSONMarker
++	Seed    string
++}
++
++func (s SeekableJSONShadow) ReconstitutedLength(transformed []byte) (int64, error) {
++	length := int64(len(transformed))
++	for _, marker := range s.Markers {
++		if bytes.Count(transformed, marker.Literal) != 1 {
++			return 0, errors.New("transformed seekable JSON changed an opaque value")
++		}
++		length += marker.End - marker.Start - int64(len(marker.Literal))
++	}
++	return length, nil
++}
++
++// BuildSeekableJSONShadow keeps JSON structure and small fields in memory while
++// leaving large string values on the private body. The caller must prove that
++// transformations do not depend on any omitted string before provider traffic.
++func BuildSeekableJSONShadow(ctx context.Context, body SeekableBody) (SeekableJSONShadow, error) {
++	if body == nil {
++		return SeekableJSONShadow{}, errors.New("seekable source is missing")
++	}
++	source, err := body.Open()
++	if err != nil {
++		return SeekableJSONShadow{}, err
++	}
++	defer source.Close()
++	var nonce [16]byte
++	if _, err := rand.Read(nonce[:]); err != nil {
++		return SeekableJSONShadow{}, err
++	}
++	seed := hex.EncodeToString(nonce[:])
++	reader := bufio.NewReaderSize(source, seekableChunkBytes)
++	var shadow bytes.Buffer
++	var pending bytes.Buffer
++	markers := make([]SeekableJSONMarker, 0)
++	var offset, stringStart int64
++	inString, escaped, omitted := false, false, false
++	unicodeDigits, utf8Remaining := 0, 0
++	var utf8NextMin, utf8NextMax byte
++	for {
++		if err := ctx.Err(); err != nil {
++			return SeekableJSONShadow{}, err
++		}
++		value, readErr := reader.ReadByte()
++		if readErr == io.EOF {
++			break
++		}
++		if readErr != nil {
++			return SeekableJSONShadow{}, readErr
++		}
++		if !inString {
++			if value == '"' {
++				inString, escaped, omitted = true, false, false
++				unicodeDigits, utf8Remaining = 0, 0
++				stringStart = offset
++				pending.Reset()
++				_ = pending.WriteByte(value)
++			} else {
++				_ = shadow.WriteByte(value)
++			}
++		} else {
++			if !omitted {
++				_ = pending.WriteByte(value)
++				if pending.Len() > seekableInlineStringBytes {
++					omitted = true
++					pending.Reset()
++				}
++			}
++			closing := false
++			switch {
++			case unicodeDigits > 0:
++				if !((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F')) {
++					return SeekableJSONShadow{}, errors.New("seekable JSON has an invalid unicode escape")
++				}
++				unicodeDigits--
++			case escaped:
++				escaped = false
++				if value == 'u' {
++					unicodeDigits = 4
++				} else if value != '"' && value != '\\' && value != '/' && value != 'b' && value != 'f' && value != 'n' && value != 'r' && value != 't' {
++					return SeekableJSONShadow{}, errors.New("seekable JSON has an invalid string escape")
++				}
++			case utf8Remaining > 0:
++				if value < utf8NextMin || value > utf8NextMax {
++					return SeekableJSONShadow{}, errors.New("seekable JSON has invalid UTF-8")
++				}
++				utf8Remaining--
++				utf8NextMin, utf8NextMax = 0x80, 0xbf
++			case value == '\\':
++				escaped = true
++			case value == '"':
++				closing = true
++			case value < 0x20:
++				return SeekableJSONShadow{}, errors.New("seekable JSON has an unescaped control byte")
++			case value >= 0x80:
++				switch {
++				case value >= 0xc2 && value <= 0xdf:
++					utf8Remaining, utf8NextMin, utf8NextMax = 1, 0x80, 0xbf
++				case value == 0xe0:
++					utf8Remaining, utf8NextMin, utf8NextMax = 2, 0xa0, 0xbf
++				case value >= 0xe1 && value <= 0xec, value >= 0xee && value <= 0xef:
++					utf8Remaining, utf8NextMin, utf8NextMax = 2, 0x80, 0xbf
++				case value == 0xed:
++					utf8Remaining, utf8NextMin, utf8NextMax = 2, 0x80, 0x9f
++				case value == 0xf0:
++					utf8Remaining, utf8NextMin, utf8NextMax = 3, 0x90, 0xbf
++				case value >= 0xf1 && value <= 0xf3:
++					utf8Remaining, utf8NextMin, utf8NextMax = 3, 0x80, 0xbf
++				case value == 0xf4:
++					utf8Remaining, utf8NextMin, utf8NextMax = 3, 0x80, 0x8f
++				default:
++					return SeekableJSONShadow{}, errors.New("seekable JSON has invalid UTF-8")
++				}
++			}
++			if closing {
++				inString = false
++				if omitted {
++					if len(markers) >= seekableShadowMarkers {
++						return SeekableJSONShadow{}, errors.New("seekable JSON has too many opaque values")
++					}
++					literal := []byte(fmt.Sprintf(`"__orca_replay_%s_%d__"`, seed, len(markers)))
++					_, _ = shadow.Write(literal)
++					markers = append(markers, SeekableJSONMarker{Literal: literal, Start: stringStart, End: offset + 1})
++				} else {
++					_, _ = shadow.Write(pending.Bytes())
++				}
++			}
++		}
++		offset++
++		if shadow.Len() > seekableShadowBytes {
++			return SeekableJSONShadow{}, errors.New("seekable JSON structural state exceeds its budget")
++		}
++	}
++	if inString || escaped || unicodeDigits != 0 || utf8Remaining != 0 || offset != body.Size() || !json.Valid(shadow.Bytes()) {
++		return SeekableJSONShadow{}, errors.New("seekable JSON is incomplete or invalid")
++	}
++	return SeekableJSONShadow{JSON: bytes.Clone(shadow.Bytes()), Markers: markers, Seed: seed}, nil
++}
++
++// WriteReconstitutedJSON replaces each unique marker with its exact raw JSON
++// string from the source body; missing or duplicated markers fail closed.
++func WriteReconstitutedJSON(ctx context.Context, source SeekableBody, shadow SeekableJSONShadow, transformed []byte, output io.Writer) (int64, error) {
++	if !json.Valid(transformed) {
++		return 0, errors.New("transformed seekable JSON is invalid")
++	}
++	var total int64
++	remaining := transformed
++	seen := make(map[string]bool, len(shadow.Markers))
++	markers := make(map[string]SeekableJSONMarker, len(shadow.Markers))
++	for _, marker := range shadow.Markers {
++		markers[string(marker.Literal)] = marker
++	}
++	prefix := []byte(`"__orca_replay_` + shadow.Seed + `_`)
++	for len(remaining) > 0 {
++		if err := ctx.Err(); err != nil {
++			return total, err
++		}
++		firstIndex := bytes.Index(remaining, prefix)
++		if firstIndex < 0 {
++			written, err := output.Write(remaining)
++			total += int64(written)
++			if err != nil {
++				return total, err
++			}
++			if written != len(remaining) {
++				return total, io.ErrShortWrite
++			}
++			break
++		}
++		written, err := output.Write(remaining[:firstIndex])
++		total += int64(written)
++		if err != nil {
++			return total, err
++		}
++		if written != firstIndex {
++			return total, io.ErrShortWrite
++		}
++		closing := bytes.IndexByte(remaining[firstIndex+len(prefix):], '"')
++		if closing < 0 {
++			return total, errors.New("transformed seekable JSON has an incomplete marker")
++		}
++		literal := string(remaining[firstIndex : firstIndex+len(prefix)+closing+1])
++		marker, ok := markers[literal]
++		if !ok {
++			return total, errors.New("transformed seekable JSON changed an opaque marker")
++		}
++		key := string(marker.Literal)
++		if seen[key] {
++			return total, errors.New("transformed seekable JSON duplicated an opaque value")
++		}
++		seen[key] = true
++		copied, err := source.CopySpan(ctx, output, marker.Start, marker.End)
++		total += copied
++		if err != nil {
++			return total, err
++		}
++		remaining = remaining[firstIndex+len(marker.Literal):]
++	}
++	if len(seen) != len(shadow.Markers) {
++		return total, errors.New("transformed seekable JSON discarded an opaque value")
++	}
++	return total, nil
++}
+--- /dev/null
++++ b/sdk/cliproxy/executor/seekable_model_rewrite.go
+@@ -0,0 +1,97 @@
++package executor
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"io"
++)
++
++func copySeekableBytes(ctx context.Context, target io.Writer, source io.Reader, limit int64) (int64, error) {
++	buffer := make([]byte, 64*1024)
++	var copied int64
++	for limit < 0 || copied < limit {
++		if err := ctx.Err(); err != nil {
++			return copied, err
++		}
++		part := buffer
++		if limit >= 0 && int64(len(part)) > limit-copied {
++			part = part[:limit-copied]
++		}
++		read, err := source.Read(part)
++		if read > 0 {
++			written, writeErr := target.Write(part[:read])
++			copied += int64(written)
++			if writeErr != nil {
++				return copied, writeErr
++			}
++			if written != read {
++				return copied, io.ErrShortWrite
++			}
++		}
++		if err == io.EOF && limit < 0 {
++			return copied, nil
++		}
++		if err != nil {
++			return copied, err
++		}
++	}
++	return copied, nil
++}
++
++// WriteSeekableModel rewrites only the verified top-level model string while
++// copying every other byte, including opaque history and image data, verbatim.
++func WriteSeekableModel(ctx context.Context, body SeekableBody, start, end int64, model string, output io.Writer) (int64, error) {
++	if body == nil || start < 0 || end <= start || end > body.Size() {
++		return 0, errors.New("seekable model span is invalid")
++	}
++	encoded, err := json.Marshal(model)
++	if err != nil {
++		return 0, err
++	}
++	reader, err := body.Open()
++	if err != nil {
++		return 0, err
++	}
++	defer reader.Close()
++	if err = ctx.Err(); err != nil {
++		return 0, err
++	}
++	first, err := copySeekableBytes(ctx, output, reader, start)
++	if err != nil {
++		return first, err
++	}
++	if _, err = copySeekableBytes(ctx, io.Discard, reader, end-start); err != nil {
++		return first, err
++	}
++	second, err := output.Write(encoded)
++	total := first + int64(second)
++	if err != nil {
++		return total, err
++	}
++	if second != len(encoded) {
++		return total, io.ErrShortWrite
++	}
++	if err = ctx.Err(); err != nil {
++		return total, err
++	}
++	last, err := copySeekableBytes(ctx, output, reader, -1)
++	return total + last, err
++}
++
++// NewSeekableModelBody opens one replay attempt with bounded pipe backpressure.
++func NewSeekableModelBody(ctx context.Context, body SeekableBody, start, end int64, model string) (io.ReadCloser, int64, error) {
++	if body == nil || start < 0 || end <= start || end > body.Size() {
++		return nil, 0, errors.New("seekable model span is invalid")
++	}
++	encoded, err := json.Marshal(model)
++	if err != nil {
++		return nil, 0, err
++	}
++	pipeReader, pipeWriter := io.Pipe()
++	go func() {
++		_, copyErr := WriteSeekableModel(ctx, body, start, end, model, pipeWriter)
++		_ = pipeWriter.CloseWithError(copyErr)
++	}()
++	return pipeReader, body.Size() - (end - start) + int64(len(encoded)), nil
++}
+--- a/sdk/cliproxy/executor/types.go
++++ b/sdk/cliproxy/executor/types.go
+@@ -98,0 +99,3 @@
++	// SeekablePayload is present only for a qualified private native replay route.
++	// Payload then contains bounded routing metadata, never the full history.
++	SeekablePayload SeekableBody
+@@ -216,0 +220,8 @@
++	// OriginalSeekableRequest preserves the complete inbound body across auth retries.
++	OriginalSeekableRequest SeekableBody
++	SeekableBudget          *SeekableBodyBudget
++	// Seekable model offsets refer to the validated private body, not Payload.
++	SeekableModelStart int64
++	SeekableModelEnd   int64
++	SeekableShadowJSON []byte
++	SeekableShadow     SeekableJSONShadow
+@@ -259 +270,2 @@
+-	Payload []byte
++	Payload         []byte
++	SeekablePayload SeekableBody

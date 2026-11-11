@@ -71,6 +71,8 @@ export function CodexResetCreditControl({
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const mounted = useRef(false)
+  const resetButtonRef = useRef<HTMLButtonElement>(null)
+  const focusViewVersion = useRef<number | null>(null)
   const ownerKey = owner.kind === 'local' ? 'local' : `environment:${owner.environmentId}`
   const environmentId = owner.kind === 'environment' ? owner.environmentId : null
   const credits = limits?.rateLimitResetCredits
@@ -284,11 +286,13 @@ export function CodexResetCreditControl({
           {expiry ? ` · ${count === 1 ? 'Expires' : 'Next expires'} ${expiry}` : ''}
         </span>
         <Button
+          ref={resetButtonRef}
           variant="outline"
           size="xs"
           disabled={!canUse}
           onClick={() => {
             if (scope) {
+              focusViewVersion.current = currentView.current.version
               setConfirming({ scope, ownerKey, viewVersion: currentView.current.version })
             }
           }}
@@ -321,7 +325,16 @@ export function CodexResetCreditControl({
           }
         }}
       >
-        <DialogContent surface="security">
+        <DialogContent
+          surface="security"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            if (focusViewVersion.current === currentView.current.version) {
+              resetButtonRef.current?.focus()
+            }
+            focusViewVersion.current = null
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Use one manual reset?</DialogTitle>
             <DialogDescription>

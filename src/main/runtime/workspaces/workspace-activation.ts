@@ -1,3 +1,5 @@
+import { createNativeCliStartupReadiness } from '../native-cli-startup-readiness'
+import { currentNativeCliStartup } from '../native-cli-startup'
 import { OrcaRuntimeWithListManagedWorktrees } from './managed-workspace-operations'
 import type { RuntimeNavigationTarget } from '../../../shared/runtime-navigation'
 import {
@@ -243,50 +245,43 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
   ): Promise<RuntimeTerminalWait> {
     const initialPtyId =
       this.getLivePtyForHandle(handle)?.pty.ptyId ?? this.getLiveLeafForHandle(handle).leaf.ptyId
-    const stop = new AbortController()
-    const onAbort = (): void => stop.abort()
-    signal?.addEventListener('abort', onAbort, { once: true })
-    const ptyId = await waitForWorktreeStartupDraft(
-      { ...this.getWorktreeStartupReadinessHost(), getPtyId: () => initialPtyId },
-      handle,
-      agent,
-      {
-        timeoutMs,
-        requireComposerMarker,
-        // Every caller pastes and then presses Enter: a worker brief or a launch prompt.
-        submit: true,
-        signal: stop.signal,
-        isShellInFront: async (ownerPtyId) =>
-          (await this.readLaunchedAgentForeground(ownerPtyId, agent)) === 'shell',
-        accept: (readyPtyId) => {
-          const pty = this.ptysById.get(readyPtyId)
-          const hold = pty
-            ? readFreshComposerHold(
-                buildTerminalWaitText(pty.tailBuffer, pty.tailPartialLine, pty.preview),
-                this.readLiveTerminalScreenLines(readyPtyId)
-              )
-            : null
-          if (hold === 'dialog' && stopOnDialog) {
-            stop.abort()
+    const startup = initialPtyId ? currentNativeCliStartup(this.ptysById.get(initialPtyId)) : null
+    const readiness = createNativeCliStartupReadiness(startup, signal)
+    const { stop } = readiness
+    const ptyId = await readiness.wait(
+      waitForWorktreeStartupDraft(
+        { ...this.getWorktreeStartupReadinessHost(), getPtyId: () => initialPtyId },
+        handle,
+        agent,
+        {
+          timeoutMs,
+          requireComposerMarker,
+          // Every caller pastes and then presses Enter: a worker brief or a launch prompt.
+          submit: true,
+          signal: stop.signal,
+          isShellInFront: async (ownerPtyId) =>
+            (await this.readLaunchedAgentForeground(ownerPtyId, agent)) === 'shell',
+          accept: (readyPtyId) => {
+            const pty = this.ptysById.get(readyPtyId)
+            const hold = pty
+              ? readFreshComposerHold(
+                  buildTerminalWaitText(pty.tailBuffer, pty.tailPartialLine, pty.preview),
+                  this.readLiveTerminalScreenLines(readyPtyId)
+                )
+              : null
+            if (hold === 'dialog' && stopOnDialog) {
+              stop.abort()
+            }
+            return hold === null
           }
-          return hold === null
         }
-      }
-    )
-    signal?.removeEventListener('abort', onAbort)
-    if (!ptyId) {
-      throw new Error(
-        signal?.aborted
-          ? 'request_aborted'
-          : stop.signal.aborted
-            ? 'agent_startup_dialog'
-            : 'timeout'
       )
-    }
+    )
     this.assertLiveTerminalHandleTargetsPty(handle, ptyId)
     if (!this.ptysById.get(ptyId)?.connected) {
       throw new Error('terminal_handle_stale')
     }
+    readiness.ready()
     return this.buildTuiIdleProbeResult(handle, null)
   }
 

@@ -1,8 +1,9 @@
 import { taskViewKey, type TaskViewRow } from './project-task-projects'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { readProjectTaskView, saveProjectTaskView } from './project-task-view-state'
+import { projectTaskNextAction } from '../../../../shared/project-task-attention'
 
 function TaskRow({
   task,
@@ -29,6 +30,16 @@ function TaskRow({
           {task.workflow.revisionChanged ? ' · plan changed' : ''}
           {task.workflow.archived ? ' · archived' : ''}
         </span>
+        {task.workflow.attempts[0]?.session?.blocker && (
+          <span className="block text-xs text-muted-foreground">
+            Waiting: {task.workflow.attempts[0].session.blocker}
+          </span>
+        )}
+        {projectTaskNextAction(task.workflow) && (
+          <span className="block text-xs text-muted-foreground">
+            Next: {projectTaskNextAction(task.workflow)}
+          </span>
+        )}
       </span>
     </Button>
   )
@@ -45,6 +56,12 @@ export function ProjectTaskList({
   mode: 'list' | 'tree'
 }) {
   const [collapsed, setCollapsed] = useState(() => new Set(readProjectTaskView().collapsed))
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = readProjectTaskView().listScrollTop
+    }
+  }, [])
   const toggle = (id: string) => {
     const next = new Set(collapsed)
     if (next.has(id)) {
@@ -84,5 +101,13 @@ export function ProjectTaskList({
             render(taskViewKey(task), depth + 1)}
         </div>
       ))
-  return <div className="scrollbar-sleek min-h-0 space-y-1 overflow-auto p-2">{render(null)}</div>
+  return (
+    <div
+      ref={listRef}
+      onScroll={(event) => saveProjectTaskView({ listScrollTop: event.currentTarget.scrollTop })}
+      className="scrollbar-sleek min-h-0 space-y-1 overflow-auto p-2"
+    >
+      {render(null)}
+    </div>
+  )
 }

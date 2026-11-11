@@ -140,3 +140,32 @@ it('keeps independent repository boards canonical without adopting a remote regi
   repos[0].executionHostId = 'ssh:elsewhere'
   expect(await resolveRegisteredTaskRoot(host, root, 'web')).toBe(root)
 })
+
+it('lists independent repository boards under their existing project names without changing selectors', async () => {
+  const { root, child, folders, repos, host } = await fixture()
+  folders.length = 0
+  repos[0].projectGroupId = 'group'
+  const second = join(root, 'apps/cli')
+  await mkdir(second, { recursive: true })
+  repos.push({ id: 'cli', path: second, displayName: 'cli', projectGroupId: 'group' })
+  await initializeTaskFiles(child)
+  await initializeTaskFiles(second)
+  expect((await readTaskProjectCatalog(host)).projects).toEqual([
+    expect.objectContaining({
+      selector: `path:${child}`,
+      groupId: 'group',
+      groupName: 'Overall project',
+      repositoryName: 'web',
+      projectGroupsAvailable: true,
+      state: 'configured'
+    }),
+    expect.objectContaining({
+      selector: `path:${second}`,
+      groupId: 'group',
+      groupName: 'Overall project',
+      repositoryName: 'cli',
+      projectGroupsAvailable: true,
+      state: 'configured'
+    })
+  ])
+})
