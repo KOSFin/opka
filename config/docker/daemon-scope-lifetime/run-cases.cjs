@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const { join } = require('node:path')
+const { dirname, join } = require('node:path')
 const { spawn, execFileSync } = require('node:child_process')
 const { runTerminalScopeCases } = require('./terminal-scope-cases.cjs')
 
@@ -53,6 +53,54 @@ function scopePath(pid) {
   return fs.readFileSync(`/proc/${pid}/cgroup`, 'utf8').trim()
 }
 
+function readCgroupFile(directory, name) {
+  try {
+    return fs.readFileSync(join(directory, name), 'utf8').trim()
+  } catch {
+    return null
+  }
+}
+
+function unitProperties(unit) {
+  try {
+    return execFileSync(
+      'systemctl',
+      ['--user', 'show', unit, '-p', 'ControlGroup', '-p', 'MemoryAccounting', '-p', 'Delegate'],
+      { encoding: 'utf8', timeout: 2000, maxBuffer: 4096 }
+    ).trim()
+  } catch (error) {
+    return String(error)
+  }
+}
+
+function memoryAccountingDiagnostic(pid, unit, directory) {
+  const ancestors = []
+  for (
+    let current = directory;
+    ancestors.length < 16 &&
+    (current === '/sys/fs/cgroup' || current.startsWith('/sys/fs/cgroup/'));
+    current = dirname(current)
+  ) {
+    ancestors.push({
+      directory: current,
+      exists: fs.existsSync(current),
+      controllers: readCgroupFile(current, 'cgroup.controllers'),
+      subtreeControl: readCgroupFile(current, 'cgroup.subtree_control'),
+      memoryCurrentExists: fs.existsSync(join(current, 'memory.current'))
+    })
+  }
+  console.error(
+    JSON.stringify({
+      oracle: 'daemon-cgroup-memory-accounting-diagnostic',
+      procCgroup: scopePath(pid),
+      resolvedDirectory: directory,
+      ancestors,
+      scopeProperties: unitProperties(unit),
+      sliceProperties: unitProperties('app.slice')
+    })
+  )
+}
+
 async function startCycle(cycle, ownership = 'exclusive') {
   const nonce = `${prefix}-${cycle}`
   const resultPath = `/tmp/${nonce}`
@@ -79,6 +127,9 @@ async function startCycle(cycle, ownership = 'exclusive') {
   assert.equal(scopePath(workerPid), scopePath(daemonPid), 'worker escaped its owning scope')
   assert.ok(scopePath(workerPid).endsWith(unit), 'daemon did not enter requested scope')
   const cgroupDirectory = join('/sys/fs/cgroup', scopePath(workerPid).split(':').slice(2).join(':'))
+  if (!fs.existsSync(join(cgroupDirectory, 'memory.current'))) {
+    memoryAccountingDiagnostic(workerPid, unit, cgroupDirectory)
+  }
   assert.ok(
     fs.existsSync(join(cgroupDirectory, 'memory.current')),
     'cgroup memory accounting missing'

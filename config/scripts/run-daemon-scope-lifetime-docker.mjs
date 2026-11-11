@@ -169,8 +169,26 @@ function runCases(baseImage) {
     container,
     '/bin/sh',
     '-c',
+    "timeout --kill-after=5s 30s sh -c 'until systemctl list-jobs --no-legend >/dev/null 2>&1; do sleep 0.1; done'"
+  ])
+  const controllers = runDocker([
+    'exec',
+    container,
+    'systemd-run',
+    '--scope',
+    '--quiet',
+    '--collect',
+    '--unit=orca-fixture-cgroup-controllers',
+    'node',
+    '/opt/daemon-scope-lifetime/enable-fixture-cgroup-controllers.cjs'
+  ])
+  process.stdout.write(controllers.stdout ?? '')
+  runDocker([
+    'exec',
+    container,
+    '/bin/sh',
+    '-c',
     [
-      "timeout --kill-after=5s 30s sh -c 'until systemctl list-jobs --no-legend >/dev/null 2>&1; do sleep 0.1; done'",
       'systemctl start systemd-logind.service',
       "timeout --kill-after=5s 30s sh -c 'until loginctl list-users --no-legend >/dev/null 2>&1; do sleep 0.1; done'",
       'loginctl enable-linger orca-repro',

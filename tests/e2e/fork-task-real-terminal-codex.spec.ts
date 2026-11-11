@@ -23,6 +23,7 @@ import { probeForkCodexStartup } from './helpers/fork-codex-startup'
 import { startForkCodexScriptedTaskProvider } from './helpers/fork-codex-scripted-task-provider'
 import { FORK_TASK_TERMINAL_FIXTURE } from './helpers/fork-task-terminal-fixture'
 import { verifyForkTaskReview } from './helpers/fork-task-review'
+import { closeRestoredProjectTaskDetail } from './helpers/restored-project-task-detail'
 import { projectTaskTemplate } from '../../src/shared/project-task-template'
 import { quotePosixShell } from '../../src/shared/shell-argument-quoting'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
@@ -262,6 +263,8 @@ test(`${scripted ? 'scripted local binary contract' : 'one real Codex exec'} tak
     launched = await session.launch({ executablePath })
     app = launched.app
     page = launched.page
+    await page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
+    await closeRestoredProjectTaskDetail(page, 'Исправить сложение', 'Real Codex task smoke')
     await verifyForkTaskReview(
       page,
       root,

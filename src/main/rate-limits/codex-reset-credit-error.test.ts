@@ -10,7 +10,10 @@ const home = join('synthetic', 'codex-home')
 const key = 'synthetic-original-key'
 const url = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume'
 
-function strictRequest(response: Response): (url: string, init: RequestInit) => Promise<Response> {
+function strictRequest(
+  response: Response,
+  expectedAccountId: string | null = 'synthetic-account'
+): (url: string, init: RequestInit) => Promise<Response> {
   return vi.fn(async (requestedUrl, init) => {
     expect(requestedUrl).toBe(url)
     expect(init).toEqual({
@@ -21,7 +24,7 @@ function strictRequest(response: Response): (url: string, init: RequestInit) => 
         'User-Agent': 'codex-cli',
         'OpenAI-Beta': 'codex-1',
         originator: 'Codex Desktop',
-        'ChatGPT-Account-Id': 'synthetic-account',
+        ...(expectedAccountId ? { 'ChatGPT-Account-Id': expectedAccountId } : {}),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ redeem_request_id: key }),
@@ -112,6 +115,87 @@ describe('Codex reset provider rejection', () => {
     expect(request).toHaveBeenCalledOnce()
     expect(fetch).not.toHaveBeenCalled()
   })
+
+  it.each([undefined, ''])(
+    'uses the selected auth token claim when account_id is %s',
+    async (accountId) => {
+      const idTokenPayload = Buffer.from(
+        JSON.stringify({
+          'https://api.openai.com/auth': { chatgpt_account_id: 'synthetic-account' }
+        })
+      ).toString('base64url')
+      readFileMock.mockResolvedValueOnce(
+        JSON.stringify({
+          tokens: {
+            access_token: 'synthetic-token',
+            account_id: accountId,
+            id_token: `header.${idTokenPayload}.signature`
+          }
+        })
+      )
+      const claimHome = join(
+        'synthetic',
+        `claim-home-${accountId === undefined ? 'absent' : 'blank'}`
+      )
+      const request = strictRequest(Response.json({ code: 'nothing_to_reset' }))
+
+      await expect(
+        consumeCodexRateLimitResetCreditFromBackend(
+          { codexHomePath: claimHome, idempotencyKey: key },
+          request
+        )
+      ).resolves.toBe('nothingToReset')
+      expect(request).toHaveBeenCalledOnce()
+      expect(readFileMock).toHaveBeenCalledWith(join(claimHome, 'auth.json'), 'utf8')
+      expect(fetch).not.toHaveBeenCalled()
+    }
+  )
+
+  it('keeps the explicit account ID when the ID-token claim conflicts', async () => {
+    const idTokenPayload = Buffer.from(
+      JSON.stringify({
+        'https://api.openai.com/auth': { chatgpt_account_id: 'different-account' }
+      })
+    ).toString('base64url')
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({
+        tokens: {
+          access_token: 'synthetic-token',
+          account_id: 'synthetic-account',
+          id_token: `header.${idTokenPayload}.signature`
+        }
+      })
+    )
+    const request = strictRequest(Response.json({ code: 'nothing_to_reset' }))
+
+    await expect(
+      consumeCodexRateLimitResetCreditFromBackend(
+        { codexHomePath: join('synthetic', 'conflicting-claim-home'), idempotencyKey: key },
+        request
+      )
+    ).resolves.toBe('nothingToReset')
+    expect(request).toHaveBeenCalledOnce()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 'malformed.jwt'])(
+    'omits the account header for a missing or malformed ID-token claim: %s',
+    async (idToken) => {
+      readFileMock.mockResolvedValueOnce(
+        JSON.stringify({ tokens: { access_token: 'synthetic-token', id_token: idToken } })
+      )
+      const request = strictRequest(Response.json({ code: 'nothing_to_reset' }), null)
+
+      await expect(
+        consumeCodexRateLimitResetCreditFromBackend(
+          { codexHomePath: join('synthetic', 'unidentified-home'), idempotencyKey: key },
+          request
+        )
+      ).resolves.toBe('nothingToReset')
+      expect(request).toHaveBeenCalledOnce()
+      expect(fetch).not.toHaveBeenCalled()
+    }
+  )
 
   it.each([
     ['reset', 'reset'],

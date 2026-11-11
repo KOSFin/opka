@@ -12,7 +12,7 @@ RUN apt-get update \
   && useradd --uid 1100 --create-home --shell /bin/sh orca-repro
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
-COPY process-fixture.cjs run-cases.cjs terminal-scope-cases.cjs automation-command-cases.cjs automation-command-agent-report.cjs automation-command-restart.cjs automation-command-state.cjs automation-command-store-prepare.cjs automation-command-store-restart.cjs /opt/daemon-scope-lifetime/
+COPY process-fixture.cjs run-cases.cjs terminal-scope-cases.cjs automation-command-cases.cjs automation-command-agent-report.cjs automation-command-restart.cjs automation-command-state.cjs automation-command-store-prepare.cjs automation-command-store-restart.cjs enable-fixture-cgroup-controllers.cjs /opt/daemon-scope-lifetime/
 RUN mkdir -p /opt/daemon-scope-lifetime/node_modules/electron
 COPY electron-stub.cjs /opt/daemon-scope-lifetime/node_modules/electron/index.js
 
