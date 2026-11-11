@@ -236,6 +236,11 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
       { workspace }
     )
     await expect(picker).toHaveCount(0)
+    await expect(location.getByRole('button', { name: 'ui', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    await location.getByRole('button', { name: 'repo', exact: true }).click()
     await expect(rows.filter({ hasText: 'README.md' })).toBeVisible()
     await capture('ordinary-workspace')
   }

@@ -77,6 +77,54 @@ function setup() {
     store.transaction(() => store.delegation.approve(context, task, randomUUID()))
   return { db, store, task, context, proposal, install, approve }
 }
+it('registers an empty project before reviewing a scoped grant', () => {
+  const db = new OrchestrationDb(':memory:')
+  opened.push(db)
+  const store = new TaskWorkflowStore(db)
+  const binding = {
+    installationId: 'host',
+    machineBinding: 'machine',
+    projectId: 'empty-project',
+    root: '/synthetic-empty',
+    configRevision: 'c'.repeat(64)
+  }
+  store.syncGraph(binding.projectId, binding.root, [])
+  const proposed = store.transaction(() =>
+    store.delegation.propose(
+      binding.projectId,
+      'interactive:owner',
+      'connection',
+      0,
+      {
+        schema: 1,
+        binding,
+        actor: { key: 'grantee', aliases: ['grantee'] },
+        actorAddress: 'synthetic-grantee',
+        actions: ['approve-plan'],
+        runId: null,
+        taskIds: null,
+        expiresAt: Date.now() + 60_000,
+        generation: 1
+      },
+      binding
+    )
+  )
+  expect(proposed.grant?.binding.projectId).toBe(binding.projectId)
+  expect(store.delegation.read(binding.projectId).generation).toBe(0)
+  store.transaction(() =>
+    store.delegation.confirm(
+      binding.projectId,
+      'interactive:owner',
+      'connection',
+      proposed.id,
+      proposed.digest,
+      randomUUID(),
+      binding
+    )
+  )
+  expect(store.delegation.read(binding.projectId).generation).toBe(1)
+  expect(() => store.syncGraph(binding.projectId, '/another-root', [])).toThrow(/another root/)
+})
 it('defaults to manual, records explicit grant and delegated actor without manufacturing manual approval', () => {
   const { store, task, context, install, approve } = setup()
   expect(taskAdmission(store, 'project', task, context)).toBeNull()

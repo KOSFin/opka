@@ -175,7 +175,8 @@ function runCases(baseImage) {
       "timeout --kill-after=5s 30s sh -c 'until loginctl list-users --no-legend >/dev/null 2>&1; do sleep 0.1; done'",
       'loginctl enable-linger orca-repro',
       'systemctl start user@1100.service',
-      'test -S /run/user/1100/bus'
+      'test -S /run/user/1100/bus',
+      'runuser -u orca-repro -- env XDG_RUNTIME_DIR=/run/user/1100 systemctl --user set-property --runtime app.slice MemoryAccounting=yes'
     ].join(' && ')
   ])
   for (const mode of ['baseline', 'candidate']) {

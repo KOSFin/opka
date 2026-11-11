@@ -20,7 +20,7 @@ export class TaskWorkflowStore {
 
   constructor(readonly native: OrchestrationDb) {}
 
-  register(projectId: string, root: string, task: ProjectTaskEntry): void {
+  private registerHome(projectId: string, root: string): void {
     const home = this.native.db
       .prepare('SELECT root_path FROM project_task_homes WHERE project_id = ?')
       .get(projectId)
@@ -30,6 +30,10 @@ export class TaskWorkflowStore {
     this.native.db
       .prepare('INSERT OR IGNORE INTO project_task_homes(project_id,root_path) VALUES (?,?)')
       .run(projectId, root)
+  }
+
+  register(projectId: string, root: string, task: ProjectTaskEntry): void {
+    this.registerHome(projectId, root)
     const change = this.native.db
       .prepare(`INSERT INTO project_task_items(project_id,task_id,document_path,current_revision)
       VALUES (?,?,?,?) ON CONFLICT(project_id,task_id) DO UPDATE SET
@@ -53,6 +57,7 @@ export class TaskWorkflowStore {
       throw new Error('Project task graph capacity exceeded')
     }
     const apply = () => {
+      this.registerHome(projectId, root)
       this.native.db.prepare('DELETE FROM project_task_graph WHERE project_id=?').run(projectId)
       for (const task of tasks) {
         this.register(projectId, root, task)
