@@ -5,10 +5,7 @@ import type { Locator, Page } from '@stablyai/playwright-test'
 
 test.use({ orcaAppExtraEnv: { ORCA_BACKGROUND_LAUNCH: '1' }, trace: 'off', screenshot: 'off' })
 
-const evidence = path.join(
-  process.cwd(),
-  'test-results/desktop-usage-independent-evidence'
-)
+const evidence = path.join(process.cwd(), 'test-results/desktop-usage-independent-evidence')
 
 async function capture(page: Page, name: string): Promise<void> {
   const cdp = await page.context().newCDPSession(page)
