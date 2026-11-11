@@ -174,15 +174,27 @@ it('cancellation releases a pending activation without replacing the valid conne
 
 it('bounds a missing native boundary and preserves the old writer/grant', async () => {
   const f = fixture(40)
-  await f.launch()
-  f.stats.safe = false
-  const state = await f.host.beginGrant('owner', {
-    accountId: f.a.id,
-    expectedRosterRevision: 'r1'
-  })
-  await tick()
-  f.finishLogin()
-  await expect.poll(() => f.host.grant('owner', state.id).status).toBe('failed')
+  let stateId: string
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    await f.launch()
+    f.stats.safe = false
+    const state = await f.host.beginGrant('owner', {
+      accountId: f.a.id,
+      expectedRosterRevision: 'r1'
+    })
+    stateId = state.id
+    await tick()
+    f.finishLogin()
+    await tick()
+    expect(f.host.grantPhase('owner', state.id)).toBe('activation')
+    await vi.advanceTimersByTimeAsync(39)
+    expect(f.host.grant('owner', state.id).status).not.toBe('failed')
+    await vi.advanceTimersByTimeAsync(1)
+  } finally {
+    vi.useRealTimers()
+  }
+  await expect.poll(() => f.host.grant('owner', stateId).status).toBe('failed')
   expect(f.stats.starts).toBe(1)
   expect(f.host.readConnection(f.a.id)?.adopted).toBe(true)
 })

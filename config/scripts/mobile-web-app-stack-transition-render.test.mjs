@@ -177,10 +177,10 @@ async function openList(browser, { animation = 'default', reducedMotion = 'no-pr
 function sampleFrames(
   page,
   action,
-  { followUp = null, afterFrames = 0, observeFullWindow = false } = {}
+  { followUp = null, afterFrames = 0, observeFullWindow = false, diagnose = false } = {}
 ) {
   return page.evaluate(
-    ([name, sampleMs, nextAction, followAt, settledGraceMs, fullWindow]) =>
+    ([name, sampleMs, nextAction, followAt, settledGraceMs, fullWindow, captureDiagnostics]) =>
       new Promise((resolve) => {
         const leftOf = (id) => {
           const node = document.querySelector(`[data-testid="${id}"]`)
@@ -194,12 +194,16 @@ function sampleFrames(
             ?.getAttribute('data-testid')
             ?.replace('stack-probe-', '') ?? null
         const frames = []
-        const start = performance.now()
+        const diagnostics = []
+        let start = null
         let settledAt = null
         const destination = nextAction ?? name
         const pushing = destination === 'push' || destination === 'pushOther'
-        globalThis.__orcaStackProbe[name]()
         const tick = () => {
+          if (start === null) {
+            start = performance.now()
+            globalThis.__orcaStackProbe[name]()
+          }
           if (nextAction !== null && frames.length === followAt) {
             globalThis.__orcaStackProbe[nextAction]()
           }
@@ -217,18 +221,31 @@ function sampleFrames(
           const followUpDelivered = nextAction === null || frames.length > followAt
           const settled = arrived && followUpDelivered && document.getAnimations().length === 0
           const now = performance.now()
+          if (captureDiagnostics) {
+            diagnostics.push({
+              elapsedMs: Math.round(now - start),
+              session: last.session,
+              animations: document.getAnimations().map((slide) => ({
+                currentTime: slide.currentTime,
+                playState: slide.playState
+              }))
+            })
+          }
           settledAt = settled ? (settledAt ?? now) : null
           // Observe cleanup after actual arrival; retain the full window for interruption races.
           const finished = !fullWindow && settledAt !== null && now - settledAt >= settledGraceMs
           if (!finished && now - start < sampleMs) {
             requestAnimationFrame(tick)
           } else {
+            if (captureDiagnostics) {
+              globalThis.__orcaStackFrameDiagnostics = diagnostics
+            }
             resolve(frames)
           }
         }
         requestAnimationFrame(tick)
       }),
-    [action, SAMPLE_MS, followUp, afterFrames, SETTLED_GRACE_MS, observeFullWindow]
+    [action, SAMPLE_MS, followUp, afterFrames, SETTLED_GRACE_MS, observeFullWindow, diagnose]
   )
 }
 
@@ -258,10 +275,13 @@ describeRender('the host stack transition on the page', () => {
       const open = (options) => openList(browsers.get(engine.name), options)
       it('slides the session in from the right on push, over the list', async () => {
         const { errors, page } = await open()
-        const frames = await sampleFrames(page, 'push')
+        const frames = await sampleFrames(page, 'push', { diagnose: true })
         const firstShown = frames.find((frame) => frame.session !== null)
         // Red on native-stack's web view: the session's first visible frame is already at x = 0.
-        expect(firstShown?.session).toBeGreaterThan(0)
+        expect(
+          firstShown?.session,
+          JSON.stringify(await page.evaluate(() => globalThis.__orcaStackFrameDiagnostics))
+        ).toBeGreaterThan(0)
         expect(frames.some((frame) => between(frame.session) && frame.list === 0)).toBe(true)
         // The list stays painted under the slide but takes no tap, so a double tap cannot push twice.
         expect(sliding(frames).map((frame) => frame.hit)).toEqual(sliding(frames).map(() => null))
