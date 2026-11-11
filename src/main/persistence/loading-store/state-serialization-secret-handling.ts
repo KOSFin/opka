@@ -66,6 +66,7 @@ export class StateSerializationSecretHandlingOperations {
           break
         case 'automations':
         case 'automationRuns':
+        case 'automationCommandsV1':
           stateToSave[domain] = this.runtime.state[domain]
           break
         case 'featureInteractionTelemetryBuckets':

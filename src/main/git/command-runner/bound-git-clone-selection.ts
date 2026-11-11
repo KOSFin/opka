@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
 import { access } from 'node:fs/promises'
-import { app } from 'electron'
+import { getAppEnvironment } from '../../../shared/app-environment'
 import type { BoundGitCloneChoice, GitNetworkBinding } from '../../../shared/git-network-binding'
 import {
   normalizeGhAccountBinding,
@@ -10,7 +10,6 @@ import {
 import { createGitLabNetworkProfileStore } from '../../gitlab/gitlab-network-profile-store'
 import { invalidateGhAccountTokenCache, resolveGhAccountToken } from '../../github/gh-account-token'
 import { validateGhAccountBinding } from '../../github/gh-account-binding-inventory'
-import { desktopCliLauncherPath } from '../../cli/desktop-cli-launcher-path'
 import { parseBoundGitCredentialTarget } from './bound-git-credential-target'
 
 export type BoundGitCloneSelection = {
@@ -48,12 +47,7 @@ export async function validateBoundGitCloneSelection(
   }
   const launcherPath =
     dependencies.launcherPath === undefined
-      ? desktopCliLauncherPath({
-          platform: process.platform,
-          packaged: app.isPackaged,
-          resourcesPath: process.resourcesPath,
-          userDataPath: app.getPath('userData')
-        })
+      ? (getAppEnvironment().getCliLauncherPath?.() ?? null)
       : dependencies.launcherPath
   if (!launcherPath) {
     throw unavailable()

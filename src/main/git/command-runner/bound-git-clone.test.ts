@@ -53,7 +53,16 @@ async function requestCredential(env: NodeJS.ProcessEnv, host = 'gitlab.com', us
 
 async function expectCredentialDenied(env: NodeJS.ProcessEnv, host = 'gitlab.com'): Promise<void> {
   const response = await requestCredential(env, host).catch((error: unknown) => {
-    if (error instanceof Error && /ECONNREFUSED|ECONNRESET|UND_ERR_SOCKET/.test(error.message)) {
+    const cause = error instanceof Error ? error.cause : null
+    if (
+      error instanceof Error &&
+      (/ECONNREFUSED|ECONNRESET|UND_ERR_SOCKET/.test(error.message) ||
+        (cause !== null &&
+          typeof cause === 'object' &&
+          'code' in cause &&
+          typeof cause.code === 'string' &&
+          /^(ECONNREFUSED|ECONNRESET|UND_ERR_SOCKET)$/.test(cause.code)))
+    ) {
       return null
     }
     throw error

@@ -109,6 +109,13 @@ import {
 } from './antigravity-accounts-params'
 import { ArtifactsDeleteParams, ListOptions, SourceRequest, WriteRequest } from './artifacts-params'
 import {
+  AutomationCancelRunV1,
+  AutomationCreateV2,
+  AutomationDeleteV2,
+  AutomationRunNowV2,
+  AutomationUpdateV2
+} from './automation-command-params'
+import {
   AutomationCreate,
   AutomationId,
   AutomationList,
@@ -872,13 +879,18 @@ export const RPC_PARAMS_BY_METHOD = {
   'artifacts.share': WriteRequest,
   'artifacts.unshare': SourceRequest,
   'artifacts.update': WriteRequest,
+  'automation.cancelRunV1': AutomationCancelRunV1,
   'automation.create': AutomationCreate,
+  'automation.createV2': AutomationCreateV2,
   'automation.delete': AutomationId,
+  'automation.deleteV2': AutomationDeleteV2,
   'automation.list': AutomationList,
   'automation.runNow': AutomationId,
+  'automation.runNowV2': AutomationRunNowV2,
   'automation.runs': AutomationRuns,
   'automation.show': AutomationId,
   'automation.update': AutomationUpdate,
+  'automation.updateV2': AutomationUpdateV2,
   'browser.back': BrowserTarget,
   'browser.capture.start': BrowserTarget,
   'browser.capture.stop': BrowserTarget,

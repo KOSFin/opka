@@ -43,3 +43,15 @@ it('preserves the host directory classification with default Quick Open preferen
   expect(entries).toEqual([{ name: 'linked', isDirectory: true, isSymlink: true }])
   expect(readRuntimeDirectoryPage).toHaveBeenLastCalledWith(expect.anything(), '/w', {})
 })
+
+it('forwards the owner signal with a page cursor to the runtime read', async () => {
+  const controller = new AbortController()
+  readRuntimeDirectoryPage.mockResolvedValueOnce({ entries: [], nextCursor: null })
+
+  await readFileExplorerDirectory('wt-1', '/w', '/w/src', 'page-2', controller.signal)
+
+  expect(readRuntimeDirectoryPage).toHaveBeenLastCalledWith(expect.anything(), '/w/src', {
+    cursor: 'page-2',
+    signal: controller.signal
+  })
+})

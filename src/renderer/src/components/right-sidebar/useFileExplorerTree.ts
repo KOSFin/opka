@@ -3,11 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DirCache, FileExplorerTreeRefreshOutcome } from './file-explorer-types'
 import { splitPathSegments } from './path-tree'
 import { createFileExplorerDirLoadTracker } from './file-explorer-dir-load-tracker'
-import {
-  getFileExplorerOperationOwner,
-  getFileExplorerOwnerUnresolvedMessage,
-  getFileExplorerOperationRoute
-} from './file-explorer-operation-owner'
+import { getFileExplorerOperationOwner } from './file-explorer-operation-owner'
 import {
   fileExplorerEntriesToTreeNodes,
   readFileExplorerDirectory
@@ -22,8 +18,12 @@ import {
   markFileExplorerDirsLoading,
   withPendingFileExplorerDirCacheEntries
 } from './file-explorer-dir-load-state'
-import { statUserOpenedPath, type UserOpenedPathStat } from '@/lib/user-opened-local-path'
+import type { UserOpenedPathStat } from '@/lib/user-opened-local-path'
 import { useFileExplorerDirectoryPaging } from './use-file-explorer-directory-paging'
+import {
+  markFileExplorerCachePathAsDirectory,
+  statFileExplorerTreePath
+} from './file-explorer-tree-path-operations'
 
 type UseFileExplorerTreeResult = {
   dirCache: Record<string, DirCache>
@@ -32,6 +32,7 @@ type UseFileExplorerTreeResult = {
   sourceWorkspaceId: string | null
   /** Dirs with a read in flight — kept out of dirCache so the row projection does not rebuild. */
   loadingDirPaths: ReadonlySet<string>
+  cancelledReadRevision: number
   rootCache: DirCache | undefined
   rootError: string | null
   loadDir: (
@@ -54,12 +55,14 @@ export function useFileExplorerTree(
   worktreePath: string | null,
   expanded: Set<string>,
   activeWorktreeId?: string | null,
-  displayRootPath?: string | null
+  displayRootPath?: string | null,
+  visibleFilesWorktreePath: string | null = worktreePath
 ): UseFileExplorerTreeResult {
   const [dirCache, setDirCache] = useState<Record<string, DirCache>>({})
   const [loadingDirPaths, setLoadingDirPaths] = useState<ReadonlySet<string>>(
     EMPTY_FILE_EXPLORER_LOADING_DIRS
   )
+  const [cancelledReadRevision, setCancelledReadRevision] = useState(0)
   const [rootError, setRootError] = useState<string | null>(null)
   const [sourceWorkspaceId, setSourceWorkspaceId] = useState<string | null>(null)
   const dirCacheRef = useRef(dirCache)
@@ -121,7 +124,13 @@ export function useFileExplorerTree(
       setDirCache((prev) => withPendingFileExplorerDirCacheEntries(prev, [dirPath]))
       updateLoadingDirPaths((prev) => markFileExplorerDirsLoading(prev, [dirPath]))
       try {
-        const listing = await readFileExplorerDirectory(activeWorktreeId, worktreePath, dirPath)
+        const listing = await readFileExplorerDirectory(
+          activeWorktreeId,
+          worktreePath,
+          dirPath,
+          undefined,
+          loadToken.signal
+        )
         // Why: only the current owner may clear the flag — a superseded read clearing it would
         // drop the spinner while the load that replaced it is still in flight.
         if (!dirLoadTrackerRef.current.isCurrent(loadToken)) {
@@ -171,10 +180,38 @@ export function useFileExplorerTree(
         }))
         updateLoadingDirPaths((prev) => clearFileExplorerDirsLoading(prev, [dirPath]))
         return !options?.failOnError
+      } finally {
+        dirLoadTrackerRef.current.finish(loadToken)
       }
     },
     [activeWorktreeId, updateLoadingDirPaths, worktreePath]
   )
+
+  const previousScopeRef = useRef({ displayRootPath, visibleFilesWorktreePath })
+  useEffect(() => {
+    const previous = previousScopeRef.current
+    previousScopeRef.current = { displayRootPath, visibleFilesWorktreePath }
+    if (
+      previous.displayRootPath === displayRootPath &&
+      previous.visibleFilesWorktreePath === visibleFilesWorktreePath
+    ) {
+      return
+    }
+    const hadPendingReads = loadingDirPathsRef.current.size > 0
+    refreshGenerationRef.current++
+    dirLoadTrackerRef.current.reset()
+    updateLoadingDirPaths(() => EMPTY_FILE_EXPLORER_LOADING_DIRS)
+    if (hadPendingReads) {
+      setCancelledReadRevision((revision) => revision + 1)
+    }
+    if (
+      visibleFilesWorktreePath &&
+      worktreePath &&
+      !dirCacheRef.current[worktreePath]?.operationOwner
+    ) {
+      void loadDir(worktreePath, -1, { force: true })
+    }
+  }, [displayRootPath, visibleFilesWorktreePath, worktreePath, loadDir, updateLoadingDirPaths])
 
   const loadMoreDir = useFileExplorerDirectoryPaging({
     activeWorktreeId,
@@ -188,42 +225,11 @@ export function useFileExplorerTree(
   })
 
   const markPathAsDirectory = useCallback((path: string) => {
-    setDirCache((prev) => {
-      let changed = false
-      const next: Record<string, DirCache> = {}
-      for (const [dirPath, cache] of Object.entries(prev)) {
-        let cacheChanged = false
-        const children = cache.children.map((child) => {
-          if (child.path !== path || child.isDirectory) {
-            return child
-          }
-          changed = true
-          cacheChanged = true
-          return { ...child, isDirectory: true }
-        })
-        next[dirPath] = cacheChanged ? { ...cache, children } : cache
-      }
-      return changed ? next : prev
-    })
+    setDirCache((prev) => markFileExplorerCachePathAsDirectory(prev, path))
   }, [])
 
   const statPath = useCallback(
-    async (path: string) => {
-      const operationOwner = getFileExplorerOperationOwner(activeWorktreeId)
-      const route = getFileExplorerOperationRoute(operationOwner)
-      if (!route) {
-        throw new Error(getFileExplorerOwnerUnresolvedMessage())
-      }
-      return statUserOpenedPath(
-        {
-          target: route.target,
-          worktreeId: activeWorktreeId,
-          worktreePath,
-          connectionId: route.connectionId
-        },
-        path
-      )
-    },
+    (path: string) => statFileExplorerTreePath(activeWorktreeId, worktreePath, path),
     [activeWorktreeId, worktreePath]
   )
 
@@ -279,8 +285,8 @@ export function useFileExplorerTree(
       dirLoadTracker: dirLoadTrackerRef.current,
       setDirCache,
       updateLoadingDirPaths,
-      readDirectory: (dirPath) =>
-        readFileExplorerDirectory(activeWorktreeId, worktreePath, dirPath),
+      readDirectory: (dirPath, signal) =>
+        readFileExplorerDirectory(activeWorktreeId, worktreePath, dirPath, undefined, signal),
       maxConcurrentReads: fileExplorerRefreshConcurrency(
         getFileExplorerOperationOwner(activeWorktreeId)
       ),
@@ -332,6 +338,7 @@ export function useFileExplorerTree(
     setDirCache,
     sourceWorkspaceId,
     loadingDirPaths,
+    cancelledReadRevision,
     rootCache,
     rootError,
     loadDir,

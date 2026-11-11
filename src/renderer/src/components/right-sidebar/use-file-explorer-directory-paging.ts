@@ -45,7 +45,8 @@ export function useFileExplorerDirectoryPaging({
           activeWorktreeId,
           worktreePath,
           dirPath,
-          cursor
+          cursor,
+          loadToken.signal
         )
         if (
           !dirLoadTrackerRef.current.isCurrent(loadToken) ||
@@ -63,20 +64,25 @@ export function useFileExplorerDirectoryPaging({
           ) {
             return prev
           }
+          const existingPaths = new Set(cached.children.map((child) => child.path))
+          const nextChildren = fileExplorerEntriesToTreeNodes(
+            listing.entries,
+            dirPath,
+            depth,
+            worktreePath,
+            listing.operationOwner
+          ).filter((child) => {
+            if (existingPaths.has(child.path)) {
+              return false
+            }
+            existingPaths.add(child.path)
+            return true
+          })
           return {
             ...prev,
             [dirPath]: {
               ...cached,
-              children: [
-                ...cached.children,
-                ...fileExplorerEntriesToTreeNodes(
-                  listing.entries,
-                  dirPath,
-                  depth,
-                  worktreePath,
-                  listing.operationOwner
-                )
-              ],
+              children: [...cached.children, ...nextChildren],
               nextCursor: listing.nextCursor,
               error: undefined
             }
@@ -100,6 +106,7 @@ export function useFileExplorerDirectoryPaging({
         if (dirLoadTrackerRef.current.isCurrent(loadToken)) {
           updateLoadingDirPaths((prev) => clearFileExplorerDirsLoading(prev, [dirPath]))
         }
+        dirLoadTrackerRef.current.finish(loadToken)
       }
     },
     [

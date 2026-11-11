@@ -69,5 +69,62 @@ it('appends a current page once and retains its cursor', async () => {
     'two'
   ])
   expect(result.current.dirCache['/repo'].nextCursor).toBe('cursor-2')
-  expect(read).toHaveBeenLastCalledWith('wt', '/repo', '/repo', 'cursor-1')
+  expect(read).toHaveBeenLastCalledWith('wt', '/repo', '/repo', 'cursor-1', expect.any(AbortSignal))
+})
+
+it('does not duplicate an entry repeated on the next page', async () => {
+  read.mockResolvedValueOnce(page('one', 'cursor-1'))
+  read.mockResolvedValueOnce({
+    entries: [
+      { name: 'one', isDirectory: false },
+      { name: 'two', isDirectory: false }
+    ],
+    nextCursor: null,
+    operationOwner: { kind: 'local' }
+  })
+  const { result } = renderHook(() => useFileExplorerTree('/repo', new Set(), 'wt'))
+  await act(async () => {
+    await result.current.loadDir('/repo', -1)
+  })
+  await act(async () => {
+    await result.current.loadMoreDir('/repo', -1)
+  })
+  expect(result.current.dirCache['/repo'].children.map((entry) => entry.name)).toEqual([
+    'one',
+    'two'
+  ])
+})
+
+it('aborts a hidden view read, rejects its stale result, and reloads on reopen', async () => {
+  let release!: (value: ReturnType<typeof page>) => void
+  read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve
+      })
+  )
+  read.mockResolvedValueOnce(page('current', null))
+  const hook = renderHook(
+    ({ visible }) =>
+      useFileExplorerTree('/repo', new Set(), 'wt', '/repo', visible ? '/repo' : null),
+    { initialProps: { visible: true } }
+  )
+  let pending!: Promise<boolean>
+  act(() => {
+    pending = hook.result.current.loadDir('/repo', -1)
+  })
+  const signal = read.mock.calls[0][4]
+  expect(signal).toBeInstanceOf(AbortSignal)
+  act(() => hook.rerender({ visible: false }))
+  expect(signal.aborted).toBe(true)
+  await act(async () => {
+    release(page('stale', null))
+    await pending
+  })
+  expect(hook.result.current.dirCache['/repo'].children).toEqual([])
+  await act(async () => {
+    hook.rerender({ visible: true })
+    await Promise.resolve()
+  })
+  expect(hook.result.current.dirCache['/repo'].children[0].name).toBe('current')
 })

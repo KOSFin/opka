@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Automation, AutomationRun } from '../../shared/automations-types'
-import type { AutomationRunWriter } from './automation-run-writer'
+import type { LegacyAutomationRunWriter } from './automation-run-writer'
 import { UNEVALUABLE_SCHEDULE, recordUnevaluableAutomation } from './dispatch-refusal'
 
 const brokenAutomation: Automation = {
@@ -52,13 +52,13 @@ const makeRun = (id: string): AutomationRun => ({
 
 /** Records what the writer was asked to do, with `repeatSkip` standing in for a fold or not. */
 function makeRunWriter(foldsRepeat: boolean): {
-  writer: AutomationRunWriter
+  writer: LegacyAutomationRunWriter
   created: string[]
   updated: { status: string; error?: string | null }[]
 } {
   const created: string[] = []
   const updated: { status: string; error?: string | null }[] = []
-  const writer: AutomationRunWriter = {
+  const writer: LegacyAutomationRunWriter = {
     advanceNextRun: async () => brokenAutomation,
     repeatSkip: async () => (foldsRepeat ? makeRun('folded') : null),
     createRun: async () => {

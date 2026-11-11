@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { getAppEnvironment } from '../../../../shared/app-environment'
 import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,7 +21,6 @@ import {
 } from '../../../github/gh-account-token'
 import { validateGhAccountBinding } from '../../../github/gh-account-binding-inventory'
 import type { GhAccountBinding } from '../../../../shared/github/account-binding'
-import { desktopCliLauncherPath } from '../../../cli/desktop-cli-launcher-path'
 import { gitExecFileAsync } from '../../../git/runner'
 import { boundGitPreflightEnvironment } from '../../../git/command-runner/bound-git-child-command'
 import { getLocalBoundReposForRegisteredWorktree } from '../../local-worktree-runtime-options'
@@ -184,12 +183,7 @@ export async function boundGitLocalOperationForWorktree(
   }
   const launcherPath =
     dependencies.launcherPath === undefined
-      ? desktopCliLauncherPath({
-          platform: process.platform,
-          packaged: app.isPackaged,
-          resourcesPath: process.resourcesPath,
-          userDataPath: app.getPath('userData')
-        })
+      ? (getAppEnvironment().getCliLauncherPath?.() ?? null)
       : dependencies.launcherPath
   const commonDirPath = await resolveGitCommonDirectory(args.resolvedPath)
   const commonGitDir = commonDirPath ? await realpath(commonDirPath).catch(() => null) : null

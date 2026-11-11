@@ -42,7 +42,8 @@ export async function readFileExplorerDirectory(
   activeWorktreeId: string | null | undefined,
   worktreePath: string | null,
   dirPath: string,
-  cursor?: string
+  cursor?: string,
+  signal?: AbortSignal
 ): Promise<FileExplorerDirectoryListing> {
   const operationOwner = getFileExplorerOperationOwner(activeWorktreeId)
   const route = getFileExplorerOperationRoute(operationOwner)
@@ -61,7 +62,8 @@ export async function readFileExplorerDirectory(
       ...(useAppStore.getState().settings?.followSymlinkedDirectories
         ? { followSymlinks: true }
         : {}),
-      ...(cursor ? { cursor } : {})
+      ...(cursor ? { cursor } : {}),
+      ...(signal ? { signal } : {})
     }
   )
   // Why: remote-runtime and paired-web routes return the host's order verbatim,

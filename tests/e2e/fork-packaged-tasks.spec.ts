@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
 import { prepareForkProfileCli } from './helpers/fork-profile-cli'
+import { selectTaskProject } from './helpers/task-project-picker'
 import {
   FORK_TASK_TERMINAL_FIXTURE,
   FORK_TASK_FILTERED_CODEX_FIXTURE
@@ -44,8 +45,7 @@ async function rpc(page: Page, method: string, params: Record<string, unknown>) 
 
 async function openReport(page: Page) {
   await page.getByText('Tasks', { exact: true }).first().click()
-  await page.getByRole('combobox', { name: 'Task project' }).click()
-  await page.getByRole('option', { name: /Packaged task project/ }).click()
+  await selectTaskProject(page, /Packaged task project/)
   await page.getByRole('button', { name: /Packaged task smoke/ }).click()
   await page.getByRole('button', { name: 'Reports & notes', exact: true }).click()
   await expect(page.getByRole('region', { name: 'Task reports and notes' })).toContainText(

@@ -14,6 +14,23 @@ import { assertWorkerStartTaskSpecWithinPromptBudget } from './rpc/methods/orche
 import { projectTaskAttemptSpec } from '../project-tasks/task-attempt-spec'
 import { projectTaskRepositories } from '../../shared/project-task-placement'
 
+export function isManualProjectTaskOperatorStart(
+  context: Pick<
+    RpcContext,
+    'caller' | 'pairedDeviceId' | 'orchestrationCaller' | 'orchestrationCompatibilityEvidence'
+  >,
+  params: Pick<z.infer<typeof ProjectTaskStart>, 'delegationCapability' | 'requestId'>
+): boolean {
+  return (
+    context.caller?.kind === 'desktop' &&
+    !context.pairedDeviceId &&
+    !context.orchestrationCaller &&
+    !context.orchestrationCompatibilityEvidence &&
+    !params.delegationCapability &&
+    !params.requestId
+  )
+}
+
 export async function startProjectTask(
   params: z.infer<typeof ProjectTaskStart>,
   context: RpcContext
@@ -79,12 +96,14 @@ export async function startProjectTask(
       }
       return store.transaction(() => {
         store.syncGraph(projectId, root, snapshot.tasks)
-        const delegation = optionalProjectTaskDelegationContext(
-          context,
-          resources,
-          params.launch.from,
-          params.delegationCapability
-        )
+        const delegation = isManualProjectTaskOperatorStart(context, params)
+          ? undefined
+          : optionalProjectTaskDelegationContext(
+              context,
+              resources,
+              params.launch.from,
+              params.delegationCapability
+            )
         const dependencies = snapshot.tasks.filter((entry) => current.depends_on.includes(entry.id))
         if (delegation) {
           if (!params.requestId) {

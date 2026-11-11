@@ -129,6 +129,7 @@ describe('folder workspace generic activation and activity', () => {
     const workspaceKey = folderWorkspaceKey(folderWorkspace.id)
     folderWorkspacesUpdate.mockImplementation(respondWithUpdates(folderWorkspace))
     const store = seedLocalFolderStore(folderWorkspace)
+    store.setState({ ...rememberedBrowserSurface(workspaceKey), activeView: 'terminal' })
 
     installAttentionScreen(store, true)
     store.getState().setActiveWorktree(workspaceKey)

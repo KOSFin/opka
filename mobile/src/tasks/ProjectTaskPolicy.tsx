@@ -31,6 +31,8 @@ export function ProjectTaskPolicy(props: {
   const owner = `${props.hostId}:${props.worktree}:${props.executionHostId}`
   const generation = props.client?.getGeneration?.() ?? 0
   const busyRef = useRef(false)
+  const readSequence = useRef(0)
+  const renderedReadSequence = readSequence.current
   const [policy, setPolicy] = useState<TaskPolicy | null>(null)
   const [observedAt, setObservedAt] = useState(0)
   const [proposal, setProposal] = useState<TaskPolicyProposal | null>(null)
@@ -41,13 +43,14 @@ export function ProjectTaskPolicy(props: {
   const [taskIds, setTaskIds] = useState('')
   const [hours, setHours] = useState(8)
   const [actions, setActions] = useState<DelegationAction[]>(['approve-plan'])
-  const current = () =>
+  const sameOwner = () =>
     latest.current.client === props.client &&
     latest.current.hostId === props.hostId &&
     latest.current.worktree === props.worktree &&
     latest.current.executionHostId === props.executionHostId &&
-    (props.client?.getGeneration?.() ?? 0) === generation &&
-    props.client?.getState() === 'connected'
+    (props.client?.getGeneration?.() ?? 0) === generation
+  const current = () => sameOwner() && props.client?.getState() === 'connected'
+  const actionCurrent = () => current() && readSequence.current === renderedReadSequence
   const target = {
     worktree: props.worktree,
     expectedExecutionHostId: props.executionHostId,
@@ -55,14 +58,40 @@ export function ProjectTaskPolicy(props: {
   } as const
 
   async function read() {
-    if (!props.client || !props.supported || !props.connected || !props.executionHostId) {
+    if (
+      !props.client ||
+      !props.supported ||
+      !props.connected ||
+      !props.executionHostId ||
+      !sameOwner()
+    ) {
       return
     }
-    const result = taskPolicyRead.interpret(await taskPolicyRead.request(props.client, target))
-    if (current()) {
-      setObservedAt(Date.now())
-      setPolicy(result)
+    const request = ++readSequence.current
+    setPolicy(null)
+    setProposal(null)
+    setError('')
+    if (!current()) {
+      setError('Host policy unavailable')
+      return
     }
+    try {
+      const result = taskPolicyRead.interpret(await taskPolicyRead.request(props.client, target))
+      if (current() && request === readSequence.current) {
+        setObservedAt(Date.now())
+        setPolicy(result)
+      }
+    } catch (cause) {
+      if (sameOwner() && request === readSequence.current) {
+        setError(cause instanceof Error ? cause.message : 'Policy unavailable')
+      }
+    }
+  }
+
+  async function refreshAfterAction() {
+    busyRef.current = false
+    setBusy(false)
+    await read()
   }
 
   useEffect(() => {
@@ -74,22 +103,26 @@ export function ProjectTaskPolicy(props: {
   }, [policy, observedAt])
 
   useEffect(() => {
+    readSequence.current += 1
     setPolicy(null)
     setProposal(null)
     setError('')
     busyRef.current = false
     setBusy(false)
     if (props.supported && props.connected && props.client && props.executionHostId) {
-      void read().catch((cause: unknown) => {
-        if (current()) {
-          setError(cause instanceof Error ? cause.message : 'Policy unavailable')
-        }
-      })
+      void read()
     }
   }, [props.client, owner, props.supported, props.connected, generation])
 
   async function begin(manual: boolean) {
-    if (!props.client || !props.connected || !props.supported || !policy || busyRef.current) {
+    if (
+      !props.client ||
+      !props.connected ||
+      !props.supported ||
+      !policy ||
+      busyRef.current ||
+      !actionCurrent()
+    ) {
       return
     }
     if (!manual && (!grantee.trim() || !actions.length)) {
@@ -123,20 +156,16 @@ export function ProjectTaskPolicy(props: {
               }
         })
       )
-      if (current()) {
+      if (actionCurrent()) {
         setProposal(result)
       }
     } catch (cause) {
-      if (current()) {
+      if (actionCurrent()) {
         setError(cause instanceof Error ? cause.message : 'Proposal failed. Refresh this host.')
-        void read().catch(() => {
-          if (current()) {
-            setPolicy(null)
-          }
-        })
+        void refreshAfterAction()
       }
     } finally {
-      if (current()) {
+      if (actionCurrent()) {
         busyRef.current = false
         setBusy(false)
       }
@@ -144,7 +173,7 @@ export function ProjectTaskPolicy(props: {
   }
 
   async function confirm() {
-    if (!props.client || !proposal || busyRef.current || !current()) {
+    if (!props.client || !proposal || busyRef.current || !actionCurrent()) {
       return
     }
     busyRef.current = true
@@ -161,25 +190,23 @@ export function ProjectTaskPolicy(props: {
           requestId: randomV4Uuid()
         })
       )
-      if (current()) {
-        await read()
-        latest.current.onChanged()
+      if (actionCurrent()) {
+        await refreshAfterAction()
+        if (current()) {
+          latest.current.onChanged()
+        }
       }
     } catch (cause) {
-      if (current()) {
+      if (actionCurrent()) {
         setError(
           cause instanceof Error
             ? `${cause.message} Refresh the host policy before another proposal.`
             : 'Confirmation uncertain. Refresh the host policy before another proposal.'
         )
-        void read().catch(() => {
-          if (current()) {
-            setPolicy(null)
-          }
-        })
+        void refreshAfterAction()
       }
     } finally {
-      if (current()) {
+      if (actionCurrent()) {
         busyRef.current = false
         setBusy(false)
       }
@@ -195,7 +222,9 @@ export function ProjectTaskPolicy(props: {
       <Text style={styles.meta}>
         {policy
           ? `${policy.grant && policy.grant.expiresAt > observedAt ? 'Delegated policy' : policy.grant ? 'Manual review required · grant expired' : 'Manual'} · generation ${policy.generation}`
-          : 'Checking host policy…'}
+          : error
+            ? 'Host policy unavailable · refresh to retry'
+            : 'Checking host policy…'}
       </Text>
       {policy?.grant ? (
         <Text style={styles.meta}>
@@ -358,13 +387,7 @@ export function ProjectTaskPolicy(props: {
       <Pressable
         accessibilityRole="button"
         disabled={busy || !props.connected}
-        onPress={() =>
-          void read().catch((cause: unknown) => {
-            if (current()) {
-              setError(cause instanceof Error ? cause.message : 'Policy unavailable')
-            }
-          })
-        }
+        onPress={() => void read()}
         style={styles.button}
       >
         <Text style={styles.text}>Refresh policy</Text>

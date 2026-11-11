@@ -88,6 +88,11 @@ export const PERSISTED_STATE_DISPOSITIONS = {
   migrationUnsupportedPtyEntries: { disposition: 'gate', item: 20 },
   legacyPaneKeyAliasEntries: { disposition: 'gate', item: 20 },
   automations: moveDisposition(18),
+  automationCommandsV1: {
+    disposition: 'gate',
+    item: 18,
+    note: 'Execution-host-owned definitions and active claims require a scoped move preflight before writes.'
+  },
   automationRuns: moveDisposition(19, {
     note: 'An in-flight run in scope blocks the move.'
   }),

@@ -18,9 +18,34 @@ const run = { ...data.automationRuns[0], id: 'run-1', automationId: automation.i
 function writerWith(selector: ReturnType<Store['automationChangeSelector']>) {
   const publish = vi.fn()
   const automationChangeSelector = vi.fn(() => selector)
+  const claim = {
+    automationId: automation.id,
+    runId: run.id,
+    definitionRevision: 1,
+    hostId: 'local',
+    hostGeneration: 1,
+    acquisitionId: 'acquisition-1',
+    attempt: 1,
+    phase: 'acquiring' as const,
+    createdAt: 1
+  }
   const store = {
     flushPendingOrThrowAsync: vi.fn().mockResolvedValue(undefined),
     createAutomationRun: vi.fn(() => run),
+    claimCommandAutomationRun: vi.fn<Store['claimCommandAutomationRun']>(() => ({
+      kind: 'claimed' as const,
+      run,
+      claim
+    })),
+    advanceCommandAutomationRun: vi.fn(() => run),
+    bindCommandAutomationProcessIntent: vi.fn(() => claim),
+    recordCommandAutomationExitProof: vi.fn(() => claim),
+    requestCommandAutomationCancel: vi.fn(() => claim),
+    settleCommandAutomationRun: vi.fn(() => run),
+    releaseCommandAutomationClaim: vi.fn(),
+    advanceCommandAutomationNextRun: vi.fn<Store['advanceCommandAutomationNextRun']>(() => {
+      throw new Error('unused')
+    }),
     updateAutomationRun: vi.fn(() => run),
     recordRepeatedAutomationSkip: vi.fn(() => null),
     advanceAutomationNextRun: vi.fn(() => automation),
@@ -35,6 +60,90 @@ function writerWith(selector: ReturnType<Store['automationChangeSelector']>) {
 }
 
 describe('automation run writer publications', () => {
+  it('publishes a command claim only after its joint durable write', async () => {
+    const { store, writer, publish } = writerWith(SSH_SELECTOR)
+    const acknowledgement = Promise.withResolvers<void>()
+    vi.spyOn(store, 'flushPendingOrThrowAsync').mockReturnValue(acknowledgement.promise)
+    const request = {
+      automationId: automation.id,
+      definitionRevision: 1,
+      ownerHostId: 'local',
+      ownerHostGeneration: 1,
+      scheduledFor: 1,
+      trigger: 'manual' as const,
+      manualRequest: { key: 'key-1', createdAt: 1, payloadHash: 'hash-1' },
+      now: 1
+    }
+    const pending = writer.claimCommandRun(request)
+    await Promise.resolve()
+    expect(publish).not.toHaveBeenCalled()
+    acknowledgement.resolve()
+    await pending
+    expect(publish).toHaveBeenCalledWith({ reason: 'run', selector: SSH_SELECTOR })
+  })
+
+  it('holds a replay receipt until the shared claim is durable', async () => {
+    const { store, writer, publish } = writerWith(SSH_SELECTOR)
+    const acknowledgement = Promise.withResolvers<void>()
+    vi.spyOn(store, 'flushPendingOrThrowAsync').mockReturnValue(acknowledgement.promise)
+    vi.spyOn(store, 'claimCommandAutomationRun')
+      .mockReturnValueOnce({
+        kind: 'claimed',
+        run,
+        claim: {
+          automationId: automation.id,
+          runId: run.id,
+          definitionRevision: 1,
+          hostId: 'local',
+          hostGeneration: 1,
+          acquisitionId: 'acquisition-1',
+          attempt: 1,
+          phase: 'acquiring',
+          createdAt: 1
+        }
+      })
+      .mockReturnValueOnce({ kind: 'replayed', run })
+    const request = {
+      automationId: automation.id,
+      definitionRevision: 1,
+      ownerHostId: 'local',
+      ownerHostGeneration: 1,
+      scheduledFor: 1,
+      trigger: 'manual' as const,
+      manualRequest: { key: 'key-1', createdAt: 1, payloadHash: 'hash-1' },
+      now: 1
+    }
+    const first = writer.claimCommandRun(request)
+    const replayed = vi.fn()
+    const second = writer.claimCommandRun(request).then(replayed)
+    await Promise.resolve()
+    expect(replayed).not.toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
+    acknowledgement.resolve()
+    await Promise.all([first, second])
+    expect(replayed).toHaveBeenCalledWith({ kind: 'replayed', run })
+    expect(publish).toHaveBeenCalledOnce()
+  })
+
+  it('rejects a replay when its claim flush fails', async () => {
+    const { store, writer, publish } = writerWith(SSH_SELECTOR)
+    vi.spyOn(store, 'claimCommandAutomationRun').mockReturnValueOnce({ kind: 'replayed', run })
+    vi.spyOn(store, 'flushPendingOrThrowAsync').mockRejectedValueOnce(new Error('disk full'))
+    await expect(
+      writer.claimCommandRun({
+        automationId: automation.id,
+        definitionRevision: 1,
+        ownerHostId: 'local',
+        ownerHostGeneration: 1,
+        scheduledFor: 1,
+        trigger: 'manual',
+        manualRequest: { key: 'key-1', createdAt: 1, payloadHash: 'a'.repeat(64) },
+        now: 1
+      })
+    ).rejects.toThrow('disk full')
+    expect(publish).not.toHaveBeenCalled()
+  })
+
   it('waits for durable acknowledgement before publishing or returning a run', async () => {
     const { store, writer, publish } = writerWith(SSH_SELECTOR)
     const acknowledgement = Promise.withResolvers<void>()
@@ -56,6 +165,25 @@ describe('automation run writer publications', () => {
     await expect(writer.updateRun({ runId: 'run-1', status: 'completed' })).rejects.toThrow(
       'disk full'
     )
+    expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('retains the command claim when the final report flush fails', async () => {
+    const { store, writer, publish } = writerWith(SSH_SELECTOR)
+    vi.spyOn(store, 'flushPendingOrThrowAsync').mockRejectedValueOnce(new Error('disk full'))
+    await expect(
+      writer.settleCommandRun(
+        {
+          automationId: automation.id,
+          runId: run.id,
+          acquisitionId: 'acquisition-1',
+          hostGeneration: 1,
+          expectedPhase: 'report'
+        },
+        { status: 'completed', finalReason: 'never_agent', deliveryStatus: 'history_only' }
+      )
+    ).rejects.toThrow('disk full')
+    expect(store.releaseCommandAutomationClaim).not.toHaveBeenCalled()
     expect(publish).not.toHaveBeenCalled()
   })
 

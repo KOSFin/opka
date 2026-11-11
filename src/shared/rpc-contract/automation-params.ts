@@ -176,12 +176,17 @@ export const AutomationId = z.object({
   expectedOwner: ExpectedOwner
 })
 
-export const AutomationRuns = z.object({
-  automationId: OptionalString,
-  expectedOwner: ExpectedOwner,
-  limit: OptionalPositiveInt,
-  cursor: OptionalString
-})
+export const AutomationRuns = z
+  .object({
+    automationId: OptionalString,
+    expectedOwner: ExpectedOwner,
+    limit: OptionalPositiveInt,
+    cursor: OptionalString,
+    manualRequestKey: z.string().min(1).max(128).optional()
+  })
+  .refine((value) => !value.manualRequestKey || !!value.automationId, {
+    message: 'Manual receipt lookup needs an automation id.'
+  })
 
 // Why strict: null or a non-string must fail rather than fall back to "omitted", which preserves.
 const ExtraAgentArgs = z.string({ message: 'Extra agent arguments must be text.' }).optional()

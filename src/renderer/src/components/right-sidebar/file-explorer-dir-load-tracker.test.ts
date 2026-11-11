@@ -9,7 +9,9 @@ describe('createFileExplorerDirLoadTracker', () => {
     const secondLoad = tracker.begin('/repo')
 
     expect(tracker.isCurrent(firstLoad)).toBe(false)
+    expect(firstLoad.signal.aborted).toBe(true)
     expect(tracker.isCurrent(secondLoad)).toBe(true)
+    expect(secondLoad.signal.aborted).toBe(false)
   })
 
   it('keeps concurrent loads for different directories independent', () => {
@@ -30,7 +32,19 @@ describe('createFileExplorerDirLoadTracker', () => {
     const newSessionLoad = tracker.begin('/repo')
 
     expect(tracker.isCurrent(oldSessionLoad)).toBe(false)
+    expect(oldSessionLoad.signal.aborted).toBe(true)
     expect(tracker.isCurrent(newSessionLoad)).toBe(true)
+  })
+
+  it('releases completed requests without aborting their signal', () => {
+    const tracker = createFileExplorerDirLoadTracker()
+    const completed = tracker.begin('/repo')
+
+    tracker.finish(completed)
+    tracker.reset()
+
+    expect(completed.signal.aborted).toBe(false)
+    expect(tracker.isCurrent(completed)).toBe(false)
   })
 
   it('invalidates session snapshots only when the tree reset session changes', () => {

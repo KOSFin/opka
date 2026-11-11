@@ -1,8 +1,11 @@
 import { lstatSync } from 'node:fs'
 import type { OrchestrationDb } from './orchestration/db/orchestration-db'
 import { SCHEMA_VERSION } from './orchestration/db/contract-constants'
+import { TaskDelegationGrant } from '../../shared/project-task-delegation'
 
 export type NativeStdioReferenceVerdict = 'clear' | 'present' | 'unverifiable'
+// A maximal valid grant has 1,000 256-character task IDs, even when JSON escapes each character.
+const MAX_DELEGATION_GRANT_BYTES = 2 * 1024 * 1024
 const KNOWN_TABLES = new Set([
   'runs',
   'messages',
@@ -36,9 +39,21 @@ const KNOWN_TABLES = new Set([
   'account_pool_native_scopes',
   'project_task_homes',
   'project_task_items',
+  'project_task_graph',
+  'project_task_attempt_placements',
   'project_task_attempts',
   'project_task_session_attempts',
-  'project_task_events'
+  'project_task_events',
+  'project_task_delegation_policy',
+  'project_task_delegation_proposals',
+  'project_task_delegation_mutations',
+  'project_task_delegation_audit',
+  'project_task_delegated_plans',
+  'project_task_admissions',
+  'project_task_results',
+  'project_task_review_assignments',
+  'project_task_reviews',
+  'project_task_acceptances'
 ])
 function readAdditionalReferenceColumns(
   db: OrchestrationDb['db'],
@@ -80,6 +95,52 @@ function readAdditionalReferenceColumns(
             `structured:${sessionId}`
           )
       ) {
+        return 'present'
+      }
+    }
+  }
+  return 'clear'
+}
+function readActiveDelegationReferences(
+  db: OrchestrationDb['db'],
+  sessionId: string
+): NativeStdioReferenceVerdict {
+  const now = Date.now()
+  const addresses = new Set([sessionId, `orca_session_id:${sessionId}`, `session:${sessionId}`])
+  for (const [table, proposal] of [
+    ['project_task_delegation_policy', false],
+    ['project_task_delegation_proposals', true]
+  ] as const) {
+    let count = 0
+    for (const _ of db
+      .prepare(`SELECT 1 FROM ${table} WHERE grant_json IS NOT NULL LIMIT 65`)
+      .iterate()) {
+      if (++count > 64) {
+        return 'unverifiable'
+      }
+    }
+    const sql = `SELECT CASE WHEN length(CAST(grant_json AS BLOB)) <= ${MAX_DELEGATION_GRANT_BYTES} THEN grant_json END AS grant_json${proposal ? ',expires_at' : ''} FROM ${table} WHERE grant_json IS NOT NULL`
+    for (const row of db.prepare(sql).iterate()) {
+      if (typeof row.grant_json !== 'string') {
+        return 'unverifiable'
+      }
+      const proposalExpiresAt = row.expires_at
+      if (
+        proposal &&
+        (typeof proposalExpiresAt !== 'number' ||
+          !Number.isSafeInteger(proposalExpiresAt) ||
+          proposalExpiresAt <= 0)
+      ) {
+        return 'unverifiable'
+      }
+      const grant = TaskDelegationGrant.parse(JSON.parse(row.grant_json))
+      if (
+        grant.expiresAt <= now ||
+        (proposal && typeof proposalExpiresAt === 'number' && proposalExpiresAt <= now)
+      ) {
+        continue
+      }
+      if (addresses.has(grant.actorAddress)) {
         return 'present'
       }
     }
@@ -176,8 +237,12 @@ export function readNativeStdioExternalReferences(
       return 'unverifiable'
     }
     const additional = readAdditionalReferenceColumns(db, sessionId)
+    if (additional !== 'clear') {
+      return additional
+    }
+    const delegation = readActiveDelegationReferences(db, sessionId)
     args.assertExclusive()
-    return additional
+    return delegation
   } catch {
     return 'unverifiable'
   }

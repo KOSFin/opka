@@ -184,6 +184,7 @@ export function useFileExplorerTreePaneState({
     expanded: effectiveExpanded,
     dirCache,
     loadingDirPaths,
+    cancelledReadRevision: tree.cancelledReadRevision,
     rootError:
       rootError ?? (displayRootPath ? tree.dirCache[displayRootPath]?.error : null) ?? null,
     isDirStale,

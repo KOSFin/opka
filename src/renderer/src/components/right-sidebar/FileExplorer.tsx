@@ -110,7 +110,8 @@ function FileExplorerFiles(): React.JSX.Element {
     worktreePath,
     effectiveExpanded,
     activeWorktreeId,
-    displayRootPath
+    displayRootPath,
+    visibleFilesWorktreePath
   )
   const {
     nameFilterQuery,

@@ -192,6 +192,9 @@ export function FileExplorerFilesTreePane({
       )}
       {showTree && (
         <FileExplorerVirtualRows
+          worktreePath={worktreePath}
+          displayRootPath={displayRootPath}
+          onLoadMoreDir={tree.loadMoreDir}
           displayDepthOffset={getExplorerDisplayDepth(worktreePath, displayRootPath)}
           virtualizer={virtualizer}
           inlineInputIndex={inlineInputIndex}

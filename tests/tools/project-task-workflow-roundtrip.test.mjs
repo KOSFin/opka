@@ -146,7 +146,7 @@ describe('project workflow RPC admission and native launch bridge', () => {
       ]),
       json: false
     })
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('Current plan approved: true'))
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Current admission eligible: true'))
   })
   it('binds before the native handler and rejects a concurrent claim without a second launch', async () => {
     const { db, invoke, task } = await fixture()

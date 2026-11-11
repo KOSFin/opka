@@ -211,6 +211,7 @@ export async function consumeCodexRateLimitResetCreditFromBackend(
     'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume',
     {
       method: 'POST',
+      redirect: 'manual',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ redeem_request_id: options.idempotencyKey }),
       signal
@@ -218,6 +219,19 @@ export async function consumeCodexRateLimitResetCreditFromBackend(
   )
   if (!response.ok) {
     await cancelUnreadResponseBody(response)
+    if (response.status === 401) {
+      throw new Error(
+        'Codex provider rejected the reset request (HTTP 401; reason unknown). The reset outcome is unconfirmed.'
+      )
+    }
+    if (response.status === 403) {
+      throw new Error(
+        'Codex provider rejected the reset request (HTTP 403; reason unknown). The reset outcome is unconfirmed.'
+      )
+    }
+    if (response.status >= 300 && response.status < 400) {
+      throw new Error('Codex backend redirected the reset request; no reset was confirmed.')
+    }
     throw new Error(`Codex reset failed: HTTP ${response.status}`)
   }
   const payload = (await response.json()) as { code?: string }

@@ -4,6 +4,26 @@ import { initializeTerminalScopes } from '../../../src/main/daemon/terminal-scop
 
 export { buildDurableDaemonScopeCommand } from '../../../src/main/daemon/daemon-cgroup-scope'
 export { wrapPtySpawnInTerminalScope } from '../../../src/main/daemon/terminal-scopes-runtime'
+export { createLinuxCommandAutomationAdapter } from '../../../src/main/automations/automation-linux-command-adapter'
+export { AutomationCommandService } from '../../../src/main/automations/automation-command-service'
+export { createAutomationRunWriter } from '../../../src/main/automations/automation-run-writer'
+export { Store } from '../../../src/main/persistence/loading-store/store'
+export { ProfileStateSqliteAuthority } from '../../../src/main/persistence/profile-state/profile-state-sqlite-authority'
+export {
+  AutomationCommandDefinitionV1,
+  readAutomationCommandsV1Domain
+} from '../../../src/shared/automation-command-domain'
+export { getDefaultPersistedState } from '../../../src/shared/constants'
+export { recoverActiveAutomationCommandRuns } from '../../../src/main/persistence/loading-store/automation-command-run-recovery'
+export {
+  advanceAutomationCommandRun,
+  settleAutomationCommandRun,
+  releaseAutomationCommandClaim
+} from '../../../src/main/persistence/scheduling-automations/automation-command-progress-operations'
+export {
+  bindAutomationCommandProcessIntent,
+  recordAutomationCommandExitProof
+} from '../../../src/main/persistence/scheduling-automations/automation-command-process-operations'
 
 export function startScopeReaper(launchNonce: string, freshScope: boolean) {
   return startDaemonScopeDeathWatch({

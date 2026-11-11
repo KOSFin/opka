@@ -51,6 +51,7 @@ export const HOST_OPERATION_OWNERSHIP = {
   plugins: 'host',
   preflight: 'host',
   project: 'host',
+  projectTask: 'host',
   projectGroup: 'host',
   projectHostSetup: 'host',
   reference: 'host',

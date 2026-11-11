@@ -25,7 +25,7 @@ export type RefreshFileExplorerExpandedDirsParams = {
   dirLoadTracker: FileExplorerDirLoadTracker
   setDirCache: Dispatch<SetStateAction<Record<string, DirCache>>>
   updateLoadingDirPaths: FileExplorerLoadingDirsUpdater
-  readDirectory: (dirPath: string) => Promise<FileExplorerDirectoryListing>
+  readDirectory: (dirPath: string, signal: AbortSignal) => Promise<FileExplorerDirectoryListing>
   maxConcurrentReads: number
   /** Called per dir whose fresh listing was committed, so callers can clear a staleness mark. */
   onDirCommitted?: (dirPath: string) => void
@@ -154,7 +154,7 @@ export async function refreshFileExplorerExpandedDirs({
       }
       let cache: DirCache | undefined
       try {
-        const listing = await readDirectory(dirPath)
+        const listing = await readDirectory(dirPath, loadToken.signal)
         if (dirLoadTracker.isCurrent(loadToken)) {
           cache = {
             children: fileExplorerEntriesToTreeNodes(
@@ -173,12 +173,16 @@ export async function refreshFileExplorerExpandedDirs({
           cache = { children: [], error: describeFileExplorerReadError(error) }
         }
       }
+      dirLoadTracker.finish(loadToken)
       settleRead(cache ? { dirPath, cache } : undefined)
     })
     if (settledSinceCommit > 0) {
       commitPendingResults()
     }
   } finally {
+    for (const token of loadTokens.values()) {
+      dirLoadTracker.finish(token)
+    }
     // Why: no dir this refresh still owns may keep a spinner once the wave ends, including the
     // ones a failed commit or a superseded read left uncommitted.
     clearOwnedLoadingMarks(uniqueDirPaths)

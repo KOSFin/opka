@@ -121,8 +121,9 @@ jobs:
           - { shard: 3, group: root, label: '3/4' }
           - { shard: 4, group: root, label: '4/4' }
           - { shard: 1, group: shared, label: 'mobile and integration' }
+          - { shard: 1, group: automation-containment, label: 'automation physical scope' }
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: ${{ matrix.group == 'automation-containment' && 40 || matrix.group == 'shared' && 55 || 25 }}
     env:
       OPKA_FORK_TEST_GROUP: ${{ matrix.group }}
       OPKA_FORK_TEST_SHARD_INDEX: ${{ matrix.shard }}
@@ -137,10 +138,12 @@ jobs:
         with:
           native-runtime: node
       - uses: ./.github/actions/install-mobile-dependencies
+        if: matrix.group != 'automation-containment'
       - name: Install the pinned headless renderer browser
         if: matrix.group == 'shared'
         run: node node_modules/playwright-core/cli.js install --with-deps chromium webkit
       - name: Test host accounts, mobile state and generated pages
+        if: matrix.group != 'automation-containment'
         env:
           OPKA_MOBILE_EVIDENCE_DIR: ${{ github.workspace }}/out/mobile-web-qa
           ORCA_MOBILE_WEB_APP_DEPS_REQUIRED: '1'
@@ -154,6 +157,70 @@ jobs:
           else
             pnpm run test:fork
           fi
+      - name: Cache pinned Codex replay build inputs
+        if: matrix.group == 'shared'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/opka-replay-ci/source.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/go.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/modules
+          key: codex-replay-linux-x64-${{ hashFiles('config/scripts/build-codex-replay-engine.mjs', 'config/patches/cli-proxy-api-8.0.55-native-replay.patch', 'config/patches/cli-proxy-api-8.0.55-native-replay.source-sha256') }}-e6e5708e677adb2463d45accdd24bc9fd028ddd8-ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5
+      - name: Build exact native replay engine from pinned public inputs
+        if: matrix.group == 'shared'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/opka-replay-ci"
+          mkdir -p "$work/modules" "$work/go" "$work/source" out/native-transport
+          if [ ! -f "$work/source.tar.gz" ]; then
+            curl --connect-timeout 10 --max-time 300 -fsSL 'https://codeload.github.com/router-for-me/CLIProxyAPI/tar.gz/e6e5708e677adb2463d45accdd24bc9fd028ddd8' -o "$work/source.tar.gz"
+          fi
+          if [ ! -f "$work/go.tar.gz" ]; then
+            curl --connect-timeout 10 --max-time 300 -fsSL 'https://go.dev/dl/go1.26.10.linux-amd64.tar.gz' -o "$work/go.tar.gz"
+          fi
+          printf '%s  %s\n' '45d766358b7e6c453031800af6f1ba6fa1a30bf06a9aca9de8e39141aeaf5b56' "$work/source.tar.gz" 'ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5' "$work/go.tar.gz" | sha256sum -c -
+          tar -xf "$work/go.tar.gz" -C "$work/go" --strip-components=1
+          tar -xf "$work/source.tar.gz" -C "$work/source" --strip-components=1
+          (cd "$work/source" && GOMODCACHE="$work/modules" timeout --signal=TERM --kill-after=10s 600s "$work/go/bin/go" mod download)
+          GOMODCACHE="$work/modules" timeout --signal=TERM --kill-after=10s 1080s node config/scripts/build-codex-replay-engine.mjs linux-x64 "$work/source.tar.gz" "$work/go.tar.gz" "$PWD/.build/codex-routing-replay"
+          sha256sum .build/codex-routing-replay/linux-x64/{cli-proxy-api,engine.zip,manifest.json} > out/native-transport/engine-hashes.txt
+          printf '%s  %s\n' 'e94a00b52f2889369f663e5ec72be141ccaaaf943a3ebf039df44330cffc487f' '.build/codex-routing-replay/linux-x64/cli-proxy-api' '07cb29062e910eb7047d23a70b71caae32e112b4dd3a341bc4a1a5651c17b89d' '.build/codex-routing-replay/linux-x64/engine.zip' 'a83672b2e5e3ce564e936c128bad15313f97ca68874053c971141a42d8b0bbd7' '.build/codex-routing-replay/linux-x64/manifest.json' | sha256sum -c -
+      - name: Qualify public Codex opaque compact and resumed request in isolation
+        if: matrix.group == 'shared'
+        shell: bash
+        run: |
+          set -euo pipefail
+          codex_root="$RUNNER_TEMP/opka-codex-transport"
+          timeout --signal=TERM --kill-after=10s 240s npm install --no-audit --no-fund --ignore-scripts --prefix "$codex_root" '@openai/codex@0.166.0'
+          codex_binary="$codex_root/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+          if [ ! -f "$codex_binary" ]; then
+            codex_binary="$codex_root/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+          fi
+          printf '%s  %s\n' 'b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8' "$codex_binary" | sha256sum -c -
+          timeout --signal=TERM --kill-after=10s 180s bash config/scripts/codex-routing-transport-compact-ci.sh "$codex_binary" "$PWD/.build/codex-routing-replay/linux-x64/cli-proxy-api" "$PWD/out/native-transport/public-compact-resume.json" > out/native-transport/public-compact-resume.log 2>&1
+      - name: Keep exact synthetic native transport evidence
+        if: always() && matrix.group == 'shared'
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-transport-${{ github.sha }}
+          path: out/native-transport/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify command automation physical scope and fresh-process recovery
+        if: matrix.group == 'automation-containment'
+        timeout-minutes: 36
+        env:
+          ORCA_DAEMON_SCOPE_ARTIFACT_DIR: ${{ github.workspace }}/out/automation-scope
+        run: node config/scripts/run-daemon-scope-lifetime-docker.mjs --baseline 0e2fc2618b5317120b1323c90eafbd47ac1b7cb4
+      - name: Preserve mandatory physical scope receipts
+        if: ${{ always() && matrix.group == 'automation-containment' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: automation-physical-scope-${{ github.sha }}
+          path: out/automation-scope/
+          if-no-files-found: error
+          retention-days: 7
       - name: Save synthetic mobile page evidence
         if: ${{ always() && matrix.group == 'shared' }}
         uses: actions/upload-artifact@v7
@@ -163,7 +230,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Save this shard's test selection
-        if: always()
+        if: always() && matrix.group != 'automation-containment'
         uses: actions/upload-artifact@v7
         with:
           name: fork-test-selection-${{ github.sha }}-${{ matrix.group }}-${{ matrix.shard }}

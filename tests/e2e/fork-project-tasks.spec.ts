@@ -4,6 +4,7 @@ import path from 'node:path'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
 import { prepareForkProfileCli } from './helpers/fork-profile-cli'
+import { selectTaskProject } from './helpers/task-project-picker'
 import { runProcessSync } from '@orca/process-host'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 
@@ -30,8 +31,7 @@ async function openTaskPage(page: Page, root?: string) {
   await page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
   await expect(page.getByRole('heading', { name: 'Project tasks', exact: true })).toBeVisible()
   if (root) {
-    await page.getByRole('combobox', { name: 'Task project' }).click()
-    await page.getByRole('option', { name: /Task fixture/ }).click()
+    await selectTaskProject(page, /Task fixture/)
   }
 }
 

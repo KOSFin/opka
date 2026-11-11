@@ -147,7 +147,16 @@ export type AutomationRun = {
   /** Why: run history must remain understandable after the backing workspace
    *  is deleted and its live metadata is gone. */
   workspaceDisplayName?: string | null
-  sessionKind: 'terminal'
+  sessionKind: 'terminal' | 'command'
+  commandExecution?: {
+    version: 1
+    phase: 'acquiring' | 'command' | 'condition' | 'agent' | 'report' | 'unverifiable' | 'settled'
+    attempt: number
+    observation: 'live' | 'unverifiable' | 'exited'
+    finalReason: string | null
+    overlapCount?: number
+    deliveryStatus?: 'history_only' | 'delivered' | 'failed'
+  }
   chatSessionId: string | null
   terminalSessionId: string | null
   /** Why: a terminal tab can later point at a different pane/PTY. Automation

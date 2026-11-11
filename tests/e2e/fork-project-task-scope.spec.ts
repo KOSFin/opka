@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
+import { selectTaskProject } from './helpers/task-project-picker'
 import { projectTaskTemplate } from '../../src/shared/project-task-template'
 import type { ElectronApplication } from '@stablyai/playwright-test'
 
@@ -91,10 +92,11 @@ test('all projects keeps two identically named tasks separate and selects projec
     await expect(
       page.getByRole('button', { name: /Shared plan.*Alpha project.*Plan to refine/ })
     ).toBeVisible()
-    await page.getByRole('combobox', { name: 'Task project' }).click()
-    await expect(page.getByRole('option', { name: 'All projects', exact: true })).toBeVisible()
-    await expect(page.getByRole('option', { name: /refs\/heads\/main/ })).toHaveCount(0)
-    await page.getByRole('option', { name: /Alpha project/ }).click()
+    await page.getByRole('button', { name: 'Task projects', exact: true }).click()
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Select all projects' })).toBeVisible()
+    await expect(page.getByRole('menuitemcheckbox', { name: /refs\/heads\/main/ })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await selectTaskProject(page, /Alpha project/)
     await expect(page.getByRole('button', { name: /Shared plan.*Plan to refine/ })).toBeVisible()
     await expect(page.getByText(/ENOENT/)).toHaveCount(0)
     await page.getByText('How tasks work · file locations', { exact: true }).click()

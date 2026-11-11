@@ -12,6 +12,9 @@ export const AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY =
 // Older hosts strip extraAgentArgs and would run without the user's arguments.
 export const AUTOMATION_EXTRA_AGENT_ARGS_RUNTIME_CAPABILITY =
   'automations.extra-agent-args.v1' as const
+// Advertise only after every owning-host command stage and report route is available.
+export const AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY =
+  'automation.command-pipeline.v1' as const
 
 export const AUTOMATION_RUNTIME_CAPABILITIES = [
   AUTOMATION_LIST_HOST_SCOPE_RUNTIME_CAPABILITY,
@@ -22,5 +25,6 @@ export const AUTOMATION_RUNTIME_CAPABILITIES = [
 
 export const AUTOMATION_RUNTIME_CLIENT_CAPABILITIES = [
   AUTOMATION_OWNER_FENCING_RUNTIME_CAPABILITY,
-  AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY
+  AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY,
+  AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY
 ] as const
