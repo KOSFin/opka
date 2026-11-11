@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { expect, test } from './helpers/orca-app'
@@ -67,6 +67,7 @@ test.describe('synthetic project trackers', () => {
         }))
         const calls: { method: string; repoPath: string; iid?: number }[] = []
         Reflect.set(globalThis, '__gitlabSyntheticCalls', calls)
+        Reflect.set(globalThis, '__gitlabSyntheticRepoPaths', repoPaths)
         const itemFor = (repoPath: string) => {
           const first = repoPath === repoPaths[0]
           const letter = first ? 'a' : 'b'
@@ -143,33 +144,33 @@ test.describe('synthetic project trackers', () => {
       { repoPaths }
     )
     const ids = await page.evaluate(async (paths) => {
+      const addedRepos = []
       for (const path of paths) {
         const added = await window.api.repos.add({ path })
         if ('error' in added) {
           throw new Error(added.error)
         }
+        addedRepos.push(added.repo)
       }
       await window
         .__store!.getState()
         .fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
       await window.__store!.getState().awaitLocalRepoCatalogSettlement()
-      const repos = paths.map((path) => {
+      const repos = addedRepos.map((addedRepo) => {
         const repo = window
           .__store!.getState()
-          .repos.find((entry) => entry.path === path && entry.executionHostId === 'local')
+          .repos.find(
+            (entry) =>
+              entry.id === addedRepo.id &&
+              entry.path === addedRepo.path &&
+              !entry.connectionId &&
+              (entry.executionHostId == null || entry.executionHostId === 'local')
+          )
         if (!repo) {
           throw new Error('Exact local tracker repo not loaded')
         }
         return repo
       })
-      window.__store!.getState().updateSettings({
-        uiLanguage: 'en',
-        defaultTaskSource: 'gitlab',
-        visibleTaskProviders: ['github', 'gitlab'],
-        defaultRepoSelection: repos.map((repo) => repo.id)
-      })
-      await window.__store!.getState().refreshPreflightStatus({ force: true })
-      window.__store!.getState().openTaskPage({ taskSource: 'gitlab' })
       return repos.map((repo) => ({
         id: repo?.id,
         path: repo?.path,
@@ -179,6 +180,32 @@ test.describe('synthetic project trackers', () => {
     writeFileSync(
       path.join(evidenceDir, 'gitlab-tracker-repo-owners.json'),
       `${JSON.stringify(ids, null, 2)}\n`
+    )
+    expect(new Set(ids.map((repo) => repo.id)).size).toBe(2)
+    expect(new Set(ids.map((repo) => repo.path)).size).toBe(2)
+    for (const [index, repo] of ids.entries()) {
+      expect(realpathSync(repo.path)).toBe(realpathSync(repoPaths[index]))
+    }
+    const registeredPaths = ids.map((repo) => repo.path)
+    await electronApp.evaluate((_, paths) => {
+      const allowedPaths = Reflect.get(globalThis, '__gitlabSyntheticRepoPaths')
+      if (!Array.isArray(allowedPaths)) {
+        throw new Error('Synthetic GitLab repository selector is missing')
+      }
+      allowedPaths.splice(0, allowedPaths.length, ...paths)
+    }, registeredPaths)
+    await page.evaluate(
+      async (repoIds) => {
+        window.__store!.getState().updateSettings({
+          uiLanguage: 'en',
+          defaultTaskSource: 'gitlab',
+          visibleTaskProviders: ['github', 'gitlab'],
+          defaultRepoSelection: repoIds
+        })
+        await window.__store!.getState().refreshPreflightStatus({ force: true })
+        window.__store!.getState().openTaskPage({ taskSource: 'gitlab' })
+      },
+      ids.map((repo) => repo.id)
     )
     await page.getByRole('button', { name: 'External trackers' }).click()
     await page.getByRole('button', { name: 'MRs', exact: true }).click()
@@ -207,7 +234,7 @@ test.describe('synthetic project trackers', () => {
         noProjectMessageVisible: document.body.innerText.includes('No projects'),
         providerAuthNeededVisible: document.body.innerText.includes('provider auth needed')
       }),
-      repoPaths
+      registeredPaths
     )
     writeFileSync(
       path.join(evidenceDir, 'gitlab-visible-source-state.json'),
@@ -223,8 +250,12 @@ test.describe('synthetic project trackers', () => {
     await expect(page.getByText('Synthetic MR B', { exact: true })).toBeVisible()
     const initialCalls = await readCalls()
     writeFileSync(receiptPath, `${initialCalls}\n`)
-    expect(initialCalls).toContain(JSON.stringify({ method: 'listMRs', repoPath: repoPaths[0] }))
-    expect(initialCalls).toContain(JSON.stringify({ method: 'listMRs', repoPath: repoPaths[1] }))
+    expect(initialCalls).toContain(
+      JSON.stringify({ method: 'listMRs', repoPath: registeredPaths[0] })
+    )
+    expect(initialCalls).toContain(
+      JSON.stringify({ method: 'listMRs', repoPath: registeredPaths[1] })
+    )
     await electronApp.evaluate(() => {
       const calls = Reflect.get(globalThis, '__gitlabSyntheticCalls')
       if (!Array.isArray(calls)) {
@@ -237,12 +268,12 @@ test.describe('synthetic project trackers', () => {
       .getByRole('dialog')
       .filter({ has: page.getByPlaceholder('Search projects...') })
     await projectMenu
-      .getByRole('button', { name: `tracker-b ${repoPaths[1]}`, exact: true })
+      .getByRole('button', { name: `tracker-b ${registeredPaths[1]}`, exact: true })
       .click()
     await expect(page.getByText('Synthetic MR B', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Synthetic MR A', { exact: true })).toBeVisible()
-    const selectedCall = JSON.stringify({ method: 'listMRs', repoPath: repoPaths[0] })
-    const excludedCall = JSON.stringify({ method: 'listMRs', repoPath: repoPaths[1] })
+    const selectedCall = JSON.stringify({ method: 'listMRs', repoPath: registeredPaths[0] })
+    const excludedCall = JSON.stringify({ method: 'listMRs', repoPath: registeredPaths[1] })
     await expect.poll(readCalls).toContain(selectedCall)
     const selectedCalls = await readCalls()
     expect(selectedCalls).not.toContain(excludedCall)
@@ -266,7 +297,9 @@ test.describe('synthetic project trackers', () => {
     await expect(mrDialog.getByText('synthetic-check')).toBeVisible()
     await expect
       .poll(readCalls)
-      .toContain(JSON.stringify({ method: 'workItemDetails', repoPath: repoPaths[0], iid: 11 }))
+      .toContain(
+        JSON.stringify({ method: 'workItemDetails', repoPath: registeredPaths[0], iid: 11 })
+      )
     writeFileSync(receiptPath, `${initialCalls}\n${await readCalls()}\n`)
     await captureHiddenGitScreenshot(page, evidenceDir, 'gitlab-selected-project-mr.png')
     const hiddenAfter = await electronApp.evaluate(({ BrowserWindow }) =>

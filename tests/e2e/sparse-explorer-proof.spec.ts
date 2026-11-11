@@ -81,9 +81,6 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
     },
     { workspace }
   )
-  const board = orcaPage.getByRole('button', { name: 'Workspace board', exact: true })
-  await board.click()
-  await board.click()
   await openFileExplorer(orcaPage)
   const picker = orcaPage.getByRole('button', { name: 'Explorer root', exact: true })
   await expect(picker).toContainText('apps/web')

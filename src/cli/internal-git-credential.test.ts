@@ -34,6 +34,39 @@ describe('internal Git credential helper', () => {
     expect(request).toHaveBeenCalledOnce()
   })
 
+  it('accepts Git EOF framing and ignores capability and challenge metadata', async () => {
+    const request = vi.fn(async (_url: URL | RequestInfo, options?: RequestInit) => {
+      expect(JSON.parse(String(options?.body))).toEqual({
+        nonce,
+        credential: {
+          protocol: 'https',
+          host: 'git.example.test:443',
+          path: 'alice/repo.git'
+        }
+      })
+      return Response.json({ username: 'alice', password: 'fixture-token' })
+    })
+    const raw =
+      'capability[]=authtype\ncapability[]=state\n' +
+      'protocol=https\nhost=git.example.test:443\npath=alice/repo.git\n' +
+      'wwwauth[]=Basic realm="synthetic"\n'
+    await resolveInternalGitCredential(
+      'get',
+      Readable.from([raw]),
+      {
+        ORCA_INTERNAL_GIT_CREDENTIAL_ENDPOINT: endpoint,
+        ORCA_INTERNAL_GIT_CREDENTIAL_NONCE: nonce
+      },
+      request
+    )
+    expect(request).toHaveBeenCalledOnce()
+    expect(parseGitCredentialRequest(raw.slice(0, -1))).toEqual({
+      protocol: 'https',
+      host: 'git.example.test:443',
+      path: 'alice/repo.git'
+    })
+  })
+
   it.each(['store', 'erase'])(
     '%s consumes input without contacting endpoint',
     async (operation) => {
@@ -54,7 +87,9 @@ describe('internal Git credential helper', () => {
     'protocol=https\nhost=git.example.test\npassword=secret\n\n',
     'protocol=http\nhost=git.example.test\n\n',
     'protocol=https\nhost=git.example.test\r\n\r\n',
-    'protocol=https\nhost=git.example.test\n'
+    'protocol=https\nhost=git.example.test\n\n\n',
+    'capability[]=state\nprotocol=https\nhost=git.example.test\nhost=other.test\n',
+    'protocol=https\nhost=git.example.test\npath=one\nwwwauth[]=Basic\npath=two\n'
   ])('rejects malformed or extra Git fields before request', async (raw) => {
     expect(() => parseGitCredentialRequest(raw)).toThrow()
   })

@@ -1,4 +1,3 @@
-import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -6,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { spawnProcess } from '@orca/process-host'
 import { startSyntheticRoutingEngine } from './codex-routing-probe-engine.mjs'
+import { createSyntheticRoutingUpstream } from './codex-routing-probe-upstream.mjs'
 import { SYNTHETIC_COMPACTION_CIPHERTEXT } from './codex-native-probe-ciphertext.mjs'
 
 const argv = process.argv.slice(2)
@@ -14,7 +14,6 @@ const output = argv[argv.indexOf('--output') + 1]
 const engineProgram = argv.includes('--engine') ? argv[argv.indexOf('--engine') + 1] : undefined
 const nativeAuthSwap = argv.includes('--native-auth-swap')
 const compactResume = argv.includes('--compact-resume')
-const compactOutput = { type: 'compaction', encrypted_content: SYNTHETIC_COMPACTION_CIPHERTEXT }
 if (compactResume && (!engineProgram || !argv.includes('--engine-explicit'))) {
   throw new Error('Compact/resume requires the explicit protected engine route')
 }
@@ -43,140 +42,13 @@ try {
   await Promise.all([mkdir(accountHome, { mode: 0o700 }), mkdir(workspace, { mode: 0o700 })])
   let account = 'synthetic-A'
   const requests = []
-  let compactResponseSha256
-  server = createServer(async (request, response) => {
-    try {
-      if (request.method === 'GET' && request.url === '/v1/models') {
-        response.writeHead(200, { 'content-type': 'application/json' })
-        response.end(
-          JSON.stringify({ data: ['probe-a', 'probe-b'].map((id) => ({ id, object: 'model' })) })
-        )
-        return
-      }
-      const remoteCompact = request.url === '/v1/responses/compact'
-      if (request.method !== 'POST' || (!remoteCompact && request.url !== '/v1/responses')) {
-        response.writeHead(404).end()
-        return
-      }
-      let body = ''
-      for await (const chunk of request) {
-        body += chunk
-        if (Buffer.byteLength(body) > 2 * 1024 * 1024) {
-          throw new Error('Synthetic input exceeded limit')
-        }
-      }
-      const input = JSON.parse(body)
-      const metadata = request.headers['x-codex-turn-metadata']
-      const compactionRequest =
-        remoteCompact ||
-        (typeof metadata === 'string' && JSON.parse(metadata).request_kind === 'compaction')
-      const routedAccount =
-        engine || nativeAuthSwap ? request.headers.authorization?.replace('Bearer ', '') : account
-      const text = compactionRequest
-        ? 'SYNTHETIC_COMPACTED_CONTEXT'
-        : routedAccount === 'synthetic-A'
-          ? 'PROBE_A'
-          : 'PROBE_B'
-      const compactItems = Array.isArray(input.input)
-        ? input.input.filter((item) => item?.type === 'compaction')
-        : []
-      requests.push({
-        account: routedAccount,
-        model: input.model,
-        kind: remoteCompact ? 'remote-compact' : compactionRequest ? 'local-compact' : 'turn',
-        bodyBytes: Buffer.byteLength(body),
-        bodySha256: createHash('sha256').update(body).digest('hex'),
-        opaqueCompactInInput:
-          compactItems.length === 1 &&
-          compactItems[0].encrypted_content === SYNTHETIC_COMPACTION_CIPHERTEXT &&
-          Object.keys(compactItems[0]).every((key) => Object.hasOwn(compactOutput, key)),
-        localCompactInInput: JSON.stringify(input.input ?? []).includes(
-          'SYNTHETIC_COMPACTED_CONTEXT'
-        ),
-        previousResponseIdPresent: typeof input.previous_response_id === 'string',
-        priorReplyInInput:
-          Array.isArray(input.input) &&
-          input.input.some(
-            (item) =>
-              item.role === 'assistant' &&
-              Array.isArray(item.content) &&
-              item.content.some((part) => part.text === 'PROBE_A')
-          ),
-        stream: input.stream
-      })
-      if (remoteCompact) {
-        const compactResponse = JSON.stringify({
-          id: 'cmp_synthetic',
-          object: 'response.compaction',
-          created_at: 1,
-          output: [compactOutput]
-        })
-        compactResponseSha256 = createHash('sha256').update(compactResponse).digest('hex')
-        response.writeHead(200, { 'content-type': 'application/json' })
-        response.end(compactResponse)
-        return
-      }
-      const id = `resp_probe_${requests.length}`
-      const item = {
-        id: `msg_probe_${requests.length}`,
-        type: 'message',
-        role: 'assistant',
-        status: 'completed',
-        content: [{ type: 'output_text', text, annotations: [] }]
-      }
-      const complete = {
-        id,
-        object: 'response',
-        created_at: 1,
-        status: 'completed',
-        model: input.model,
-        output: [item],
-        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }
-      }
-      response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
-      const events = [
-        ['response.created', { response: { ...complete, status: 'in_progress', output: [] } }],
-        [
-          'response.output_item.added',
-          { output_index: 0, item: { ...item, status: 'in_progress', content: [] } }
-        ],
-        [
-          'response.content_part.added',
-          {
-            output_index: 0,
-            item_id: item.id,
-            content_index: 0,
-            part: { type: 'output_text', text: '', annotations: [] }
-          }
-        ],
-        [
-          'response.output_text.delta',
-          { output_index: 0, item_id: item.id, content_index: 0, delta: text }
-        ],
-        [
-          'response.output_text.done',
-          { output_index: 0, item_id: item.id, content_index: 0, text }
-        ],
-        [
-          'response.content_part.done',
-          { output_index: 0, item_id: item.id, content_index: 0, part: item.content[0] }
-        ],
-        ['response.output_item.done', { output_index: 0, item }],
-        ['response.completed', { response: complete }]
-      ]
-      events.forEach(([type, payload], sequence_number) => {
-        response.write(
-          `event: ${String(type)}\ndata: ${JSON.stringify({ type, sequence_number, ...payload })}\n\n`
-        )
-      })
-      response.end()
-    } catch {
-      if (!response.headersSent) {
-        response.writeHead(400)
-      }
-      response.end()
-    }
+  const upstream = createSyntheticRoutingUpstream({
+    requests,
+    nativeAuthSwap,
+    getEngine: () => engine,
+    getAccount: () => account
   })
+  server = upstream.server
   await new Promise((ready, reject) => {
     server.once('error', reject)
     server.listen(0, '127.0.0.1', ready)
@@ -212,6 +84,9 @@ try {
       `requires_openai_auth = ${nativeAuthSwap}`,
       ...(nativeAuthSwap ? [] : ['env_key = "OPKA_PROBE_KEY"']),
       'supports_websockets = false',
+      ...(compactResume
+        ? ['[model_providers.opka_probe.capabilities]', 'remote_compaction = "v2"']
+        : []),
       ''
     ].join('\n'),
     { mode: 0o600 }
@@ -305,26 +180,60 @@ try {
     throw new Error('Synthetic turn timed out')
   }
   const waitCompact = async (threadId, firstNotification) => {
+    const compactDiagnostic = () => {
+      const events = notifications.slice(firstNotification)
+      console.error(
+        'Synthetic compact diagnostic:',
+        JSON.stringify({
+          notificationCount: events.length,
+          notifications: events.slice(-64).map((event) => ({
+            method: typeof event.method === 'string' ? event.method.slice(0, 80) : undefined,
+            threadMatches: event.params?.threadId === threadId,
+            itemType:
+              event.params?.item?.type === 'contextCompaction' ? 'contextCompaction' : undefined,
+            turnStatus: ['inProgress', 'completed', 'failed', 'interrupted'].includes(
+              event.params?.turn?.status
+            )
+              ? event.params.turn.status
+              : undefined
+          })),
+          requestCount: requests.length,
+          requests: requests
+            .slice(-64)
+            .map(({ kind, bodyBytes, triggerCount }) => ({ kind, bodyBytes, triggerCount })),
+          childExitCode: child.exitCode,
+          childSignal: child.signalCode,
+          stderrBytes,
+          engineOutputBytes: engine?.outputBytes()
+        })
+      )
+    }
     const deadline = Date.now() + 35_000
     while (Date.now() < deadline) {
       const events = notifications.slice(firstNotification)
       const compacted = events.some(
-        (event) => event.method === 'thread/compacted' && event.params?.threadId === threadId
+        (event) =>
+          event.method === 'item/completed' &&
+          event.params?.threadId === threadId &&
+          event.params?.item?.type === 'contextCompaction'
       )
       const completed = events.find(
         (event) => event.method === 'turn/completed' && event.params?.threadId === threadId
       )
       if (completed && completed.params.turn.status !== 'completed') {
+        compactDiagnostic()
         throw new Error('Public Codex compaction turn failed')
       }
       if (compacted && completed) {
         return
       }
       if (child.exitCode !== null) {
+        compactDiagnostic()
         throw new Error('Codex exited during compaction')
       }
       await new Promise((resume) => setTimeout(resume, 25))
     }
+    compactDiagnostic()
     throw new Error('Public Codex did not confirm compaction completion')
   }
   const initialize = async () => {
@@ -373,19 +282,62 @@ try {
   }
   let compactEvidence
   if (compactResume) {
+    const reportRequestBoundary = () => {
+      console.error(
+        'Synthetic compact request boundary:',
+        JSON.stringify({
+          requestCount: requests.length,
+          requests: requests.slice(-64).map((request) => ({
+            kind: request.kind,
+            bodyBytes: request.bodyBytes,
+            triggerCount: request.triggerCount,
+            opaqueCompactItemCount: request.opaqueCompactItemCount,
+            opaqueCiphertextMatches: request.opaqueCiphertextMatches,
+            opaqueCiphertextSha256: request.opaqueCiphertextSha256,
+            opaqueCiphertextBytes: request.opaqueCiphertextBytes,
+            opaqueCompactKnownKeys: request.opaqueCompactKnownKeys,
+            opaqueCompactUnknownKeyCount: request.opaqueCompactUnknownKeyCount,
+            opaqueCompactInInput: request.opaqueCompactInInput,
+            previousResponseIdPresent: request.previousResponseIdPresent,
+            localCompactInInput: request.localCompactInInput
+          }))
+        })
+      )
+    }
     const firstNotification = notifications.length
     await rpc('thread/compact/start', { threadId: thread.thread.id })
-    await waitCompact(thread.thread.id, firstNotification)
+    try {
+      await waitCompact(thread.thread.id, firstNotification)
+    } catch (error) {
+      reportRequestBoundary()
+      throw error
+    }
     const compact = requests[2]
-    if (!compact || compact.kind !== 'remote-compact' || compact.stream !== false) {
+    if (
+      !compact ||
+      compact.kind !== 'remote-v2-compact' ||
+      compact.stream !== true ||
+      compact.triggerCount !== 1
+    ) {
+      reportRequestBoundary()
       throw new Error('Public CLI did not request complete remote opaque compaction')
+    }
+    if (!compact.priorReplyInInput || !compact.secondReplyInInput) {
+      reportRequestBoundary()
+      throw new Error('Remote compaction omitted the original conversation window')
     }
     const next = await rpc('turn/start', {
       threadId: thread.thread.id,
       input: [{ type: 'text', text: 'Use the compacted context and return PROBE_B.' }]
     })
-    await waitTurn(next.turn.id)
+    try {
+      await waitTurn(next.turn.id)
+    } catch (error) {
+      reportRequestBoundary()
+      throw error
+    }
     if (requests.length !== 4 || !requests[3].opaqueCompactInInput) {
+      reportRequestBoundary()
       throw new Error('Complete opaque compaction was absent from the next public request')
     }
     lines.close()
@@ -419,19 +371,32 @@ try {
     if (nativeAuthSwap) {
       await rpc('account/login/start', { type: 'apiKey', apiKey: 'synthetic-B' })
     }
-    const resumed = await rpc('thread/resume', {
-      threadId: thread.thread.id,
-      excludeTurns: true
-    })
+    let resumed
+    try {
+      resumed = await rpc('thread/resume', {
+        threadId: thread.thread.id,
+        excludeTurns: true
+      })
+    } catch (error) {
+      reportRequestBoundary()
+      throw error
+    }
     if (resumed.thread?.id !== thread.thread.id) {
+      reportRequestBoundary()
       throw new Error('Public CLI resumed a different thread')
     }
     const resumedTurn = await rpc('turn/start', {
       threadId: thread.thread.id,
       input: [{ type: 'text', text: 'Retain compacted context after process restart.' }]
     })
-    await waitTurn(resumedTurn.turn.id)
+    try {
+      await waitTurn(resumedTurn.turn.id)
+    } catch (error) {
+      reportRequestBoundary()
+      throw error
+    }
     if (requests.length !== 5 || !requests[4].opaqueCompactInInput) {
+      reportRequestBoundary()
       throw new Error('Opaque compaction was absent after public CLI process restart and resume')
     }
     compactEvidence = {
@@ -442,7 +407,7 @@ try {
       opaqueCiphertextSha256: createHash('sha256')
         .update(SYNTHETIC_COMPACTION_CIPHERTEXT)
         .digest('hex'),
-      completeProviderResponseSha256: compactResponseSha256,
+      completeProviderResponseSha256: upstream.completeResponseSha256(),
       threadIdPreserved: true,
       processRestarted: true,
       nextAndResumedOpaqueContent: true,

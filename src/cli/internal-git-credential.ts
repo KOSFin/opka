@@ -26,17 +26,28 @@ async function readProtocol(input: Readable, retain: boolean): Promise<string> {
 }
 
 export function parseGitCredentialRequest(input: string): GitCredentialRequest {
-  if (!input.endsWith('\n\n') || input.includes('\r') || input.includes('\0')) {
+  if (!input || input.includes('\r') || input.includes('\0')) {
+    throw new Error('Invalid credential protocol')
+  }
+  const body = input.endsWith('\n\n')
+    ? input.slice(0, -2)
+    : input.endsWith('\n')
+      ? input.slice(0, -1)
+      : input
+  if (!body || body.endsWith('\n') || body.includes('\n\n')) {
     throw new Error('Invalid credential protocol')
   }
   const fields = new Map<string, string>()
-  for (const line of input.slice(0, -2).split('\n')) {
+  for (const line of body.split('\n')) {
     const separator = line.indexOf('=')
     if (separator <= 0 || line.slice(separator + 1).includes('\n')) {
       throw new Error('Invalid credential field')
     }
     const key = line.slice(0, separator)
     const value = line.slice(separator + 1)
+    if (key === 'capability[]' || key === 'wwwauth[]') {
+      continue
+    }
     if (!['protocol', 'host', 'path', 'username'].includes(key) || fields.has(key)) {
       throw new Error('Unexpected credential field')
     }
