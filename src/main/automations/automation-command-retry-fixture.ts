@@ -130,7 +130,7 @@ export function commandRetryFixture() {
       }
     ]
   }
-  const operations = { state, flush: vi.fn(), markDomainsDirty: vi.fn() }
+  const operations = { state, flush: vi.fn<() => void>(), markDomainsDirty: vi.fn<() => void>() }
   const readClaim = () => readAutomationCommandsV1Domain(state.automationCommandsV1).activeClaims[0]
   const claim = readClaim()
   const fence = {
