@@ -17,7 +17,6 @@ import type { AutomationRunWriter } from './automation-run-writer'
 
 export type AutomationCommandHostAdapter = AutomationCommandRunAdapter & {
   isHostReady(): boolean
-  provePriorCommandExit?(claim: AutomationCommandClaimV1): boolean
   supportsDefinition(definition: AutomationCommandDefinitionV1): Promise<boolean>
   cancelRun(claim: AutomationCommandClaimV1): Promise<'live' | 'unverifiable' | 'exited'>
 }
@@ -33,6 +32,7 @@ type CommandServiceOptions = {
     | 'advanceCommandNextRun'
     | 'advanceCommandRun'
     | 'adoptCommandCondition'
+    | 'retryCommandRun'
     | 'settleCommandRun'
     | 'requestCommandCancel'
   >

@@ -73,6 +73,7 @@ function fixture() {
     status: 'dispatching' as const
   }
   const runs = {
+    retryCommandRun: vi.fn<AutomationRunWriter['retryCommandRun']>(),
     advanceCommandRun: vi.fn<AutomationRunWriter['advanceCommandRun']>(async () => run),
     settleCommandRun: vi.fn<AutomationRunWriter['settleCommandRun']>(async () => ({
       ...run,

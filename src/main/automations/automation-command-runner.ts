@@ -18,6 +18,7 @@ type CommandExit =
 type AgentExit = { verdict: 'exited'; success: boolean } | { verdict: 'unverifiable' }
 
 export type AutomationCommandRunAdapter = {
+  provePriorCommandExit?(claim: AutomationCommandClaimV1): boolean
   readReportRun?(claim: AutomationCommandClaimV1): AutomationRun | null
   executeCommand(
     definition: AutomationCommandDefinitionV1,
@@ -44,7 +45,7 @@ export type AutomationCommandRunOutcome =
 export async function runClaimedAutomationCommand(input: {
   definition: AutomationCommandDefinitionV1
   claim: AutomationCommandClaimV1
-  runs: Pick<AutomationRunWriter, 'advanceCommandRun' | 'settleCommandRun'>
+  runs: Pick<AutomationRunWriter, 'advanceCommandRun' | 'settleCommandRun' | 'retryCommandRun'>
   adapter: AutomationCommandRunAdapter
 }): Promise<AutomationCommandRunOutcome> {
   const { definition, claim, runs, adapter } = input
@@ -116,6 +117,23 @@ export async function runClaimedAutomationCommand(input: {
   if (fence.expectedPhase === 'command') {
     await runs.advanceCommandRun(fence, { phase: 'condition', observation: 'exited' })
     fence.expectedPhase = 'condition'
+  }
+  if (
+    claim.attempt === 1 &&
+    definition.execution.policy.maxAttempts === 2 &&
+    definition.execution.policy.idempotent &&
+    definition.execution.agent === null &&
+    Number.isInteger(command.observation.exitCode) &&
+    command.observation.exitCode !== null &&
+    command.observation.exitCode !== 0 &&
+    command.observation.timedOut === false &&
+    command.observation.error === null &&
+    !adapter.isCancelRequested?.(claim) &&
+    adapter.now() < claim.createdAt + definition.execution.policy.timeoutSeconds * 1000 &&
+    adapter.provePriorCommandExit?.(claim)
+  ) {
+    const retried = await runs.retryCommandRun(fence, adapter.now())
+    return runClaimedAutomationCommand({ definition, claim: retried, runs, adapter })
   }
   const decision = decideAutomationCommandCondition(
     definition.execution.condition,

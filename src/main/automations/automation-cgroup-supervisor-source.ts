@@ -40,6 +40,7 @@ async function child() {
   }
   const gate = JSON.parse(fs.readFileSync(file('gate.json'), 'utf8'));
   if (gate.acquisitionId !== spec.acquisitionId) process.exit(91);
+  if (spec.deadlineAt !== undefined && Date.now() >= spec.deadlineAt) process.exit(93);
   const command = spec.command;
   const program = command.kind === 'program' ? command.executable : command.interpreter || (command.language === 'shell' ? '/bin/sh' : 'python3');
   const args = command.kind === 'program' ? command.argv : [file(command.language === 'shell' ? 'command.sh' : 'command.py')];
@@ -88,7 +89,7 @@ async function supervisor() {
   const timeout = setTimeout(() => {
     try { fs.writeFileSync(path.join(childCgroup, 'cgroup.kill'), '1'); } catch {}
     atomic('timeout.json', { timedOut: true });
-  }, spec.timeoutMs + 15000);
+  }, Math.max(0, Math.min(spec.timeoutMs + 15000, spec.deadlineAt === undefined ? Infinity : spec.deadlineAt - Date.now())));
   await new Promise((resolve) => blocked.once('close', resolve));
   while (!/^populated 0$/m.test(fs.readFileSync(path.join(childCgroup, 'cgroup.events'), 'utf8'))) {
     await sleep(100);

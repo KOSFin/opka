@@ -38,6 +38,7 @@ function writerWith(selector: ReturnType<Store['automationChangeSelector']>) {
       claim
     })),
     advanceCommandAutomationRun: vi.fn(() => run),
+    retryCommandAutomationRun: vi.fn(() => claim),
     adoptProvenCommandCondition: vi.fn(() => claim),
     bindCommandAutomationProcessIntent: vi.fn(() => claim),
     recordCommandAutomationExitProof: vi.fn(() => claim),
@@ -84,6 +85,43 @@ describe('automation run writer publications', () => {
     await pending
     expect(publish).toHaveBeenCalledWith({ reason: 'run', selector: SSH_SELECTOR })
   })
+
+  it.each([false, true])(
+    'acknowledges a retry only after persistence, rejected=%s',
+    async (rejected) => {
+      const { store, writer, publish } = writerWith(SSH_SELECTOR)
+      const acknowledgement = Promise.withResolvers<void>()
+      store.flushPendingOrThrowAsync.mockReturnValue(acknowledgement.promise)
+      const completed = vi.fn()
+      const pending = writer
+        .retryCommandRun(
+          {
+            automationId: automation.id,
+            runId: run.id,
+            acquisitionId: 'acquisition-1',
+            hostGeneration: 1,
+            expectedPhase: 'condition'
+          },
+          2
+        )
+        .then(completed)
+      expect(store.retryCommandAutomationRun).toHaveBeenCalledOnce()
+      await Promise.resolve()
+      expect(completed).not.toHaveBeenCalled()
+      expect(publish).not.toHaveBeenCalled()
+      if (rejected) {
+        acknowledgement.reject(new Error('retry flush failed'))
+        await expect(pending).rejects.toThrow('retry flush failed')
+        expect(completed).not.toHaveBeenCalled()
+        expect(publish).not.toHaveBeenCalled()
+      } else {
+        acknowledgement.resolve()
+        await pending
+        expect(completed).toHaveBeenCalledOnce()
+        expect(publish).toHaveBeenCalledOnce()
+      }
+    }
+  )
 
   it('holds a replay receipt until the shared claim is durable', async () => {
     const { store, writer, publish } = writerWith(SSH_SELECTOR)

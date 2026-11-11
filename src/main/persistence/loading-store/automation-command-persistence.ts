@@ -25,6 +25,7 @@ import {
   recordAutomationAgentExitProof,
   recordAutomationCommandExitProof
 } from '../scheduling-automations/automation-command-process-operations'
+import { retryAutomationCommandRun } from '../scheduling-automations/automation-command-retry-operations'
 import type { StoreRuntimeState } from './store-runtime-state'
 import type { WriteFlushBarrierOperations } from './write-flush-barriers'
 
@@ -130,6 +131,10 @@ export class AutomationCommandPersistence {
     update: Parameters<typeof advanceAutomationCommandRun>[2]
   ) {
     return advanceAutomationCommandRun(this.progressOperations(), fence, update)
+  }
+
+  retryCommandAutomationRun(fence: CommandProgressFence, now: number) {
+    return retryAutomationCommandRun(this.progressOperations(), fence, now)
   }
 
   adoptProvenCommandCondition(fence: CommandProgressFence, nextHostGeneration: number) {

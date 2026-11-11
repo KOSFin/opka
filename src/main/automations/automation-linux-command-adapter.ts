@@ -50,7 +50,15 @@ export function createLinuxCommandAutomationAdapter(
   }
   return {
     isHostReady: () => scopeReady && inputs.isCurrentOwner(),
-    provePriorCommandExit: (claim) => provePriorCommandChildExited(claim),
+    provePriorCommandExit: (claim) => {
+      const current = inputs.store.getCommandAutomationClaim(claim.automationId, claim.runId)
+      return (
+        !!current &&
+        current.acquisitionId === claim.acquisitionId &&
+        inputs.isCurrentOwner() &&
+        provePriorCommandChildExited(current)
+      )
+    },
     readReportRun: (claim) =>
       inputs.store.listAutomationRuns(claim.automationId).find((run) => run.id === claim.runId) ??
       null,
@@ -61,7 +69,8 @@ export function createLinuxCommandAutomationAdapter(
         definition.executionTargetType !== 'local' ||
         definition.executionTargetId !== LOCAL_EXECUTION_HOST_ID ||
         definition.workspaceMode !== 'existing' ||
-        definition.execution.policy.maxAttempts !== 1
+        (definition.execution.policy.maxAttempts !== 1 &&
+          (!definition.execution.policy.idempotent || definition.execution.agent !== null))
       ) {
         return false
       }
@@ -131,6 +140,7 @@ export function createLinuxCommandAutomationAdapter(
             claim.hostGeneration === inputs.hostGeneration &&
             inputs.isCurrentOwner() &&
             current.phase === 'command' &&
+            current.definitionRevision === definition.revision &&
             current.processIntent?.execMayHappen === true &&
             current.cancelRequestedAt === undefined
           )

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { z } from 'zod'
 import { spawnProcess } from '@orca/process-host'
 import type {
@@ -23,16 +23,8 @@ export {
   releaseLinuxCgroupAutomationCommand
 } from './automation-linux-cgroup-lifecycle'
 
-const ReceiptSchema = z
-  .object({
-    acquisitionId: z.string().uuid(),
-    unitName: z.string(),
-    childCgroupPath: z.string(),
-    blockedChildPid: z.number().int().positive(),
-    blockedChildStartTime: z.string().regex(/^\d+$/)
-  })
-  .strict()
-type Receipt = z.infer<typeof ReceiptSchema>
+import { verifyAutomationCommandReceipt, type Receipt } from './automation-cgroup-command-receipt'
+
 const RootSchema = z
   .object({
     exitCode: z.number().int().nullable(),
@@ -50,6 +42,7 @@ type LinuxProcessInput = {
   command: AutomationCommandV1
   cwd: string
   timeoutSeconds: number
+  deadlineAt?: number
   stdinText?: string
   binaryFingerprint?: string
   bindReceipt(
@@ -59,59 +52,9 @@ type LinuxProcessInput = {
   mayReleaseGate(): boolean | Promise<boolean>
 }
 
-const CGROUP_ROOT = '/sys/fs/cgroup'
 const RECEIPT_WAIT_MS = 15_000
 
 const readJsonFile = (file: string): unknown => JSON.parse(readFileSync(file, 'utf8'))
-
-function readStartTime(pid: number): string | null {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
-    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null
-  } catch {
-    return null
-  }
-}
-
-function blockedChildMatches(receipt: Receipt): boolean {
-  try {
-    const procCgroup = readFileSync(`/proc/${receipt.blockedChildPid}/cgroup`, 'utf8')
-    return (
-      procCgroup.split('\n').includes(`0::${receipt.childCgroupPath.slice(CGROUP_ROOT.length)}`) &&
-      readStartTime(receipt.blockedChildPid) === receipt.blockedChildStartTime
-    )
-  } catch {
-    return false
-  }
-}
-
-function verifyReceipt(input: LinuxProcessInput, candidate: unknown): Receipt | null {
-  const { claim, intent } = input
-  const parsed = ReceiptSchema.safeParse(candidate)
-  if (!intent || !parsed.success) {
-    return null
-  }
-  const receipt = parsed.data
-  if (
-    receipt.acquisitionId !== claim.acquisitionId ||
-    receipt.unitName !== intent.unitName ||
-    !receipt.childCgroupPath.startsWith(`${CGROUP_ROOT}/`) ||
-    resolve(receipt.childCgroupPath) !== receipt.childCgroupPath
-  ) {
-    return null
-  }
-  const segments = receipt.childCgroupPath.split('/')
-  if (segments.at(-1) !== intent.childName || segments.at(-2) !== intent.unitName) {
-    return null
-  }
-  const priorBindingMatches =
-    intent.execMayHappen === true &&
-    intent.childCgroupPath === receipt.childCgroupPath &&
-    intent.blockedChildPid === receipt.blockedChildPid &&
-    intent.blockedChildStartTime === receipt.blockedChildStartTime &&
-    existsSync(join(intent.receiptDirectory, 'gate.json'))
-  return blockedChildMatches(receipt) || priorBindingMatches ? receipt : null
-}
 
 async function waitForFile(file: string, deadline: number): Promise<boolean> {
   while (Date.now() < deadline) {
@@ -135,6 +78,7 @@ function startSupervisor(input: LinuxProcessInput): void {
     command,
     cwd: input.cwd,
     timeoutMs: input.timeoutSeconds * 1000,
+    ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
     ...(input.stdinText !== undefined ? { stdinFile: 'agent-prompt.txt' } : {}),
     ...(input.binaryFingerprint ? { binaryFingerprint: input.binaryFingerprint } : {})
   })
@@ -188,13 +132,24 @@ export async function executeLinuxCgroupAutomationProcess(
   }
   const directory = intent.receiptDirectory
   try {
+    if (input.deadlineAt !== undefined && Date.now() >= input.deadlineAt) {
+      return { verdict: 'unverifiable' }
+    }
     if (!existsSync(directory)) {
       startSupervisor(input)
     }
-    if (!(await waitForFile(join(directory, 'receipt.json'), Date.now() + RECEIPT_WAIT_MS))) {
+    if (
+      !(await waitForFile(
+        join(directory, 'receipt.json'),
+        Math.min(Date.now() + RECEIPT_WAIT_MS, input.deadlineAt ?? Infinity)
+      ))
+    ) {
       return { verdict: 'unverifiable' }
     }
-    const receipt = verifyReceipt(input, readJsonFile(join(directory, 'receipt.json')))
+    const receipt = verifyAutomationCommandReceipt(
+      input,
+      readJsonFile(join(directory, 'receipt.json'))
+    )
     if (!receipt) {
       return { verdict: 'unverifiable' }
     }
@@ -207,7 +162,10 @@ export async function executeLinuxCgroupAutomationProcess(
     ) {
       return { verdict: 'unverifiable' }
     }
-    if (!(await input.mayReleaseGate())) {
+    if (
+      !(await input.mayReleaseGate()) ||
+      (input.deadlineAt !== undefined && Date.now() >= input.deadlineAt)
+    ) {
       return { verdict: 'unverifiable' }
     }
     if (!existsSync(join(directory, 'gate.json'))) {
@@ -281,7 +239,15 @@ export async function executeLinuxCgroupAutomationCommand(
       command.kind === 'program'
         ? { ...command, executable: input.resolvedExecutable }
         : { ...command, interpreter: input.resolvedExecutable },
-    timeoutSeconds: input.definition.execution.policy.commandTimeoutSeconds
+    timeoutSeconds: input.definition.execution.policy.commandTimeoutSeconds,
+    ...(input.claim.attempt === 2
+      ? {
+          deadlineAt: Math.min(
+            input.claim.createdAt + input.definition.execution.policy.timeoutSeconds * 1000,
+            Date.now() + input.definition.execution.policy.commandTimeoutSeconds * 1000
+          )
+        }
+      : {})
   })
 }
 

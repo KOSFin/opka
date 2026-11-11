@@ -10,6 +10,7 @@ export type AutomationRunWriter = {
   createRun: DurableWrite<Store['createAutomationRun']>
   claimCommandRun: DurableWrite<Store['claimCommandAutomationRun']>
   advanceCommandRun: DurableWrite<Store['advanceCommandAutomationRun']>
+  retryCommandRun: DurableWrite<Store['retryCommandAutomationRun']>
   adoptCommandCondition: DurableWrite<Store['adoptProvenCommandCondition']>
   bindCommandProcessIntent: DurableWrite<Store['bindCommandAutomationProcessIntent']>
   recordCommandExitProof: DurableWrite<Store['recordCommandAutomationExitProof']>
@@ -39,6 +40,7 @@ export function createAutomationRunWriter(
     | 'claimCommandAutomationRun'
     | 'advanceCommandAutomationRun'
     | 'adoptProvenCommandCondition'
+    | 'retryCommandAutomationRun'
     | 'bindCommandAutomationProcessIntent'
     | 'recordCommandAutomationExitProof'
     | 'bindAutomationAgentProcessIntent'
@@ -79,6 +81,12 @@ export function createAutomationRunWriter(
       await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
       announce(run.automationId, 'run')
       return run
+    },
+    retryCommandRun: async (fence, now) => {
+      const claim = store.retryCommandAutomationRun(fence, now)
+      await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
+      announce(claim.automationId, 'run')
+      return claim
     },
     adoptCommandCondition: async (fence, nextHostGeneration) => {
       const claim = store.adoptProvenCommandCondition(fence, nextHostGeneration)
