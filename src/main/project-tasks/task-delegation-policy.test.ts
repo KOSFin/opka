@@ -124,6 +124,12 @@ it('registers an empty project before reviewing a scoped grant', () => {
   )
   expect(store.delegation.read(binding.projectId).generation).toBe(1)
   expect(() => store.syncGraph(binding.projectId, '/another-root', [])).toThrow(/another root/)
+  expect(() => store.syncGraph('different-project', binding.root, [])).toThrow(/UNIQUE constraint/)
+  expect(
+    db.db
+      .prepare('SELECT project_id FROM project_task_homes WHERE project_id=?')
+      .get('different-project')
+  ).toBeUndefined()
 })
 it('defaults to manual, records explicit grant and delegated actor without manufacturing manual approval', () => {
   const { store, task, context, install, approve } = setup()

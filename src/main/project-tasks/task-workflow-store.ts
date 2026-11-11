@@ -28,7 +28,9 @@ export class TaskWorkflowStore {
       throw new Error('Project ID already belongs to another root; explicit relocation is required')
     }
     this.native.db
-      .prepare('INSERT OR IGNORE INTO project_task_homes(project_id,root_path) VALUES (?,?)')
+      .prepare(
+        'INSERT INTO project_task_homes(project_id,root_path) VALUES (?,?) ON CONFLICT(project_id) DO NOTHING'
+      )
       .run(projectId, root)
   }
 
