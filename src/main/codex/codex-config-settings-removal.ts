@@ -1,4 +1,9 @@
 import { scanStructuredSettingLines } from './config-toml-promoted-setting-values'
+import {
+  createTomlLineScanState,
+  isTomlStructuralLine,
+  updateTomlLineScanState
+} from './config-toml-line-scan'
 
 export function removePromotedSettingsFromContent(
   content: string,
@@ -12,7 +17,13 @@ export function removePromotedSettingsFromContent(
     .filter((setting) => removals.has(setting.structuredKey))
     .map((setting) => setting.index)
   for (const index of indexes.toReversed()) {
-    lines.splice(index, 1)
+    let end = index
+    let state = createTomlLineScanState()
+    do {
+      state = updateTomlLineScanState(state, lines[end] ?? '')
+      end += 1
+    } while (end < lines.length && !isTomlStructuralLine(state))
+    lines.splice(index, end - index)
   }
   return lines.join('\n')
 }

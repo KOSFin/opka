@@ -4,6 +4,8 @@ import path from 'node:path'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
 import { prepareForkProfileCli } from './helpers/fork-profile-cli'
+import { closeRestoredProjectTaskDetail } from './helpers/restored-project-task-detail'
+import { selectTaskProject } from './helpers/task-project-picker'
 import { runProcessSync } from '@orca/process-host'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 
@@ -11,7 +13,7 @@ const executablePath = process.env.ORCA_FORK_AUDIT_ELECTRON
 test.skip(!executablePath, 'An explicitly prepared background Electron bundle is required')
 test.use({ trace: 'off', screenshot: 'off' })
 
-async function openTaskPage(page: Page, root?: string) {
+async function openTaskPage(page: Page, root?: string, afterRestart = false) {
   await page.waitForFunction(() => window.__store?.getState().workspaceSessionReady === true)
   if (root) {
     await page.evaluate(async (folderPath) => {
@@ -28,10 +30,12 @@ async function openTaskPage(page: Page, root?: string) {
     }, root)
   }
   await page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
+  if (afterRestart) {
+    await closeRestoredProjectTaskDetail(page, 'Audit file-backed tasks', 'Task fixture')
+  }
   await expect(page.getByRole('heading', { name: 'Project tasks', exact: true })).toBeVisible()
   if (root) {
-    await page.getByRole('combobox', { name: 'Task project' }).click()
-    await page.getByRole('option', { name: /Task fixture/ }).click()
+    await selectTaskProject(page, /Task fixture/)
   }
 }
 
@@ -183,7 +187,7 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
     app = undefined
     launched = await session.launch({ executablePath })
     app = launched.app
-    await openTaskPage(launched.page)
+    await openTaskPage(launched.page, undefined, true)
     await expect(
       launched.page.getByRole('button', { name: /Audit file-backed tasks/ })
     ).toBeVisible()
@@ -214,16 +218,10 @@ test('file tasks edit, approve, archive, conflict safely, and survive a hidden a
       launched.page.getByText('Synthetic local report', { exact: false }).first()
     ).toBeVisible()
     await launched.page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
+    await closeRestoredProjectTaskDetail(launched.page, 'Audit file-backed tasks', 'Task fixture')
     await expect(
       launched.page.getByRole('heading', { name: 'Project tasks', exact: true })
     ).toBeVisible()
-    const taskSheet = launched.page.getByRole('dialog', {
-      name: 'Audit file-backed tasks',
-      exact: true
-    })
-    if (await taskSheet.isVisible()) {
-      await taskSheet.getByRole('button', { name: 'Close', exact: true }).click()
-    }
     await launched.page.getByRole('button', { name: 'External trackers', exact: true }).click()
     await expect(
       launched.page.getByRole('heading', { name: 'Project tasks', exact: true })

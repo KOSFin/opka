@@ -316,7 +316,7 @@ describe('project groups', () => {
     const group: ProjectGroup = {
       id: 'group-1',
       name: 'Platform',
-      parentPath: '/platform',
+      parentPath: '/workspace/platform',
       parentGroupId: null,
       createdFrom: 'folder-scan',
       tabOrder: 0,
@@ -388,7 +388,7 @@ describe('project groups', () => {
     const group: ProjectGroup = {
       id: 'group-1',
       name: 'Platform',
-      parentPath: '/platform',
+      parentPath: '/workspace/platform',
       parentGroupId: null,
       createdFrom: 'folder-scan',
       tabOrder: 0,

@@ -31,7 +31,14 @@ async function listen(server: Server) {
   }
   return { port: address.port, url: `http://127.0.0.1:${address.port}` }
 }
-async function fixture(options: { headerDeadline?: number; finishThrows?: boolean } = {}) {
+async function fixture(
+  options: {
+    headerDeadline?: number
+    finishThrows?: boolean
+    maxRequestBytes?: number
+    maxConcurrent?: number
+  } = {}
+) {
   const seen: { path?: string; authorization?: string; turn?: string; body: unknown }[] = []
   const engine = await listen(
     createServer(async (req, res) => {
@@ -49,6 +56,12 @@ async function fixture(options: { headerDeadline?: number; finishThrows?: boolea
       if (body.model.endsWith('/large')) {
         res.writeHead(200)
         res.end('x'.repeat(5000))
+        return
+      }
+      if (body.model.endsWith('/later-large')) {
+        res.writeHead(200)
+        res.write('x'.repeat(2000))
+        setImmediate(() => res.end('y'.repeat(3000)))
         return
       }
       if (body.model.endsWith('/hang')) {
@@ -81,8 +94,8 @@ async function fixture(options: { headerDeadline?: number; finishThrows?: boolea
     finish
   }))
   const front = createCodexRoutingHttpServer({
-    maxConcurrent: 1,
-    maxRequestBytes: 4096,
+    maxConcurrent: options.maxConcurrent ?? 1,
+    maxRequestBytes: options.maxRequestBytes ?? 4096,
     maxResponseBytes: 4096,
     responseHeaderTimeoutMs: options.headerDeadline ?? 1000,
     onCleanupUnverifiable: cleanup,
@@ -141,6 +154,57 @@ it('passes provider denial once, forwards compact requests, and never retries in
   await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(2))
 })
 
+it('does not release an account lease merely because its local client disconnected', async () => {
+  let received: () => void = () => {}
+  const upstreamReceived = new Promise<void>((resolve) => {
+    received = resolve
+  })
+  let localSocketClosed: () => void = () => {}
+  const socketClosed = new Promise<void>((resolve) => {
+    localSocketClosed = resolve
+  })
+  const engine = await listen(
+    createServer(async (req) => {
+      req.socket.once('close', localSocketClosed)
+      for await (const _chunk of req) {
+        // The synthetic provider operation stays live beyond the local socket.
+      }
+      received()
+    })
+  )
+  const finish = vi.fn()
+  const holdUntilOwnerExit = vi.fn(() => new Promise<void>(() => {}))
+  const front = await listen(
+    createCodexRoutingHttpServer({
+      maxConcurrent: 1,
+      maxRequestBytes: 4096,
+      maxResponseBytes: 4096,
+      responseHeaderTimeoutMs: 1000,
+      onCleanupUnverifiable: vi.fn(),
+      prepare: () => ({
+        port: engine.port,
+        clientKey: engineKey,
+        prefix: 'a',
+        finish,
+        holdUntilOwnerExit
+      })
+    })
+  )
+  const controller = new AbortController()
+  const response = fetch(`${front.url}/v1/responses`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: '{"model":"native"}',
+    signal: controller.signal
+  }).catch(() => {})
+  await upstreamReceived
+  controller.abort()
+  await response
+  await socketClosed
+  await vi.waitFor(() => expect(holdUntilOwnerExit).toHaveBeenCalledOnce())
+  expect(finish).not.toHaveBeenCalled()
+})
+
 it('refuses malformed, oversized, compressed and response-id-only requests before acquiring a route', async () => {
   const { post, prepare } = await fixture()
   for (const [body, status] of [
@@ -155,6 +219,79 @@ it('refuses malformed, oversized, compressed and response-id-only requests befor
     (await post('{"model":"m"}', '/v1/responses', { 'content-encoding': 'gzip' })).status
   ).toBe(415)
   expect(prepare).not.toHaveBeenCalled()
+})
+
+it('forwards an image-bearing full history above the old limit through Responses and compact', async () => {
+  const { post, seen, finish } = await fixture({
+    maxRequestBytes: 16 * 1024 * 1024,
+    maxConcurrent: 4
+  })
+  const image = `data:image/png;base64,${'A'.repeat(12 * 1024 * 1024)}`
+  const payload = {
+    model: 'native-model',
+    input: [
+      { type: 'function_call', call_id: 'earlier-tool', name: 'lookup', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'earlier-tool', output: 'retained-history' },
+      { role: 'user', content: [{ type: 'input_image', image_url: image }] }
+    ],
+    reasoning: { effort: 'medium' }
+  }
+  const raw = JSON.stringify(payload)
+  expect(Buffer.byteLength(raw)).toBeGreaterThan(11.4 * 1024 * 1024)
+  for (const path of ['/v1/responses', '/v1/responses/compact']) {
+    const response = await post(raw, path)
+    expect(response.status).toBe(200)
+    await response.text()
+  }
+  const expectedLength = Buffer.byteLength(
+    JSON.stringify({ ...payload, model: 'account-b/native-model' })
+  )
+  expect(seen.map((entry) => Buffer.byteLength(JSON.stringify(entry.body)))).toEqual([
+    expectedLength,
+    expectedLength
+  ])
+  expect(seen.map((entry) => entry.path)).toEqual(['/v1/responses', '/v1/responses/compact'])
+  expect(JSON.stringify(seen[1]?.body)).toContain('retained-history')
+  await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(2))
+})
+
+it('keeps the rewritten body within the engine cap and refuses oversize without forwarding', async () => {
+  const maxRequestBytes = 16 * 1024 * 1024
+  const { post, seen, prepare, finish } = await fixture({ maxRequestBytes, maxConcurrent: 4 })
+  const start = '{"model":"native-model","input":"'
+  const end = '"}'
+  const body = (bytes: number) => start + 'A'.repeat(bytes - start.length - end.length) + end
+  const accepted = await post(body(maxRequestBytes - 64))
+  expect(accepted.status).toBe(200)
+  await accepted.text()
+  expect(seen).toHaveLength(1)
+  const rewrittenTooLarge = await post(body(maxRequestBytes - 1))
+  expect(rewrittenTooLarge.status).toBe(413)
+  expect(await rewrittenTooLarge.text()).toContain('forwarded request byte budget')
+  expect(seen).toHaveLength(1)
+  const incomingTooLarge = await post(body(maxRequestBytes + 1))
+  expect(incomingTooLarge.status).toBe(413)
+  expect(await incomingTooLarge.text()).toContain('local request byte budget')
+  expect(seen).toHaveLength(1)
+  expect(prepare).toHaveBeenCalledTimes(2)
+  await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(2))
+})
+
+it('admits four small streams but rejects a fifth until a stream closes', async () => {
+  const { post, seen, finish } = await fixture({
+    maxRequestBytes: 16 * 1024 * 1024,
+    maxConcurrent: 4
+  })
+  const streams = await Promise.all(Array.from({ length: 4 }, () => post('{"model":"partial"}')))
+  expect(streams.map((response) => response.status)).toEqual([200, 200, 200, 200])
+  expect((await post('{"model":"native-model"}')).status).toBe(429)
+  expect(seen).toHaveLength(4)
+  await streams[0].body?.cancel()
+  await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(1))
+  const next = await post('{"model":"native-model"}')
+  expect(next.status).toBe(200)
+  await next.text()
+  await Promise.all(streams.slice(1).map((response) => response.body?.cancel()))
 })
 
 it('cancels an accepted stream and frees the request budget without a replay', async () => {
@@ -192,6 +329,58 @@ it('bounds response bytes and frees the route after terminating an oversized str
   const next = await post('{"model":"native-model"}')
   expect(next.status).toBe(200)
   await next.text()
+})
+
+it('marks a later-chunk overflow incomplete and keeps normal framing explicit', async () => {
+  const { post } = await fixture()
+  const normal = await post('{"model":"native-model"}')
+  expect(normal.headers.get('transfer-encoding')).toBe('chunked')
+  expect(normal.headers.has('content-length')).toBe(false)
+  await normal.text()
+  await expect(
+    (async () => {
+      const overflow = await post('{"model":"later-large"}')
+      await overflow.text()
+    })()
+  ).rejects.toThrow()
+  await expect(
+    (async () => {
+      const compact = await post('{"model":"large"}', '/v1/responses/compact')
+      await compact.text()
+    })()
+  ).rejects.toThrow()
+})
+
+it.each([204, 304])('does not add body framing to an engine %s response', async (status) => {
+  const engine = await listen(
+    createServer(async (req, res) => {
+      for await (const _chunk of req) {
+        // Consume the synthetic request before issuing a bodyless response.
+      }
+      res.writeHead(status)
+      res.end()
+    })
+  )
+  const finish = vi.fn()
+  const front = await listen(
+    createCodexRoutingHttpServer({
+      maxConcurrent: 1,
+      maxRequestBytes: 4096,
+      maxResponseBytes: 4096,
+      responseHeaderTimeoutMs: 1000,
+      onCleanupUnverifiable: vi.fn(),
+      prepare: () => ({ port: engine.port, clientKey: engineKey, prefix: 'a', finish })
+    })
+  )
+  const response = await fetch(`${front.url}/v1/responses`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: '{"model":"native"}'
+  })
+  expect(response.status).toBe(status)
+  expect(response.headers.has('transfer-encoding')).toBe(false)
+  await response.text()
+  await vi.waitFor(() => expect(finish).toHaveBeenCalledOnce())
 })
 
 it('refuses missing authentication without sending a provider request', async () => {

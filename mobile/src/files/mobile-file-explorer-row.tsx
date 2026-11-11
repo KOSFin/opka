@@ -19,11 +19,34 @@ type Props = {
   expanded: ReadonlySet<string>
   onPreviewFile: (relativePath: string, displayName: string) => void
   onRetryDirectory: (relativePath: string) => void
+  onLoadMore: (relativePath: string) => void
+  onOpenHere: (relativePath: string) => void
   onToggleDirectory: (relativePath: string) => void
 }
 
 export function MobileFileExplorerRow(props: Props) {
-  const { item, expanded, onPreviewFile, onRetryDirectory, onToggleDirectory } = props
+  const {
+    item,
+    expanded,
+    onPreviewFile,
+    onRetryDirectory,
+    onToggleDirectory,
+    onLoadMore,
+    onOpenHere
+  } = props
+
+  if (item.kind === 'more') {
+    return (
+      <Pressable
+        style={styles.inlineRetryButton}
+        onPress={() => onLoadMore(item.relativePath)}
+        accessibilityRole="button"
+        accessibilityLabel={`Load more files in ${item.relativePath || 'workspace root'}`}
+      >
+        <Text style={styles.inlineRetryText}>Load more files</Text>
+      </Pressable>
+    )
+  }
 
   if (item.kind === 'loading') {
     return (
@@ -63,6 +86,7 @@ export function MobileFileExplorerRow(props: Props) {
         expanded={expanded}
         onPreviewFile={onPreviewFile}
         onToggleDirectory={onToggleDirectory}
+        onOpenHere={onOpenHere}
       />
     )
   }
@@ -79,8 +103,9 @@ function TreeRow(props: {
   expanded: ReadonlySet<string>
   onPreviewFile: (relativePath: string, displayName: string) => void
   onToggleDirectory: (relativePath: string) => void
+  onOpenHere: (relativePath: string) => void
 }) {
-  const { item, expanded, onPreviewFile, onToggleDirectory } = props
+  const { item, expanded, onPreviewFile, onToggleDirectory, onOpenHere } = props
   const isDirectory = item.kind === 'directory'
   const isExpanded = expanded.has(item.relativePath)
   const previewable =
@@ -107,6 +132,8 @@ function TreeRow(props: {
           onPreviewFile(item.relativePath, item.name)
         }
       }}
+      onLongPress={isDirectory ? () => onOpenHere(item.relativePath) : undefined}
+      accessibilityHint={isDirectory ? 'Long press to open this folder here' : undefined}
       accessibilityLabel={
         isDirectory
           ? `Open folder ${item.name}`

@@ -9,6 +9,7 @@ import WorkspaceKanbanSettingsMenu from './WorkspaceKanbanSettingsMenu'
 import { translate } from '@/i18n/i18n'
 
 type WorkspaceKanbanDrawerHeaderProps = {
+  embedded?: boolean
   selectedCount: number
   query: string
   isFiltering: boolean
@@ -31,6 +32,7 @@ type WorkspaceKanbanDrawerHeaderProps = {
 }
 
 export default function WorkspaceKanbanDrawerHeader({
+  embedded = false,
   selectedCount,
   query,
   isFiltering,
@@ -51,24 +53,32 @@ export default function WorkspaceKanbanDrawerHeader({
   onFilterMenuOpenChange,
   onClose
 }: WorkspaceKanbanDrawerHeaderProps): React.JSX.Element {
+  const title = (
+    <>
+      <span>{translate('fork.workingCopies.title', 'Working copies')}</span>
+      {selectedCount > 1 ? (
+        <span className="ml-2 rounded-full bg-worktree-sidebar-accent px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          {selectedCount}{' '}
+          {translate('auto.components.sidebar.WorkspaceKanbanDrawerHeader.81870af08f', 'selected')}
+        </span>
+      ) : null}
+    </>
+  )
+  const description = translate(
+    'fork.workingCopies.description',
+    'Moving a card changes the workspace status, not its Git branch. Plans and acceptance belong in Project tasks.'
+  )
   return (
     <>
       <SheetHeader className="border-b border-worktree-sidebar-border px-4 py-3 pr-32">
         {/* Why: SheetTitle is the sheet's aria-labelledby target and renders an
             <h2>, so the field must be its sibling, not a descendant. */}
         <div className="flex items-center gap-2">
-          <SheetTitle className="flex shrink-0 items-center gap-2 text-sm">
-            <span>{translate('fork.workingCopies.title', 'Working copies')}</span>
-            {selectedCount > 1 ? (
-              <span className="rounded-full bg-worktree-sidebar-accent px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {selectedCount}{' '}
-                {translate(
-                  'auto.components.sidebar.WorkspaceKanbanDrawerHeader.81870af08f',
-                  'selected'
-                )}
-              </span>
-            ) : null}
-          </SheetTitle>
+          {embedded ? (
+            <h2 className="flex shrink-0 items-center gap-2 text-sm">{title}</h2>
+          ) : (
+            <SheetTitle className="flex shrink-0 items-center">{title}</SheetTitle>
+          )}
           <WorkspaceKanbanSearchField
             query={query}
             isFiltering={isFiltering}
@@ -80,12 +90,11 @@ export default function WorkspaceKanbanDrawerHeader({
             onClose={onClose}
           />
         </div>
-        <SheetDescription>
-          {translate(
-            'fork.workingCopies.description',
-            'Moving a card changes the workspace status, not its Git branch. Plans and acceptance belong in Project tasks.'
-          )}
-        </SheetDescription>
+        {embedded ? (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        ) : (
+          <SheetDescription>{description}</SheetDescription>
+        )}
       </SheetHeader>
 
       <div className="absolute right-3 top-2.5 flex items-center gap-1">

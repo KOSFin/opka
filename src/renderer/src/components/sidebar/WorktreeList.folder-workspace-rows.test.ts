@@ -205,14 +205,14 @@ describe('WorktreeList lineage child card renderer', () => {
     const surfaceOpeningTag = getFolderWorkspaceSurfaceOpeningTag(markup, 'folder-workspace-1')
     const cardContentIndent = getDataNumber(cardOpeningTag, 'data-content-indent')
 
-    expect(cardOpeningTag).toContain('data-content-indent="14"')
+    expect(cardOpeningTag).toContain('data-content-indent="6"')
     expect(cardOpeningTag).toContain('data-flush-surface="true"')
     expect(
       getFlushCardContentStart({
         cardContentIndent,
         surfaceInset: getPaddingLeft(surfaceOpeningTag)
       })
-    ).toBe(28)
+    ).toBe(20)
   })
 
   it('uses comparable new-card worktree geometry for experimental folder workspace rows', async () => {
@@ -224,14 +224,14 @@ describe('WorktreeList lineage child card renderer', () => {
     const cardContentIndent = getDataNumber(cardOpeningTag, 'data-content-indent')
 
     expect(surfaceOpeningTag).toContain('padding-left:14px')
-    expect(cardOpeningTag).toContain('data-content-indent="24"')
+    expect(cardOpeningTag).toContain('data-content-indent="16"')
     expect(cardOpeningTag).toContain('data-flush-surface="true"')
     expect(
       getFlushCardContentStart({
         cardContentIndent,
         surfaceInset: getPaddingLeft(surfaceOpeningTag)
       })
-    ).toBe(38)
+    ).toBe(30)
   })
 
   it('preserves manual folder workspace indentation outside folder-scanned groups', async () => {
@@ -260,12 +260,12 @@ describe('WorktreeList lineage child card renderer', () => {
     const cardContentIndent = getDataNumber(cardOpeningTag, 'data-content-indent')
 
     expect(surfaceOpeningTag).toContain('padding-left:14px')
-    expect(cardOpeningTag).toContain('data-content-indent="14"')
+    expect(cardOpeningTag).toContain('data-content-indent="6"')
     expect(
       getFlushCardContentStart({
         cardContentIndent,
         surfaceInset: getPaddingLeft(surfaceOpeningTag)
       })
-    ).toBe(28)
+    ).toBe(20)
   })
 })

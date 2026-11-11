@@ -48,6 +48,42 @@ it('keeps retries on the same fixed identity after a policy edit', () => {
   expect(store.acquireAccountPoolAssignment(args)).toEqual(first)
   expect(store.listAccountPoolAssignments()).toHaveLength(1)
 })
+it('persists the host quota decision explanation with its selected assignment', () => {
+  const { store, args } = fixture()
+  args.policy.provider = 'codex'
+  args.policy.strategy = 'quota-equalize'
+  args.candidates[0].quota = 'available'
+  args.candidates[0].quotaWindows = [
+    {
+      windowMinutes: 10080,
+      verifiedDurationMinutes: 10080,
+      usedPercent: 50,
+      resetsAt: Date.now() + 86_400_000
+    }
+  ]
+  args.candidates[1].quota = 'available'
+  args.candidates[1].quotaWindows = [
+    {
+      windowMinutes: 10080,
+      verifiedDurationMinutes: 10080,
+      usedPercent: 5,
+      resetsAt: Date.now() + 4 * 86_400_000
+    }
+  ]
+  expect(store.acquireAccountPoolAssignment(args)).toMatchObject({
+    accountId: 'b',
+    selectionReason: expect.stringContaining('Compared verified 7d usage')
+  })
+  expect(store.listAccountPoolAssignments()[0].selectionReason).toContain('5%')
+  expect(store.listAccountPoolAssignments()[0].selectionReason).toContain('50%')
+})
+it('adds the decision explanation column when opening an older assignment table', () => {
+  const { store } = fixture()
+  store.db.exec('ALTER TABLE account_pool_assignments DROP COLUMN selection_reason')
+  store.db.pragma('user_version = 43')
+  store.migrate()
+  expect(store.hasColumn('account_pool_assignments', 'selection_reason')).toBe(true)
+})
 it('shares ordinary and worker slots atomically and releases only host-settled work', () => {
   const { store, args } = fixture()
   const first = store.acquireAccountPoolAssignment(args)

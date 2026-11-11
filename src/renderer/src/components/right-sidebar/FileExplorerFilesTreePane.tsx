@@ -28,6 +28,7 @@ type FileExplorerFilesTreePaneProps = {
   nameFilterSource: FileExplorerNameFilterProjectionSource | null
   nameFilterFiles: RuntimeFileListState
   handleExpandNameFilterDir: (dirPath: string) => void
+  onOpenHere?: (relativePath: string) => void
   tree: ReturnType<typeof useFileExplorerTree>
   selection: ReturnType<typeof useFileExplorerSelection>
   paneState: ReturnType<typeof useFileExplorerTreePaneState>
@@ -51,6 +52,7 @@ export function FileExplorerFilesTreePane({
   nameFilterSource,
   nameFilterFiles,
   handleExpandNameFilterDir,
+  onOpenHere,
   tree,
   selection,
   paneState,
@@ -190,6 +192,9 @@ export function FileExplorerFilesTreePane({
       )}
       {showTree && (
         <FileExplorerVirtualRows
+          worktreePath={worktreePath}
+          displayRootPath={displayRootPath}
+          onLoadMoreDir={tree.loadMoreDir}
           displayDepthOffset={getExplorerDisplayDepth(worktreePath, displayRootPath)}
           virtualizer={virtualizer}
           inlineInputIndex={inlineInputIndex}
@@ -227,6 +232,7 @@ export function FileExplorerFilesTreePane({
           onRequestDelete={handleContextMenuDelete}
           onCollapseFolderSubtree={handleCollapseFolderSubtree}
           onFindInFolder={handleFindInFolder}
+          onOpenHere={onOpenHere ? (node) => onOpenHere(node.relativePath) : undefined}
           onMoveDrop={handleMoveDrop}
           onDragTargetChange={setDropTargetDir}
           onDragSourceChange={setDragSourcePath}
@@ -239,6 +245,30 @@ export function FileExplorerFilesTreePane({
           dragSourcePath={dragSourcePath}
           nativeDropTargetDir={nativeDropTargetDir}
         />
+      )}
+      {!hasNameFilter && displayRootPath && rootCache?.nextCursor && (
+        <div className="flex justify-center p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={loadingDirPaths.has(displayRootPath)}
+            onClick={() =>
+              void tree.loadMoreDir(
+                displayRootPath,
+                displayRootPath === worktreePath
+                  ? -1
+                  : getExplorerDisplayDepth(worktreePath, displayRootPath) - 1
+              )
+            }
+          >
+            Load more files
+          </Button>
+        </div>
+      )}
+      {!hasNameFilter && showTree && rootCache?.error && (
+        <p role="alert" className="px-3 py-2 text-2xs text-destructive">
+          {rootCache.error}
+        </p>
       )}
     </ScrollArea>
   )

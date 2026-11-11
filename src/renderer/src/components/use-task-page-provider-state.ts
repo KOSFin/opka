@@ -1,5 +1,5 @@
 import type { TaskPageSourceAvailabilityModel } from './use-task-page-source-availability'
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { resolveVisibleTaskProvider } from '../../../shared/task-providers'
 import type { GitLabTaskFilter, GitLabIssueFilter } from '@/components/task-page-localized-options'
 import type { GitLabWorkItem, GitLabTodo } from '../../../shared/gitlab-types'
@@ -10,6 +10,7 @@ export function useTaskPageProviderState(model: TaskPageSourceAvailabilityModel)
     settings,
     pageData,
     selectedRepos,
+    selectedReposKey,
     visibleTaskProviders,
     preferredTaskSource,
     taskSource,
@@ -59,9 +60,15 @@ export function useTaskPageProviderState(model: TaskPageSourceAvailabilityModel)
   // ── GitLab task-source state ──────────────────────────────────────
   // Why: parallel to Linear's slim per-source state — skips workItemsCache and cross-repo aggregation; fetches directly via window.api.gl for the primary repo.
   const [gitlabFilter, setGitlabFilter] = useState<GitLabTaskFilter | GitLabIssueFilter>('opened')
-  const [gitlabItems, setGitlabItems] = useState<GitLabWorkItem[]>([])
-  const [gitlabLoading, setGitlabLoading] = useState(false)
-  const [gitlabError, setGitlabError] = useState<string | null>(null)
+  const [gitlabListState, setGitlabListState] = useState<{
+    key: string
+    items: GitLabWorkItem[]
+  }>({ key: '', items: [] })
+  const [gitlabLoadingState, setGitlabLoading] = useState(false)
+  const [gitlabErrorState, setGitlabErrorState] = useState<{
+    key: string
+    error: string | null
+  }>({ key: '', error: null })
   const [gitlabRefreshNonce, setGitlabRefreshNonce] = useState(0)
   // Why: separate from gitlabItems so the dialog target survives a list refresh that removes the item from the visible filter (e.g. closing an MR).
   const [gitlabDialogItem, setGitlabDialogItem] = useState<GitLabWorkItem | null>(null)
@@ -86,6 +93,30 @@ export function useTaskPageProviderState(model: TaskPageSourceAvailabilityModel)
         ? isGitLabMRFilter(gitlabFilter)
         : true
   const activeGitlabFilter = gitlabFilterIsValid ? gitlabFilter : 'opened'
+  const gitlabListKey = JSON.stringify([
+    taskSource,
+    selectedReposKey,
+    gitlabView,
+    activeGitlabFilter
+  ])
+  const gitlabItems = useMemo(
+    () => (gitlabListState.key === gitlabListKey ? gitlabListState.items : []),
+    [gitlabListState, gitlabListKey]
+  )
+  const gitlabLoading =
+    taskSource === 'gitlab' &&
+    gitlabView !== 'todos' &&
+    selectedRepos.length > 0 &&
+    (gitlabLoadingState || gitlabListState.key !== gitlabListKey)
+  const gitlabError = gitlabErrorState.key === gitlabListKey ? gitlabErrorState.error : null
+  const setGitlabItems = useCallback(
+    (items: GitLabWorkItem[]) => setGitlabListState({ key: gitlabListKey, items }),
+    [gitlabListKey]
+  )
+  const setGitlabError = useCallback(
+    (error: string | null) => setGitlabErrorState({ key: gitlabListKey, error }),
+    [gitlabListKey]
+  )
   // Why: Issues and MRs expose different filter sets; repair before commit so fetch effects never run glab with a stale filter from the other view.
   if (!gitlabFilterIsValid) {
     setGitlabFilter('opened')

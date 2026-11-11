@@ -6,6 +6,7 @@ import {
 } from '../project-runtime-git-options'
 import { splitWorktreeId } from '../../shared/worktree/id'
 import type { Repo } from '../../shared/repo-types'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
 
 function comparableLocalPath(value: string): string {
   const normalized = resolve(value)
@@ -21,7 +22,7 @@ function getCandidateLocalWorktreePaths(
 
 /** Repos owning a registered worktree at one of `candidatePaths`, in one pass over the meta table. */
 function collectRepoIdsWithRegisteredWorktreeMeta(
-  store: RuntimeStore,
+  store: Pick<RuntimeStore, 'getAllWorktreeMeta'>,
   candidatePaths: Set<string>
 ): Set<string> {
   const worktreeMeta =
@@ -54,6 +55,27 @@ export function getLocalRepoForRegisteredWorktree(
     .find(
       (repo) =>
         !repo.connectionId &&
+        (candidatePaths.has(comparableLocalPath(repo.path)) ||
+          (repoIdsWithMeta ??= collectRepoIdsWithRegisteredWorktreeMeta(store, candidatePaths)).has(
+            repo.id
+          ))
+    )
+}
+
+/** All bound local owners at this path; a missing worktree id must not select an unbound twin. */
+export function getLocalBoundReposForRegisteredWorktree(
+  store: Pick<RuntimeStore, 'getRepos' | 'getAllWorktreeMeta'>,
+  worktreePath: string,
+  resolvedWorktreePath: string
+): Repo[] {
+  const candidatePaths = getCandidateLocalWorktreePaths(worktreePath, resolvedWorktreePath)
+  let repoIdsWithMeta: Set<string> | undefined
+  return store
+    .getRepos()
+    .filter(
+      (repo) =>
+        getRepoExecutionHostId(repo) === 'local' &&
+        Boolean(repo.gitNetworkBinding) &&
         (candidatePaths.has(comparableLocalPath(repo.path)) ||
           (repoIdsWithMeta ??= collectRepoIdsWithRegisteredWorktreeMeta(store, candidatePaths)).has(
             repo.id

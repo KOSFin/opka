@@ -83,6 +83,12 @@ const CANONICAL_BODIES: AgentJournalItemBody[] = [
   { kind: 'status', text: 'working' },
   {
     kind: 'status',
+    text: 'Open report',
+    presentation: 'automation-report',
+    automationReport: { automationId: 'automation-1', runId: 'run-1' }
+  },
+  {
+    kind: 'status',
     text: 'turn',
     turnLifecycle: { turnId: 'turn-1', state: 'running' },
     providerFrame: { provider: 'codex', kind: 'raw', payload: PAYLOAD }

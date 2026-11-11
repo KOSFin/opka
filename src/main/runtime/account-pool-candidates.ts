@@ -11,25 +11,51 @@ import type { AccountsSnapshot } from './runtime-account-controller'
 
 function quotaState(
   usage: ProviderRateLimits | null | undefined
-): Pick<AccountPoolCandidate, 'quota' | 'usedPercent' | 'quotaWindows'> {
-  if (!usage || usage.status !== 'ok' || Date.now() - usage.updatedAt > 10 * 60_000) {
-    return { quota: 'unknown', usedPercent: null }
+): Pick<AccountPoolCandidate, 'quota' | 'usedPercent' | 'quotaWindows' | 'quotaReason'> {
+  if (!usage) {
+    return { quota: 'unknown', usedPercent: null, quotaReason: 'missing' }
+  }
+  if (
+    usage.status !== 'ok' ||
+    !Number.isSafeInteger(usage.updatedAt) ||
+    usage.updatedAt > Date.now() + 1000 ||
+    Date.now() - usage.updatedAt > 10 * 60_000
+  ) {
+    return { quota: 'unknown', usedPercent: null, quotaReason: 'stale' }
   }
   const windows = [usage.session, usage.weekly, ...(usage.buckets ?? [])].filter(
     (window) => window !== null
   )
   if (!windows.length) {
-    return { quota: 'unknown', usedPercent: null }
+    return { quota: 'unknown', usedPercent: null, quotaReason: 'missing' }
+  }
+  if (
+    windows.some(
+      (window) =>
+        !Number.isFinite(window.usedPercent) || window.usedPercent < 0 || window.usedPercent > 100
+    )
+  ) {
+    return { quota: 'unknown', usedPercent: null, quotaReason: 'invalid' }
   }
   const usedPercent = Math.max(...windows.map((window) => window.usedPercent))
   return {
     quota: usedPercent >= 100 ? 'exhausted' : 'available',
     usedPercent,
-    quotaWindows: windows.map(({ windowMinutes, usedPercent, resetsAt }) => ({
-      windowMinutes,
-      usedPercent,
-      resetsAt
-    }))
+    quotaWindows: windows.map(
+      ({
+        windowMinutes,
+        verifiedDurationMinutes,
+        usedPercent,
+        resetsAt,
+        resetMetadataInvalid
+      }) => ({
+        windowMinutes,
+        verifiedDurationMinutes,
+        usedPercent,
+        resetsAt,
+        resetMetadataInvalid
+      })
+    )
   }
 }
 function accountQuota(snapshot: AccountsSnapshot, provider: 'claude' | 'codex', accountId: string) {
@@ -45,7 +71,9 @@ function accountQuota(snapshot: AccountsSnapshot, provider: 'claude' | 'codex', 
       ? snapshot.rateLimits.inactiveCodexAccounts
       : snapshot.rateLimits.inactiveClaudeAccounts
   const inactive = samples.find((entry) => entry.accountId === accountId)?.rateLimits
-  return quotaState(inactiveUsageMatchesAccount(inactive, 'host', accountId) ? inactive : null)
+  return inactiveUsageMatchesAccount(inactive, 'host', accountId)
+    ? quotaState(inactive)
+    : { quota: 'unknown' as const, usedPercent: null, quotaReason: 'unverified-owner' as const }
 }
 
 function confirmedCodexQuota(snapshot: AccountsSnapshot, quotaIdentity: string): boolean {

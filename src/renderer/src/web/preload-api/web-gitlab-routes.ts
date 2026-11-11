@@ -1,4 +1,5 @@
 export type WebGitLabRouteKey =
+  | 'listNetworkProfiles'
   | 'diagnoseAuth'
   | 'rateLimit'
   | 'listMRs'
@@ -24,6 +25,7 @@ export type WebGitLabRouteKey =
   | 'workItemByPath'
 
 export type WebGitLabRuntimeMethod =
+  | 'gitlab.listNetworkProfiles'
   | 'gitlab.diagnoseAuth'
   | 'gitlab.rateLimit'
   | 'gitlab.listMRs'
@@ -48,6 +50,7 @@ export type WebGitLabRuntimeMethod =
   | 'gitlab.workItemByPath'
 
 export const GITLAB_WEB_RPC_METHODS = {
+  listNetworkProfiles: 'gitlab.listNetworkProfiles',
   diagnoseAuth: 'gitlab.diagnoseAuth',
   rateLimit: 'gitlab.rateLimit',
   listMRs: 'gitlab.listMRs',

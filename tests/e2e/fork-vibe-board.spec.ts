@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
+import { selectTaskProject } from './helpers/task-project-picker'
 import { projectTaskTemplate } from '../../src/shared/project-task-template'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../src/shared/constants'
 import type { ElectronApplication } from '@stablyai/playwright-test'
@@ -59,8 +60,7 @@ test('project-wide kanban supports a complete manual task, safe drafts, and retu
       await window.__store!.getState().fetchFolderWorkspaces({ runtimeEnvironmentId: null })
       window.__store!.getState().setActiveView('tasks')
     }, root)
-    await page.getByRole('combobox', { name: 'Task project' }).click()
-    await page.getByRole('option', { name: /Product project/ }).click()
+    await selectTaskProject(page, /Product project/)
     await page.getByRole('button', { name: 'Refresh', exact: true }).click()
     await expect(page.getByLabel('Task board', { exact: true })).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Filter repository' })).toHaveCount(0)

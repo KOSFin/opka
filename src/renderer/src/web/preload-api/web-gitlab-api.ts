@@ -4,12 +4,20 @@ import { callRuntimeResult, getRemoteRuntimeStatus } from './web-runtime-calls'
 
 export type WebGitLabApi = NonNullable<PreloadApi['gl']>
 
+const desktopOnlyNetworkProfiles = () =>
+  Promise.reject(new Error('GitLab network profile changes require the desktop app.'))
+
 export function createGitLabApi(): WebGitLabApi {
-  return createRuntimeGitLabApi({
-    call: (method, params) => callRuntimeResult(method, params),
-    supportsCapability: async (capability) => {
-      const status = await getRemoteRuntimeStatus().catch(() => null)
-      return status?.capabilities?.includes(capability) === true
-    }
-  })
+  return {
+    ...createRuntimeGitLabApi({
+      call: (method, params) => callRuntimeResult(method, params),
+      supportsCapability: async (capability) => {
+        const status = await getRemoteRuntimeStatus().catch(() => null)
+        return status?.capabilities?.includes(capability) === true
+      }
+    }),
+    provisionNetworkProfile: desktopOnlyNetworkProfiles,
+    cancelNetworkProfileProvision: desktopOnlyNetworkProfiles,
+    removeNetworkProfile: desktopOnlyNetworkProfiles
+  }
 }

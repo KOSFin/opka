@@ -1,14 +1,20 @@
+import type { DelegationContext } from '../project-tasks/task-delegation-policy'
 import type { OrcaRuntimeService } from './orca-runtime'
 import { projectTaskResources } from './project-task-workflow-service'
 import { projectTaskWorkflow } from '../project-tasks/task-workflow-view'
 import { PROJECT_TASK_CONTEXT_MAX_CHARS } from '../../shared/project-task-contract'
 
-export async function resumeProjectTask(runtime: OrcaRuntimeService, worktree: string, id: string) {
+export async function resumeProjectTask(
+  runtime: OrcaRuntimeService,
+  worktree: string,
+  id: string,
+  context?: DelegationContext
+) {
   const resources = await projectTaskResources(runtime, worktree)
   const task = await resources.workspace.show(id)
-  const workflow = projectTaskWorkflow(resources.store, resources.projectId, task)
+  const workflow = projectTaskWorkflow(resources.store, resources.projectId, task, false, context)
   const files = await resources.workspace.context(id)
-  const header = `Owning execution host: ${resources.executionHostId}\nRuntime phase: ${workflow.phase}; archived: ${workflow.archived}\nCurrent plan approved: ${workflow.approvedRevision === task.revision}; changed after approval: ${workflow.revisionChanged}\nAttempts (durable history, NOT a liveness check):\n${
+  const header = `Owning execution host: ${resources.executionHostId}\nRuntime phase: ${workflow.phase}; archived: ${workflow.archived}\nCurrent admission eligible: ${workflow.authorization?.admission.eligible ?? workflow.approvedRevision === task.revision}; reserved owner can continue: ${workflow.authorization?.continuation.eligible ?? false}; accepted current result: ${workflow.authorization?.acceptance.accepted ?? false}; changed after approval: ${workflow.revisionChanged}\nAttempts (durable history, NOT a liveness check):\n${
     workflow.attempts
       .slice(0, 3)
       .map(

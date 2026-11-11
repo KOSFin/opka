@@ -16,6 +16,7 @@ import {
   type NativeCodexQuotaAuthority,
   type NativeCodexQuotaSettings
 } from './runtime-codex-quota-failure'
+import { ensurePackagedReplayEngineAsset } from '../codex-routing/engine-replay-package'
 
 type Runtime = Parameters<typeof installRuntimeCodexEngineHost>[0]
 type AccountService = Parameters<typeof installRuntimeCodexEngineHost>[1]['codexAccounts']
@@ -51,7 +52,9 @@ export function configureNativeCodexRouting(
     codexAccounts: options.codexAccounts,
     registerCleanup: options.registerCleanup,
     memoryMiB: 128,
-    maxRequestBytes: 4 * 1024 * 1024,
+    maxRequestBytes: 16 * 1024 * 1024,
+    ensureAsset: ensurePackagedReplayEngineAsset,
+    replaySpoolDirectory: join(profile, 'codex-routing', 'replay-spool'),
     networkProxySettings: settings.httpProxyUrl?.trim()
       ? {
           httpProxyUrl: settings.httpProxyUrl,

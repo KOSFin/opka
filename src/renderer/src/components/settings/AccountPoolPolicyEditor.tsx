@@ -56,6 +56,10 @@ export function AccountPoolPolicyEditor({
   const appliedPolicy = view.policies.find((entry) => entry.id === policy.id)
   const manualBlocked =
     automatic || Boolean(appliedPolicy?.applyToNewWork && appliedPolicy.strategy !== 'manual')
+  const activeId = view.accounts[policy.provider].activeAccountId
+  const activeAccount = view.accounts[policy.provider].accounts.find(
+    (account) => account.id === activeId
+  )
   const unsaved =
     JSON.stringify(policy) !==
     JSON.stringify(accountPoolDrafts(view).find((entry) => entry.id === policy.id))
@@ -75,6 +79,11 @@ export function AccountPoolPolicyEditor({
         </p>
         <p className="text-sm font-medium">
           {automatic ? 'Selection mode: Automatic pool' : 'Selection mode: Specific account'}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {automatic
+            ? `Current active account: ${activeAccount?.email ?? 'CLI login or none'}. Next selection uses eligible ${policy.allowReserve ? 'primary, then reserve' : 'primary'} accounts${policy.strategy === 'quota-equalize' ? ' with comparable fresh quota' : policy.strategy === 'balanced' ? ' weighted within a priority level' : ' in priority order'}; cooldown and exhausted quota can exclude an account.`
+            : `Manual default for new work: ${activeAccount?.email ?? 'CLI login on this host'}. Select a saved account below to change it.`}
         </p>
         <AccountPoolLaunchSettings policy={policy} disabled={busy} onChange={change} />
         {automatic ? (
@@ -144,7 +153,7 @@ export function AccountPoolPolicyEditor({
             </div>
           </details>
         ) : null}
-        {view.accounts[policy.provider].accounts.length === 0 ? (
+        {view.accounts[policy.provider].accounts.length === 0 && !accountIds?.length ? (
           <p className="text-xs text-muted-foreground">
             No managed accounts on this host. Add an account in the provider settings.
           </p>
@@ -230,6 +239,18 @@ export function AccountPoolPolicyEditor({
               </div>
             )
           })}
+        {renderAccount && accountIds
+          ? accountIds
+              .filter(
+                (accountId) =>
+                  !view.accounts[policy.provider].accounts.some(
+                    (account) => account.id === accountId
+                  )
+              )
+              .map((accountId) => (
+                <Fragment key={accountId}>{renderAccount(accountId, null, manualBlocked)}</Fragment>
+              ))
+          : null}
         {saveError?.provider === policy.provider ? (
           <p role="alert" className="text-xs text-destructive">
             {saveError.message}

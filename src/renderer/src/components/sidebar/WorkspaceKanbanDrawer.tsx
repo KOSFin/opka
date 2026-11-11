@@ -23,6 +23,7 @@ import { useWorkspaceKanbanDrawerLingering } from './use-workspace-kanban-drawer
 import { buildWorktreeManualOrderCatalog } from './worktree-manual-order-catalog'
 
 type WorkspaceKanbanDrawerProps = {
+  embedded?: boolean
   leftSidebarStyle?: React.CSSProperties
   open: boolean
   statusBarVisible: boolean
@@ -44,6 +45,7 @@ export default function WorkspaceKanbanDrawer(
 }
 
 function WorkspaceKanbanDrawerContent({
+  embedded,
   leftSidebarStyle,
   open,
   statusBarVisible,
@@ -235,6 +237,7 @@ function WorkspaceKanbanDrawerContent({
 
   return (
     <WorkspaceKanbanDrawerView
+      embedded={embedded}
       areaSelectionOverlayRef={areaSelectionOverlayRef}
       boardRef={boardRef}
       dragPreview={dragPreview}
@@ -251,6 +254,7 @@ function WorkspaceKanbanDrawerContent({
       sidebarWidth={sidebarWidth}
       statusBarVisible={statusBarVisible}
       headerProps={{
+        embedded,
         selectedCount: renderedSelectedWorktrees.length,
         query,
         isFiltering: hasQuery,

@@ -8,6 +8,8 @@ const boardKey = (target: RuntimeClientTarget, worktree: string) =>
   JSON.stringify([target, worktree])
 export const cachedProjectTaskBoard = (target: RuntimeClientTarget, worktree: string) =>
   boards.peek(boardKey(target, worktree))
+export const invalidateProjectTaskBoard = (target: RuntimeClientTarget, worktree: string) =>
+  boards.invalidate(boardKey(target, worktree))
 
 export type ProjectTaskClient = {
   target: RuntimeClientTarget

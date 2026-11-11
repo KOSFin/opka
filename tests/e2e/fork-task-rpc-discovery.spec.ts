@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
+import { selectAllTaskProjects, selectTaskProject } from './helpers/task-project-picker'
 import { projectTaskTemplate } from '../../src/shared/project-task-template'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 
@@ -48,11 +49,9 @@ test('discovers a task initialized through RPC and opens its saved report withou
       await window.__store!.getState().fetchFolderWorkspaces({ runtimeEnvironmentId: null })
       return `folder:${folder.id}`
     }, root)
-    await page.getByRole('combobox', { name: 'Task project' }).click()
-    await page.getByRole('option', { name: /RPC task discovery/ }).click()
+    await selectTaskProject(page, /RPC task discovery/)
     await expect(page.getByRole('button', { name: 'Set up task files', exact: true })).toBeVisible()
-    await page.getByRole('combobox', { name: 'Task project' }).click()
-    await page.getByRole('option', { name: 'All projects', exact: true }).click()
+    await selectAllTaskProjects(page)
     await rpc(page, 'projectTask.init', { worktree, expectedExecutionHostId: 'local' })
     for (const file of [
       '.agents/skills/opka-tasks/SKILL.md',
@@ -79,8 +78,7 @@ test('discovers a task initialized through RPC and opens its saved report withou
       JSON.stringify(await rpc(page, 'projectTask.catalog', {}))
     )
     await page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
-    await page.getByRole('combobox', { name: 'Task project' }).click()
-    await page.getByRole('option', { name: /RPC task discovery/ }).click()
+    await selectTaskProject(page, /RPC task discovery/)
     await page.getByRole('button', { name: 'Board settings', exact: true }).click()
     let settings = page.getByRole('dialog', { name: 'Board settings', exact: true })
     await expect(settings.getByRole('status')).toHaveText('Enabled')

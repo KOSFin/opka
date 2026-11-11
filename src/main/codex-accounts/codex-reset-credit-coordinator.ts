@@ -31,6 +31,7 @@ import {
 } from './codex-reset-credit-ledger'
 import {
   CodexResetCreditScopeRejection,
+  isCodexResetCreditSourcePreflightRejection,
   validateCodexResetCreditScope,
   type CodexResetCreditScopeValidation
 } from './codex-reset-credit-scope-validation'
@@ -208,12 +209,30 @@ export class CodexResetCreditCoordinator {
         if (isFresh) {
           await this.ledger.markProviderPending(idempotencyKey, attempt)
         }
-        const { outcome, state } =
-          await this.dependencies.rateLimits.consumeCodexRateLimitResetCredit({
+        let consumed: CodexRateLimitResetResult
+        const preflightProof = Symbol('codex-reset-preflight')
+        try {
+          consumed = await this.dependencies.rateLimits.consumeCodexRateLimitResetCredit({
             idempotencyKey,
             target: expectedScope.target,
-            codexHomePath: validation.managedHomePath
+            codexHomePath: validation.managedHomePath,
+            preflightProof
           })
+        } catch (error) {
+          if (isFresh && isCodexResetCreditSourcePreflightRejection(error, preflightProof)) {
+            await this.ledger.releaseKnownLocalPending(idempotencyKey, attempt)
+            return {
+              status: 'rejectedBeforeProvider',
+              retryDisposition: 'discardAttempt',
+              reason: error.reason,
+              scope: expectedScope,
+              codex: this.dependencies.getSnapshot(),
+              rateLimits: error.rateLimits
+            }
+          }
+          throw error
+        }
+        const { outcome, state } = consumed
         // Why: queued account selection may start as soon as this mutation resolves;
         // capture both account selection and usage before releasing the queue.
         const result: CodexResetCreditConsumedResult = {

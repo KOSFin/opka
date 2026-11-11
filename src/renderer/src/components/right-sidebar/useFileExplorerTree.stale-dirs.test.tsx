@@ -133,7 +133,13 @@ describe('useFileExplorerTree stale collapsed dirs', () => {
 
     // Only the root read was attempted; the expanded dirs were not.
     expect(readDirectoryMock).toHaveBeenCalledTimes(1)
-    expect(readDirectoryMock).toHaveBeenCalledWith('wt-1', '/repo', '/repo')
+    expect(readDirectoryMock).toHaveBeenCalledWith(
+      'wt-1',
+      '/repo',
+      '/repo',
+      undefined,
+      expect.any(AbortSignal)
+    )
   })
 
   it('drops stale marks when the tree is reset for a new worktree', async () => {
@@ -250,7 +256,13 @@ describe('useFileExplorerTree stale collapsed dirs', () => {
       older = hook.result.current.refreshTree()
       await Promise.resolve()
     })
-    expect(readDirectoryMock).toHaveBeenLastCalledWith('wt-1', '/repo', '/repo/link')
+    expect(readDirectoryMock).toHaveBeenLastCalledWith(
+      'wt-1',
+      '/repo',
+      '/repo/link',
+      undefined,
+      expect.any(AbortSignal)
+    )
     hook.rerender({ expanded: new Set() })
     await act(async () => {
       await hook.result.current.refreshTree()

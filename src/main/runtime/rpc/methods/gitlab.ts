@@ -1,4 +1,5 @@
 import { defineMethod } from '../core'
+import { createGitLabNetworkProfileStore } from '../../../gitlab/gitlab-network-profile-store'
 import { normalizeGitLabIssueListArgs } from '../../../gitlab/gitlab-preload-args'
 import { toGitLabJobLogExcerptResult } from '../../../../shared/gitlab-job-log-excerpt'
 import {
@@ -24,6 +25,12 @@ import {
 } from '../../../../shared/rpc-contract/gitlab-params'
 
 export const GITLAB_METHODS = [
+  defineMethod({
+    name: 'gitlab.listNetworkProfiles',
+    permission: 'workspace',
+    params: EmptyParams,
+    handler: () => createGitLabNetworkProfileStore().list()
+  }),
   defineMethod({
     name: 'gitlab.listMRs',
     permission: 'workspace',

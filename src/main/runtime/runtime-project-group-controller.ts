@@ -2,6 +2,7 @@ import type { WorkspaceAttachmentMutation } from '../../shared/workspace-attachm
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
 import type {
   FolderWorkspacePathStatus,
   FolderWorkspacePathStatusRequest
@@ -16,7 +17,8 @@ import { FolderWorkspaceCreateRefusedError } from '../project-groups/folder-work
 import type { RuntimeStore } from './runtime-store-contract'
 import {
   runtimeVisibleFolderWorkspaces,
-  runtimeVisibleProjectGroups
+  runtimeVisibleProjectGroups,
+  runtimeVisibleRepos
 } from './runtime-visible-catalog'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import {
@@ -60,6 +62,27 @@ type FolderWorkspaceUpdates = Partial<
 > &
   WorkspaceAttachmentMutation
 
+function requireVisibleGroup(store: RuntimeStore, groupId: string, code: string): void {
+  const matches = store.getProjectGroups?.().filter((group) => group.id === groupId) ?? []
+  if (matches.length !== 1 || !runtimeVisibleProjectGroups(store).includes(matches[0])) {
+    throw new Error(code)
+  }
+}
+
+function requireVisibleRepo(store: RuntimeStore, repo: Repo): void {
+  const exact = (row: Repo) =>
+    row.id === repo.id &&
+    getRepoExecutionHostId(row) === getRepoExecutionHostId(repo) &&
+    row.path === repo.path &&
+    row.addedAt === repo.addedAt
+  if (
+    store.getRepos().filter(exact).length !== 1 ||
+    runtimeVisibleRepos(store).filter(exact).length !== 1
+  ) {
+    throw new Error('repo_not_visible')
+  }
+}
+
 export class RuntimeProjectGroupController {
   constructor(private readonly deps: RuntimeProjectGroupDependencies) {}
 
@@ -86,6 +109,7 @@ export class RuntimeProjectGroupController {
     connectionId?: string | null
     parentGroupId?: string | null
     createdFrom?: ProjectGroup['createdFrom']
+    groupIcon?: ProjectGroup['groupIcon']
   }): Promise<ProjectGroup> {
     const store = this.deps.getStore()
     if (!store?.createProjectGroup) {
@@ -96,7 +120,8 @@ export class RuntimeProjectGroupController {
       parentPath: input.parentPath ?? null,
       connectionId: input.connectionId ?? null,
       parentGroupId: input.parentGroupId ?? null,
-      createdFrom: input.createdFrom ?? 'manual'
+      createdFrom: input.createdFrom ?? 'manual',
+      groupIcon: input.groupIcon
     })
     this.deps.notifyReposChanged()
     return group
@@ -104,12 +129,15 @@ export class RuntimeProjectGroupController {
 
   async updateGroup(
     groupId: string,
-    updates: Partial<Pick<ProjectGroup, 'name' | 'isCollapsed' | 'tabOrder' | 'color'>>
+    updates: Partial<
+      Pick<ProjectGroup, 'name' | 'isCollapsed' | 'tabOrder' | 'color' | 'groupIcon'>
+    >
   ): Promise<ProjectGroup | null> {
     const store = this.deps.getStore()
     if (!store?.updateProjectGroup) {
       throw new Error('runtime_unavailable')
     }
+    requireVisibleGroup(store, groupId, 'project_group_not_visible')
     const updated = store.updateProjectGroup(groupId, updates)
     if (updated) {
       this.deps.notifyReposChanged()
@@ -150,6 +178,10 @@ export class RuntimeProjectGroupController {
       throw new Error('runtime_unavailable')
     }
     const repo = await this.deps.resolveRepo(repoSelector, connectionId)
+    requireVisibleRepo(store, repo)
+    if (groupId !== null) {
+      requireVisibleGroup(store, groupId, 'target_group_not_visible')
+    }
     assertWslMoveRepoWritable(store, repo)
     const moved = store.moveProjectToGroup(repo, groupId, order)
     if (!moved) {

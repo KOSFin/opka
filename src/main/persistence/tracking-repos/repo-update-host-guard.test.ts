@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../shared/repo-types'
 import { RepoUpdatePersistenceOperations } from './repo-update-operations'
+import { hydrateRepo } from './repo-hydration'
 
 function makeRepo(overrides: Partial<Repo> & Pick<Repo, 'id'>): Repo {
   return {
@@ -25,6 +26,14 @@ function makeOperations(repos: Repo[]) {
   })
   return { operations, scheduleSave, state }
 }
+
+const syntheticGitLabProfile = {
+  provider: 'gitlab',
+  id: 'a'.repeat(64),
+  host: 'gitlab.com',
+  user: 'alice',
+  generation: '00000000-0000-4000-8000-000000000001'
+} as const
 
 describe('updateRepo host guard', () => {
   let errors: string[]
@@ -119,5 +128,136 @@ describe('updateRepo host guard', () => {
 
     expect(state.repos.map((repo) => repo.displayName)).toEqual(['Local', 'Peer edit'])
     expect(errors).toEqual([])
+  })
+
+  it('drops a forged profile field from ordinary repo updates', () => {
+    const repo = makeRepo({ id: 'repo-1' })
+    const { operations, state } = makeOperations([repo])
+    const forged = { displayName: 'Renamed', gitNetworkBinding: syntheticGitLabProfile }
+
+    operations.updateRepo(repo, forged)
+
+    expect(state.repos[0].displayName).toBe('Renamed')
+    expect(state.repos[0].gitNetworkBinding).toBeUndefined()
+  })
+
+  it('writes only a current local Git row through the dedicated binding path', () => {
+    const repo = makeRepo({ id: 'repo-1' })
+    const { operations, scheduleSave, state } = makeOperations([repo])
+    const untrustedExtra = { ...syntheticGitLabProfile, token: 'synthetic-must-not-persist' }
+
+    const bound = operations.setRepoGitNetworkBinding(
+      repo,
+      repo.path,
+      repo.addedAt,
+      null,
+      untrustedExtra
+    )
+    expect(bound.gitNetworkBinding).toEqual(syntheticGitLabProfile)
+    expect(state.repos[0].gitNetworkBinding).toEqual(syntheticGitLabProfile)
+    expect(Object.keys(state.repos[0].gitNetworkBinding ?? {}).sort()).toEqual([
+      'generation',
+      'host',
+      'id',
+      'provider',
+      'user'
+    ])
+    expect(scheduleSave).toHaveBeenCalledOnce()
+    expect(() =>
+      operations.setRepoGitNetworkBinding(
+        repo,
+        repo.path,
+        repo.addedAt,
+        null,
+        syntheticGitLabProfile
+      )
+    ).toThrow('Git network binding unavailable for this repository.')
+    expect(scheduleSave).toHaveBeenCalledOnce()
+  })
+
+  it('atomically switches GitLab to GitHub network identity without changing legacy gh binding', () => {
+    const repo = makeRepo({
+      id: 'repo-switch',
+      ghAccount: { host: 'github.com', user: 'legacy' }
+    })
+    const { operations, state } = makeOperations([repo])
+    operations.setRepoGitNetworkBinding(repo, repo.path, repo.addedAt, null, syntheticGitLabProfile)
+    const github = {
+      provider: 'github',
+      host: 'github.com',
+      user: 'Alice',
+      generation: '00000000-0000-4000-8000-000000000002'
+    } as const
+    const switched = operations.setRepoGitNetworkBinding(
+      repo,
+      repo.path,
+      repo.addedAt,
+      syntheticGitLabProfile.generation,
+      github
+    )
+    expect(switched.gitNetworkBinding).toEqual(github)
+    expect(state.repos[0].gitNetworkBinding).toEqual(github)
+    expect(state.repos[0].ghAccount).toEqual({ host: 'github.com', user: 'legacy' })
+    expect(() =>
+      operations.setRepoGitNetworkBinding(
+        repo,
+        repo.path,
+        repo.addedAt,
+        syntheticGitLabProfile.generation,
+        null
+      )
+    ).toThrow('Git network binding unavailable for this repository.')
+  })
+
+  it('refuses a host, folder or path mismatch without persisting a binding', () => {
+    const peer = makeRepo({ id: 'repo-1', executionHostId: 'ssh:peer' })
+    const folder = makeRepo({ id: 'repo-2', kind: 'folder' })
+    const local = makeRepo({ id: 'repo-3' })
+    const { operations, scheduleSave } = makeOperations([peer, folder, local])
+
+    for (const [repo, path] of [
+      [peer, peer.path],
+      [folder, folder.path],
+      [local, '/different/path']
+    ] as const) {
+      expect(() =>
+        operations.setRepoGitNetworkBinding(repo, path, repo.addedAt, null, syntheticGitLabProfile)
+      ).toThrow('Git network binding unavailable for this repository.')
+    }
+    expect(scheduleSave).not.toHaveBeenCalled()
+  })
+
+  it('refuses a deleted and recreated row at the same host and path', () => {
+    const original = makeRepo({ id: 'repo-1', addedAt: 1 })
+    const replacement = makeRepo({ id: 'repo-1', addedAt: 2 })
+    const { operations, scheduleSave } = makeOperations([replacement])
+
+    expect(() =>
+      operations.setRepoGitNetworkBinding(
+        original,
+        original.path,
+        original.addedAt,
+        null,
+        syntheticGitLabProfile
+      )
+    ).toThrow('Git network binding unavailable for this repository.')
+    expect(scheduleSave).not.toHaveBeenCalled()
+  })
+
+  it('hydrates only token-free profile metadata from a persisted row', () => {
+    const rawProfile = { ...syntheticGitLabProfile, token: 'synthetic-must-not-project' }
+    const raw = makeRepo({
+      id: 'repo-1',
+      gitNetworkBinding: rawProfile
+    })
+    const hydrated = hydrateRepo(raw, new Map())
+    expect(hydrated.gitNetworkBinding).toEqual(syntheticGitLabProfile)
+    expect(Object.keys(hydrated.gitNetworkBinding ?? {}).sort()).toEqual([
+      'generation',
+      'host',
+      'id',
+      'provider',
+      'user'
+    ])
   })
 })

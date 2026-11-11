@@ -3,6 +3,7 @@ import type { ProjectHostSetup, ProjectHostSetupUpdateArgs } from '../../../shar
 import type { Repo } from '../../../shared/repo-types'
 import type { RepoHostTarget } from '../../../shared/repo-host-identity'
 import type { GhAccountBinding } from '../../../shared/github/account-binding'
+import type { GitNetworkBinding } from '../../../shared/git-network-binding'
 import {
   removeRepoFromHostWorkspaceSessions,
   removeRepoFromWorkspaceSession
@@ -66,8 +67,10 @@ export class RepoLifecycleOperations {
   }
 
   addRepo(repo: Repo): void {
+    const sanitized = { ...repo }
+    delete sanitized.gitNetworkBinding
     bumpLocalWorktreeScanGeneration(repo.id)
-    getRepoOrderOperations(this).addRepo(repo)
+    getRepoOrderOperations(this).addRepo(sanitized)
   }
 
   reorderRepos(orderedIds: string[]): boolean {
@@ -191,6 +194,22 @@ export class RepoLifecycleOperations {
     }
   ): Repo | null {
     return getRepoUpdateOperations(this).updateRepo(target, updates)
+  }
+
+  setRepoGitNetworkBinding(
+    target: RepoHostTarget,
+    expectedPath: string,
+    expectedAddedAt: number,
+    expectedGeneration: string | null,
+    binding: GitNetworkBinding | null
+  ): Repo {
+    return getRepoUpdateOperations(this).setRepoGitNetworkBinding(
+      target,
+      expectedPath,
+      expectedAddedAt,
+      expectedGeneration,
+      binding
+    )
   }
 }
 

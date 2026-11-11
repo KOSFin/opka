@@ -1,19 +1,22 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ClaudeIcon, OpenAIIcon } from '../components/AgentIcons'
 import {
-  getActiveProviderRateLimits,
   getUsageBarState,
   hasActiveProviderUsage,
   UsageBar,
-  type AccountsSnapshot,
-  type ProviderKey
+  type AccountsSnapshot
 } from '../components/AccountUsage'
-import { colors, radii, spacing } from '../theme/mobile-theme'
+import {
+  getAccountProviderUsage,
+  getProviderAccountSelection
+} from '../components/provider-account-usage'
+import type { MobileAccountsUsageIntent } from '../accounts/mobile-accounts-route'
+import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { HostProfile } from '../transport/types'
 
 export function MobileHomeAccountUsageCards(props: {
   items: { host: HostProfile; snapshot: AccountsSnapshot }[]
-  onOpen: (hostId: string) => void
+  onOpen: (hostId: string, usage?: MobileAccountsUsageIntent) => void
 }) {
   if (props.items.length === 0) {
     return null
@@ -22,37 +25,38 @@ export function MobileHomeAccountUsageCards(props: {
     <>
       <Text style={styles.sectionHeading}>Account usage</Text>
       {props.items.map(({ host, snapshot }) => {
-        const claudeActive =
-          snapshot.claude.accounts.find(
-            (account) => account.id === snapshot.claude.activeAccountId
-          ) ?? null
-        const codexActive =
-          snapshot.codex.accounts.find(
-            (account) => account.id === snapshot.codex.activeAccountId
-          ) ?? null
         return (
-          <Pressable
-            key={host.id}
-            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-            onPress={() => props.onOpen(host.id)}
-          >
+          <View key={host.id} style={styles.card}>
             {props.items.length > 1 ? (
               <Text style={styles.hostLabel} numberOfLines={1}>
                 {host.name}
               </Text>
             ) : null}
-            {(['claude', 'codex'] as ProviderKey[]).map((provider) => {
-              const active = provider === 'claude' ? claudeActive : codexActive
-              const accounts =
-                provider === 'claude' ? snapshot.claude.accounts : snapshot.codex.accounts
-              const limits = getActiveProviderRateLimits(snapshot, provider)
+            {(['claude', 'codex'] as const).map((provider) => {
+              const accounts = snapshot[provider].accounts
+              const selection = getProviderAccountSelection(snapshot, provider)
+              const { accountId } = selection
+              const active = accounts.find((account) => account.id === accountId) ?? null
+              const limits = getAccountProviderUsage(snapshot, provider, active?.id ?? null)
               if (accounts.length === 0 && !hasActiveProviderUsage(limits)) {
                 return null
               }
+              const usage =
+                selection.runtimeKey && (accountId === null || active)
+                  ? { provider, accountId, runtimeKey: selection.runtimeKey }
+                  : undefined
+              const label =
+                active?.email ?? (accountId === null ? 'System default' : 'Account unavailable')
               const sessionBar = getUsageBarState(limits, 'session')
               const weeklyBar = getUsageBarState(limits, 'weekly')
               return (
-                <View key={provider} style={styles.row}>
+                <Pressable
+                  key={provider}
+                  style={({ pressed }) => [styles.row, pressed && styles.cardPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${label} ${provider} usage on ${host.name}`}
+                  onPress={() => props.onOpen(host.id, usage)}
+                >
                   <View style={styles.icon}>
                     {provider === 'claude' ? (
                       <ClaudeIcon size={18} />
@@ -62,7 +66,7 @@ export function MobileHomeAccountUsageCards(props: {
                   </View>
                   <View style={styles.info}>
                     <Text style={styles.email} numberOfLines={1}>
-                      {active?.email ?? 'System default'}
+                      {label}
                     </Text>
                     <View style={styles.bars}>
                       <UsageBar
@@ -79,10 +83,18 @@ export function MobileHomeAccountUsageCards(props: {
                       />
                     </View>
                   </View>
-                </View>
+                </Pressable>
               )
             })}
-          </Pressable>
+            <Pressable
+              style={styles.manageAccounts}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${host.name} account usage`}
+              onPress={() => props.onOpen(host.id)}
+            >
+              <Text style={styles.manageAccountsText}>Manage accounts</Text>
+            </Pressable>
+          </View>
         )
       })}
     </>
@@ -111,6 +123,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm
   },
   cardPressed: { backgroundColor: colors.bgRaised },
+  manageAccounts: { alignSelf: 'flex-start', paddingVertical: spacing.xs },
+  manageAccountsText: {
+    color: colors.textSecondary,
+    fontSize: typography.metaSize,
+    fontWeight: '600'
+  },
   hostLabel: {
     fontSize: 11,
     color: colors.textMuted,

@@ -8,9 +8,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OpkaUpdateConnectionTest {
-  private class Connection(val status: Int = 200, val failure: Boolean = false, val location: String? = null) : HttpURLConnection(URL("https://github.com/")) {
+  private class Connection(val status: Int = 200, val failure: Boolean = false, val location: String? = null, val onResponse: () -> Unit = {}) : HttpURLConnection(URL("https://github.com/")) {
     var disconnected = 0
     override fun getResponseCode(): Int {
+      onResponse()
       if (failure) throw IOException("response failed")
       return status
     }
@@ -63,6 +64,21 @@ class OpkaUpdateConnectionTest {
       val cancelled = Connection()
       assertThrows(CancellationException::class.java) { OpkaUpdateConnection.open("https://github.com/", attempt, create = { cancelled }) }
       assertEquals(1, cancelled.disconnected)
+    } finally { OpkaUpdateTransaction.finish(attempt) }
+  }
+
+  @Test fun cancellingDuringRedirectStopsBeforeTheNextHost() {
+    val attempt = OpkaUpdateTransaction.begin("redirect")
+    try {
+      val redirect = Connection(status = 302, location = "https://release-assets.githubusercontent.com/update.apk", onResponse = {
+        assertTrue(OpkaUpdateTransaction.cancelMatching("redirect"))
+      })
+      var opens = 0
+      assertThrows(CancellationException::class.java) {
+        OpkaUpdateConnection.open("https://github.com/", attempt, create = { opens++; redirect })
+      }
+      assertEquals(1, opens)
+      assertEquals(2, redirect.disconnected)
     } finally { OpkaUpdateTransaction.finish(attempt) }
   }
 }

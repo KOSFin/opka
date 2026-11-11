@@ -1,10 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { UsageAccountRows } from './UsageAccountRows'
 import { UsageCodexAccountRows } from './UsageCodexAccountRows'
 import { useUsageAccounts } from './UsageAccountsContext'
 import { getProviderAccountsOwnerKey } from '@/runtime/runtime-provider-accounts-client'
 import { ChevronRight, RefreshCw } from 'lucide-react'
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui/button'
 import { SettingsSegmentedControl } from '@/components/settings/SettingsFormControls'
 import { useResetCountdownClock } from '@/hooks/useResetCountdownClock'
 import { translate } from '@/i18n/i18n'
@@ -151,8 +151,8 @@ export function UsageRow({
   const tightest = mode === 'compact' ? getUsageHeadlineSection(p) : null
 
   return (
-    <div data-usage-mode={mode} className="flex min-w-0 flex-1 flex-col gap-1">
-      <div className="flex items-center gap-2.5">
+    <span data-usage-mode={mode} className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="flex items-center gap-2.5">
         <span className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border bg-secondary">
           <ProviderIcon provider={p.provider} />
         </span>
@@ -183,12 +183,12 @@ export function UsageRow({
         ) : reset ? (
           <span className="shrink-0 text-[11px] text-muted-foreground">{reset}</span>
         ) : null}
-      </div>
+      </span>
       {state.detail ? (
         <span className="pl-[30px] text-[11px] text-muted-foreground">{state.detail}</span>
       ) : null}
       {hasUsage && mode === 'verbose' ? (
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-[30px]">
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-[30px]">
           {sections.map((section) => (
             <UsageMetric
               key={section.label}
@@ -197,9 +197,9 @@ export function UsageRow({
               display={display}
             />
           ))}
-        </div>
+        </span>
       ) : null}
-    </div>
+    </span>
   )
 }
 
@@ -239,6 +239,10 @@ export function UsageRosterPanel({
   renderRow?: (p: ProviderRateLimits, row: React.ReactNode) => React.ReactNode
 }): React.JSX.Element {
   const accountsOwner = useUsageAccounts()
+  const [inspected, setInspected] = useState<{
+    scope: string
+    rowId: string
+  } | null>(null)
   // Why: one boundary-scheduled clock keeps every open row current without per-provider timers.
   const now = useResetCountdownClock(
     [
@@ -264,7 +268,7 @@ export function UsageRosterPanel({
   const ownerKey = accountsOwner ? getProviderAccountsOwnerKey(accountsOwner.target) : null
 
   return (
-    <div className="w-[360px] text-xs">
+    <div className="w-full min-w-0 text-xs">
       <div className="flex items-center gap-2 px-3.5 py-2.5">
         <span className="shrink-0 text-[13px] font-semibold text-foreground">
           {translate('auto.components.status.bar.UsageRosterPanel.title', 'Usage')}
@@ -273,19 +277,19 @@ export function UsageRosterPanel({
           {accountsOwner?.ownerLabel ??
             translate('auto.components.status.bar.UsageRosterPanel.allAgents', 'all agents')}
         </span>
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onRefresh()
-          }}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={onRefresh}
           aria-label={translate(
             'auto.components.status.bar.StatusBar.3325d996cb',
             'Refresh rate limits'
           )}
-          className="size-5 justify-center p-0"
+          className="justify-center"
         >
           <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-        </DropdownMenuItem>
+        </Button>
         <SettingsSegmentedControl<StatusBarUsageMode>
           value={statusBarUsageMode}
           onChange={onStatusBarUsageModeChange}
@@ -321,16 +325,14 @@ export function UsageRosterPanel({
             provider.provider === 'codex'
               ? accountsOwner?.rateLimits.codexTarget
               : accountsOwner?.rateLimits.claudeTarget
-          const actions =
-            accountsOwner?.verified && accountsOwner.snapshot
-              ? renderRow?.(
-                  provider,
-                  <span className="text-xs">
-                    {provider.provider === 'codex' ? 'Codex' : 'Claude'} ·{' '}
-                    {translate('usage.accounts.switchRuntime', 'Switch account or runtime')}
-                  </span>
-                )
-              : null
+          const accountProvider = provider.provider === 'codex' ? 'codex' : 'claude'
+          const selectionScope = `${ownerKey}:${accountProvider}:${target?.runtime}:${target?.wslDistro ?? ''}`
+          const inspectedRowId = inspected?.scope === selectionScope ? inspected.rowId : null
+          const onInspectRow = (rowId: string): void => {
+            if (ownerKey) {
+              setInspected({ scope: selectionScope, rowId })
+            }
+          }
           return (
             <React.Fragment
               key={`${ownerKey}:${provider.provider}:${target?.runtime}:${target?.wslDistro ?? ''}`}
@@ -342,6 +344,8 @@ export function UsageRosterPanel({
                   display={display}
                   mode={statusBarUsageMode}
                   onManageProvider={() => onOpenProvider('codex')}
+                  inspectedRowId={inspectedRowId}
+                  onInspectRow={onInspectRow}
                 />
               ) : (
                 <UsageAccountRows
@@ -350,16 +354,10 @@ export function UsageRosterPanel({
                   display={display}
                   mode={statusBarUsageMode}
                   onManageProvider={() => onOpenProvider('claude')}
+                  inspectedRowId={inspectedRowId}
+                  onInspectRow={onInspectRow}
                 />
               )}
-              {actions ? (
-                <div
-                  data-usage-account-actions={provider.provider}
-                  className="border-b border-border/50"
-                >
-                  {actions}
-                </div>
-              ) : null}
             </React.Fragment>
           )
         })}
@@ -378,36 +376,43 @@ export function UsageRosterPanel({
           )
           const custom = showSignInAction ? null : renderRow?.(p, rowNode)
           const item = custom ?? (
-            <DropdownMenuItem
-              onSelect={() =>
-                showSignInAction ? onSignIn(p.provider) : onOpenProvider(p.provider)
-              }
-              className="w-full cursor-pointer rounded-none px-3.5 py-2.5"
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => (showSignInAction ? onSignIn(p.provider) : onOpenProvider(p.provider))}
+              className="h-auto w-full min-w-0 justify-start text-left whitespace-normal"
             >
               {rowNode}
-            </DropdownMenuItem>
+            </Button>
           )
           return <React.Fragment key={p.provider}>{item}</React.Fragment>
         })}
       </div>
       <div className="border-t border-border/70" />
-      <DropdownMenuItem
-        onSelect={onUsageDetails}
-        className="w-full cursor-pointer justify-between rounded-none px-3.5 py-2.5 text-[13px] text-foreground"
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onUsageDetails}
+        className="h-auto w-full justify-between"
       >
         {translate(
           'auto.components.status.bar.UsageRosterPanel.usageDetails',
           'Usage details & history'
         )}
         <ChevronRight size={14} className="text-muted-foreground" />
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        onSelect={onManageAccounts}
-        className="w-full cursor-pointer justify-between rounded-none px-3.5 py-2.5 text-[13px] text-foreground"
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onManageAccounts}
+        className="h-auto w-full justify-between"
       >
         {translate('auto.components.status.bar.StatusBar.75ded02687', 'Manage Accounts…')}
         <ChevronRight size={14} className="text-muted-foreground" />
-      </DropdownMenuItem>
+      </Button>
     </div>
   )
 }

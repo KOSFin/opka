@@ -33,7 +33,14 @@ export type AccountPoolCandidate = {
   auth: 'ready' | 'unavailable'
   quota: 'available' | 'exhausted' | 'unknown'
   usedPercent: number | null
-  quotaWindows?: { windowMinutes: number; usedPercent: number; resetsAt: number | null }[]
+  quotaReason?: 'missing' | 'stale' | 'invalid' | 'unverified-owner'
+  quotaWindows?: {
+    windowMinutes: number
+    verifiedDurationMinutes?: 300 | 10080
+    usedPercent: number
+    resetsAt: number | null
+    resetMetadataInvalid?: true
+  }[]
 }
 export const AccountPoolUpdateParams = z.object({
   policy: AccountPoolPolicySchema,

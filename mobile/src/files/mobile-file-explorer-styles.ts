@@ -18,6 +18,28 @@ export const fileExplorerStyles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.md
   },
+  navigationBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm
+  },
+  navigationButton: {
+    minHeight: 36,
+    justifyContent: 'center'
+  },
+  breadcrumbScroll: { flex: 1 },
+  breadcrumbContent: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  breadcrumbText: {
+    color: colors.textPrimary,
+    fontSize: typography.metaSize
+  },
+  viewScopeNote: {
+    color: colors.textSecondary,
+    fontSize: typography.metaSize,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm
+  },
   backButton: {
     width: 36,
     height: 36,

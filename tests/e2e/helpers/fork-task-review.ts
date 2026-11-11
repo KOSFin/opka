@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
 import { expect, type Page } from '@stablyai/playwright-test'
 import type { ProjectTaskWorkflow } from '../../../src/shared/project-task-workflow'
+import { selectTaskProject } from './task-project-picker'
 
 export async function verifyForkTaskReview(
   page: Page,
@@ -23,8 +24,7 @@ export async function verifyForkTaskReview(
   })
   expect(checks.code).toBe(0)
   await page.evaluate(() => window.__store!.getState().setActiveView('tasks'))
-  await page.getByRole('combobox', { name: 'Task project' }).click()
-  await page.getByRole('option', { name: /Real Codex task smoke/ }).click()
+  await selectTaskProject(page, /Real Codex task smoke/)
   await page.getByRole('button', { name: /Исправить сложение/ }).click()
   await page.getByRole('button', { name: 'Reports & notes', exact: true }).click()
   await expect(page.getByRole('region', { name: 'Task reports and notes' })).toContainText('sum')

@@ -121,6 +121,64 @@ describe('CodexResetCreditControl synthetic adapter', () => {
     expect(screen.getByRole('button', { name: 'Use reset' }).hasAttribute('disabled')).toBe(true)
   })
 
+  it('disables a newly expired credit before the minute tick and refuses an expired confirmation', () => {
+    const initial = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(initial)
+    try {
+      const offer = limits(2)
+      const view = render(
+        <CodexResetCreditControl
+          account={account}
+          limits={offer}
+          rateLimitTarget={target}
+          owner={local}
+          ownerLabel="Desk"
+          verified
+        />
+      )
+      clock.mockReturnValue(initial + 20_000)
+      view.rerender(
+        <CodexResetCreditControl
+          account={account}
+          limits={{
+            ...offer,
+            updatedAt: initial + 20_000,
+            rateLimitResetCredits: { availableCount: 2, nextExpiresAt: initial + 19_000 }
+          }}
+          rateLimitTarget={target}
+          owner={local}
+          ownerLabel="Desk"
+          verified
+        />
+      )
+      expect(screen.getByRole('button', { name: 'Use reset' }).hasAttribute('disabled')).toBe(true)
+      view.unmount()
+
+      clock.mockReturnValue(initial)
+      const later = {
+        ...limits(2),
+        rateLimitResetCredits: { availableCount: 2, nextExpiresAt: initial + 1_000 }
+      }
+      mocks.getState.mockReturnValue({ rateLimits: { codex: later } })
+      render(
+        <CodexResetCreditControl
+          account={account}
+          limits={later}
+          rateLimitTarget={target}
+          owner={local}
+          ownerLabel="Desk"
+          verified
+        />
+      )
+      const confirmation = confirm()
+      clock.mockReturnValue(initial + 2_000)
+      fireEvent.click(confirmation)
+      expect(mocks.call).not.toHaveBeenCalled()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it('cancels without a mutation and updates 2 to 1 after a confirmed result', async () => {
     const view = render(control(2))
     confirm()

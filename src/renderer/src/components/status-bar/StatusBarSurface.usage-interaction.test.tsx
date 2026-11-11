@@ -137,12 +137,16 @@ vi.mock('./UsageCodexAccountRows', async () => {
       now,
       display,
       mode,
-      onManageProvider
+      onManageProvider,
+      inspectedRowId,
+      onInspectRow
     }: {
       now: number
       display: 'used'
       mode: 'compact'
       onManageProvider: () => void
+      inspectedRowId?: string | null
+      onInspectRow?: (rowId: string) => void
     }) => (
       <UsageAccountRows
         provider="codex"
@@ -150,6 +154,8 @@ vi.mock('./UsageCodexAccountRows', async () => {
         display={display}
         mode={mode}
         onManageProvider={onManageProvider}
+        inspectedRowId={inspectedRowId}
+        onInspectRow={onInspectRow}
         onSelectAccount={mocks.select}
       />
     )
@@ -239,34 +245,46 @@ it('keeps flat account actions reachable from the production Usage trigger and r
       .textContent
   ).not.toContain('Saved profile')
   expect(screen.getByText('Synthetic host')).toBeTruthy()
-  expect(screen.getAllByText('Codex · Switch account or runtime')).toHaveLength(1)
-  expect(screen.getAllByText('Claude · Switch account or runtime')).toHaveLength(1)
+  expect(screen.queryByText('Codex · Switch account or runtime')).toBeNull()
+  expect(screen.queryByText('Claude · Switch account or runtime')).toBeNull()
   expect(screen.queryByText('Profiles are separate sign-in contexts')).toBeNull()
 
   const rowButton = row.querySelector('button[aria-expanded]')
   if (!rowButton) {
     throw new Error('Missing account row trigger')
   }
-  for (let step = 0; step < 5 && document.activeElement !== rowButton; step++) {
-    await user.keyboard('{ArrowDown}')
+  for (let step = 0; step < 12 && document.activeElement !== rowButton; step++) {
+    await user.keyboard('{Tab}')
   }
+  expect(document.activeElement).toBe(rowButton)
+  const nextRowButton = screen
+    .getByRole('group', { name: 'Codex reserve@example.test usage' })
+    .querySelector('button[aria-expanded]')
+  await user.keyboard('{Tab}')
+  expect(document.activeElement).toBe(nextRowButton)
+  expect(
+    screen.getByRole('complementary', { name: 'Codex reserve@example.test details' })
+  ).toBeTruthy()
+  await user.keyboard('{Shift>}{Tab}{/Shift}')
   expect(document.activeElement).toBe(rowButton)
   await user.keyboard('{Enter}')
   expect(rowButton.getAttribute('aria-expanded')).toBe('true')
+  expect(
+    screen.getByRole('complementary', { name: 'Codex active@example.test details' })
+  ).toBeTruthy()
+  expect(document.activeElement).toBe(
+    screen.getByRole('button', { name: 'Pin active@example.test to status bar' })
+  )
   if (process.env.OPKA_SYNTHETIC_EVIDENCE_DIR) {
-    const panel = document.querySelector('[data-slot="dropdown-menu-content"] > div')
+    const panel = document.querySelector('[data-slot="popover-content"] > div')
     if (!panel) {
       throw new Error('Missing production Usage panel')
     }
     writeFileSync(
       join(process.env.OPKA_SYNTHETIC_EVIDENCE_DIR, 'review-actions.html'),
-      `<html><head><meta charset="utf-8"><link rel="stylesheet" href="review-actions.css"></head><body><main style="width:360px;margin:48px auto;border:1px solid #ddd;background:#fff">${panel.outerHTML}</main></body></html>`
+      `<html><head><meta charset="utf-8"><link rel="stylesheet" href="review-actions.css"></head><body><main style="width:640px;margin:48px auto;border:1px solid #ddd;background:#fff">${panel.outerHTML}</main></body></html>`
     )
   }
-  await user.keyboard('{Tab}')
-  expect(document.activeElement).toBe(
-    screen.getByRole('button', { name: 'Pin active@example.test to status bar' })
-  )
   await user.keyboard('{Enter}')
   expect(useAppStore.getState().statusBarAccountPins).toHaveLength(1)
   expect(screen.queryByText(/Pinned status bar accounts/)).toBeNull()
@@ -274,41 +292,46 @@ it('keeps flat account actions reachable from the production Usage trigger and r
   await user.keyboard('{Tab}{Tab}')
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Use reset' }))
   await user.keyboard('{Enter}')
-  expect(screen.getByRole('dialog').textContent).toContain('active@example.test')
+  expect(screen.getByRole('dialog', { name: 'Use one manual reset?' }).textContent).toContain(
+    'active@example.test'
+  )
   expect(mocks.resetRpc).not.toHaveBeenCalled()
   await user.keyboard('{Escape}')
-  expect(screen.queryByRole('dialog')).toBeNull()
-
-  const codexActions = screen.getByText('Codex · Switch account or runtime')
-  const codexMenuItem = codexActions.closest('[role="menuitem"]')
-  if (!(codexMenuItem instanceof HTMLElement)) {
-    throw new Error('Missing Codex menu item')
-  }
-  codexMenuItem.focus()
-  await user.keyboard('{ArrowRight}')
-  await user.click(await screen.findByText('Use Codex CLI login'))
-  expect(mocks.select).toHaveBeenCalledWith(null)
-  trigger.focus()
-  await user.keyboard('{Enter}')
-  const claudeActions = screen.getByText('Claude · Switch account or runtime')
-  const claudeMenuItem = claudeActions.closest('[role="menuitem"]')
-  if (!(claudeMenuItem instanceof HTMLElement)) {
-    throw new Error('Missing Claude menu item')
-  }
-  claudeMenuItem.focus()
-  await user.keyboard('{ArrowRight}')
-  const claudeAccount = (await screen.findByText('Choose Claude account')).closest(
-    '[role="menuitem"]'
+  expect(screen.queryByRole('dialog', { name: 'Use one manual reset?' })).toBeNull()
+  expect(screen.getByRole('dialog', { name: 'Usage' })).toBeTruthy()
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Use reset' }))
   )
-  if (!(claudeAccount instanceof HTMLElement)) {
-    throw new Error('Missing Claude account item')
-  }
-  claudeAccount.focus()
-  await user.keyboard('{Enter}')
-  expect(mocks.select).toHaveBeenCalledWith('claude')
-  trigger.focus()
-  await user.keyboard('{Enter}')
   await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Usage' })).toBeNull())
   await waitFor(() => expect(document.activeElement).toBe(trigger))
   expect(mocks.resetRpc).not.toHaveBeenCalled()
+})
+
+it('moves Space from a focused account row into that account’s detail', async () => {
+  const user = userEvent.setup()
+  render(
+    <TooltipProvider>
+      <StatusBarSurface floatingTerminalOpen={false} />
+    </TooltipProvider>
+  )
+  const trigger = screen.getByRole('button', { name: 'Usage' })
+  trigger.focus()
+  await user.keyboard('{Enter}')
+  const row = await screen.findByRole('group', { name: 'Codex active@example.test usage' })
+  const rowButton = row.querySelector('button[aria-expanded]')
+  if (!rowButton) {
+    throw new Error('Missing account row trigger')
+  }
+  for (let step = 0; step < 12 && document.activeElement !== rowButton; step++) {
+    await user.keyboard('{Tab}')
+  }
+  expect(document.activeElement).toBe(rowButton)
+  await user.keyboard(' ')
+  expect(
+    screen.getByRole('complementary', { name: 'Codex active@example.test details' })
+  ).toBeTruthy()
+  expect(document.activeElement).toBe(
+    screen.getByRole('button', { name: 'Pin active@example.test to status bar' })
+  )
 })

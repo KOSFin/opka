@@ -42,11 +42,11 @@ export function ProjectGroupDeleteDialog({
     projectCount === 1
       ? translate(
           'auto.components.sidebar.ProjectGroupDeleteDialog.removeContainedProjectSingular',
-          'Remove 1 contained project'
+          'Remove 1 repository from Orca'
         )
       : translate(
           'auto.components.sidebar.ProjectGroupDeleteDialog.removeContainedProjectPlural',
-          'Remove {{value0}} contained projects',
+          'Remove {{value0}} repositories from Orca',
           { value0: projectCount }
         )
 
@@ -110,7 +110,7 @@ export function ProjectGroupDeleteDialog({
           <DialogTitle className="text-sm">
             {translate(
               'auto.components.sidebar.ProjectGroupDeleteDialog.591f330288',
-              'Delete Project Group'
+              'Delete project'
             )}
           </DialogTitle>
           <DialogDescription className="text-xs">
@@ -125,14 +125,14 @@ export function ProjectGroupDeleteDialog({
                 <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
                   {translate(
                     'auto.components.sidebar.ProjectGroupDeleteDialog.0e0e6764af',
-                    'Contained projects'
+                    'Repositories in this project'
                   )}
                 </div>
                 <ul
                   className="min-w-0 space-y-0.5 text-foreground"
                   aria-label={translate(
                     'auto.components.sidebar.ProjectGroupDeleteDialog.0e0e6764af',
-                    'Contained projects'
+                    'Repositories in this project'
                   )}
                 >
                   {projectNames.slice(0, 4).map((projectName, index) => (
@@ -174,7 +174,7 @@ export function ProjectGroupDeleteDialog({
                 >
                   {translate(
                     'auto.components.sidebar.ProjectGroupDeleteDialog.55f75628c0',
-                    'Project folders on disk are not deleted.'
+                    'Repository folders on disk are not deleted.'
                   )}
                 </span>
               </span>
@@ -208,7 +208,7 @@ export function ProjectGroupDeleteDialog({
                 )
               : translate(
                   'auto.components.sidebar.ProjectGroupDeleteDialog.fec7e9c8ae',
-                  'Delete Group'
+                  'Delete project'
                 )}
           </Button>
         </DialogFooter>

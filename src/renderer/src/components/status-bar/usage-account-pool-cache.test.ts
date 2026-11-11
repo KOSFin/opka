@@ -1,5 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { readUsageAccountPools, peekUsageAccountPools } from './usage-account-pool-cache'
+import {
+  invalidateUsageAccountPools,
+  readUsageAccountPools,
+  peekUsageAccountPools
+} from './usage-account-pool-cache'
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: rpc }))
 const view = {
@@ -41,4 +45,35 @@ it('retains last-known metadata on failure and retries expired entries', async (
   expect(peekUsageAccountPools(b)).toEqual(saved)
   await readUsageAccountPools(b)
   expect(rpc).toHaveBeenCalledTimes(3)
+})
+
+it('rejects an invalidated account response and keeps an oversized view out of cache', async () => {
+  const target = { kind: 'environment', environmentId: 'cache-invalidation' } as const
+  let finishOld: ((value: typeof view) => void) | undefined
+  rpc.mockImplementationOnce(
+    () =>
+      new Promise<typeof view>((resolve) => {
+        finishOld = resolve
+      })
+  )
+  const old = readUsageAccountPools(target)
+  await Promise.resolve()
+  invalidateUsageAccountPools(target)
+  rpc.mockResolvedValueOnce(view)
+  const current = readUsageAccountPools(target)
+  finishOld?.(view)
+  await expect(old).rejects.toThrow('Account pool changed while loading')
+  await current
+  expect(peekUsageAccountPools(target)?.view).toEqual(view)
+
+  invalidateUsageAccountPools(target)
+  rpc.mockResolvedValueOnce({
+    ...view,
+    accounts: {
+      ...view.accounts,
+      claude: { accounts: [{ id: 'oversized', email: 'x'.repeat(300_000) }], activeAccountId: null }
+    }
+  })
+  await readUsageAccountPools(target)
+  expect(peekUsageAccountPools(target)).toBeNull()
 })

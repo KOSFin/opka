@@ -2,6 +2,20 @@ import type { CommandSpec } from '../args'
 import { GLOBAL_FLAGS } from '../args'
 
 export const AGENT_HOOK_COMMAND_SPECS: CommandSpec[] = [
+  {
+    path: ['agent', 'native-home', 'status'],
+    argumentMode: 'passthrough',
+    summary: 'Inspect this host native routing preference conflicts and exact recovery hashes',
+    usage: 'orca agent native-home status [profile]',
+    allowedFlags: []
+  },
+  {
+    path: ['agent', 'native-home', 'apply'],
+    argumentMode: 'passthrough',
+    summary: 'Apply an explicit native routing recovery request on this host',
+    usage: 'orca agent native-home apply <request.json> [profile]',
+    allowedFlags: []
+  },
   ...(['status', 'install', 'uninstall'] as const).map((action) => ({
     path: ['agent', 'native-shell', action],
     summary: `${action === 'status' ? 'Inspect' : action === 'install' ? 'Install' : 'Remove'} this host's native account command integration`,

@@ -33,18 +33,28 @@ class OpkaAppUpdateModule : Module() {
       destroyed = true
       activeAttempt?.cancel()
     }
-    AsyncFunction("install") { manifestUrl: String ->
-      check(!destroyed) { "The update screen was closed. Please retry." }
-      val attempt = OpkaUpdateTransaction.begin()
-      activeAttempt = attempt
-      try {
-        if (destroyed) attempt.cancel()
-        attempt.checkActive()
-        install(manifestUrl, attempt)
-      } finally {
-        activeAttempt = null
-        OpkaUpdateTransaction.finish(attempt)
-      }
+    AsyncFunction("install") { manifestUrl: String -> executeInstall(manifestUrl, null) }
+      .runOnQueue(appContext.backgroundCoroutineScope)
+    AsyncFunction("installTracked") { manifestUrl: String, operationId: String ->
+      require(operationId.isNotBlank()) { "Missing update operation identity." }
+      executeInstall(manifestUrl, operationId)
+    }.runOnQueue(appContext.backgroundCoroutineScope)
+    AsyncFunction("cancel") { operationId: String ->
+      OpkaUpdateTransaction.cancelMatching(operationId)
+    }
+  }
+
+  private fun executeInstall(manifestUrl: String, operationId: String?) {
+    check(!destroyed) { "The update screen was closed. Please retry." }
+    val attempt = OpkaUpdateTransaction.begin(operationId)
+    activeAttempt = attempt
+    try {
+      if (destroyed) attempt.cancel()
+      attempt.checkActive()
+      install(manifestUrl, attempt)
+    } finally {
+      if (activeAttempt === attempt) activeAttempt = null
+      OpkaUpdateTransaction.finish(attempt)
     }
   }
 
@@ -125,7 +135,7 @@ class OpkaAppUpdateModule : Module() {
           .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
       }
     } finally {
-      partial.delete()
+      check(!partial.exists() || partial.delete()) { "Could not remove the unfinished update file. Please retry." }
     }
   }
 

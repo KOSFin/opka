@@ -1,3 +1,4 @@
+import { NativeCliControlError } from '../../shared/native-cli-control-error'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createGlobalSettingsFixture } from '../../shared/global-settings-test-fixture'
 import type { OrcaRuntimeService } from './orca-runtime'
@@ -6,7 +7,13 @@ import {
   releaseNativeCliAccountLaunch
 } from './native-cli-account-launch'
 
-const hooks = vi.hoisted(() => ({ pinned: vi.fn(), candidates: vi.fn(), claudeRouting: vi.fn() }))
+const hooks = vi.hoisted(() => ({
+  pinned: vi.fn(),
+  candidates: vi.fn(),
+  claudeRouting: vi.fn(),
+  verified: vi.fn()
+}))
+vi.mock('./project-task-terminal-proof', () => ({ verifyProjectTaskTerminalProof: hooks.verified }))
 vi.mock('../claude-accounts/pinned-account-launch', () => ({
   preparePinnedClaudeAccountLaunch: hooks.pinned
 }))
@@ -155,3 +162,21 @@ it.each(['claude', 'codex'] as const)(
     expect(f.manual.prepareForCodexLaunch).not.toHaveBeenCalled()
   }
 )
+
+it('keeps managed Claude preparation on the proven parent instead of deferring refusal into stdio', async () => {
+  const f = fixture('claude')
+  hooks.verified.mockReturnValue({ terminalHandle: 'term_synthetic' })
+  hooks.claudeRouting.mockRejectedValue(new NativeCliControlError('config_conflict'))
+  await expect(
+    prepareNativeCliAccountLaunch(f.runtime, {
+      provider: 'claude',
+      launchId: '12345678-1234-4234-8234-123456789012',
+      stdio: true,
+      parentTerminal: {
+        terminalHandle: 'term_synthetic',
+        paneKey: 'tab:leaf',
+        terminalTaskProof: 'a'.repeat(64)
+      }
+    })
+  ).rejects.toMatchObject({ code: 'native_cli_config_conflict' })
+})

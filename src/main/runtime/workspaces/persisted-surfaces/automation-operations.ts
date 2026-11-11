@@ -7,6 +7,11 @@ import type {
 } from '../../../../shared/automation-owner-precondition'
 import type { Automation, AutomationRun } from '../../../../shared/automations-types'
 import type {
+  AutomationCommandDefinitionCreateV1,
+  AutomationCommandDefinitionV1
+} from '../../../../shared/automation-command-domain'
+import type { CommandRunClaimResult } from '../../../persistence/scheduling-automations/automation-command-claim-operations'
+import type {
   RuntimeAutomationCreateInput,
   RuntimeAutomationUpdateInput
 } from '../../runtime-automation-controller'
@@ -31,6 +36,10 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
   protected abstract getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>>
   protected abstract getLeafKey(tabId: string, leafId: string): string
 
+  commandAutomationAvailable(): boolean {
+    return this.automation.commands.available()
+  }
+
   private readAutomationRuns<T>(
     automationId: string | undefined,
     expectedOwner: AutomationOwnerPrecondition | undefined,
@@ -47,13 +56,8 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
     })
   }
 
-  listAutomationRuns(
-    automationId?: string,
-    expectedOwner?: AutomationOwnerPrecondition
-  ): AutomationRun[] {
-    return this.readAutomationRuns(automationId, expectedOwner, () =>
-      this.automation.listRuns(automationId)
-    )
+  listAutomationRuns(id?: string, owner?: AutomationOwnerPrecondition): AutomationRun[] {
+    return this.readAutomationRuns(id, owner, () => this.automation.listRuns(id))
   }
 
   listAutomationRunsPage(
@@ -97,6 +101,75 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
         this.publishAutomationDefinitionChange(selector, selector)
         return automation
       })
+    )
+  }
+
+  listCommandAutomations(): AutomationCommandDefinitionV1[] {
+    return this.automation.withExternalProbePriority(() => this.automation.commands.list())
+  }
+
+  commandAutomationManualReceipt(id: string, key: string) {
+    return this.automation.commands.manualReceipt(id, key)
+  }
+
+  createCommandAutomation(
+    input: AutomationCommandDefinitionCreateV1
+  ): Promise<AutomationCommandDefinitionV1> {
+    return this.automation.withExternalProbePriority(() =>
+      this.automation.commands.create(input).then((definition) => {
+        this.notifyAutomationsChanged({ reason: 'definition' })
+        return definition
+      })
+    )
+  }
+
+  updateCommandAutomation(
+    id: string,
+    expectedRevision: number,
+    expectedOwner: AutomationOwnerPrecondition,
+    updates: Partial<AutomationCommandDefinitionCreateV1>
+  ): Promise<AutomationCommandDefinitionV1> {
+    return this.automation.withExternalProbePriority(() =>
+      this.automation.commands
+        .update(id, expectedRevision, expectedOwner, updates)
+        .then((definition) => {
+          this.notifyAutomationsChanged({ reason: 'definition' })
+          return definition
+        })
+    )
+  }
+
+  async deleteCommandAutomation(
+    id: string,
+    expectedRevision: number,
+    expectedOwner: AutomationOwnerPrecondition
+  ): Promise<{ removed: boolean; id: string }> {
+    await this.automation.withExternalProbePriority(() =>
+      this.automation.commands.delete(id, expectedRevision, expectedOwner)
+    )
+    this.notifyAutomationsChanged({ reason: 'definition' })
+    return { removed: true, id }
+  }
+
+  runCommandAutomationNow(
+    id: string,
+    expectedRevision: number,
+    expectedOwner: AutomationOwnerPrecondition,
+    manualRequest: { key: string; createdAt: number; payloadHash: string }
+  ): Promise<CommandRunClaimResult> {
+    return this.automation.withExternalProbePriority(() =>
+      this.automation.commands.runNow(id, expectedRevision, expectedOwner, manualRequest)
+    )
+  }
+
+  cancelCommandAutomationRun(
+    id: string,
+    runId: string,
+    expectedOwner: AutomationOwnerPrecondition,
+    requestKey: string
+  ) {
+    return this.automation.withExternalProbePriority(() =>
+      this.automation.commands.cancel(id, runId, expectedOwner, requestKey)
     )
   }
 

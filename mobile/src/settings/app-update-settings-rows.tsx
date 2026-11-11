@@ -25,6 +25,7 @@ function checkRowValue(status: AppUpdateCheckRowStatus, lastCheckedAt: number | 
 /** Settings' version row and manual check; the update row stays after the home card is dismissed. */
 export function AppUpdateSettingsRows(props: {
   installBusy?: boolean
+  installCanCancel?: boolean
   installLabel?: string | null
   installedVersion: string | null
   available: KnownAppUpdate | null
@@ -32,6 +33,7 @@ export function AppUpdateSettingsRows(props: {
   now: number
   checkStatus: AppUpdateCheckRowStatus
   onUpdate: (url: string) => void
+  onCancel?: () => void
   onCheck: () => void
 }) {
   const checkValue = checkRowValue(props.checkStatus, props.lastCheckedAt, props.now)
@@ -57,6 +59,19 @@ export function AppUpdateSettingsRows(props: {
     <View style={styles.section}>
       {versionRow}
       {versionRow && <View style={styles.separator} />}
+      {props.installCanCancel && (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel update download"
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            onPress={props.onCancel}
+          >
+            <Text style={styles.rowLabel}>Cancel download</Text>
+          </Pressable>
+          <View style={styles.separator} />
+        </>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Check for updates, ${checkValue}`}

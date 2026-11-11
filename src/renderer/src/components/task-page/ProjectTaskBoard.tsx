@@ -1,9 +1,14 @@
 import { Circle, CircleCheck, CircleDot, ClipboardCheck, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { projectTaskNeedsDecision } from '../../../../shared/project-task-attention'
+import {
+  projectTaskNeedsDecision,
+  projectTaskNextAction
+} from '../../../../shared/project-task-attention'
 import { taskViewKey, type TaskViewRow } from './project-task-projects'
 import { getWorkspaceStatusVisualMeta } from '../sidebar/workspace-status'
+import { useEffect, useRef } from 'react'
+import { readProjectTaskView, saveProjectTaskView } from './project-task-view-state'
 
 export const TASK_COLUMNS = [
   { id: 'planned', title: 'Planned', phases: ['draft', 'ready'], icon: Circle },
@@ -25,8 +30,16 @@ export function ProjectTaskBoard({
   onCreate?: () => void
   onMove: (task: TaskViewRow, phase: 'draft' | 'active' | 'review' | 'done') => void
 }) {
+  const boardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (boardRef.current) {
+      boardRef.current.scrollLeft = readProjectTaskView().boardScrollLeft
+    }
+  }, [])
   return (
     <div
+      ref={boardRef}
+      onScroll={(event) => saveProjectTaskView({ boardScrollLeft: event.currentTarget.scrollLeft })}
       className="scrollbar-sleek flex min-h-0 flex-1 gap-4 overflow-x-auto p-5"
       aria-label="Task board"
     >
@@ -118,6 +131,9 @@ export function ProjectTaskBoard({
                     {task.workflow.archived && <span>Archived</span>}
                     {task.workflow.attempts[0]?.session?.blocker && (
                       <span>Waiting: {task.workflow.attempts[0].session.blocker}</span>
+                    )}
+                    {projectTaskNextAction(task.workflow) && (
+                      <span>Next: {projectTaskNextAction(task.workflow)}</span>
                     )}
                     {task.parent && <span>Subtask</span>}
                   </span>

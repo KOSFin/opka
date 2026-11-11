@@ -96,17 +96,27 @@ export function ProviderDetailsMenu({
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange} modal={false}>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center cursor-pointer rounded px-1 py-0.5 hover:bg-accent/70"
-          aria-label={ariaLabel}
-        >
-          {iconOnly ? (
-            <ProviderLetterBadge p={provider} />
-          ) : (
-            <ProviderSegment p={provider} compact={compact} display={usagePercentageDisplay} />
-          )}
-        </button>
+        {triggerContent ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={ariaLabel}
+          >
+            {triggerContent}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center cursor-pointer rounded px-1 py-0.5 hover:bg-accent/70"
+            aria-label={ariaLabel}
+          >
+            {iconOnly ? (
+              <ProviderLetterBadge p={provider} />
+            ) : (
+              <ProviderSegment p={provider} compact={compact} display={usagePercentageDisplay} />
+            )}
+          </button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         {...STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS}

@@ -14,6 +14,7 @@ export const taskSchema = z.object({
   title: z.string(),
   revision: z.string(),
   path: z.string(),
+  source: z.string().optional(),
   workflow: z.object({
     phase: z.string(),
     archived: z.boolean(),
@@ -58,7 +59,11 @@ export const catalogRead = bindDeferredRpcOperation(
             selector: z.string(),
             name: z.string(),
             state: z.string(),
-            message: z.string().optional()
+            message: z.string().optional(),
+            groupId: z.string().optional(),
+            groupName: z.string().optional(),
+            repositoryName: z.string().optional(),
+            projectGroupsAvailable: z.boolean().optional()
           })
         ),
         truncated: z.boolean()

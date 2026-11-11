@@ -6,13 +6,15 @@ import { WorkspaceAttachmentsSchema } from '../../../shared/workspace-attachment
 import { isWorkspaceLinkedItemSourceContextMatch } from '../../../shared/workspace-linked-item-source-context'
 import { DiffCommentSchema } from '../../../shared/diff-comment-schema'
 import { normalizeExecutionHostId } from '../../../shared/execution-host'
+import { sanitizeRepoIcon } from '../../../shared/repo-icon'
 
 export const ProjectGroupCreateArgs = z.object({
   name: z.string().min(1),
   parentPath: z.string().nullable().optional(),
   connectionId: z.string().nullable().optional(),
   parentGroupId: z.string().nullable().optional(),
-  createdFrom: z.enum(['manual', 'folder-scan', 'migration']).optional()
+  createdFrom: z.enum(['manual', 'folder-scan', 'migration']).optional(),
+  groupIcon: z.unknown().transform(sanitizeRepoIcon).optional()
 })
 
 export const ProjectGroupUpdateArgs = z.object({
@@ -21,7 +23,8 @@ export const ProjectGroupUpdateArgs = z.object({
     name: z.string().optional(),
     isCollapsed: z.boolean().optional(),
     tabOrder: z.number().finite().optional(),
-    color: z.string().nullable().optional()
+    color: z.string().nullable().optional(),
+    groupIcon: z.unknown().transform(sanitizeRepoIcon).optional()
   })
 })
 

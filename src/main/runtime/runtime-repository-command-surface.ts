@@ -68,6 +68,8 @@ export type RuntimeRepositoryCommandSurface = {
   showRepo: RuntimeRepositorySettingsController['show']
   setRepoBaseRef: RuntimeRepositorySettingsController['setBaseRef']
   updateRepo: RuntimeRepositorySettingsController['update']
+  bindGitLabNetworkProfile: RuntimeRepositorySettingsController['bindGitLabNetworkProfile']
+  bindGitHubNetworkAccount: RuntimeRepositorySettingsController['bindGitHubNetworkAccount']
   removeProject: RuntimeRepositorySettingsController['remove']
   reorderRepos: RuntimeRepositorySettingsController['reorder']
   getRepoBaseRefDefault: RuntimeRepositoryRefQueries['getDefault']
@@ -147,6 +149,8 @@ export function installRuntimeRepositoryCommandSurface(
     showRepo: settings.show.bind(settings),
     setRepoBaseRef: settings.setBaseRef.bind(settings),
     updateRepo: settings.update.bind(settings),
+    bindGitLabNetworkProfile: settings.bindGitLabNetworkProfile.bind(settings),
+    bindGitHubNetworkAccount: settings.bindGitHubNetworkAccount.bind(settings),
     removeProject: settings.remove.bind(settings),
     reorderRepos: settings.reorder.bind(settings),
     getRepoBaseRefDefault: refs.getDefault.bind(refs),

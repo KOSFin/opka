@@ -27,7 +27,7 @@ export function AddRepoStepIndicator({
   return (
     <div className="-mt-1 flex min-h-5 items-center">
       <button
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:cursor-default disabled:opacity-40"
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:cursor-default disabled:opacity-40 max-sm:min-h-11 max-sm:px-2"
         disabled={step === 'nested' && isAdding}
         onClick={onBack}
       >

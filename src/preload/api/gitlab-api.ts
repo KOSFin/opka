@@ -1,5 +1,6 @@
 import type { TaskSourceContext } from '../../shared/task-source-context'
 import type { ClassifiedError } from '../../shared/classified-error'
+import type { GitLabNetworkProfile } from '../../shared/gitlab-network-profile'
 import type {
   GetGitLabRateLimitResult,
   GitLabAssignableUser,
@@ -34,6 +35,15 @@ export type GitLabRepoSelectorArgs = {
 // ── GitLab — parallel to gh, MR/issue surface only in v1 ────────
 // Shapes mirror gh.* except where GitLab's API differs (MR states, host-qualified project path, `glab api -i` paging).
 export type GitLabApi = {
+  listNetworkProfiles?: () => Promise<GitLabNetworkProfile[]>
+  provisionNetworkProfile?: (input: {
+    intentId: string
+    host: string
+    user: string
+    token: string
+  }) => Promise<GitLabNetworkProfile>
+  cancelNetworkProfileProvision?: (intentId: string) => Promise<void>
+  removeNetworkProfile?: (profile: GitLabNetworkProfile) => Promise<void>
   viewer: () => Promise<GitLabViewer | null>
   diagnoseAuth: () => Promise<GitLabAuthDiagnostic>
   rateLimit: (args?: { force?: boolean; host?: string | null }) => Promise<GetGitLabRateLimitResult>

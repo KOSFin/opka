@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import {
   chmod,
+  copyFile,
   lstat,
   mkdir,
   readFile,
@@ -16,8 +17,9 @@ import { z } from 'zod'
 import { isDefinitiveAbsence } from '../../shared/definitive-filesystem-absence'
 import { getMainHttpClient, type MainHttpClient } from '../network/http-client'
 import { downloadVerifiedArchive } from '../node-runtime/runtime-archive-download'
-import { ENGINE_LICENSE_SHA256, getEngineAssetPin } from './engine-asset-pin'
+import { ENGINE_LICENSE_SHA256, getEngineAssetPin, type EngineAssetPin } from './engine-asset-pin'
 import { extractEngineAsset } from './engine-asset-extraction'
+import { assertEngineAssetTargetFormat } from './engine-asset-target-format'
 
 export type EngineAssetCacheOptions = {
   cacheDirectory: string
@@ -25,6 +27,8 @@ export type EngineAssetCacheOptions = {
   arch?: string
   signal?: AbortSignal
   fetcher?: MainHttpClient['fetch']
+  /** A protected package manifest supplies the patched source identity and final binary pin. */
+  packaged?: { pin: EngineAssetPin; archivePath: string; binarySha256: string }
   /** Host-owned install lease excludes every previous/concurrent writer, including crash recovery. */
   assertExclusiveInstallLease: () => void
   /** The host must prove no live or unverifiable engine uses a damaged/old installed directory. */
@@ -77,12 +81,28 @@ async function ownedDirectory(path: string): Promise<void> {
 /** Explicit provisioning only. Never starts an engine, imports auth or changes runtime installations. */
 export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) {
   const signal = options.signal ?? new AbortController().signal
-  const pin = getEngineAssetPin(options.platform, options.arch)
+  options.assertExclusiveInstallLease()
+  const pin = options.packaged?.pin ?? getEngineAssetPin(options.platform, options.arch)
+  if (options.packaged) {
+    if (
+      pin.target !== `${options.platform ?? process.platform}-${options.arch ?? process.arch}` ||
+      !isAbsolute(options.packaged.archivePath) ||
+      !/^[a-f0-9]{64}$/.test(options.packaged.binarySha256)
+    ) {
+      throw new Error('Packaged routing engine target or protected pin is invalid')
+    }
+    const source = await lstat(options.packaged.archivePath)
+    if (!source.isFile() || source.isSymbolicLink() || source.size !== pin.archiveBytes) {
+      throw new Error('Packaged routing engine archive is missing or has the wrong byte count')
+    }
+    if ((await digest(options.packaged.archivePath, signal)) !== pin.archiveSha256) {
+      throw new Error('Packaged routing engine archive does not match its protected pin')
+    }
+  }
   const root = options.cacheDirectory
   if (!isAbsolute(root)) {
     throw new Error('Routing engine cache path must be absolute')
   }
-  options.assertExclusiveInstallLease()
   signal.throwIfAborted()
   await ownedDirectory(root)
   const destination = join(root, `${pin.version}-${pin.target}`)
@@ -126,6 +146,7 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
         !file.isFile() ||
         file.isSymbolicLink() ||
         file.size !== receipt.binaryBytes ||
+        (options.packaged && receipt.binarySha256 !== options.packaged.binarySha256) ||
         !license.isFile() ||
         license.isSymbolicLink() ||
         license.size > 65536 ||
@@ -133,6 +154,9 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
         (await digest(join(destination, 'LICENSE'), signal)) !== ENGINE_LICENSE_SHA256
       ) {
         throw new Error('Damaged engine cache')
+      }
+      if (options.packaged) {
+        await assertEngineAssetTargetFormat(binaryPath, pin.target)
       }
       return {
         binaryPath,
@@ -155,20 +179,29 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
     await ownedDirectory(release)
     const archive = join(
       staging,
-      pin.url.endsWith('.zip') ? 'archive.part.zip' : 'archive.part.tar.gz'
+      (options.packaged?.archivePath ?? pin.url).endsWith('.zip')
+        ? 'archive.part.zip'
+        : 'archive.part.tar.gz'
     )
-    await downloadVerifiedArchive(
-      {
-        label: 'Routing engine',
-        url: pin.url,
-        archiveSha256: pin.archiveSha256,
-        maxArchiveBytes: pin.archiveBytes
-      },
-      archive,
-      options.fetcher ?? getMainHttpClient().fetch,
-      signal,
-      []
-    )
+    if (options.packaged) {
+      await copyFile(options.packaged.archivePath, archive)
+      if ((await digest(archive, signal)) !== pin.archiveSha256) {
+        throw new Error('Packaged routing engine archive does not match its protected pin')
+      }
+    } else {
+      await downloadVerifiedArchive(
+        {
+          label: 'Routing engine',
+          url: pin.url,
+          archiveSha256: pin.archiveSha256,
+          maxArchiveBytes: pin.archiveBytes
+        },
+        archive,
+        options.fetcher ?? getMainHttpClient().fetch,
+        signal,
+        []
+      )
+    }
     if ((await stat(archive)).size !== pin.archiveBytes) {
       throw new Error('Routing engine archive byte count differs from its pin')
     }
@@ -179,6 +212,12 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
     const binary = join(release, pin.binaryMember)
     const binarySha256 = await digest(binary, signal)
     const binaryBytes = (await stat(binary)).size
+    if (options.packaged) {
+      if (binarySha256 !== options.packaged.binarySha256) {
+        throw new Error('Packaged routing engine binary does not match its protected pin')
+      }
+      await assertEngineAssetTargetFormat(binary, pin.target)
+    }
     if (process.platform !== 'win32') {
       await chmod(binary, 0o700)
       await chmod(join(release, 'LICENSE'), 0o600)

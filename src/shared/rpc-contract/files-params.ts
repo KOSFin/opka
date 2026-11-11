@@ -76,6 +76,11 @@ export const FileTreePath = WorktreeSelector.extend({
     .pipe(z.string())
 })
 
+export const FileTreePage = FileTreePath.extend({
+  cursor: z.string().min(1).max(1500).optional(),
+  limit: z.number().int().min(1).max(128).optional()
+})
+
 export const ServerDirectoryBrowse = z.object({
   path: z
     .unknown()

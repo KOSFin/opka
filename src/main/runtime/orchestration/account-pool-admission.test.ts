@@ -85,12 +85,97 @@ it('equalizes fresh comparable Codex usage while preserving priority and slots',
   admission.candidates[1].usedPercent = 5
   admission.candidates.forEach((candidate) => {
     candidate.quotaWindows = [
-      { windowMinutes: 300, usedPercent: candidate.usedPercent ?? 0, resetsAt: Date.now() + 60_000 }
+      {
+        windowMinutes: 300,
+        verifiedDurationMinutes: 300,
+        usedPercent: candidate.usedPercent ?? 0,
+        resetsAt: Date.now() + 60_000
+      }
     ]
   })
   expect(JSON.parse(start().worker.start_options).account.id).toBe('b')
   admission.policy.members[1].priority = 2
   expect(JSON.parse(start().worker.start_options).account.id).toBe('a')
+})
+it('uses verified evidence only as a final fallback tie break, without a quota score', () => {
+  const { store, admission, start } = fixture('quota-equalize')
+  admission.candidates[0].quotaWindows = [
+    { windowMinutes: 300, verifiedDurationMinutes: 300, usedPercent: 5, resetsAt: 1_800_000 }
+  ]
+  admission.candidates[1].quotaWindows = [
+    {
+      windowMinutes: 300,
+      verifiedDurationMinutes: 300,
+      usedPercent: 50,
+      resetsAt: Date.now() + 60_000
+    }
+  ]
+  expect(JSON.parse(start().worker.start_options).account.id).toBe('b')
+  expect(store.listAccountPoolAssignments()[0].selectionReason).toContain(
+    'verified measurement on a tie'
+  )
+})
+it('does not treat a malformed provider reset as a missing comparable reset', () => {
+  const { admission, start } = fixture('quota-equalize')
+  admission.candidates[0].quotaWindows = [
+    {
+      windowMinutes: 300,
+      verifiedDurationMinutes: 300,
+      usedPercent: 5,
+      resetsAt: null,
+      resetMetadataInvalid: true
+    }
+  ]
+  admission.candidates[1].quotaWindows = [
+    { windowMinutes: 300, verifiedDurationMinutes: 300, usedPercent: 50, resetsAt: null }
+  ]
+  expect(JSON.parse(start().worker.start_options).account.id).toBe('b')
+})
+it('uses verified evidence for an exact fallback tie in reversed member order', () => {
+  const { admission, start } = fixture('quota-equalize')
+  admission.policy.members.reverse()
+  admission.candidates[0].quotaWindows = [
+    { windowMinutes: 300, verifiedDurationMinutes: 300, usedPercent: 5, resetsAt: 1_800_000 }
+  ]
+  admission.candidates[1].quotaWindows = [
+    {
+      windowMinutes: 300,
+      verifiedDurationMinutes: 300,
+      usedPercent: 50,
+      resetsAt: Date.now() + 60_000
+    }
+  ]
+  expect(JSON.parse(start().worker.start_options).account.id).toBe('b')
+})
+
+it('keeps an unknown alias from making a shared quota identity appear cheap', () => {
+  const { admission, start } = fixture('quota-equalize')
+  admission.policy.unknownQuota = 'allow'
+  admission.policy.members.push({ ...admission.policy.members[0], accountId: 'alias' })
+  admission.candidates[0].quotaWindows = [
+    {
+      windowMinutes: 300,
+      verifiedDurationMinutes: 300,
+      usedPercent: 5,
+      resetsAt: Date.now() + 60_000
+    }
+  ]
+  admission.candidates[1].quotaWindows = [
+    {
+      windowMinutes: 300,
+      verifiedDurationMinutes: 300,
+      usedPercent: 20,
+      resetsAt: Date.now() + 60_000
+    }
+  ]
+  admission.candidates.push({
+    ...admission.candidates[0],
+    accountId: 'alias',
+    quota: 'unknown',
+    usedPercent: null,
+    quotaWindows: undefined
+  })
+  expect(JSON.parse(start().worker.start_options).account.id).toBe('b')
 })
 it.each(['start_unknown', 'stop_unknown', 'starting', 'stopping', 'ready'])(
   'retains %s reservations and rolls back rejected dispatch/task',

@@ -47,6 +47,7 @@ import {
 } from '../native-claude-refresh-source'
 import {
   NativeCliAccountLaunchParams,
+  NativeCliAccountLaunchV2Params,
   NativeCliAccountReleaseParams
 } from '../native-cli-account-launch'
 import {
@@ -60,6 +61,10 @@ import {
   NativeCliTerminalReference,
   NativeCliTerminalResize
 } from '../native-cli-terminal'
+import {
+  NativeCodexHomeProfileParams,
+  NativeCodexHomeRecoveryApplyParams
+} from '../native-codex-home-recovery-contract'
 import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration/orcad-migration-blob-transfer'
 import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration/orcad-migration-scrollback'
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
@@ -103,6 +108,13 @@ import {
   AntigravityChatSignInFlowParams
 } from './antigravity-accounts-params'
 import { ArtifactsDeleteParams, ListOptions, SourceRequest, WriteRequest } from './artifacts-params'
+import {
+  AutomationCancelRunV1,
+  AutomationCreateV2,
+  AutomationDeleteV2,
+  AutomationRunNowV2,
+  AutomationUpdateV2
+} from './automation-command-params'
 import {
   AutomationCreate,
   AutomationId,
@@ -238,6 +250,7 @@ import {
   FilePathsExist,
   FileReadChunk,
   FileSearch,
+  FileTreePage,
   FileTreePath,
   FileUnwatch,
   ResolveTerminalPath,
@@ -277,7 +290,11 @@ import {
   GitTargetedRemote,
   WorktreeSelector as WorktreeSelectorOfGitParams
 } from './git-params'
-import { BindableAccounts, ValidateAccountBinding } from './github-account-binding-params'
+import {
+  BindableAccounts,
+  CloneAccounts,
+  ValidateAccountBinding
+} from './github-account-binding-params'
 import { CreateIssue, Issue, IssueComment, UpdateIssue } from './github-issue-params'
 import {
   ClearProjectItemField,
@@ -507,6 +524,13 @@ import {
   ProjectUpdate
 } from './project-runtime-params'
 import {
+  TaskDelegatedApproval,
+  TaskDelegationRead,
+  TaskPolicyConfirm,
+  TaskPolicyPropose,
+  TaskPolicyTarget
+} from './project-task-delegation-params'
+import {
   ProjectTaskCreate,
   ProjectTaskIdentity,
   ProjectTaskInit,
@@ -514,6 +538,12 @@ import {
   ProjectTaskTarget,
   ProjectTaskUpdate
 } from './project-task-params'
+import {
+  TaskDelegatedDecision,
+  TaskResultSnapshot,
+  TaskReviewAssignment,
+  TaskReviewSubmission
+} from './project-task-result-params'
 import {
   ProjectTaskAction,
   ProjectTaskAgentIntegration,
@@ -539,7 +569,13 @@ import {
   ProjectGroupSelector,
   ProjectGroupUpdate,
   RepoClone,
+  RepoCloneBoundGitHub,
+  RepoCloneBoundGitLab,
   RepoCreate,
+  RepoGitAuthorGet,
+  RepoGitAuthorUpdate,
+  RepoGitHubNetworkBind,
+  RepoGitLabProfileBind,
   RepoIssueCommandWrite,
   RepoPath,
   RepoReorder,
@@ -741,6 +777,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.deviceSignIn': AccountDeviceSignInParams,
   'accounts.finishClaudeSignIn': FinishClaudeSignInParams,
   'accounts.getNativeClaudeRefreshSignInLink': NativeClaudeRefreshSignInReference,
+  'accounts.inspectNativeCodexHome': NativeCodexHomeProfileParams,
   'accounts.installNativeCliIntegration': null,
   'accounts.list': ListAccountsParams,
   'accounts.listData': null,
@@ -755,6 +792,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.nativeCliIntegrationStatus': null,
   'accounts.openSignInTerminal': OpenAccountSignInTerminalParams,
   'accounts.prepareNativeCliLaunch': NativeCliAccountLaunchParams,
+  'accounts.prepareNativeCliLaunchV2': NativeCliAccountLaunchV2Params,
+  'accounts.recoverNativeCodexHome': NativeCodexHomeRecoveryApplyParams,
   'accounts.releaseNativeCliLaunch': NativeCliAccountReleaseParams,
   'accounts.removeClaude': RemoveAccountParams,
   'accounts.removeCodex': RemoveAccountParams,
@@ -840,13 +879,18 @@ export const RPC_PARAMS_BY_METHOD = {
   'artifacts.share': WriteRequest,
   'artifacts.unshare': SourceRequest,
   'artifacts.update': WriteRequest,
+  'automation.cancelRunV1': AutomationCancelRunV1,
   'automation.create': AutomationCreate,
+  'automation.createV2': AutomationCreateV2,
   'automation.delete': AutomationId,
+  'automation.deleteV2': AutomationDeleteV2,
   'automation.list': AutomationList,
   'automation.runNow': AutomationId,
+  'automation.runNowV2': AutomationRunNowV2,
   'automation.runs': AutomationRuns,
   'automation.show': AutomationId,
   'automation.update': AutomationUpdate,
+  'automation.updateV2': AutomationUpdateV2,
   'browser.back': BrowserTarget,
   'browser.capture.start': BrowserTarget,
   'browser.capture.stop': BrowserTarget,
@@ -995,6 +1039,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'files.read': FileOpen,
   'files.readChunk': FileReadChunk,
   'files.readDir': FileTreePath,
+  'files.readDirPage': FileTreePage,
   'files.readDocPreview': DocPreviewFileRead,
   'files.readPreview': FileOpen,
   'files.readTerminalArtifact': TerminalArtifactFile,
@@ -1059,6 +1104,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'github.issue': Issue,
   'github.listAssignableUsers': RepoSelector,
   'github.listBindableAccounts': BindableAccounts,
+  'github.listCloneAccounts': CloneAccounts,
   'github.listIssues': IssuesList,
   'github.listLabels': RepoSelector,
   'github.listWorkItems': WorkItemsList,
@@ -1113,6 +1159,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'gitlab.listIssues': IssuesListOfGitlabParams,
   'gitlab.listLabels': RepoSelectorOfGitlabParams,
   'gitlab.listMRs': WorkItemsListOfGitlabParams,
+  'gitlab.listNetworkProfiles': EmptyParams,
   'gitlab.listWorkItems': WorkItemsListOfGitlabParams,
   'gitlab.mergeMR': MergeMr,
   'gitlab.rateLimit': GitLabRateLimit,
@@ -1322,6 +1369,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'projectHostSetup.update': ProjectHostSetupUpdate,
   'projectTask.agentSettings': ProjectTaskAgentSettings,
   'projectTask.approve': ProjectTaskAction,
+  'projectTask.approveDelegated': TaskDelegatedApproval,
   'projectTask.archive': ProjectTaskArchive,
   'projectTask.board': ProjectTaskList,
   'projectTask.catalog': null,
@@ -1330,16 +1378,24 @@ export const RPC_PARAMS_BY_METHOD = {
   'projectTask.context': ProjectTaskIdentity,
   'projectTask.create': ProjectTaskCreate,
   'projectTask.decide': ProjectTaskDecision,
+  'projectTask.decideDelegated': TaskDelegatedDecision,
   'projectTask.delete': ProjectTaskAction,
   'projectTask.documents': ProjectTaskDocuments,
   'projectTask.enableAgentTasks': ProjectTaskAgentIntegration,
   'projectTask.init': ProjectTaskInit,
   'projectTask.list': ProjectTaskList,
   'projectTask.move': ProjectTaskMove,
+  'projectTask.policy.confirm': TaskPolicyConfirm,
+  'projectTask.policy.propose': TaskPolicyPropose,
+  'projectTask.policy.read': TaskPolicyTarget,
   'projectTask.progress': ProjectTaskProgress,
   'projectTask.rename': ProjectTaskRename,
+  'projectTask.resultSnapshot': TaskResultSnapshot,
   'projectTask.resume': ProjectTaskIdentity,
+  'projectTask.resumeDelegated': TaskDelegationRead,
   'projectTask.retryExport': ProjectTaskTarget,
+  'projectTask.reviewAssign': TaskReviewAssignment,
+  'projectTask.reviewSubmit': TaskReviewSubmission,
   'projectTask.show': ProjectTaskIdentity,
   'projectTask.start': ProjectTaskStart,
   'projectTask.stop': ProjectTaskStop,
@@ -1353,8 +1409,14 @@ export const RPC_PARAMS_BY_METHOD = {
   'repo.addRemote': RepoAddRemote,
   'repo.baseRefDefault': RepoSelector,
   'repo.clone': RepoClone,
+  'repo.cloneBoundGitHub': RepoCloneBoundGitHub,
+  'repo.cloneBoundGitLab': RepoCloneBoundGitLab,
   'repo.create': RepoCreate,
+  'repo.gitAuthor.get': RepoGitAuthorGet,
+  'repo.gitAuthor.update': RepoGitAuthorUpdate,
   'repo.gitAvailable': null,
+  'repo.gitHubNetwork.bind': RepoGitHubNetworkBind,
+  'repo.gitLabProfile.bind': RepoGitLabProfileBind,
   'repo.hooks': RepoSelector,
   'repo.hooksCheck': RepoSelector,
   'repo.issueCommandRead': RepoSelector,

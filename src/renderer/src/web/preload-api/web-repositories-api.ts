@@ -1,6 +1,8 @@
 import type { PreloadApi } from '../../../../preload/api-types'
 import { legacyBaseRefSearchResult } from '../../../../shared/base-ref-search-result'
 import type { Repo } from '../../../../shared/repo-types'
+import type { RepoGitAuthor } from '../../../../shared/repo-git-author'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { getDefaultCreateProjectParent } from '@/components/sidebar/create-project-defaults'
 import {
   callRuntimeResult,
@@ -44,16 +46,48 @@ export function createReposApi(): NonNullable<Partial<PreloadApi>['repos']> {
     pickFolder: () => Promise.resolve(null),
     pickFolders: () => Promise.resolve([]),
     pickDirectory: () => Promise.resolve(null),
-    clone: async ({ url, destination }) => {
+    clone: async ({ url, destination, gitNetworkChoice }) => {
       invalidateRuntimeWorktreeCaches()
       const owned = await callRuntimeResultWithOwner<{ repo: Repo }>(
-        'repo.clone',
-        { url, destination },
+        gitNetworkChoice?.provider === 'gitlab'
+          ? 'repo.cloneBoundGitLab'
+          : gitNetworkChoice?.provider === 'github'
+            ? 'repo.cloneBoundGitHub'
+            : 'repo.clone',
+        {
+          url,
+          destination,
+          ...(gitNetworkChoice?.provider === 'gitlab'
+            ? { profileId: gitNetworkChoice.profileId }
+            : gitNetworkChoice?.provider === 'github'
+              ? { account: { host: gitNetworkChoice.host, user: gitNetworkChoice.user } }
+              : {})
+        },
         10 * 60_000
       )
       return withRuntimeRepoOwner(owned.result.repo, owned.hostId)
     },
     cloneAbort: () => Promise.resolve(),
+    bindGitLabNetworkProfile: async ({ repoId, expectedPath, profileId, remoteName }) => {
+      const owned = await callRuntimeResultWithOwner<{ repo: Repo }>('repo.gitLabProfile.bind', {
+        repo: repoId,
+        repoHostId: LOCAL_EXECUTION_HOST_ID,
+        expectedPath,
+        profileId,
+        remoteName
+      })
+      return withRuntimeRepoOwner(owned.result.repo, owned.hostId)
+    },
+    bindGitHubNetworkAccount: async ({ repoId, expectedPath, account, remoteName }) => {
+      const owned = await callRuntimeResultWithOwner<{ repo: Repo }>('repo.gitHubNetwork.bind', {
+        repo: repoId,
+        repoHostId: LOCAL_EXECUTION_HOST_ID,
+        expectedPath,
+        account,
+        remoteName
+      })
+      return withRuntimeRepoOwner(owned.result.repo, owned.hostId)
+    },
     create: async ({ parentPath, name, kind }) => {
       invalidateRuntimeWorktreeCaches()
       const owned = await callRuntimeResultWithOwner<{ repo: Repo } | { error: string }>(
@@ -72,6 +106,23 @@ export function createReposApi(): NonNullable<Partial<PreloadApi>['repos']> {
     },
     onCloneProgress: () => noopUnsubscribe,
     getGitUsername: () => Promise.resolve(''),
+    getGitAuthor: async ({ repoId, expectedPath }) =>
+      (
+        await callRuntimeResult<{ author: RepoGitAuthor }>('repo.gitAuthor.get', {
+          repo: repoId,
+          repoHostId: LOCAL_EXECUTION_HOST_ID,
+          expectedPath
+        })
+      ).author,
+    updateGitAuthor: async ({ repoId, expectedPath, ...update }) =>
+      (
+        await callRuntimeResult<{ author: RepoGitAuthor }>('repo.gitAuthor.update', {
+          repo: repoId,
+          repoHostId: LOCAL_EXECUTION_HOST_ID,
+          expectedPath,
+          ...update
+        })
+      ).author,
     getBaseRefDefault: async ({ repoId }) =>
       callRuntimeResult('repo.baseRefDefault', { repo: repoId }),
     searchBaseRefs: async ({ repoId, query, limit }) =>

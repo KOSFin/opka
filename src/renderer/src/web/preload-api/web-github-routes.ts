@@ -33,6 +33,7 @@ export type WebGitHubRouteKey =
   | 'listAssignableUsers'
   | 'rateLimit'
   | 'listBindableAccounts'
+  | 'listCloneAccounts'
   | 'validateAccountBinding'
   | 'listAccessibleProjects'
   | 'resolveProjectRef'
@@ -86,6 +87,7 @@ export type WebGitHubRuntimeMethod =
   | 'github.listAssignableUsers'
   | 'github.rateLimit'
   | 'github.listBindableAccounts'
+  | 'github.listCloneAccounts'
   | 'github.validateAccountBinding'
   | 'github.project.listAccessible'
   | 'github.project.resolveRef'
@@ -139,6 +141,7 @@ export const GITHUB_WEB_RPC_METHODS = {
   listAssignableUsers: 'github.listAssignableUsers',
   rateLimit: 'github.rateLimit',
   listBindableAccounts: 'github.listBindableAccounts',
+  listCloneAccounts: 'github.listCloneAccounts',
   validateAccountBinding: 'github.validateAccountBinding',
   listAccessibleProjects: 'github.project.listAccessible',
   resolveProjectRef: 'github.project.resolveRef',

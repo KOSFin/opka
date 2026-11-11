@@ -13,6 +13,7 @@ import {
   parseWorkspaceSessionsByHostId,
   workspaceSessionSalvageLogDetails
 } from './workspace-session-partitions'
+import { recoverActiveAutomationCommandRuns } from './automation-command-run-recovery'
 
 export function normalizeLoadedLocalSession(
   parsed: PersistedState,
@@ -60,12 +61,16 @@ export function normalizeLoadedAutomationRuns(
   parsed: PersistedState,
   markNeedsSave: () => void
 ): PersistedState['automationRuns'] {
-  if (!Array.isArray(parsed.automationRuns)) {
-    return []
-  }
-  const runs = pruneAutomationRuns(backfillAutomationRunNumbers(parsed.automationRuns))
+  const loadedRuns = Array.isArray(parsed.automationRuns) ? parsed.automationRuns : []
+  const runs = pruneAutomationRuns(
+    recoverActiveAutomationCommandRuns(
+      parsed,
+      backfillAutomationRunNumbers(loadedRuns),
+      markNeedsSave
+    )
+  )
   // Why: nothing else marks dirty, so an oversized legacy file would otherwise only shrink at the next unrelated save.
-  if (runs.length !== parsed.automationRuns.length) {
+  if (runs.length !== loadedRuns.length) {
     markNeedsSave()
   }
   return runs

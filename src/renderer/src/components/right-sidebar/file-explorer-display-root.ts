@@ -6,6 +6,20 @@ import { splitPathSegments } from './path-tree'
 export { FILE_EXPLORER_FULL_ROOT }
 export type ExplorerRootOption = { value: string; label: string }
 
+export function normalizeExplorerDisplayRootChoice(value: string): string | null {
+  if (value === FILE_EXPLORER_FULL_ROOT) {
+    return value
+  }
+  if (!value || value.length > 4096 || /^[\\/]|^[A-Za-z]:/.test(value) || value.includes('\0')) {
+    return null
+  }
+  const segments = splitPathSegments(value)
+  return segments.length &&
+    segments.every((part) => part !== '.' && part !== '..' && !part.includes(':'))
+    ? segments.join('/')
+    : null
+}
+
 /** Returns deduplicated safe sparse-directory choices plus full root, or null when scoping is unavailable. */
 export function getExplorerDisplayRootOptions(
   worktree: {
@@ -44,11 +58,22 @@ export function resolveExplorerDisplayRootChoice(
   options: ExplorerRootOption[] | null,
   saved?: string
 ): string {
-  return options?.some((option) => option.value === saved)
-    ? saved!
-    : options?.length === 2
-      ? options[1].value
-      : FILE_EXPLORER_FULL_ROOT
+  const normalized = saved ? normalizeExplorerDisplayRootChoice(saved) : null
+  if (
+    normalized &&
+    (!options ||
+      normalized === FILE_EXPLORER_FULL_ROOT ||
+      options.some(
+        (option) =>
+          option.value !== FILE_EXPLORER_FULL_ROOT &&
+          (normalized === option.value ||
+            normalized.startsWith(`${option.value}/`) ||
+            option.value.startsWith(`${normalized}/`))
+      ))
+  ) {
+    return normalized
+  }
+  return options?.length === 2 ? options[1].value : FILE_EXPLORER_FULL_ROOT
 }
 
 /** Resolves a display choice against the actual workspace root; the full-root sentinel leaves that root intact. */
@@ -56,8 +81,9 @@ export function getExplorerDisplayRootPath(
   worktreePath: string | null,
   choice: string
 ): string | null {
-  return worktreePath && choice !== FILE_EXPLORER_FULL_ROOT
-    ? joinPath(worktreePath, choice)
+  const normalized = normalizeExplorerDisplayRootChoice(choice)
+  return worktreePath && normalized && normalized !== FILE_EXPLORER_FULL_ROOT
+    ? joinPath(worktreePath, normalized)
     : worktreePath
 }
 

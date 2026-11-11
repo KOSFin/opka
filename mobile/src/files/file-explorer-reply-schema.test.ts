@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { fileDirectoryEntriesSchema, legacyFileListSchema } from './file-explorer-reply-schema'
+import {
+  fileDirectoryEntriesSchema,
+  fileDirectoryPageSchema,
+  legacyFileListSchema
+} from './file-explorer-reply-schema'
+
+it('requires a bounded page cursor and salvageable entry array', () => {
+  expect(fileDirectoryPageSchema.safeParse({ entries: [], nextCursor: null }).success).toBe(true)
+  expect(
+    fileDirectoryPageSchema.safeParse({ entries: [], nextCursor: 'x'.repeat(1501) }).success
+  ).toBe(false)
+  expect(fileDirectoryPageSchema.safeParse({ entries: 'wrong', nextCursor: null }).success).toBe(
+    false
+  )
+})
 
 describe('file explorer reply schemas', () => {
   it('requires the listing itself to be an array', () => {

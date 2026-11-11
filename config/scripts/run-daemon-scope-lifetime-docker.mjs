@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -72,6 +72,7 @@ async function bundle(mode) {
         }),
     bundle: true,
     platform: 'node',
+    external: ['electron'],
     format: 'cjs',
     target: 'node22',
     outfile: join(temp, `${mode}.cjs`),
@@ -100,6 +101,22 @@ const baseImages = (
   process.env.ORCA_DAEMON_SCOPE_BASE_IMAGES ??
   'ubuntu:22.04,debian:bookworm-slim,debian:trixie-slim'
 ).split(',')
+const artifactDirectory = process.env.ORCA_DAEMON_SCOPE_ARTIFACT_DIR
+
+function recordCase(baseImage, name, result) {
+  if (artifactDirectory) {
+    mkdirSync(artifactDirectory, { recursive: true })
+    const imageName = baseImage.replace(/[^a-z0-9]+/gi, '-')
+    writeFileSync(
+      join(artifactDirectory, `${imageName}-${name}.log`),
+      `exit=${result.status}\nstdout:\n${result.stdout ?? ''}\nstderr:\n${result.stderr ?? ''}`
+    )
+  }
+  process.stdout.write(result.stdout ?? '')
+  process.stderr.write(result.stderr ?? '')
+}
+
+let agentReportCasePending = true
 
 function runCases(baseImage) {
   runDocker([
@@ -112,6 +129,19 @@ function runCases(baseImage) {
     image,
     dockerDir
   ])
+  if (artifactDirectory) {
+    const imageName = baseImage.replace(/[^a-z0-9]+/gi, '-')
+    const identity = runDocker(['image', 'inspect', '--format', '{{.Id}}', image])
+    const baseDigests = runDocker(
+      ['image', 'inspect', '--format', '{{json .RepoDigests}}', baseImage],
+      true
+    )
+    mkdirSync(artifactDirectory, { recursive: true })
+    writeFileSync(
+      join(artifactDirectory, `${imageName}-image.txt`),
+      `candidateImageId=${identity.stdout.trim()}\nbaseImage=${baseImage}\nbaseRepoDigests=${baseDigests.status === 0 ? baseDigests.stdout.trim() : 'unavailable'}\n`
+    )
+  }
   runDocker([
     'run',
     '--detach',
@@ -139,11 +169,32 @@ function runCases(baseImage) {
     container,
     '/bin/sh',
     '-c',
+    "timeout --kill-after=5s 30s sh -c 'until systemctl list-jobs --no-legend >/dev/null 2>&1; do sleep 0.1; done'"
+  ])
+  const controllers = runDocker([
+    'exec',
+    container,
+    'systemd-run',
+    '--scope',
+    '--quiet',
+    '--collect',
+    '--unit=orca-fixture-cgroup-controllers',
+    'node',
+    '/opt/daemon-scope-lifetime/enable-fixture-cgroup-controllers.cjs'
+  ])
+  process.stdout.write(controllers.stdout ?? '')
+  runDocker([
+    'exec',
+    container,
+    '/bin/sh',
+    '-c',
     [
       'systemctl start systemd-logind.service',
+      "timeout --kill-after=5s 30s sh -c 'until loginctl list-users --no-legend >/dev/null 2>&1; do sleep 0.1; done'",
       'loginctl enable-linger orca-repro',
       'systemctl start user@1100.service',
-      'test -S /run/user/1100/bus'
+      'test -S /run/user/1100/bus',
+      'runuser -u orca-repro -- env XDG_RUNTIME_DIR=/run/user/1100 systemctl --user set-property --runtime app.slice MemoryAccounting=yes'
     ].join(' && ')
   ])
   for (const mode of ['baseline', 'candidate']) {
@@ -168,11 +219,71 @@ function runCases(baseImage) {
       ],
       true
     )
-    process.stdout.write(result.stdout ?? '')
-    process.stderr.write(result.stderr ?? '')
+    recordCase(baseImage, mode, result)
     if (result.status !== 0) {
       throw new Error(`${mode} scope lifetime oracle failed on ${baseImage} with ${result.status}`)
     }
+  }
+  const stateRoot = `/tmp/orca-automation-case-${suffix}`
+  for (const [name, script, timeout] of [
+    ['automation-prepare', 'automation-command-cases.cjs', '90s'],
+    ['automation-store-prepare', 'automation-command-store-prepare.cjs', '30s'],
+    ['automation-store-recover', 'automation-command-store-restart.cjs', '30s'],
+    ['automation-recover', 'automation-command-restart.cjs', '30s']
+  ]) {
+    const automation = runDocker(
+      [
+        'exec',
+        container,
+        'timeout',
+        '--kill-after=5s',
+        timeout,
+        'runuser',
+        '-u',
+        'orca-repro',
+        '--',
+        'env',
+        'XDG_RUNTIME_DIR=/run/user/1100',
+        'ORCA_BACKGROUND_LAUNCH=1',
+        'node',
+        `/opt/daemon-scope-lifetime/${script}`,
+        '/opt/daemon-scope-lifetime/candidate.cjs',
+        stateRoot
+      ],
+      true
+    )
+    recordCase(baseImage, name, automation)
+    if (automation.status !== 0) {
+      throw new Error(`${name} scope oracle failed on ${baseImage} with ${automation.status}`)
+    }
+  }
+  if (agentReportCasePending) {
+    const agentReport = runDocker(
+      [
+        'exec',
+        container,
+        'timeout',
+        '--kill-after=5s',
+        '90s',
+        'runuser',
+        '-u',
+        'orca-repro',
+        '--',
+        'env',
+        'XDG_RUNTIME_DIR=/run/user/1100',
+        'ORCA_BACKGROUND_LAUNCH=1',
+        'node',
+        '/opt/daemon-scope-lifetime/automation-command-agent-report.cjs',
+        '/opt/daemon-scope-lifetime/candidate.cjs',
+        `${stateRoot}-agent-report`
+      ],
+      true
+    )
+    recordCase(baseImage, 'automation-agent-report', agentReport)
+    if (agentReport.status !== 0) {
+      throw new Error(`automation-agent-report scope oracle failed on ${baseImage}`)
+    }
+    agentReportCasePending = false
   }
 }
 

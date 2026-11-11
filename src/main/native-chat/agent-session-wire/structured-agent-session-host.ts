@@ -333,8 +333,10 @@ export class StructuredAgentSessionHost {
 
   /** The fully reduced timeline, for readers that cannot tolerate a page's ambiguity — rows are
    *  revised or tombstoned in place, so an item's ABSENCE from a bounded page proves nothing. */
-  journalSnapshot = async (sessionId: string) =>
-    (await this.lifetime.conversation(sessionId)).journal.snapshot()
+  journalSnapshot = async (id: string) => (await this.lifetime.conversation(id)).journal.snapshot()
+
+  // oxfmt-ignore
+  get appendAutomationReport() { return this.conversationDelivery.appendAutomationReport }
 
   /** The host's projection of a held chat's current work (`structuredAgentSessionCurrentWork`). */
   currentWork = this.clientDelivery.readCurrentWork

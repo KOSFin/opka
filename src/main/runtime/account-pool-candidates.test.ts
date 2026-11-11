@@ -6,7 +6,13 @@ import type { ProviderRateLimits } from '../../shared/rate-limit-types'
 function snapshot(provenance?: string): AccountsSnapshot {
   const usage: ProviderRateLimits = {
     provider: 'codex',
-    session: { usedPercent: 15, windowMinutes: 300, resetsAt: null, resetDescription: null },
+    session: {
+      usedPercent: 15,
+      windowMinutes: 300,
+      verifiedDurationMinutes: 300,
+      resetsAt: null,
+      resetDescription: null
+    },
     weekly: null,
     status: 'ok',
     error: null,
@@ -58,6 +64,17 @@ it('publishes only fresh proven windows for pool comparison and blocks an exhaus
   source.rateLimits.codex.session.usedPercent = 100
   expect(accountPoolCandidates(source)[0].quota).toBe('exhausted')
   source.rateLimits.codex.updatedAt = Date.now() - 11 * 60_000
+  expect(accountPoolCandidates(source)[0]).toMatchObject({ quota: 'unknown', usedPercent: null })
+  source.rateLimits.codex.updatedAt = Date.now() + 60_000
+  expect(accountPoolCandidates(source)[0]).toMatchObject({ quota: 'unknown', usedPercent: null })
+})
+
+it('keeps invalid usage out of ranking without inventing free capacity', () => {
+  const source = snapshot('profile:b')
+  if (!source.rateLimits.codex?.session) {
+    throw new Error('Missing fixture window')
+  }
+  source.rateLimits.codex.session.usedPercent = Number.NaN
   expect(accountPoolCandidates(source)[0]).toMatchObject({ quota: 'unknown', usedPercent: null })
 })
 

@@ -12,6 +12,8 @@ import { registerSparsePresetHandlers } from './repos/sparse-preset-handlers'
 import { registerRepoFolderPickerHandlers } from './repos/repo-folder-picker-handlers'
 import { registerRepoCloneHandlers } from './repos/repo-clone-lifecycle'
 import { registerRepoGitUsernameHandler } from './repos/repo-git-username-handler'
+import { registerRepoGitAuthorHandler } from './repos/repo-git-author-handler'
+import { registerRepoGitNetworkBindingHandler } from './repos/repo-git-network-binding-handler'
 import { registerBaseRefQueryHandlers } from './repos/base-ref-query-handlers'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 
@@ -55,6 +57,10 @@ export function registerRepoHandlers(
   ipcMain.removeHandler('repos:isGitAvailable')
   ipcMain.removeHandler('repos:getDefaultCreateProjectParent')
   ipcMain.removeHandler('repos:getGitUsername')
+  ipcMain.removeHandler('repos:getGitAuthor')
+  ipcMain.removeHandler('repos:updateGitAuthor')
+  ipcMain.removeHandler('repos:bindGitLabNetworkProfile')
+  ipcMain.removeHandler('repos:bindGitHubNetworkAccount')
   ipcMain.removeHandler('repos:getBaseRefDefault')
   ipcMain.removeHandler('repos:searchBaseRefs')
   ipcMain.removeHandler('repos:searchBaseRefDetails')
@@ -74,5 +80,7 @@ export function registerRepoHandlers(
   registerRepoFolderPickerHandlers(mainWindow)
   registerRepoCloneHandlers(mainWindow, store)
   registerRepoGitUsernameHandler(store)
+  registerRepoGitAuthorHandler(store)
+  registerRepoGitNetworkBindingHandler(mainWindow, store)
   registerBaseRefQueryHandlers(store)
 }

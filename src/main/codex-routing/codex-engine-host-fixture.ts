@@ -75,6 +75,7 @@ export function engineHostFixture(
   }
   const stats: {
     starts: number
+    stopAttempts: number
     residents: number
     maximum: number
     provisions: number
@@ -88,6 +89,7 @@ export function engineHostFixture(
     quotaOnce: boolean
   } = {
     starts: 0,
+    stopAttempts: 0,
     residents: 0,
     maximum: 0,
     provisions: 0,
@@ -214,6 +216,7 @@ export function engineHostFixture(
           return verdict
         },
         stop: async () => {
+          stats.stopAttempts++
           if (stats.stopVerdict === 'unverifiable') {
             verdict = 'unverifiable'
             return { root: 'unverifiable', tree: null }

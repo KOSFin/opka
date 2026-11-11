@@ -1,3 +1,4 @@
+import type { NativeCliStartup } from './native-cli-startup'
 import type { AgentStatus } from '../../shared/agent-detection'
 import type { AgentStatusState } from '../../shared/agent-status-types'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
@@ -64,6 +65,7 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
    * pty-recorded-surface-topology.ts.
    */
   surfaceRecordedAtGraphSequence: number
+  nativeCliStartup?: NativeCliStartup
   launchConfig: SleepingAgentLaunchConfig | null
   launchToken: string | null
   launchIncarnationId: PtyIncarnationId | null

@@ -1,4 +1,5 @@
 import type { PreloadApi } from '../../../preload/api-types'
+import type { GitLabNetworkProfile } from '../../../shared/gitlab-network-profile'
 import {
   GITLAB_READY_FOR_REVIEW_RUNTIME_CAPABILITY,
   GITLAB_READY_FOR_REVIEW_UPDATE_REQUIRED_MESSAGE,
@@ -13,7 +14,7 @@ import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
 
 export type GitLabApi = NonNullable<PreloadApi['gl']>
 
-type GitLabApiResult<K extends keyof GitLabApi> = Awaited<ReturnType<GitLabApi[K]>>
+type GitLabApiResult<K extends keyof GitLabApi> = Awaited<ReturnType<NonNullable<GitLabApi[K]>>>
 
 export type RuntimeGitLabTransport = {
   call: <Result>(method: WebGitLabRuntimeMethod, params?: unknown) => Promise<Result>
@@ -26,6 +27,8 @@ export function createRuntimeGitLabApi(transport: RuntimeGitLabTransport): GitLa
     transport.call<Result>(method, mapRepoPathArg(args))
 
   return {
+    listNetworkProfiles: (): Promise<GitLabNetworkProfile[]> =>
+      route<GitLabNetworkProfile[]>(GITLAB_WEB_RPC_METHODS.listNetworkProfiles),
     viewer: () => Promise.resolve(null),
     diagnoseAuth: () => route<GitLabApiResult<'diagnoseAuth'>>(GITLAB_WEB_RPC_METHODS.diagnoseAuth),
     rateLimit: (args) =>

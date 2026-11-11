@@ -23,6 +23,7 @@ type WorkspaceKanbanDrawerViewProps = {
   sidebarOpen: boolean
   sidebarWidth: number
   statusBarVisible: boolean
+  embedded?: boolean
 }
 
 export default function WorkspaceKanbanDrawerView(
@@ -39,6 +40,7 @@ export default function WorkspaceKanbanDrawerView(
       sidebarOpen={props.sidebarOpen}
       sidebarWidth={props.sidebarWidth}
       statusBarVisible={props.statusBarVisible}
+      embedded={props.embedded}
     >
       <WorkspaceKanbanDrawerHeader {...props.headerProps} />
       <div

@@ -169,11 +169,11 @@ export function RepositoryGitHubAccountSection({
     <SearchableSetting
       title={translate(
         'auto.components.settings.RepositoryGitHubAccountSection.title',
-        'GitHub Account'
+        'GitHub tracker account'
       )}
       description={translate(
         'auto.components.settings.RepositoryGitHubAccountSection.description',
-        'Use a specific gh login for this project’s GitHub issue and pull request calls.'
+        'Choose the GitHub login for this project’s issues and pull requests. Git clone and sync use the separate Git network account.'
       )}
       keywords={searchKeywords([
         repo.displayName,
@@ -195,13 +195,13 @@ export function RepositoryGitHubAccountSection({
           <div className="text-sm font-semibold">
             {translate(
               'auto.components.settings.RepositoryGitHubAccountSection.title',
-              'GitHub Account'
+              'GitHub tracker account'
             )}
           </div>
           <p className="text-xs text-muted-foreground">
             {translate(
               'auto.components.settings.RepositoryGitHubAccountSection.longDescription',
-              'Orca injects a short-lived token from the selected keyring login into each gh call for this project. Project View stays on the ambient login.'
+              'This account reads GitHub issues and pull requests for the project. Clone, fetch, pull and push use the separate Git network account.'
             )}
           </p>
         </div>

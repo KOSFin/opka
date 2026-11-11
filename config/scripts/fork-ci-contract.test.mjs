@@ -21,12 +21,15 @@ describe('fork CI safety and required checks', () => {
           { shard: 2, group: 'root', label: '2/4' },
           { shard: 3, group: 'root', label: '3/4' },
           { shard: 4, group: 'root', label: '4/4' },
-          { shard: 1, group: 'shared', label: 'mobile and integration' }
+          { shard: 1, group: 'shared', label: 'mobile and integration' },
+          { shard: 1, group: 'automation-containment', label: 'automation physical scope' }
         ]
       }
     })
     expect(job.name).toBe('Fork regression tests (${{ matrix.label }})')
-    expect(job['timeout-minutes']).toBe(25)
+    expect(job['timeout-minutes']).toBe(
+      "${{ matrix.group == 'automation-containment' && 40 || matrix.group == 'shared' && 55 || 25 }}"
+    )
     expect(job.env).toEqual({
       OPKA_FORK_TEST_GROUP: '${{ matrix.group }}',
       OPKA_FORK_TEST_SHARD_INDEX: '${{ matrix.shard }}',
@@ -42,7 +45,7 @@ describe('fork CI safety and required checks', () => {
     }
     expect(
       job.steps.find((entry) => entry.uses === './.github/actions/install-mobile-dependencies').if
-    ).toBeUndefined()
+    ).toBe("matrix.group != 'automation-containment'")
     const mobileEvidence = job.steps.find(
       (entry) => entry.name === 'Save synthetic mobile page evidence'
     )

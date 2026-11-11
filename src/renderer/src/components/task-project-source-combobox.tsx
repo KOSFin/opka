@@ -224,6 +224,10 @@ export default function TaskProjectSourceCombobox({
           type="button"
           variant="outline"
           role="combobox"
+          aria-label={translate(
+            'auto.components.task.project.source.combobox.selectProjects',
+            'Select projects'
+          )}
           aria-expanded={open}
           className={cn('h-8 w-full justify-between px-3 text-xs font-normal', triggerClassName)}
         >

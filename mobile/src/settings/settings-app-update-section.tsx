@@ -3,6 +3,7 @@ import { useAppUpdateInstallState } from '../app-update/app-update-install-state
 import { useEffect, useState } from 'react'
 import {
   appUpdateChecker,
+  cancelAppUpdate,
   installedAppVersion,
   openAppUpdate,
   useAppUpdateState
@@ -40,12 +41,14 @@ export function SettingsAppUpdateSection() {
     <AppUpdateSettingsRows
       installedVersion={installedAppVersion}
       installBusy={install.busy}
+      installCanCancel={install.canCancel}
       installLabel={install.label}
       available={state.available}
       lastCheckedAt={state.lastCheckedAt}
       now={now}
       checkStatus={checkStatus}
       onUpdate={openAppUpdate}
+      onCancel={cancelAppUpdate}
       onCheck={runCheck}
     />
   )

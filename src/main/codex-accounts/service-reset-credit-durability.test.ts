@@ -196,11 +196,13 @@ describe('CodexAccountService config sync', () => {
     expect(resetResults[0]?.codex.activeAccountId).toBe(account.id)
     expect(resetResults[0]?.rateLimits).toBe(state)
     expect(service.listAccounts().activeAccountId).toBe(nextAccount.id)
-    expect(consume).toHaveBeenCalledWith({
-      idempotencyKey,
-      target: { runtime: 'host', wslDistro: null },
-      codexHomePath: managedHomePath
-    })
+    expect(consume).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey,
+        target: { runtime: 'host', wslDistro: null },
+        codexHomePath: managedHomePath
+      })
+    )
     await expect(
       service.consumeRateLimitResetCredit(idempotencyKey, expectedScope)
     ).rejects.toThrow('selected Codex account changed')

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { ProjectTaskBoard } from '../../../../shared/project-task-board'
-import { cachedProjectTaskBoard, readProjectTaskBoard } from './project-task-client'
+import {
+  cachedProjectTaskBoard,
+  invalidateProjectTaskBoard,
+  readProjectTaskBoard
+} from './project-task-client'
 import { subscribeRuntimeRpc } from '@/runtime/runtime-rpc-subscribe'
 import { projectTaskError } from './project-task-projects'
 
@@ -19,7 +23,12 @@ export function useProjectTaskBoard(target: RuntimeClientTarget | null, worktree
   const [loading, setLoading] = useState(false)
   const [revision, setRevision] = useState(0)
   const [connectionRevision, setConnectionRevision] = useState(0)
-  const reload = useCallback(() => setRevision((value) => value + 1), [])
+  const reload = useCallback(() => {
+    if (target && worktree) {
+      invalidateProjectTaskBoard(target, worktree)
+    }
+    setRevision((value) => value + 1)
+  }, [target, worktree])
   const refresh = useCallback(() => {
     reload()
     setConnectionRevision((value) => value + 1)

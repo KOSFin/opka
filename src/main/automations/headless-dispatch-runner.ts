@@ -13,14 +13,14 @@ import type {
   HeadlessAutomationDispatchLaunch
 } from './headless-dispatch'
 import type { AutomationRunTargetResult } from './run-target-resolution'
-import type { AutomationRunWriter } from './automation-run-writer'
+import type { LegacyAutomationRunWriter } from './automation-run-writer'
 
 export type HeadlessAutomationDispatchContext = {
   automation: Automation
   run: AutomationRun
   target: Extract<AutomationRunTargetResult, { ok: true }>
   dispatcher: HeadlessAutomationDispatcher
-  runs: AutomationRunWriter
+  runs: LegacyAutomationRunWriter
   runPrecheck: () => Promise<AutomationPrecheckResult | null>
   markDispatchResult: (result: AutomationDispatchResult) => Promise<AutomationRun>
   watchRun: (run: AutomationRun) => void

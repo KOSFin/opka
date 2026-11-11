@@ -12,6 +12,7 @@ import {
   getExplorerEffectiveExpanded
 } from './file-explorer-display-root'
 import { FileExplorerScopeNotice } from './FileExplorerScopeNotice'
+import { FileExplorerLocationBar } from './FileExplorerLocationBar'
 import { useFileExplorerRootNavigation } from './use-file-explorer-root-navigation'
 import { useFileExplorerScopeTransition } from './use-file-explorer-scope-transition'
 import { basename } from '@/lib/path'
@@ -21,7 +22,7 @@ import { getVisibleFileExplorerWorktreePath } from './file-explorer-reset'
 import { FileExplorerBackgroundMenu } from './FileExplorerBackgroundMenu'
 import { FileExplorerFilesTreePane } from './FileExplorerFilesTreePane'
 import { FileExplorerNameFilter } from './FileExplorerNameFilter'
-import { FileExplorerQueryStrip } from './FileExplorerQueryStrip'
+import { FileExplorerQueryRows } from './FileExplorerQueryRows'
 import { FileExplorerToolbar } from './FileExplorerToolbar'
 import { SearchFilters } from './SearchFilters'
 import { SearchQueryRow } from './SearchQueryRow'
@@ -105,7 +106,13 @@ function FileExplorerFiles(): React.JSX.Element {
       ),
     [expanded, visibleFilesWorktreePath, displayRootPath, worktreePath]
   )
-  const tree = useFileExplorerTree(worktreePath, effectiveExpanded, activeWorktreeId)
+  const tree = useFileExplorerTree(
+    worktreePath,
+    effectiveExpanded,
+    activeWorktreeId,
+    displayRootPath,
+    visibleFilesWorktreePath
+  )
   const {
     nameFilterQuery,
     setNameFilterQuery,
@@ -276,6 +283,21 @@ function FileExplorerFiles(): React.JSX.Element {
           showDotfiles={showDotfiles}
           onToggleDotfiles={handleToggleDotfiles}
         />
+        {isFilesViewActive && worktreePath && (
+          <FileExplorerLocationBar
+            rootChoice={rootChoice}
+            rootName={repoName}
+            canGoBack={rootNavigation.canGoBack}
+            canGoForward={rootNavigation.canGoForward}
+            onBack={rootNavigation.goBack}
+            onForward={rootNavigation.goForward}
+            onUp={rootNavigation.goUp}
+            onSelectRoot={rootNavigation.selectRoot}
+            disabled={
+              Boolean(paneState.dragDrop.dragSourcePath) || paneState.dragDrop.isNativeDragOver
+            }
+          />
+        )}
         {activeWorktree?.isSparse && (
           <FileExplorerScopeNotice
             rootSelect={
@@ -299,46 +321,29 @@ function FileExplorerFiles(): React.JSX.Element {
             sparse={!!activeWorktree?.isSparse}
           />
         )}
-        <FileExplorerQueryStrip view={explorerView} onSelectView={handleSelectExplorerView}>
-          {/* Why: keep both query rows mounted and cross-fade so the Names/Contents
-             switch does not remount or shift when changing modes. */}
-          <div className="relative min-h-7">
-            <div
-              className={cn(
-                explorerView !== 'files' && 'pointer-events-none invisible absolute inset-x-0 top-0'
-              )}
-            >
-              <FileExplorerNameFilter
-                query={nameFilterQuery}
-                scopeLabel={rootOptions?.find((option) => option.value === rootChoice)?.label}
-                loading={nameFilterFiles.loading}
-                onQueryChange={setNameFilterQuery}
-                onClear={handleClearNameFilter}
-              />
-            </div>
-            <div
-              className={cn(
-                explorerView !== 'search' &&
-                  'pointer-events-none invisible absolute inset-x-0 top-0'
-              )}
-            >
-              <SearchQueryRow {...searchPanel.queryRowProps} />
-            </div>
-          </div>
-        </FileExplorerQueryStrip>
-        <div
-          className={cn(
-            'border-b border-border px-2 pb-1.5',
-            explorerView !== 'search' &&
-              'pointer-events-none invisible h-0 overflow-hidden border-b-0 p-0'
-          )}
-        >
-          <SearchFilters {...searchPanel.filtersProps} />
-        </div>
+        <FileExplorerQueryRows
+          view={explorerView}
+          onSelectView={handleSelectExplorerView}
+          nameFilter={
+            <FileExplorerNameFilter
+              query={nameFilterQuery}
+              scopeLabel={
+                rootOptions?.find((option) => option.value === rootChoice)?.label ??
+                (rootChoice === '/' ? undefined : rootChoice)
+              }
+              loading={nameFilterFiles.loading}
+              onQueryChange={setNameFilterQuery}
+              onClear={handleClearNameFilter}
+            />
+          }
+          contentsQuery={<SearchQueryRow {...searchPanel.queryRowProps} />}
+          searchFilters={<SearchFilters {...searchPanel.filtersProps} />}
+        />
         {/* Why: the Files and Contents views share one body slot; layering them
            avoids remounting heavy virtualized panes while preserving full height. */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <FileExplorerFilesTreePane
+            onOpenHere={rootNavigation.selectRoot}
             displayRootPath={displayRootPath}
             activeRepo={activeRepo}
             worktreePath={worktreePath}

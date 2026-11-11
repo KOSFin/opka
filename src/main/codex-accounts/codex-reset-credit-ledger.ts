@@ -179,6 +179,50 @@ export class CodexResetCreditLedger {
     }
   }
 
+  releaseKnownLocalPending(
+    idempotencyKey: string,
+    attempt: CodexResetCreditAttempt
+  ): Promise<void> {
+    return this.serializeMutation(async () => {
+      const durable = this.durableLedger?.attempts.find(
+        (candidate) => candidate.idempotencyKey === idempotencyKey
+      )
+      if (
+        attempt.state !== 'providerPending' ||
+        this.attemptsByKey.get(idempotencyKey) !== attempt ||
+        durable?.state !== 'providerPending' ||
+        resetScopeKey(durable.expectedScope) !== attempt.scopeKey ||
+        !this.durableLedger
+      ) {
+        throw new Error('Codex reset-credit attempt changed before local release.')
+      }
+      const nextLedger: CodexResetCreditAttemptLedger = {
+        version: 1,
+        attempts: this.durableLedger.attempts.filter(
+          (candidate) => candidate.idempotencyKey !== idempotencyKey
+        )
+      }
+      try {
+        await this.store.replaceCodexResetCreditAttemptLedgerAndFlush(nextLedger)
+      } catch (error) {
+        // Why: a failed deletion must not free the attempt until reload confirms disk state.
+        this.stateError = new Error('Codex reset-credit attempt durability is unknown', {
+          cause: error
+        })
+        throw error
+      }
+      this.durableLedger = structuredClone(nextLedger)
+      this.attemptsByKey.delete(idempotencyKey)
+      if (this.attemptKeyByOffer.get(attempt.scopeKey) === idempotencyKey) {
+        this.attemptKeyByOffer.delete(attempt.scopeKey)
+      }
+      if (this.unresolvedKeyByAccountScope.get(attempt.accountScopeKey) === idempotencyKey) {
+        this.unresolvedKeyByAccountScope.delete(attempt.accountScopeKey)
+      }
+      attempt.state = 'fresh'
+    })
+  }
+
   // Why: a removed account's managed home is gone, so its unresolved providerPending
   // attempt can never validate or be replayed; drop it so a target-scoped default reset
   // is not wedged forever by hasPendingResetForTarget matching the orphan.

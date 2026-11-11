@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native'
 import { undismissedAppUpdate } from '../app-update/app-update-checker'
 import {
   appUpdateChecker,
+  cancelAppUpdate,
   openAppUpdate,
   useAppUpdateState
 } from '../app-update/app-update-runtime'
@@ -20,9 +21,11 @@ export function MobileHomeAppUpdateCard() {
       <AppUpdateCard
         version={available.version}
         busy={install.busy}
+        canCancel={install.canCancel}
         status={install.label}
         onPress={() => openAppUpdate(available.url)}
         onDismiss={() => appUpdateChecker.dismiss(available.version)}
+        onCancel={cancelAppUpdate}
       />
     </View>
   )

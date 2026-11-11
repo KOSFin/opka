@@ -2,7 +2,10 @@ import { prepareNativeCodexStatusHooks } from '../codex-routing/native-codex-sta
 import { isAgentStatusHooksEnabledForAgent } from '../agent-hooks/managed-agent-hook-controls'
 import { prepareCodexNativeHome } from '../codex-routing/codex-native-home'
 import { readManagedNativeTrustKeys } from '../codex-routing/codex-native-home-managed-config'
-import { prepareNativeCodexGatewayAuth } from '../codex-routing/native-codex-gateway-credential'
+import {
+  inspectNativeCodexGatewayAuth,
+  prepareNativeCodexGatewayAuth
+} from '../codex-routing/native-codex-gateway-credential'
 import type { NativeCodexRoutingContext } from './read-native-codex-routing-context'
 import { readIndexedCodexRolloutPath } from '../codex/codex-indexed-rollout-path'
 import type { OrcaRuntimeService } from './orca-runtime'
@@ -34,6 +37,8 @@ export async function prepareNativeCodexRoutingHistory(
     const prepared = await prepareCodexNativeHome({
       ...context,
       sourceHome,
+      inspectGatewayAuth: (home) =>
+        inspectNativeCodexGatewayAuth(home, localGatewayKey, context.assertExclusive),
       prepareManagedConfig: async (home) => {
         const keys = readManagedNativeTrustKeys(home)
         prepareNativeCodexGatewayAuth(home, localGatewayKey, context.assertExclusive)

@@ -99,6 +99,10 @@ export type Section = {
   title: string
   icon?: 'pin'
   projectGroupHeader?: boolean
+  projectGroupId?: string
+  projectGroupHostId?: ExecutionHostId
+  /** The group has its own icon; it never inherits a member repository icon. */
+  groupIcon?: unknown
   headerDepth?: number
   /** Under Project grouping, the repo whose colour and icon the header shows, as on the desktop. */
   repo?: SectionRepo

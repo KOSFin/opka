@@ -57,6 +57,7 @@ export const ROOT_HELP_TEXT_PRIMARY = [
   '  automations remove        Remove an Orca automation and its run history',
   '  automations run           Run an Orca automation now',
   '  automations runs          List automation run history',
+  '  automations command       Manage versioned command automations',
   '',
   'Projects:',
   '  project list              List durable projects known to Orca',

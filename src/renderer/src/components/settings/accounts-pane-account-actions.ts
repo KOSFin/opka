@@ -41,7 +41,9 @@ type CodexActionContext = {
   codexAccounts: CodexRateLimitAccountsState
   setCodexAccounts: Dispatch<SetStateAction<CodexRateLimitAccountsState>>
   setCodexAccountsLoaded: Dispatch<SetStateAction<boolean>>
-  setCodexAction: Dispatch<SetStateAction<CodexAccountAction>>
+  getRosterRevision: () => number
+  startCodexAction: (action: CodexAccountAction) => number
+  finishCodexAction: (sequence: number) => void
   fetchSettings: () => Promise<void>
   recordFeatureInteraction: (featureId: FeatureInteractionId) => void
   /** False once the pane shows a different account owner than this action targeted. */
@@ -61,11 +63,16 @@ export function createCodexAccountActionRunner(
     recordFeatureInteraction,
     setCodexAccounts,
     setCodexAccountsLoaded,
-    setCodexAction
+    getRosterRevision,
+    startCodexAction,
+    finishCodexAction
   } = context
-  const syncCodexAccounts = async (next: CodexRateLimitAccountsState): Promise<void> => {
+  const syncCodexAccounts = async (
+    next: CodexRateLimitAccountsState,
+    rosterRevision: number
+  ): Promise<void> => {
     // Why: only the roster is the shown owner's; the toast and follow-up still describe this action.
-    if (isCurrentAccountOwner()) {
+    if (isCurrentAccountOwner() && getRosterRevision() === rosterRevision) {
       setCodexAccounts(next)
       setCodexAccountsLoaded(true)
     }
@@ -79,10 +86,11 @@ export function createCodexAccountActionRunner(
   // compare the selected row's runtime slot instead of the forced host view.
   return async (action, operation, actionRuntime = accountRuntime): Promise<void> => {
     const previousActiveAccountId = getProviderAccountActiveIdForView(codexAccounts, actionRuntime)
-    setCodexAction(action)
+    const rosterRevision = getRosterRevision()
+    const sequence = startCodexAction(action)
     try {
       const next = await operation()
-      await syncCodexAccounts(next)
+      await syncCodexAccounts(next, rosterRevision)
       recordFeatureInteraction('codex-account-switching')
       const nextActiveAccountId = getProviderAccountActiveIdForView(next, actionRuntime)
       const shouldPromptRestart =
@@ -145,7 +153,7 @@ export function createCodexAccountActionRunner(
         }
       )
     } finally {
-      setCodexAction('idle')
+      finishCodexAction(sequence)
     }
   }
 }
@@ -157,7 +165,9 @@ type ClaudeActionContext = {
   isRemoteAccountScope: boolean
   claudeAccounts: ClaudeRateLimitAccountsState
   setClaudeAccounts: Dispatch<SetStateAction<ClaudeRateLimitAccountsState>>
-  setClaudeAction: Dispatch<SetStateAction<ClaudeAccountAction>>
+  getRosterRevision: () => number
+  startClaudeAction: (action: ClaudeAccountAction) => number
+  finishClaudeAction: (sequence: number) => void
   fetchSettings: () => Promise<void>
   recordFeatureInteraction: (featureId: FeatureInteractionId) => void
   /** False once the pane shows a different account owner than this action targeted. */
@@ -176,10 +186,15 @@ export function createClaudeAccountActionRunner(
     isRemoteAccountScope,
     recordFeatureInteraction,
     setClaudeAccounts,
-    setClaudeAction
+    getRosterRevision,
+    startClaudeAction,
+    finishClaudeAction
   } = context
-  const syncClaudeAccounts = async (next: ClaudeRateLimitAccountsState): Promise<void> => {
-    if (isCurrentAccountOwner()) {
+  const syncClaudeAccounts = async (
+    next: ClaudeRateLimitAccountsState,
+    rosterRevision: number
+  ): Promise<void> => {
+    if (isCurrentAccountOwner() && getRosterRevision() === rosterRevision) {
       setClaudeAccounts(next)
     }
     if (!isRemoteAccountScope) {
@@ -189,10 +204,11 @@ export function createClaudeAccountActionRunner(
 
   return async (action, operation, actionRuntime = accountRuntime): Promise<void> => {
     const previousActiveAccountId = getProviderAccountActiveIdForView(claudeAccounts, actionRuntime)
-    setClaudeAction(action)
+    const rosterRevision = getRosterRevision()
+    const sequence = startClaudeAction(action)
     try {
       const next = await operation()
-      await syncClaudeAccounts(next)
+      await syncClaudeAccounts(next, rosterRevision)
       recordFeatureInteraction('claude-account-switching')
       const nextActiveAccountId = getProviderAccountActiveIdForView(next, actionRuntime)
       const switched = previousActiveAccountId !== nextActiveAccountId
@@ -245,7 +261,7 @@ export function createClaudeAccountActionRunner(
         }
       )
     } finally {
-      setClaudeAction('idle')
+      finishClaudeAction(sequence)
     }
   }
 }

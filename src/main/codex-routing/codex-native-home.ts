@@ -22,6 +22,7 @@ import { nativeHomeDigest, nativeHomeMissing } from './codex-native-home-inputs'
 import { adoptCodexNativeHistory, type CodexNativeHomeAdoption } from './codex-native-home-history'
 import { planNativeHomeResources } from './codex-native-home-resources'
 import { copyNativeHomeResources } from './codex-native-home-resource-copy'
+import { NativeCliControlError } from '../../shared/native-cli-control-error'
 
 const preparing = new Set<string>()
 export type PrepareCodexNativeHomeOptions = {
@@ -33,6 +34,7 @@ export type PrepareCodexNativeHomeOptions = {
   resourceRoots?: readonly string[]
   adopt?: CodexNativeHomeAdoption
   prepareManagedConfig?: (home: string) => Promise<ReadonlySet<string>>
+  inspectGatewayAuth?: (home: string) => void
 }
 export type PreparedCodexNativeHome = {
   home: string
@@ -80,8 +82,9 @@ async function prepare(
   const manifestPath = join(home, '.opka-native-home.json'),
     pendingPath = join(home, '.opka-native-home-pending.json')
   if (await nativeUserFile(pendingPath)) {
-    throw new Error('Interrupted native Codex HOME preparation needs review; files were preserved.')
+    throw new NativeCliControlError('home_preparation_pending')
   }
+  options.inspectGatewayAuth?.(home)
   const beforeManifest = await nativeUserFile(manifestPath)
   let previous: CodexNativeHomeManifest | undefined
   if (beforeManifest) {
@@ -154,7 +157,7 @@ async function prepare(
       continue
     }
     if (current && (!baseline || current.sha256 !== baseline.publishedHash)) {
-      throw new Error('Native Codex preferences changed in both homes; user files were preserved.')
+      throw new NativeCliControlError('config_conflict')
     }
     next.configs[file.name] = {
       sourceHash: file.sourceHash,
@@ -177,6 +180,7 @@ async function prepare(
     Boolean(options.adopt) ||
     Boolean(options.prepareManagedConfig)
   if (!needsWrite) {
+    options.inspectGatewayAuth?.(home)
     const actual = await readNativeHomeConfigs(home, home, options.context)
     return {
       home,
@@ -185,6 +189,7 @@ async function prepare(
     }
   }
   options.assertExclusive()
+  options.inspectGatewayAuth?.(home)
   await writeNativeUserPrivate(pendingPath, JSON.stringify({ version: 1 }))
   for (const change of changes) {
     await replaceNativeUserFile({

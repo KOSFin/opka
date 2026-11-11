@@ -171,6 +171,9 @@ export function updateAutomationRun(
   }
   const now = Date.now()
   const current = operations.state.automationRuns[index]
+  if (current.sessionKind === 'command') {
+    throw new Error('Command runs require an acquisition-fenced update.')
+  }
   const workspaceId = result.workspaceId ?? current.workspaceId
   const workspaceDisplayName = Object.hasOwn(result, 'workspaceDisplayName')
     ? normalizeAutomationRunWorkspaceDisplayName(result.workspaceDisplayName ?? null)

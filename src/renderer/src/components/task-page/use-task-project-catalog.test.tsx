@@ -15,6 +15,7 @@ vi.mock('@/store', async () => {
       runtimeEnvironments: [],
       runtimeStatusByEnvironmentId: new Map(),
       folderWorkspaces: [],
+      projectGroups: [],
       repos: []
     }))
   }
@@ -97,9 +98,7 @@ it('shows local projects before a slow remote and ignores reference-only catalog
 
 it('reloads after a host contact edge without reacting to status timestamp churn', async () => {
   vi.mocked(callRuntimeRpc).mockImplementation((target) =>
-    target.kind === 'local'
-      ? Promise.resolve(local)
-      : Promise.reject(new Error('Disconnected'))
+    target.kind === 'local' ? Promise.resolve(local) : Promise.reject(new Error('Disconnected'))
   )
   useAppStore.setState({
     runtimeEnvironments: [environment],

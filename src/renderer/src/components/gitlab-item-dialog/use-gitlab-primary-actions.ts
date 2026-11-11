@@ -11,7 +11,7 @@ import type { GitLabItemDialogState } from './use-gitlab-item-dialog-state'
 
 export function useGitLabPrimaryActions(
   item: GitLabWorkItem | null,
-  itemId: string | null,
+  itemScopeKey: string | null,
   repoSelector: GitLabDialogRepoSelector | null,
   state: GitLabItemDialogState,
   handleRefresh: () => void
@@ -155,7 +155,7 @@ export function useGitLabPrimaryActions(
       if (res.ok) {
         if (mountedRef.current) {
           setCommentDraftState((current) =>
-            current.itemId === itemId ? { itemId, value: '' } : current
+            current.scopeKey === itemScopeKey ? { scopeKey: itemScopeKey, value: '' } : current
           )
           useAppStore.getState().recordFeatureInteraction('gitlab-tasks')
           handleRefresh()
@@ -178,7 +178,7 @@ export function useGitLabPrimaryActions(
     commentDraft,
     handleRefresh,
     item,
-    itemId,
+    itemScopeKey,
     mountedRef,
     repoSelector,
     setCommentDraftState,

@@ -9,6 +9,7 @@ import type {
 } from './engine-device-login-process'
 
 export type CodexEngineHostOptions = CodexEngineLifecycleOptions & {
+  replaySpoolDirectory?: string
   db: OrchestrationDb
   readAccount: (id: string) => EngineGrantAccount | null
   listAccounts: () => EngineGrantAccount[]

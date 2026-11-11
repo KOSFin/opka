@@ -13,6 +13,7 @@ type UseFileExplorerTreeLoadEffectsParams = {
   expanded: Set<string>
   dirCache: Record<string, DirCache>
   loadingDirPaths: ReadonlySet<string>
+  cancelledReadRevision?: number
   rootError: string | null
   isDirStale: (dirPath: string) => boolean
   loadDir: (dirPath: string, depth: number, options?: { force?: boolean }) => Promise<boolean>
@@ -29,6 +30,7 @@ export function useFileExplorerTreeLoadEffects({
   expanded,
   dirCache,
   loadingDirPaths,
+  cancelledReadRevision,
   rootError,
   isDirStale,
   loadDir,
@@ -140,7 +142,7 @@ export function useFileExplorerTreeLoadEffects({
       const depth = splitPathSegments(dirPath.slice(visibleFilesWorktreePath.length + 1)).length - 1
       void loadDir(dirPath, depth, decision === 'reload' ? { force: true } : undefined)
     }
-  }, [expanded, visibleFilesWorktreePath]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expanded, visibleFilesWorktreePath, cancelledReadRevision]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (

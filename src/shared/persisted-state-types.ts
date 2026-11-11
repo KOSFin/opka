@@ -118,6 +118,8 @@ export type PersistedState = {
   legacyPaneKeyAliasEntries: LegacyPaneKeyAliasEntry[]
   automations: Automation[]
   automationRuns: AutomationRun[]
+  /** Opaque to legacy Automation readers; command definitions and active claims live here. */
+  automationCommandsV1?: unknown
   /** Catalogs an orcad imported, so a retried commit returns the same receipt. */
   orcadMigrationImportReceipts?: OrcadMigrationImportReceipt[]
   /** Commits whose full receipt aged out of the list above; still answered as committed. */

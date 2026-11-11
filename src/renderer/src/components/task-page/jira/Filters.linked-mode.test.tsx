@@ -22,6 +22,7 @@ const project = { id: '10', key: 'ALP', name: 'Alpha', siteId: 'site-a' }
 const setJiraProjectFilter = vi.fn()
 const initialStore = useAppStore.getState()
 const initialApiDescriptor = Object.getOwnPropertyDescriptor(window, 'api')
+let previousTaskPageSource: string | null
 
 function FiltersFixture({
   baseModel,
@@ -92,6 +93,8 @@ function FiltersFixture({
 
 beforeEach(() => {
   fixture.loading = false
+  previousTaskPageSource = window.localStorage.getItem('orca.taskPage.source')
+  window.localStorage.setItem('orca.taskPage.source', 'providers')
   useAppStore.setState(
     {
       ...initialStore,
@@ -121,6 +124,11 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  if (previousTaskPageSource === null) {
+    window.localStorage.removeItem('orca.taskPage.source')
+  } else {
+    window.localStorage.setItem('orca.taskPage.source', previousTaskPageSource)
+  }
   useAppStore.setState(initialStore, true)
   if (initialApiDescriptor) {
     Object.defineProperty(window, 'api', initialApiDescriptor)

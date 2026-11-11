@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { appStarSourceSchema } from '../../shared/gh-star-source'
 import { resolveGhAccountRequiredHost } from '../github/account-binding-required-host'
+import { listGitHubCloneAccountInventory } from '../github/clone-account-inventory'
 import { diagnoseGhAuth } from '../github/auth-diagnose'
 import { checkOrcaStarred, getAuthenticatedViewer, starOrca } from '../github/client'
 import {
@@ -14,6 +15,15 @@ import { track } from '../telemetry/client'
 import { assertRegisteredGitHubRepo, getGitHubLocalGitOptionArgs } from './github-repo-routing'
 
 export function registerGitHubAccountHandlers(store: Store): void {
+  ipcMain.handle(
+    'gh:listCloneAccounts',
+    (_event, args: { url: string; refreshCapability?: boolean }) => {
+      if (!args || typeof args.url !== 'string') {
+        throw new Error('Missing HTTPS clone URL.')
+      }
+      return listGitHubCloneAccountInventory(args.url, args.refreshCapability === true)
+    }
+  )
   ipcMain.handle('gh:viewer', () => getAuthenticatedViewer())
   ipcMain.handle('gh:checkOrcaStarred', () => checkOrcaStarred())
   ipcMain.handle('gh:starOrca', async (_event, source: unknown) => {

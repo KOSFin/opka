@@ -25,6 +25,8 @@ import { RepositoryHostSetupsSection } from './RepositoryHostSetupsSection'
 import { RepoSettingsDraftInput } from './RepositorySettingsDraftInput'
 import { RepositoryForkSyncSection } from './RepositoryForkSyncSection'
 import { RepositoryGitHubAccountSection } from './RepositoryGitHubAccountSection'
+import { RepositoryGitNetworkSection } from './RepositoryGitNetworkSection'
+import { RepositoryGitAuthorSection } from './RepositoryGitAuthorSection'
 import { translate } from '@/i18n/i18n'
 import { RepositoryWindowsRuntimeSection } from './RepositoryWindowsRuntimeSection'
 import { matchesRepositoryIdentitySearch } from './repository-identity-search'
@@ -350,6 +352,18 @@ export function RepositoryPane({
             <RepositoryGitHubAccountSection
               repo={repo}
               updateRepo={updateSelectedRepo}
+              forceVisible={forceFullPaneForRepoMatch}
+            />
+
+            <RepositoryGitNetworkSection
+              key={`${selectedHostId}:${repo.id}:${repo.path}:${JSON.stringify(repo.gitNetworkBinding)}`}
+              repo={repo}
+              forceVisible={forceFullPaneForRepoMatch}
+            />
+
+            <RepositoryGitAuthorSection
+              key={`${selectedHostId}:${repo.id}`}
+              repo={repo}
               forceVisible={forceFullPaneForRepoMatch}
             />
 

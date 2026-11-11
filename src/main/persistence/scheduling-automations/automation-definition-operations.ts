@@ -114,7 +114,7 @@ export function createAutomation(
     rrule: input.rrule,
     dtstart: input.dtstart,
     enabled: input.enabled ?? true,
-    nextRunAt: nextAutomationOccurrenceAfter(input.rrule, input.dtstart, now),
+    nextRunAt: nextAutomationOccurrenceAfter(input.rrule, input.dtstart, now, input.timezone),
     missedRunPolicy: 'run_once_within_grace',
     missedRunGraceMinutes: input.missedRunGraceMinutes ?? 720,
     createdAt: now,
@@ -166,7 +166,8 @@ export function updateAutomation(
   const contexts = getAutomationContextsForRepo(repo, operations.state.projectHostSetups ?? [])
   const rrule = updates.rrule ?? current.rrule
   const dtstart = updates.dtstart ?? current.dtstart
-  const scheduleChanged = updates.rrule !== undefined || updates.dtstart !== undefined
+  const scheduleChanged =
+    updates.rrule !== undefined || updates.dtstart !== undefined || updates.timezone !== undefined
   const workspaceMode = updates.workspaceMode ?? current.workspaceMode
   // Omitted preserves; empty or whitespace clears.
   const extraAgentArgs = Object.hasOwn(definedUpdates, 'extraAgentArgs')
@@ -225,7 +226,12 @@ export function updateAutomation(
     rrule,
     dtstart,
     nextRunAt: scheduleChanged
-      ? nextAutomationOccurrenceAfter(rrule, dtstart, Date.now())
+      ? nextAutomationOccurrenceAfter(
+          rrule,
+          dtstart,
+          Date.now(),
+          updates.timezone ?? current.timezone
+        )
       : current.nextRunAt,
     updatedAt: Date.now()
   }

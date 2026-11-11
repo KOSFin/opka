@@ -33,6 +33,25 @@ export class CodexResetCreditScopeRejection extends Error {
   }
 }
 
+// Only this subtype proves the reset transport was never entered.
+export class CodexResetCreditSourcePreflightRejection extends CodexResetCreditScopeRejection {
+  constructor(
+    reason: CodexResetCreditRejectedBeforeProviderReason,
+    rateLimits: RateLimitState,
+    message: string,
+    readonly proof: symbol | undefined
+  ) {
+    super(reason, rateLimits, message)
+  }
+}
+
+export function isCodexResetCreditSourcePreflightRejection(
+  error: unknown,
+  proof: symbol
+): error is CodexResetCreditSourcePreflightRejection {
+  return typeof error === 'object' && error !== null && 'proof' in error && error.proof === proof
+}
+
 type CodexResetCreditScopeDependencies = {
   store: Store
   rateLimits: RateLimitService

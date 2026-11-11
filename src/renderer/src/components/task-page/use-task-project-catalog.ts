@@ -32,15 +32,21 @@ export function useTaskProjectCatalog() {
       state.folderWorkspaces
         .map((folder) => [folder.id, folder.folderPath, folder.isArchived, folder.executionHostId])
         .sort(),
-      state.repos.map((repo) => [repo.id, repo.path, repo.executionHostId]).sort()
+      state.repos
+        .map((repo) => [repo.id, repo.path, repo.executionHostId, repo.projectGroupId])
+        .sort(),
+      state.projectGroups.map((group) => [group.id, group.name, group.executionHostId]).sort()
     ])
   )
+  const key = JSON.stringify([sourceRevision, rootRevision])
   const [revision, setRevision] = useState(0)
-  const refresh = useCallback(() => setRevision((value) => value + 1), [])
+  const refresh = useCallback(() => {
+    catalogs.invalidate(key)
+    setRevision((value) => value + 1)
+  }, [key])
   const [projects, setProjects] = useState<TaskProjectScope[]>([])
   const [errors, setErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
-  const key = JSON.stringify([sourceRevision, rootRevision])
   const [loadedKey, setLoadedKey] = useState('')
   useEffect(() => {
     let cancelled = false

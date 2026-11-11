@@ -3,6 +3,7 @@ import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/exec
 import type { Repo } from '../../shared/repo-types'
 import type { GitPushTarget, GitWorktreeInfo, Worktree } from '../../shared/worktree/types'
 import type { GitRuntimeOptions } from '../git/git-runtime-options'
+import type { BoundGitExecution } from '../git/command-runner/bound-git-network-executor'
 import { getWorktreeSharedLinkPaths } from '../git/worktree-shared-directories'
 import {
   ExecutionHostNotDispatchableError,
@@ -38,6 +39,12 @@ export type RuntimeGitTarget = {
 
 export type RuntimeGitCommandHost = {
   resolveRuntimeGitTarget(selector: string): Promise<RuntimeGitTarget>
+  resolveBoundGitOperation?: (
+    target: RuntimeGitTarget,
+    operation: 'fetch' | 'pull' | 'push',
+    remoteName: string,
+    pushTarget?: GitPushTarget
+  ) => Promise<BoundGitExecution | null>
   getRuntimeSettings(): SourceControlAiSettingsInput
   getCommitMessageAgentEnvironment?(): CommitMessageAgentEnvironmentResolvers | undefined
   /** `undefined` keeps cached metadata; `null` is the authoritative unlinked answer. */

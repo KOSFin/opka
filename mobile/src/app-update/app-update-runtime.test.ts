@@ -162,3 +162,126 @@ it('publishes native transfer progress and removes its listener after handoff', 
   expect(getAppUpdateInstallSnapshot()).toMatchObject({ phase: 'installer', busy: false })
   expect(remove).toHaveBeenCalledOnce()
 })
+
+it('cancels a native download, keeps it busy until cleanup, and permits retry', async () => {
+  mocks.package = 'com.kosfin.opka.mobile'
+  const { requireOptionalNativeModule } = await import('expo-modules-core')
+  let notify:
+    | ((event: { phase: string; downloadedBytes?: number; totalBytes?: number }) => void)
+    | undefined
+  let rejectInstall: ((error: Error) => void) | undefined
+  const cancel = vi.fn().mockResolvedValue(true)
+  const install = vi.fn(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectInstall = reject
+      })
+  )
+  vi.mocked(requireOptionalNativeModule).mockReturnValue({
+    install,
+    installTracked: install,
+    cancel,
+    addListener: (_name: string, listener: NonNullable<typeof notify>) => {
+      notify = listener
+      return { remove: vi.fn() }
+    }
+  })
+  const { openAppUpdate, cancelAppUpdate } = await import('./app-update-runtime')
+  const { getAppUpdateInstallSnapshot } = await import('./app-update-install-state')
+  const { Alert } = await import('react-native')
+  openAppUpdate('manifest')
+  notify?.({ phase: 'downloading', downloadedBytes: 1, totalBytes: 10 })
+  expect(getAppUpdateInstallSnapshot()).toMatchObject({ phase: 'downloading', canCancel: true })
+  cancelAppUpdate()
+  expect(getAppUpdateInstallSnapshot()).toMatchObject({ phase: 'cancelling', busy: true })
+  await Promise.resolve()
+  expect(cancel).toHaveBeenCalledOnce()
+  expect(cancel).toHaveBeenCalledWith(expect.any(String))
+  rejectInstall?.(new Error('Update download cancelled.'))
+  await vi.waitFor(() =>
+    expect(getAppUpdateInstallSnapshot()).toMatchObject({ phase: 'cancelled', busy: false })
+  )
+  expect(Alert.alert).not.toHaveBeenCalled()
+  openAppUpdate('manifest')
+  expect(install).toHaveBeenCalledTimes(2)
+})
+
+it('does not offer cancellation to a native module without the cancel method', async () => {
+  mocks.package = 'com.kosfin.opka.mobile'
+  const { requireOptionalNativeModule } = await import('expo-modules-core')
+  let notify: ((event: { phase: string }) => void) | undefined
+  vi.mocked(requireOptionalNativeModule).mockReturnValue({
+    install: () => new Promise<void>(() => {}),
+    addListener: (_name: string, listener: NonNullable<typeof notify>) => {
+      notify = listener
+      return { remove: vi.fn() }
+    }
+  })
+  const { openAppUpdate, cancelAppUpdate } = await import('./app-update-runtime')
+  const { getAppUpdateInstallSnapshot } = await import('./app-update-install-state')
+  openAppUpdate('manifest')
+  notify?.({ phase: 'downloading' })
+  expect(getAppUpdateInstallSnapshot().canCancel).toBe(false)
+  expect(getAppUpdateInstallSnapshot().label).toContain('Cancel is unavailable')
+  cancelAppUpdate()
+  expect(getAppUpdateInstallSnapshot().phase).toBe('downloading')
+})
+
+it('shows a cleanup failure after cancellation instead of claiming the file was removed', async () => {
+  mocks.package = 'com.kosfin.opka.mobile'
+  const { requireOptionalNativeModule } = await import('expo-modules-core')
+  let notify: ((event: { phase: string }) => void) | undefined
+  let rejectInstall: ((error: Error) => void) | undefined
+  vi.mocked(requireOptionalNativeModule).mockReturnValue({
+    install: vi.fn(),
+    installTracked: () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectInstall = reject
+      }),
+    cancel: vi.fn().mockResolvedValue(true),
+    addListener: (_name: string, listener: NonNullable<typeof notify>) => {
+      notify = listener
+      return { remove: vi.fn() }
+    }
+  })
+  const { openAppUpdate, cancelAppUpdate } = await import('./app-update-runtime')
+  const { getAppUpdateInstallSnapshot } = await import('./app-update-install-state')
+  const { Alert } = await import('react-native')
+  openAppUpdate('manifest')
+  notify?.({ phase: 'downloading' })
+  cancelAppUpdate()
+  await Promise.resolve()
+  rejectInstall?.(new Error('Could not remove the unfinished update file. Please retry.'))
+  await vi.waitFor(() => expect(getAppUpdateInstallSnapshot().phase).toBe('failed'))
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Update could not be opened',
+    'Could not remove the unfinished update file. Please retry.',
+    expect.any(Array)
+  )
+})
+
+it('keeps the installer handoff when native cancellation loses the race', async () => {
+  mocks.package = 'com.kosfin.opka.mobile'
+  const { requireOptionalNativeModule } = await import('expo-modules-core')
+  let notify: ((event: { phase: string }) => void) | undefined
+  let finish: (() => void) | undefined
+  vi.mocked(requireOptionalNativeModule).mockReturnValue({
+    install: vi.fn(),
+    installTracked: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+    cancel: vi.fn().mockResolvedValue(false),
+    addListener: (_name: string, listener: NonNullable<typeof notify>) => {
+      notify = listener
+      return { remove: vi.fn() }
+    }
+  })
+  const { openAppUpdate, cancelAppUpdate } = await import('./app-update-runtime')
+  const { getAppUpdateInstallSnapshot } = await import('./app-update-install-state')
+  openAppUpdate('manifest')
+  notify?.({ phase: 'downloading' })
+  cancelAppUpdate()
+  finish?.()
+  await vi.waitFor(() => expect(getAppUpdateInstallSnapshot().phase).toBe('installer'))
+})

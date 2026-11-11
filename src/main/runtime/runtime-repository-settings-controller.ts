@@ -1,13 +1,27 @@
 import { isFolderRepo } from '../../shared/repo-kind'
+import { randomUUID } from 'node:crypto'
 import { commitProvenRepoKindChange } from '../folder-repo-git-conversion'
 import type { Repo } from '../../shared/repo-types'
 import type { RuntimeRepoSelector } from './runtime-repo-selector'
-import type { GhAccountBinding } from '../../shared/github/account-binding'
+import {
+  normalizeGhAccountBinding,
+  type GhAccountBinding
+} from '../../shared/github/account-binding'
+import { invalidateGhAccountTokenCache } from '../github/gh-account-token'
+import { validateGhAccountBinding } from '../github/gh-account-binding-inventory'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { assertWslMoveRepoWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { teardownStops } from './owned-session-teardown-policy'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
+import {
+  isGitLabNetworkProfile,
+  type GitLabNetworkProfile
+} from '../../shared/gitlab-network-profile'
+import { createGitLabNetworkProfileStore } from '../gitlab/gitlab-network-profile-store'
+import { readGitNetworkRemoteHost } from './runtime-git-network-remote-host'
+import type { GitNetworkBinding } from '../../shared/git-network-binding'
 
 const PROJECT_TERMINAL_STOP_BUDGET_MS = 10_000
 
@@ -23,6 +37,9 @@ type RuntimeRepositorySettingsDependencies = {
   invalidateResolvedWorktrees: () => void
   invalidateWorktreeScan: (repoId: string) => void
   notifyReposChanged: () => void
+  listGitLabNetworkProfiles?: () => GitLabNetworkProfile[]
+  readGitNetworkRemoteHost?: (repoPath: string, remoteName: string, user: string) => Promise<string>
+  validateGitHubNetworkAccount?: (account: GhAccountBinding) => Promise<boolean>
 }
 
 type RepositoryUpdates = Partial<
@@ -65,6 +82,126 @@ export class RuntimeRepositorySettingsController {
 
   async show(repoSelector: RuntimeRepoSelector): Promise<Repo> {
     return await this.deps.resolveRepo(repoSelector)
+  }
+
+  async bindGitLabNetworkProfile(
+    repoSelector: RuntimeRepoSelector,
+    profileId: string | null,
+    remoteName = 'origin',
+    expectedPath?: string
+  ): Promise<Repo> {
+    const store = this.requireStore()
+    if (!store.setRepoGitNetworkBinding) {
+      throw new Error('GitLab profile binding unavailable on this runtime.')
+    }
+    const repo = await this.deps.resolveRepo(repoSelector)
+    if (profileId === null && repo.gitNetworkBinding?.provider === 'github') {
+      throw new Error('GitHub network binding must be cleared through its own action.')
+    }
+    if (expectedPath !== undefined && repo.path !== expectedPath) {
+      throw new Error('GitLab profile binding repository changed before selection.')
+    }
+    assertWslMoveRepoWritable(store, repo)
+    if (
+      process.platform === 'win32' ||
+      getRepoExecutionHostId(repo) !== 'local' ||
+      isFolderRepo(repo)
+    ) {
+      throw new Error('GitLab profile binding unavailable on this host.')
+    }
+    let profile: GitLabNetworkProfile | null = null
+    if (profileId !== null) {
+      if (!/^[a-f0-9]{64}$/.test(profileId)) {
+        throw new Error('GitLab profile unavailable on this host.')
+      }
+      const list =
+        this.deps.listGitLabNetworkProfiles ?? (() => createGitLabNetworkProfileStore().list())
+      profile = list().find((entry) => entry.id === profileId) ?? null
+      if (!isGitLabNetworkProfile(profile)) {
+        throw new Error('GitLab profile unavailable on this host.')
+      }
+      const readHost = this.deps.readGitNetworkRemoteHost ?? readGitNetworkRemoteHost
+      if ((await readHost(repo.path, remoteName, profile.user)) !== profile.host) {
+        throw new Error('Repository remote does not match the selected GitLab profile.')
+      }
+      const currentProfile = list().find((entry) => entry.id === profileId)
+      if (!currentProfile || currentProfile.generation !== profile.generation) {
+        throw new Error('GitLab profile changed before binding.')
+      }
+      if ((await readHost(repo.path, remoteName, profile.user)) !== profile.host) {
+        throw new Error('Repository remote changed before GitLab profile binding.')
+      }
+    }
+    assertWslMoveRepoWritable(store, repo)
+    const bound = store.setRepoGitNetworkBinding(
+      repo,
+      repo.path,
+      repo.addedAt,
+      repo.gitNetworkBinding?.generation ?? null,
+      profile ? { provider: 'gitlab', ...profile } : null
+    )
+    this.deps.notifyReposChanged()
+    return bound
+  }
+
+  async bindGitHubNetworkAccount(
+    repoSelector: RuntimeRepoSelector,
+    accountInput: GhAccountBinding | null,
+    remoteName = 'origin',
+    expectedPath?: string
+  ): Promise<Repo> {
+    const store = this.requireStore()
+    if (!store.setRepoGitNetworkBinding) {
+      throw new Error('Git network binding unavailable.')
+    }
+    const repo = await this.deps.resolveRepo(repoSelector)
+    if (expectedPath !== undefined && repo.path !== expectedPath) {
+      throw new Error('GitHub network binding repository changed before selection.')
+    }
+    assertWslMoveRepoWritable(store, repo)
+    if (
+      process.platform === 'win32' ||
+      getRepoExecutionHostId(repo) !== 'local' ||
+      isFolderRepo(repo)
+    ) {
+      throw new Error('GitHub network binding unavailable on this host.')
+    }
+    if (accountInput === null && repo.gitNetworkBinding?.provider === 'gitlab') {
+      throw new Error('GitLab network binding must be cleared through its own action.')
+    }
+    const account = accountInput ? normalizeGhAccountBinding(accountInput) : null
+    if (accountInput && !account) {
+      throw new Error('Selected GitHub account is invalid.')
+    }
+    let binding: GitNetworkBinding | null = null
+    if (account) {
+      const readHost = this.deps.readGitNetworkRemoteHost ?? readGitNetworkRemoteHost
+      if ((await readHost(repo.path, remoteName, account.user)) !== account.host) {
+        throw new Error('Repository remote does not match the selected GitHub account.')
+      }
+      invalidateGhAccountTokenCache(account)
+      const validate =
+        this.deps.validateGitHubNetworkAccount ??
+        (async (selected: GhAccountBinding) =>
+          (await validateGhAccountBinding(selected, {}, { requiredHost: selected.host })).ok)
+      if (!(await validate(account))) {
+        throw new Error('Selected GitHub account is unavailable.')
+      }
+      if ((await readHost(repo.path, remoteName, account.user)) !== account.host) {
+        throw new Error('Repository remote changed before GitHub account binding.')
+      }
+      binding = { provider: 'github' as const, ...account, generation: randomUUID() }
+    }
+    assertWslMoveRepoWritable(store, repo)
+    const bound = store.setRepoGitNetworkBinding(
+      repo,
+      repo.path,
+      repo.addedAt,
+      repo.gitNetworkBinding?.generation ?? null,
+      binding
+    )
+    this.deps.notifyReposChanged()
+    return bound
   }
 
   async setBaseRef(repoSelector: string, baseRef: string): Promise<Repo> {

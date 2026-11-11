@@ -1,3 +1,4 @@
+import { armNativeCliStartup } from '../../native-cli-startup'
 import { OrcaRuntimeWithInvalidateAllHandlesForPty } from './pty-handle-invalidation'
 import type { PtyIncarnationId } from '../../../../shared/pty-incarnation'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -135,6 +136,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       pty.launchIncarnationId = binding.incarnationId
       pty.launchAgent = agentLaunchAuthority.launchAgent
     }
+    armNativeCliStartup(pty)
     const providerReattachLaunchIdentity = binding?.providerReattachLaunchIdentity
     if (
       providerReattachLaunchIdentity &&

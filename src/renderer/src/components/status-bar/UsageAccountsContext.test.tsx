@@ -166,11 +166,16 @@ it('reveals the selected account’s reset count and confirmation from its focus
   const row = screen.getByRole('group', { name: 'Codex active@example.test usage' })
   expect(row.textContent).toContain('62%')
   expect(row.textContent).toContain('81%')
-  expect(row.querySelector('.group-focus-within\\:block')).toBeTruthy()
+  expect(
+    screen.queryByRole('complementary', { name: 'Codex active@example.test details' })
+  ).toBeNull()
   const toggle = row.querySelector('button[aria-expanded]')
   if (toggle) {
     fireEvent.focus(toggle)
   }
+  expect(
+    screen.getByRole('complementary', { name: 'Codex active@example.test details' })
+  ).toBeTruthy()
   expect(screen.getByText(/2 manual resets available/)).toBeTruthy()
   if (process.env.OPKA_SYNTHETIC_EVIDENCE_DIR) {
     writeFileSync(

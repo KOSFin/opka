@@ -38,4 +38,21 @@ export type ProjectTaskWorkflow = {
   events: ProjectTaskEvent[]
   exportError: string | null
   recordedSequence: number
+  authorization?: {
+    schema: 1
+    admission: {
+      eligible: boolean
+      source: string
+      revision: string
+      receiptId: string | null
+      generation: number | null
+      reason: string | null
+    }
+    continuation: {
+      eligible: boolean
+      authorizedRevision: string | null
+      ownerBinding: string | null
+    }
+    acceptance: { accepted: boolean; revision: string; resultDigest: string | null }
+  }
 }

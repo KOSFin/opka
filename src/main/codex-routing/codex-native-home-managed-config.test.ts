@@ -71,7 +71,7 @@ it('preserves a genuine owned user edit when the source also changes', async () 
   await writeFile(f.source, 'model="after"\n')
   await expect(
     prepareCodexNativeHome({ ...f.options, prepareManagedConfig: f.prepareManagedConfig })
-  ).rejects.toThrow('changed in both homes')
+  ).rejects.toThrow('changed in both the source and Orca HOME')
   expect(await readFile(f.owned, 'utf8')).toBe(before)
 })
 it('does not bless a user change arriving while the managed installer awaits', async () => {
@@ -85,7 +85,9 @@ it('does not bless a user change arriving while the managed installer awaits', a
     }
   })
   await writeFile(f.source, 'model="after"\n')
-  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow('changed in both homes')
+  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow(
+    'changed in both the source and Orca HOME'
+  )
 })
 it('leaves the existing interrupted-preparation guard if a managed installer fails', async () => {
   const f = await fixture()
@@ -97,7 +99,9 @@ it('leaves the existing interrupted-preparation guard if a managed installer fai
       }
     })
   ).rejects.toThrow('installer failed')
-  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow('Interrupted native')
+  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow(
+    'previous native HOME preparation stopped mid-write'
+  )
 })
 
 it('does not bless concurrent user comments outside the managed trust entry', async () => {
@@ -111,5 +115,7 @@ it('does not bless concurrent user comments outside the managed trust entry', as
     }
   })
   await writeFile(f.source, 'model="after"\n')
-  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow('changed in both homes')
+  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow(
+    'changed in both the source and Orca HOME'
+  )
 })

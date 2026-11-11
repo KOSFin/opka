@@ -21,6 +21,7 @@ export type TreeNode = {
 export type DirCache = {
   error?: string
   children: TreeNode[]
+  nextCursor?: string | null
   operationOwner?: FileExplorerOperationOwner
 }
 

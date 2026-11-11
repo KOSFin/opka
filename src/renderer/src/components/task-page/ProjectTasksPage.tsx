@@ -2,13 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
-import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -28,6 +21,7 @@ import { ProjectTaskConfirm, type ProjectTaskConfirmation } from './ProjectTaskC
 import { ProjectTasksBesideChatButton } from './ProjectTasksBesideChatButton'
 import { ProjectTaskBoardSettings } from './ProjectTaskBoardSettings'
 import { ProjectTaskHelp } from './ProjectTaskHelp'
+import { ProjectTaskProjectPicker } from './ProjectTaskProjectPicker'
 import { readProjectTaskView, saveProjectTaskView } from './project-task-view-state'
 import { projectTaskNeedsDecision } from '../../../../shared/project-task-attention'
 import { useTaskProjectCatalog } from './use-task-project-catalog'
@@ -42,10 +36,15 @@ import {
 const NO_PROJECTS: TaskProjectScope[] = []
 export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
   const catalog = useTaskProjectCatalog()
-  const [chosen, setChosen] = useState(() => readProjectTaskView().workspace || '*')
-  const scope = catalog.projects.find(
-    (project) => project.key === chosen || project.selector === chosen
+  const [projectKeys, setProjectKeys] = useState(() => readProjectTaskView().projectKeys)
+  const selectedScopes = useMemo(
+    () =>
+      catalog.projects.filter(
+        (project) => projectKeys.includes('*') || projectKeys.includes(project.key)
+      ),
+    [catalog.projects, projectKeys]
   )
+  const scope = selectedScopes.length === 1 ? selectedScopes[0] : undefined
   const workspace = scope?.key ?? '*'
   const target = useMemo(() => scope?.target ?? null, [scope])
   const single = useProjectTaskBoard(
@@ -66,27 +65,22 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
   )
   const [limit, setLimit] = useState(16)
   const overview = useTaskProjectOverview(
-    workspace === '*' ? catalog.projects : NO_PROJECTS,
+    scope ? NO_PROJECTS : selectedScopes,
     '*',
     catalog.revision,
     limit
   )
   const views = useMemo(
-    () =>
-      scope && single.board
-        ? [{ scope, board: single.board }]
-        : workspace === '*'
-          ? overview.views
-          : [],
-    [scope, single.board, workspace, overview.views]
+    () => (scope && single.board ? [{ scope, board: single.board }] : !scope ? overview.views : []),
+    [scope, single.board, overview.views]
   )
-  const allRows = useMemo(() => projectTaskRows(views, workspace === '*'), [views, workspace])
-  const [selected, setSelected] = useState('')
-  const [query, setQuery] = useState('')
-  const [repo, setRepo] = useState('*')
-  const [source, setSource] = useState('*')
-  const [archived, setArchived] = useState(false)
-  const [attention, setAttention] = useState(false)
+  const allRows = useMemo(() => projectTaskRows(views, !scope), [views, scope])
+  const [selected, setSelected] = useState(() => readProjectTaskView().selected)
+  const [query, setQuery] = useState(() => readProjectTaskView().query)
+  const [repo, setRepo] = useState(() => readProjectTaskView().repo)
+  const [source, setSource] = useState(() => readProjectTaskView().source)
+  const [archived, setArchived] = useState(() => readProjectTaskView().archived)
+  const [attention, setAttention] = useState(() => readProjectTaskView().attention)
   const [mode, setMode] = useState(() => readProjectTaskView().mode)
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<ProjectTaskConfirmation | null>(null)
@@ -98,13 +92,27 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
     refreshCatalog()
     refreshSingle()
   }, [refreshCatalog, refreshSingle])
-  useEffect(() => saveProjectTaskView({ workspace: chosen, mode }), [chosen, mode])
+  useEffect(
+    () =>
+      saveProjectTaskView({
+        workspace,
+        projectKeys,
+        selected,
+        mode,
+        query,
+        repo,
+        source,
+        archived,
+        attention
+      }),
+    [workspace, projectKeys, selected, mode, query, repo, source, archived, attention]
+  )
   const choose = (value: string) => {
     const project = catalog.projects.find((p) => p.key === value || p.selector === value)
     if (project && project.state !== 'configured') {
       refreshCatalog()
     }
-    setChosen(value)
+    setProjectKeys([project?.key ?? value])
     setSelected('')
     setRepo('*')
     setSource('*')
@@ -118,7 +126,7 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
       (!attention || projectTaskNeedsDecision(task.workflow)) &&
       `${task.title} ${task.projectLabel ?? ''}`.toLowerCase().includes(query.toLowerCase())
   )
-  const current = allRows.find(
+  const current = visible.find(
     (task) => taskViewKey(task) === selected && (archived || !task.workflow.archived)
   )
   const owner = current ? views.find((view) => view.scope.key === current.projectKey) : undefined
@@ -144,9 +152,7 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
   const repositories = [
     ...new Set(views.flatMap((view) => Object.keys(view.board.project.repos)))
   ].sort()
-  const configuredCount = catalog.projects.filter(
-    (project) => project.state === 'configured'
-  ).length
+  const configuredCount = selectedScopes.filter((project) => project.state === 'configured').length
   const sources = [
     ...new Set(views.flatMap((view) => view.board.project.sources.map((entry) => entry.id)))
   ].sort()
@@ -227,19 +233,25 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
       <header className="space-y-2 border-b px-5 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="sr-only">Project tasks</h1>
-          <Select value={workspace} onValueChange={choose}>
-            <SelectTrigger aria-label="Task project">
-              <SelectValue placeholder="All projects" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="*">All projects</SelectItem>
-              {catalog.projects.map((project) => (
-                <SelectItem key={project.key} value={project.key}>
-                  {project.name} · {project.hostLabel}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProjectTaskProjectPicker
+            projects={catalog.projects}
+            selected={projectKeys}
+            onChange={(keys) => {
+              if (
+                catalog.projects.some(
+                  (project) =>
+                    project.state !== 'configured' &&
+                    (keys.includes('*') || keys.includes(project.key))
+                )
+              ) {
+                refreshCatalog()
+              }
+              setProjectKeys(keys)
+              setRepo('*')
+              setSource('*')
+              setCreating(false)
+            }}
+          />
           <div className="min-w-40 flex-1">
             <Input
               aria-label="Search project tasks"
@@ -262,7 +274,7 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
             projects={catalog.projects}
             selected={scope}
             onCreate={(key) => {
-              setChosen(key)
+              setProjectKeys([key])
               setSelected('')
               setCreating(true)
             }}
@@ -330,7 +342,7 @@ export function ProjectTasksPage({ embedded = false }: { embedded?: boolean } = 
                 : 'Add a project folder, then create your first task here.'}
             </p>
           )}
-          {workspace === '*' && configuredCount > limit && (
+          {!scope && configuredCount > limit && (
             <Button variant="outline" onClick={() => setLimit((value) => value + 16)}>
               Load more projects ({Math.min(limit, configuredCount)} of {configuredCount})
             </Button>

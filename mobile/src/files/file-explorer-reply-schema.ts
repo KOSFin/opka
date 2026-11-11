@@ -27,6 +27,11 @@ export const fileDirectoryEntriesSchema = salvagingArray(
   })
 )
 
+export const fileDirectoryPageSchema = z.object({
+  entries: fileDirectoryEntriesSchema,
+  nextCursor: z.string().min(1).max(1500).nullable()
+})
+
 /**
  * The capped flat list an older desktop answers when `files.readDir` is not allowlisted.
  *

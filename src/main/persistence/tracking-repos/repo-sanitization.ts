@@ -88,6 +88,9 @@ export function sanitizeRepoUpdatesForPersistence<
   }
 >(updates: T): T {
   const sanitized = { ...updates }
+  if ('gitNetworkBinding' in sanitized) {
+    delete sanitized.gitNetworkBinding
+  }
   if ('defaultJiraProject' in sanitized) {
     const reference = normalizeJiraProjectReference(sanitized.defaultJiraProject)
     if (reference === undefined) {

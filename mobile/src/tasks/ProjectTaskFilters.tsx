@@ -10,15 +10,22 @@ import {
 export function ProjectTaskFilters({
   query,
   phase,
+  source,
+  sources,
   onQuery,
-  onPhase
+  onPhase,
+  onSource
 }: {
   query: string
   phase: string
+  source: string
+  sources: string[]
   onQuery: (value: string) => void
   onPhase: (value: string) => void
+  onSource: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [sourceOpen, setSourceOpen] = useState(false)
   return (
     <View style={styles.section}>
       <TextInput
@@ -60,6 +67,28 @@ export function ProjectTaskFilters({
         onSelect={(value) => {
           onPhase(value)
           setOpen(false)
+        }}
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Filter task source"
+        style={styles.rowLine}
+        onPress={() => setSourceOpen(true)}
+      >
+        <Text style={styles.text}>{source === '*' ? 'All sources' : source}</Text>
+      </Pressable>
+      <PickerModal
+        visible={sourceOpen}
+        title="Task source"
+        selected={source}
+        options={['*', ...sources].map((value) => ({
+          value,
+          label: value === '*' ? 'All sources' : value
+        }))}
+        onClose={() => setSourceOpen(false)}
+        onSelect={(value) => {
+          onSource(value)
+          setSourceOpen(false)
         }}
       />
     </View>

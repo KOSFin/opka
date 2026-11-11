@@ -77,6 +77,42 @@ function outline(sections: ReturnType<typeof sectionsFor>): string[] {
 }
 
 describe('the phone list from the sidebar feed', () => {
+  it('keeps a served project-group icon on its own header', () => {
+    const sections = buildHostFeedSections({
+      rows: [
+        {
+          type: 'header',
+          key: 'project-group:local:g',
+          label: 'App',
+          count: 0,
+          icon: { kind: 'project' },
+          projectGroup: {
+            id: 'g',
+            name: 'App',
+            parentPath: '/app',
+            parentGroupId: null,
+            createdFrom: 'manual',
+            tabOrder: 0,
+            isCollapsed: false,
+            color: null,
+            groupIcon: { type: 'lucide', name: 'Rocket' },
+            createdAt: 0,
+            updatedAt: 0
+          }
+        }
+      ],
+      activeRowKeys: new Set(),
+      liveRows: [],
+      repoHostIdByRepoId: new Map(),
+      search: ''
+    })
+    expect(sections[0]).toMatchObject({
+      projectGroupHeader: true,
+      projectGroupId: 'g',
+      projectGroupHostId: 'local',
+      groupIcon: { type: 'lucide', name: 'Rocket' }
+    })
+  })
   it('draws the shared builder’s headers, order, nesting and single highlight', () => {
     const lines = outline(sectionsFor(phoneView()))
     // Host scope comes first; its pinned parent still carries its nested child.

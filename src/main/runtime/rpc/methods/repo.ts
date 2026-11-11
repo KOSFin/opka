@@ -1,5 +1,7 @@
 import { defineMethod } from '../core'
 import { PROJECT_RUNTIME_METHODS } from './project-runtime-rpc-methods'
+import { REPO_GIT_AUTHOR_METHODS } from './repo-git-author-methods'
+import { REPO_GIT_NETWORK_METHODS } from './repo-git-network-methods'
 import { FOLDER_WORKSPACE_METHODS } from './folder-workspace'
 import {
   includesQualifiedSearchRefs,
@@ -170,6 +172,7 @@ export const REPO_METHODS = [
     params: null,
     handler: async (_params, { runtime }) => ({ available: await runtime.isGitAvailable() })
   }),
+  ...REPO_GIT_AUTHOR_METHODS,
   defineMethod({
     name: 'repo.clone',
     permission: 'workspace',
@@ -181,6 +184,7 @@ export const REPO_METHODS = [
       )
     })
   }),
+  ...REPO_GIT_NETWORK_METHODS,
   defineMethod({
     name: 'repo.show',
     permission: 'workspace',

@@ -50,7 +50,8 @@ export type NativeCodexRoutingRuntime = Pick<
 export async function prepareNativeCodexRoutingLaunch(
   runtime: NativeCodexRoutingRuntime,
   params: NativeCliAccountLaunchRequest,
-  defaultPool?: AccountPoolPolicy
+  defaultPool?: AccountPoolPolicy,
+  assertCurrent?: () => void
 ): Promise<NativeCliAccountLaunch | null> {
   if (params.provider !== 'codex') {
     return null
@@ -97,6 +98,7 @@ export async function prepareNativeCodexRoutingLaunch(
     return null
   }
   const historyContext = await readNativeCodexRoutingContext(runtime, params)
+  assertCurrent?.()
   if (!historyContext) {
     return null
   }
@@ -114,6 +116,12 @@ export async function prepareNativeCodexRoutingLaunch(
     host.getNativeClientKey(),
     historyContext
   )
+  try {
+    assertCurrent?.()
+  } catch (error) {
+    history.release()
+    throw error
+  }
   const home = history.home
   let disposeBoundary = () => {}
   let disposeSources = () => {}
@@ -205,6 +213,7 @@ export async function prepareNativeCodexRoutingLaunch(
             }
           : undefined
     })
+    assertCurrent?.()
     if (!transport) {
       boundary.dispose()
       sessionAuthority.dispose()

@@ -13,6 +13,9 @@ const PHONE_TASK_METHODS = [
   'projectTask.show',
   'projectTask.documents',
   'projectTask.resume',
+  'projectTask.policy.read',
+  'projectTask.policy.propose',
+  'projectTask.policy.confirm',
   'projectTask.approve',
   'projectTask.decide'
 ]
@@ -27,6 +30,9 @@ describe('phone task workflow authorization', () => {
   })
 
   it.each([
+    'approveDelegated',
+    'decideDelegated',
+    'reviewSubmit',
     'claim',
     'progress',
     'complete',

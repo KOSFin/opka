@@ -100,6 +100,15 @@ export function buildUpdateCardErrorModel({
       }
     }
   }
+  if (status.manualInstaller && status.message === 'Unsupported Mac architecture') {
+    return {
+      title: 'Beta update unavailable',
+      summary:
+        'This Mac cannot use this beta installer. Keep the installed version and use a supported installer when available.',
+      detail: status.message,
+      releaseUrl: getReleaseNotesUrlForVersion(cachedVersion)
+    }
+  }
   if (isHttp2ProtocolError(status.message)) {
     return {
       variant: 'http1Compatibility',

@@ -1,6 +1,6 @@
 import { providerAccountUsageRevision } from './provider-account-usage-revision'
 import type { RateLimitState } from '../../../../shared/rate-limit-types'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   ClaudeRateLimitAccountsState,
   CodexRateLimitAccountsState
@@ -16,19 +16,7 @@ import {
   getProviderAccountsOwnerKey,
   watchProviderAccounts
 } from '@/runtime/runtime-provider-accounts-client'
-import { getAccountsClaudeSearchEntries } from './accounts-claude-search'
-import {
-  getAccountsCodexSearchEntries,
-  getAccountsGeminiSearchEntries,
-  getAccountsCursorSearchEntries,
-  getAccountsGrokSearchEntries,
-  getAccountsAntigravitySearchEntries,
-  getAccountsLocationSearchEntries,
-  getAccountsMiniMaxSearchEntries,
-  getAccountsOpencodeSearchEntries,
-  getAccountsPaneSearchEntries,
-  getAccountsZcodePlanSearchEntries
-} from './accounts-search'
+import { getAccountsLocationSearchEntries, getAccountsPaneSearchEntries } from './accounts-search'
 import { getRemoteAccountsPaneScope } from './provider-account-scope'
 import { ProviderHostScopeControl } from './ProviderHostScopeControl'
 import { SettingsSectionStack } from './SettingsSectionStack'
@@ -40,12 +28,8 @@ import {
   providerAccountIsActiveInView,
   providerAccountMatchesView
 } from './provider-account-visibility'
-import { GrokAccountsSection } from './GrokAccountsSection'
-import { AntigravityAccountsSection } from './AntigravityAccountsSection'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
-import { CursorAccountsSection } from './CursorAccountsSection'
-import { ZcodePlanAccountsSection } from './ZcodePlanAccountsSection'
 import type {
   AccountsPaneProps,
   AccountsPaneSectionModel,
@@ -64,26 +48,11 @@ import {
   createCodexAccountActionRunner
 } from './accounts-pane-account-actions'
 import { renderAccountsLocationSection } from './accounts-pane-location-section'
-import { renderClaudeAccountsSection } from './accounts-pane-claude-section'
-import { renderCodexAccountsSection } from './accounts-pane-codex-section'
-import {
-  renderGeminiAccountsSection,
-  renderOpenCodeAccountsSection
-} from './accounts-pane-provider-setting-sections'
-import { MiniMaxAccountsSection } from './MiniMaxAccountsSection'
 import { useUsageHostSettings } from './use-usage-host-settings'
-import { ManagedDataAccountsSection } from './ManagedDataAccountsSection'
-import { RemoteAccountSignInSection } from './RemoteAccountSignInSection'
+import { buildAccountsProviderSections } from './accounts-pane-provider-sections'
 import { renderAccountsRemovalDialogs } from './accounts-pane-removal-dialogs'
 import { ProviderAccountsDisclosure } from './ProviderAccountsDisclosure'
-import {
-  ClaudeIcon,
-  GeminiIcon,
-  MiniMaxIcon,
-  OpenAIIcon,
-  OpenCodeGoIcon
-} from '../status-bar/icons'
-import { AgentIcon } from '@/lib/agent-catalog'
+import { useAccountActionState } from './use-account-action-state'
 
 export { getAccountsPaneSearchEntries }
 
@@ -127,14 +96,17 @@ export function AccountsPane({
   const accountOwner = hostScope.target
   const isRemoteAccountScope = accountOwner.kind === 'environment'
   const scopeEnvironmentId = runtimeTargetEnvironmentId(hostScope.target)
-  // Why: a select/remove can outlive a host change; its result
-  // belongs to the owner it was sent to, not the one now shown.
+  // Why: A → B → A must not make an earlier A action current again.
   const accountOwnerKey = getProviderAccountsOwnerKey(accountOwner)
-  const currentAccountOwnerKeyRef = useRef(accountOwnerKey)
-  useEffect(() => {
-    currentAccountOwnerKeyRef.current = accountOwnerKey
-  }, [accountOwnerKey])
-  const isCurrentAccountOwner = (): boolean => currentAccountOwnerKeyRef.current === accountOwnerKey
+  const accountOwnerView = useMemo(() => ({ key: accountOwnerKey }), [accountOwnerKey])
+  const accountOwnerViewRef = useRef<{ key: string } | null>(accountOwnerView)
+  useLayoutEffect(() => {
+    accountOwnerViewRef.current = accountOwnerView
+    return () => {
+      accountOwnerViewRef.current = null
+    }
+  }, [accountOwnerView])
+  const isCurrentAccountOwner = (): boolean => accountOwnerViewRef.current === accountOwnerView
   // Why: keep the real name separate from the prose fallback below; the scope
   // label must not interpolate the fallback.
   const remoteServerName = isRemoteAccountScope
@@ -170,11 +142,20 @@ export function AccountsPane({
 
   const [codexAccounts, setCodexAccounts] =
     useState<CodexRateLimitAccountsState>(emptyCodexAccountsState)
+  const rosterRevisionRef = useRef({ codex: 0, claude: 0 })
   const [codexAccountsLoaded, setCodexAccountsLoaded] = useState(false)
-  const [codexAction, setCodexAction] = useState<CodexAccountAction>('idle')
   const [claudeAccounts, setClaudeAccounts] =
     useState<ClaudeRateLimitAccountsState>(emptyClaudeAccountsState)
-  const [claudeAction, setClaudeAction] = useState<ClaudeAccountAction>('idle')
+  const {
+    action: codexAction,
+    start: startCodexAction,
+    finish: finishCodexAction
+  } = useAccountActionState<CodexAccountAction>(accountOwnerView, isCurrentAccountOwner)
+  const {
+    action: claudeAction,
+    start: startClaudeAction,
+    finish: finishClaudeAction
+  } = useAccountActionState<ClaudeAccountAction>(accountOwnerView, isCurrentAccountOwner)
   // Why: capture the account's runtime slot when the dialog opens; the roster
   // can change underneath an open dialog and lose the slot to diff for restarts.
   const [removeCodexTarget, setRemoveCodexTarget] = useState<RemoveAccountTarget | null>(null)
@@ -264,6 +245,7 @@ export function AccountsPane({
   )
 
   useEffect(() => {
+    let active = true
     const owner: RuntimeClientTarget = scopeEnvironmentId
       ? { kind: 'environment', environmentId: scopeEnvironmentId }
       : { kind: 'local' }
@@ -272,6 +254,9 @@ export function AccountsPane({
     // path resolves once and the close() is a no-op.
     const watcher = watchProviderAccounts(owner, {
       onSnapshot: (snapshot) => {
+        if (!active || accountOwnerViewRef.current !== accountOwnerView) {
+          return
+        }
         setRemotePoolUsage({
           owner: getProviderAccountsOwnerKey(owner),
           state: snapshot.rateLimits
@@ -280,14 +265,19 @@ export function AccountsPane({
         // Why: a failed provider's half is a substituted empty roster, not
         // authoritative data; keep prior state and leave the loaded gate shut.
         if (!snapshot.failedProviders?.includes('codex')) {
+          rosterRevisionRef.current.codex++
           setCodexAccounts(snapshot.codex)
           setCodexAccountsLoaded(true)
         }
         if (!snapshot.failedProviders?.includes('claude')) {
+          rosterRevisionRef.current.claude++
           setClaudeAccounts(snapshot.claude)
         }
       },
       onError: (error) => {
+        if (!active || accountOwnerViewRef.current !== accountOwnerView) {
+          return
+        }
         toast.error(
           translate(
             'auto.components.settings.AccountsPane.loadAccountsFailed',
@@ -298,9 +288,10 @@ export function AccountsPane({
       }
     })
     return () => {
+      active = false
       watcher.close()
     }
-  }, [scopeEnvironmentId, enrollmentRevision])
+  }, [scopeEnvironmentId, enrollmentRevision, accountOwnerView])
 
   const runCodexAccountAction = createCodexAccountActionRunner({
     settings,
@@ -311,7 +302,9 @@ export function AccountsPane({
     codexAccounts,
     setCodexAccounts,
     setCodexAccountsLoaded,
-    setCodexAction,
+    getRosterRevision: () => rosterRevisionRef.current.codex,
+    startCodexAction,
+    finishCodexAction,
     fetchSettings,
     recordFeatureInteraction
   })
@@ -322,7 +315,9 @@ export function AccountsPane({
     isRemoteAccountScope,
     claudeAccounts,
     setClaudeAccounts,
-    setClaudeAction,
+    getRosterRevision: () => rosterRevisionRef.current.claude,
+    startClaudeAction,
+    finishClaudeAction,
     fetchSettings,
     recordFeatureInteraction
   })
@@ -380,143 +375,15 @@ export function AccountsPane({
     runCodexAccountAction,
     recordOpenCodeSettingEdit
   }
-  const providerSections = [
-    {
-      key: 'opencode-data',
-      matches: !searchQuery || /opencode|account/i.test(searchQuery),
-      title: 'OpenCode',
-      description: 'Saved accounts for OpenCode launches on this host.',
-      icon: <AgentIcon agent="opencode" size={16} />,
-      content: <ManagedDataAccountsSection provider="opencode" target={accountOwner} />
-    },
-    {
-      key: 'devin-data',
-      matches: !searchQuery || /devin|account/i.test(searchQuery),
-      title: 'Devin',
-      description: 'Saved accounts for Devin launches on this host.',
-      icon: <AgentIcon agent="devin" size={16} />,
-      content: <ManagedDataAccountsSection provider="devin" target={accountOwner} />
-    },
-    {
-      key: 'claude',
-      matches: matchesSettingsSearch(searchQuery, getAccountsClaudeSearchEntries()),
-      title: 'Claude',
-      description: 'Saved logins, default account and pool settings.',
-      icon: <ClaudeIcon size={16} />,
-      content: (
-        <>
-          {isRemoteAccountScope ? (
-            <RemoteAccountSignInSection
-              key={`sign-in:claude:${accountOwnerKey}`}
-              provider="claude"
-              target={accountOwner}
-              hostLabel={remoteServerLabel ?? 'Server'}
-              onComplete={() => setEnrollmentRevision((revision) => revision + 1)}
-            />
-          ) : null}
-          {renderClaudeAccountsSection(model)}
-        </>
-      )
-    },
-    {
-      key: 'codex',
-      matches: matchesSettingsSearch(searchQuery, getAccountsCodexSearchEntries()),
-      title: 'Codex',
-      description: 'Saved logins, quotas, manual resets and pool settings.',
-      icon: <OpenAIIcon size={16} />,
-      content: (
-        <>
-          {isRemoteAccountScope ? (
-            <RemoteAccountSignInSection
-              key={`sign-in:codex:${accountOwnerKey}`}
-              provider="codex"
-              target={accountOwner}
-              hostLabel={remoteServerLabel ?? 'Server'}
-              onComplete={() => setEnrollmentRevision((revision) => revision + 1)}
-            />
-          ) : null}
-          {renderCodexAccountsSection(model)}
-        </>
-      )
-    },
-    {
-      key: 'gemini',
-      matches: matchesSettingsSearch(searchQuery, getAccountsGeminiSearchEntries()),
-      title: 'Gemini CLI',
-      description: 'Existing Gemini CLI credentials for usage.',
-      icon: <GeminiIcon size={16} />,
-      content: renderGeminiAccountsSection(model)
-    },
-    {
-      key: 'antigravity',
-      matches: matchesSettingsSearch(searchQuery, getAccountsAntigravitySearchEntries()),
-      title: 'Antigravity',
-      description: 'Native agy account on the selected host.',
-      icon: <AgentIcon agent="antigravity" size={16} />,
-      content: (
-        <AntigravityAccountsSection
-          key={`antigravity:${accountOwnerKey}:${accountRuntime.runtime}:${accountRuntime.wslDistro ?? ''}`}
-          owner={accountOwner}
-          target={{ runtime: accountRuntime.runtime, wslDistro: accountRuntime.wslDistro }}
-          label={accountRuntimeSentenceLabel}
-        />
-      )
-    },
-    {
-      key: 'opencode-go',
-      matches: matchesSettingsSearch(searchQuery, getAccountsOpencodeSearchEntries()),
-      title: 'OpenCode Go',
-      description: 'Credentials and usage settings for OpenCode Go.',
-      icon: <OpenCodeGoIcon size={16} />,
-      content: renderOpenCodeAccountsSection(model)
-    },
-    {
-      key: 'minimax',
-      matches: matchesSettingsSearch(searchQuery, getAccountsMiniMaxSearchEntries()),
-      title: 'MiniMax',
-      description: 'Host credentials and MiniMax usage.',
-      icon: <MiniMaxIcon size={16} />,
-      content: (
-        <MiniMaxAccountsSection
-          key={`minimax:${accountOwnerKey}`}
-          host={usageCredentialHost}
-          usageSettings={usageHostSettings}
-          miniMaxRateLimits={isRemoteAccountScope ? null : miniMaxRateLimits}
-          recordFeatureInteraction={recordFeatureInteraction}
-        />
-      )
-    },
-    {
-      key: 'grok',
-      matches: matchesSettingsSearch(searchQuery, getAccountsGrokSearchEntries()),
-      title: 'Grok',
-      description: 'Sign-in and usage for Grok.',
-      icon: <AgentIcon agent="grok" size={16} />,
-      content: <GrokAccountsSection />
-    },
-    {
-      key: 'cursor',
-      matches: matchesSettingsSearch(searchQuery, getAccountsCursorSearchEntries()),
-      title: 'Cursor',
-      description: 'Monthly plan usage from your Cursor sign-in.',
-      icon: <AgentIcon agent="cursor" size={16} />,
-      content: <CursorAccountsSection />
-    },
-    {
-      key: 'zcode',
-      matches: matchesSettingsSearch(searchQuery, getAccountsZcodePlanSearchEntries()),
-      title: 'Zcode',
-      description: 'Plan credentials and usage on the selected host.',
-      icon: <AgentIcon agent="zcode" size={16} />,
-      content: (
-        <ZcodePlanAccountsSection
-          key={`zcode:${accountOwnerKey}`}
-          host={usageCredentialHost}
-          usageSettings={usageHostSettings}
-        />
-      )
-    }
-  ]
+  const providerSections = buildAccountsProviderSections({
+    model,
+    accountOwnerKey,
+    remoteServerLabel,
+    setEnrollmentRevision,
+    usageCredentialHost,
+    usageHostSettings,
+    miniMaxRateLimits
+  })
   const visibleSections = [
     wslSupportedPlatform &&
     !isRemoteAccountScope &&

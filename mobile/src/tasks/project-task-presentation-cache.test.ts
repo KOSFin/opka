@@ -25,10 +25,21 @@ describe('bounded project task presentation', () => {
       taskId: 'task',
       document: 'report.md',
       query: 'Fix',
-      phase: 'review'
+      phase: 'review',
+      source: 'tasks',
+      projects: ['project'],
+      projectLimit: 16,
+      catalogScroll: 48,
+      boardScroll: 96
     })
     expect(readProjectTaskPresentation(client, key, 2)?.kind).toBe('report')
     expect(readProjectTaskSelection(client, 'other').project).toBeNull()
+    expect(readProjectTaskSelection(client, 'host')).toMatchObject({
+      source: 'tasks',
+      projects: ['project'],
+      catalogScroll: 48,
+      boardScroll: 96
+    })
     expect(readProjectTaskPresentation(new FakeSession('connected'), key, 2)).toBeNull()
     generation += 1
     expect(readProjectTaskPresentation(client, key, 2)).toBeNull()
@@ -81,7 +92,12 @@ describe('bounded project task presentation', () => {
       taskId: null,
       document: null,
       query: 'Fix',
-      phase: 'all'
+      phase: 'all',
+      source: '*',
+      projects: ['*'],
+      projectLimit: 16,
+      catalogScroll: 0,
+      boardScroll: 0
     })
     invalidateProjectTaskPresentation(client, 'host', 'project')
     expect(readProjectTaskPresentation(client, key)).toBeNull()

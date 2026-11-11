@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { CodexEngineHost } from './codex-engine-host'
 import { engineHostFixture, syntheticTurn, tick } from './codex-engine-host-fixture'
 import { engineCredentialFilename } from './engine-account-connection'
@@ -174,37 +174,62 @@ it('cancellation releases a pending activation without replacing the valid conne
 
 it('bounds a missing native boundary and preserves the old writer/grant', async () => {
   const f = fixture(40)
-  await f.launch()
-  f.stats.safe = false
-  const state = await f.host.beginGrant('owner', {
-    accountId: f.a.id,
-    expectedRosterRevision: 'r1'
-  })
-  await tick()
-  f.finishLogin()
-  await expect.poll(() => f.host.grant('owner', state.id).status).toBe('failed')
+  let stateId: string
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    await f.launch()
+    f.stats.safe = false
+    const state = await f.host.beginGrant('owner', {
+      accountId: f.a.id,
+      expectedRosterRevision: 'r1'
+    })
+    stateId = state.id
+    await tick()
+    f.finishLogin()
+    await tick()
+    expect(f.host.grantPhase('owner', state.id)).toBe('activation')
+    await vi.advanceTimersByTimeAsync(39)
+    expect(f.host.grant('owner', state.id).status).not.toBe('failed')
+    await vi.advanceTimersByTimeAsync(1)
+  } finally {
+    vi.useRealTimers()
+  }
+  await expect.poll(() => f.host.grant('owner', stateId).status).toBe('failed')
   expect(f.stats.starts).toBe(1)
   expect(f.host.readConnection(f.a.id)?.adopted).toBe(true)
 })
 
 it('bounds cancellation behind another native account mutation and never publishes its late callback', async () => {
-  const f = fixture(40)
+  const f = fixture()
   const launch = await f.launch()
   let unblock = () => {}
+  let entered = () => {}
   const previousMutation = new Promise<void>((resolve) => {
     unblock = resolve
   })
+  const mutationEntered = new Promise<void>((resolve) => {
+    entered = resolve
+  })
   f.options.withAccountMutationLease = async (operation) => {
+    entered()
     await previousMutation
     return operation()
   }
-  const state = await f.host.beginGrant('owner', {
-    accountId: f.a.id,
-    expectedRosterRevision: 'r1'
-  })
-  await tick()
-  f.finishLogin()
-  await expect.poll(() => f.host.grant('owner', state.id).status).toBe('failed')
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    const state = await f.host.beginGrant('owner', {
+      accountId: f.a.id,
+      expectedRosterRevision: 'r1'
+    })
+    await tick()
+    f.finishLogin()
+    await mutationEntered
+    await vi.advanceTimersByTimeAsync(1000)
+    await tick()
+    expect(f.host.grant('owner', state.id).status).toBe('failed')
+  } finally {
+    vi.useRealTimers()
+  }
   expect((await syntheticTurn(launch)).status).toBe(200)
   unblock()
   await tick()

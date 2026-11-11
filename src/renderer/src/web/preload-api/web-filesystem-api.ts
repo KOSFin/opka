@@ -4,6 +4,7 @@ import type { PreloadApi } from '../../../../preload/api-types'
 import type { SearchResult } from '../../../../shared/code-search-types'
 import { assertFileMutationOwnershipCapability } from '../../../../shared/file-mutation-ownership'
 import type { DirEntry } from '../../../../shared/filesystem-entry-types'
+import type { FileExplorerDirectoryPage } from '../../../../shared/file-explorer-directory-page'
 import type { RuntimeRpcResponse } from '../../../../shared/runtime-rpc-envelope'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import type { SshConnectionState } from '../../../../shared/ssh-types'
@@ -43,6 +44,16 @@ export function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
       return callRuntimeResult<DirEntry[]>('files.readDir', {
         worktree: toRuntimeWorktreeSelector(file.worktree.id),
         relativePath: file.relativePath
+      })
+    },
+    readDirPage: async ({ dirPath, cursor, followSymlinks, limit }) => {
+      const file = await resolveRuntimeFilePath(dirPath)
+      return callRuntimeResult<FileExplorerDirectoryPage>('files.readDirPage', {
+        worktree: toRuntimeWorktreeSelector(file.worktree.id),
+        relativePath: file.relativePath,
+        cursor,
+        followSymlinks,
+        limit
       })
     },
     readFile: async ({ filePath }) => {

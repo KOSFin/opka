@@ -27,26 +27,52 @@ for (const method of eraseRpcMethods(NATIVE_CLI_ACCOUNT_METHODS)) {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Authorization must refuse before consulting the deliberately absent runtime.
       const runtime = {} as OrcaRuntimeService
       const params = method.params?.parse(
-        method.name.endsWith('prepareNativeCliLaunch')
-          ? { provider: 'claude', launchId }
-          : method.name === 'accounts.nativeClaudeHook'
-            ? {
-                launchId,
-                capability: 'synthetic-capability-'.repeat(3),
-                sessionId: 'session',
-                promptId: 'prompt',
-                event: 'stop'
-              }
-            : method.name === 'accounts.nativeClaudeCoverage'
-              ? {
-                  launchId,
-                  capability: 'synthetic-capability-'.repeat(3),
-                  sessionId: 'session',
-                  generation: launchId,
-                  sequence: 1,
-                  observation: { kind: 'draft', active: false }
-                }
-              : { launchId }
+        method.name === 'accounts.prepareNativeCliLaunchV2'
+          ? {
+              provider: 'claude',
+              launchId,
+              parentTerminal: {
+                terminalHandle: 'term_owned',
+                paneKey: 'pane',
+                terminalTaskProof: 'a'.repeat(64)
+              },
+              startup: { version: 1, launchToken: 'synthetic' }
+            }
+          : method.name.endsWith('prepareNativeCliLaunch')
+            ? { provider: 'claude', launchId }
+            : method.name === 'accounts.inspectNativeCodexHome'
+              ? {}
+              : method.name === 'accounts.recoverNativeCodexHome'
+                ? {
+                    request: {
+                      version: 1,
+                      requestId: launchId,
+                      file: 'config.toml',
+                      expectedManifestHash: 'a'.repeat(64),
+                      expectedSourceHash: 'b'.repeat(64),
+                      expectedOwnedHash: 'c'.repeat(64),
+                      choices: { model: 'owned' },
+                      trustedProjects: []
+                    }
+                  }
+                : method.name === 'accounts.nativeClaudeHook'
+                  ? {
+                      launchId,
+                      capability: 'synthetic-capability-'.repeat(3),
+                      sessionId: 'session',
+                      promptId: 'prompt',
+                      event: 'stop'
+                    }
+                  : method.name === 'accounts.nativeClaudeCoverage'
+                    ? {
+                        launchId,
+                        capability: 'synthetic-capability-'.repeat(3),
+                        sessionId: 'session',
+                        generation: launchId,
+                        sequence: 1,
+                        observation: { kind: 'draft', active: false }
+                      }
+                    : { launchId }
       )
       await expect(
         Promise.resolve().then(() => method.handler(params, { runtime, clientKind }))

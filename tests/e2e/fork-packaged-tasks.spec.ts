@@ -13,6 +13,8 @@ import { z } from 'zod'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
 import { prepareForkProfileCli } from './helpers/fork-profile-cli'
+import { selectTaskProject } from './helpers/task-project-picker'
+import { closeRestoredProjectTaskDetail } from './helpers/restored-project-task-detail'
 import {
   FORK_TASK_TERMINAL_FIXTURE,
   FORK_TASK_FILTERED_CODEX_FIXTURE
@@ -42,10 +44,12 @@ async function rpc(page: Page, method: string, params: Record<string, unknown>) 
   return reply.result
 }
 
-async function openReport(page: Page) {
+async function openReport(page: Page, afterRestart = false) {
+  if (afterRestart) {
+    await closeRestoredProjectTaskDetail(page, 'Packaged task smoke', 'Packaged task project')
+  }
   await page.getByText('Tasks', { exact: true }).first().click()
-  await page.getByRole('combobox', { name: 'Task project' }).click()
-  await page.getByRole('option', { name: /Packaged task project/ }).click()
+  await selectTaskProject(page, /Packaged task project/)
   await page.getByRole('button', { name: /Packaged task smoke/ }).click()
   await page.getByRole('button', { name: 'Reports & notes', exact: true }).click()
   await expect(page.getByRole('region', { name: 'Task reports and notes' })).toContainText(
@@ -244,7 +248,7 @@ for (const managedLaunch of [true, false]) {
         app = undefined
         launched = await session.launch(options)
         app = launched.app
-        await openReport(launched.page)
+        await openReport(launched.page, true)
         expect(
           await app.evaluate(({ BrowserWindow }) =>
             BrowserWindow.getAllWindows().some((window) => window.isVisible())

@@ -152,11 +152,13 @@ export default React.memo(function AddRepoDialog({
   const {
     cloneUrl,
     cloneDestination,
+    cloneChoice,
     cloneError,
     cloneProgress,
     isCloning,
     setCloneUrl,
     setCloneDestination,
+    setCloneChoice,
     setCloneError,
     resetCloneFlow,
     handlePickDestination,
@@ -313,6 +315,7 @@ export default React.memo(function AddRepoDialog({
         isAddingServerPath={isAddingServerPath}
         cloneUrl={cloneUrl}
         cloneDestination={cloneDestination}
+        cloneChoice={cloneChoice}
         cloneError={cloneError}
         cloneProgress={cloneProgress}
         isCloning={isCloning}
@@ -382,6 +385,7 @@ export default React.memo(function AddRepoDialog({
           setCloneUrl(value)
           setCloneError(null)
         }}
+        onCloneChoiceChange={setCloneChoice}
         onCloneDestinationChange={(value) => {
           setCloneDestination(value)
           setCloneError(null)

@@ -1,27 +1,14 @@
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
-import { fileDirectoryEntriesSchema, legacyFileListSchema } from './file-explorer-reply-schema'
+import { fileDirectoryPageSchema, legacyFileListSchema } from './file-explorer-reply-schema'
 
-/**
- * The Files tab's directory read and the capped list it falls back to.
- *
- * Both skip rather than throw, because neither refusal is an error the operation decides: the
- * `files.readDir` refusal is what selects the fallback (a desktop predating the mobile allowlist
- * answers `method_not_found`), and the `files.list` refusal supplies the message the screen shows.
- * No acceptance policy exposes a refusal code, so the panel reads the envelope's own error the way
- * `mobile-file-preview-operations.ts` does, and only these two consumers want one.
- *
- * A malformed *accepted* reply is what moves: the panel's own catch already turns a throw into the
- * inline directory error it drew for a failed load, so an unreadable listing now names the reply
- * instead of crashing the row builder one render later.
- */
-export const fileDirectoryRead = bindDeferredRpcOperation(
+export const fileDirectoryPageRead = bindDeferredRpcOperation(
   defineRpcOperation({
-    name: 'files.read-directory-or-skip',
-    method: 'files.readDir',
+    name: 'files.read-directory-page-or-skip',
+    method: 'files.readDirPage',
     acceptance: 'success-result-or-skip',
     barrier: 'after-caller-barrier',
-    read: rpcResultVariant('directory-entries', fileDirectoryEntriesSchema)
+    read: rpcResultVariant('directory-page', fileDirectoryPageSchema)
   })
 )
 

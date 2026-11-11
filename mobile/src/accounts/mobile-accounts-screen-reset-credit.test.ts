@@ -12,8 +12,11 @@ const dependencies = vi.hoisted(() => ({
   loadHosts: vi.fn(),
   uuid: vi.fn<() => string>(),
   resetRequest: vi.fn(),
+  listRequest: vi.fn(),
   selectRequest: vi.fn(),
   statusCapabilities: vi.fn(),
+  autoCompleteDrawerClose: true,
+  pendingDrawerCloses: new Array<() => void>(),
   subscriptionListeners: new Array<(payload: unknown) => void>()
 }))
 
@@ -52,8 +55,34 @@ vi.mock('../navigation/route-handoff', () => ({
   useRouteHandoff: () => ({ back: dependencies.back })
 }))
 
-// The dialogs are read off `ConfirmModal`'s props; the drawer under them needs a native runtime.
-vi.mock('../components/BottomDrawer', () => ({ BottomDrawer: () => null }))
+vi.mock('../components/BottomDrawer', async () => {
+  const React = await import('react')
+  function MockBottomDrawer({
+    visible,
+    children,
+    onAfterClose
+  }: {
+    visible: boolean
+    children: React.ReactNode
+    onAfterClose?: () => void
+  }) {
+    const wasVisible = React.useRef(false)
+    React.useEffect(() => {
+      if (wasVisible.current && !visible) {
+        if (dependencies.autoCompleteDrawerClose) {
+          onAfterClose?.()
+        } else if (onAfterClose) {
+          dependencies.pendingDrawerCloses.push(onAfterClose)
+        }
+      }
+      wasVisible.current = visible
+    }, [visible, onAfterClose])
+    return visible ? React.createElement('BottomDrawer', null, children) : null
+  }
+  return {
+    BottomDrawer: MockBottomDrawer
+  }
+})
 
 vi.mock('../platform/random-v4-uuid', () => ({ randomV4Uuid: dependencies.uuid }))
 
@@ -91,7 +120,7 @@ vi.mock('../transport/host-client-hooks', () => {
         return dependencies.selectRequest(method, params)
       }
       if (method === 'accounts.list') {
-        return { id: 'list', ok: true, result: AVAILABLE_SNAPSHOT }
+        return dependencies.listRequest()
       }
       throw new Error(`Unexpected request: ${method}`)
     },
@@ -313,7 +342,14 @@ describe('accounts route Codex reset credit', () => {
       ok: true,
       result: AVAILABLE_SNAPSHOT.codex
     })
+    dependencies.listRequest.mockReset().mockResolvedValue({
+      id: 'list',
+      ok: true,
+      result: AVAILABLE_SNAPSHOT
+    })
     dependencies.subscriptionListeners.length = 0
+    dependencies.pendingDrawerCloses.length = 0
+    dependencies.autoCompleteDrawerClose = true
   })
 
   afterEach(() => {
@@ -331,6 +367,31 @@ describe('accounts route Codex reset credit', () => {
     expect(resetButtons(renderer)).toHaveLength(1)
     expect(resetButtons(renderer)[0]?.props.disabled).toBe(true)
     expect(dependencies.resetRequest).not.toHaveBeenCalled()
+    act(() => renderer.unmount())
+  })
+
+  it('waits for the native detail sheet to unmount before showing reset confirmation', async () => {
+    dependencies.autoCompleteDrawerClose = false
+    const renderer = await renderAccountsRoute()
+    const button = await findResetButton(renderer)
+    await act(async () => button.props.onPress())
+
+    expect(openDialog(renderer)).toBeNull()
+    expect(dependencies.pendingDrawerCloses).toHaveLength(1)
+    await act(async () => dependencies.pendingDrawerCloses.shift()?.())
+    expect(openDialog(renderer)?.title).toBe('Use a rate-limit reset?')
+    expect(dependencies.resetRequest).not.toHaveBeenCalled()
+    act(() => renderer.unmount())
+  })
+
+  it('closes account details through the visible Back action', async () => {
+    const renderer = await renderAccountsRoute()
+    await findResetButton(renderer)
+    expect(pressables(renderer, 'Close account details')).toHaveLength(1)
+    await act(async () => pressables(renderer, 'Close account details')[0]?.props.onPress())
+
+    expect(resetButtons(renderer)).toHaveLength(0)
+    expect(openDialog(renderer)).toBeNull()
     act(() => renderer.unmount())
   })
 
@@ -592,6 +653,35 @@ describe('accounts route Codex reset credit', () => {
     act(() => renderer.unmount())
   })
 
+  it('does not select an account removed while its detail sheet closes', async () => {
+    dependencies.autoCompleteDrawerClose = false
+    const renderer = await renderAccountsRoute()
+    const reserve = {
+      ...AVAILABLE_SNAPSHOT,
+      codex: {
+        ...AVAILABLE_SNAPSHOT.codex,
+        accounts: [
+          ...AVAILABLE_SNAPSHOT.codex.accounts,
+          { ...AVAILABLE_SNAPSHOT.codex.accounts[0], id: 'reserve', email: 'reserve@example.com' }
+        ]
+      }
+    }
+    act(() => dependencies.subscriptionListeners[0]?.({ type: 'snapshot', snapshot: reserve }))
+    await act(async () =>
+      pressables(renderer, 'Show reserve@example.com codex usage')[0]?.props.onPress()
+    )
+    await act(async () =>
+      pressables(renderer, 'Use reserve@example.com for new manual codex chats')[0]?.props.onPress()
+    )
+    act(() =>
+      dependencies.subscriptionListeners[0]?.({ type: 'snapshot', snapshot: AVAILABLE_SNAPSHOT })
+    )
+    await act(async () => dependencies.pendingDrawerCloses.shift()?.())
+
+    expect(dependencies.selectRequest).not.toHaveBeenCalled()
+    act(() => renderer.unmount())
+  })
+
   it('leaves through the route handoff, which pops the shell from inside the page', async () => {
     const renderer = await renderAccountsRoute()
     const back = pressables(renderer, 'Back')
@@ -604,9 +694,40 @@ describe('accounts route Codex reset credit', () => {
   it('shows one account surface with no separate account/pool tabs', async () => {
     const renderer = await renderAccountsRoute()
     expect(pressables(renderer, 'Pools & switching')).toHaveLength(0)
-    expect(renderer.root.findAllByType('AccountPoolSection')).toHaveLength(1)
+    expect(
+      renderer.root.findAll((node) => String(node.type) === 'AccountPoolSection')
+    ).toHaveLength(1)
     expect(systemDefaultRows(renderer)).toHaveLength(2)
     expect(pressables(renderer, 'Show dev@example.com codex usage')).toHaveLength(1)
+    act(() => renderer.unmount())
+  })
+
+  it('does not replace a newer streamed account with a late refresh reply', async () => {
+    let resolveList: (value: unknown) => void = () => {}
+    dependencies.listRequest.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve
+        })
+    )
+    const renderer = await renderAccountsRoute()
+    await act(async () => pressables(renderer, 'Refresh accounts')[0]?.props.onPress())
+    const fresh = {
+      ...AVAILABLE_SNAPSHOT,
+      codex: {
+        ...AVAILABLE_SNAPSHOT.codex,
+        accounts: [{ ...AVAILABLE_SNAPSHOT.codex.accounts[0], email: 'fresh@example.com' }]
+      }
+    }
+    await act(async () => {
+      dependencies.subscriptionListeners[0]?.({ type: 'snapshot', snapshot: fresh })
+    })
+    await act(async () => {
+      resolveList({ id: 'late', ok: true, result: AVAILABLE_SNAPSHOT })
+      await Promise.resolve()
+    })
+    expect(pressables(renderer, 'Show fresh@example.com codex usage')).toHaveLength(1)
+    expect(pressables(renderer, 'Show dev@example.com codex usage')).toHaveLength(0)
     act(() => renderer.unmount())
   })
 })

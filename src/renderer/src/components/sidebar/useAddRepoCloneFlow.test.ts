@@ -92,7 +92,7 @@ describe('useAddRepoCloneFlow', () => {
     mocks.stateSetters = []
     mocks.refIndex = 0
     mocks.refValues = []
-    mocks.stateValues = ['https://github.com/stablyai/orca.git', '/srv', false, null, null]
+    mocks.stateValues = ['https://github.com/stablyai/orca.git', null, '/srv', false, null, null]
     mocks.storeState.repos = []
     mocks.storeState.projects = []
     mocks.storeState.projectHostSetups = []
@@ -124,7 +124,7 @@ describe('useAddRepoCloneFlow', () => {
     })
     await result.handleClone()
 
-    expect(mocks.stateSetters[3]).toHaveBeenCalledWith(cloneError)
+    expect(mocks.stateSetters[4]).toHaveBeenCalledWith(cloneError)
   })
 
   it('clones through the selected runtime environment', async () => {
@@ -184,5 +184,91 @@ describe('useAddRepoCloneFlow', () => {
     await result.handleClone()
 
     expect(mocks.cloneLocal).not.toHaveBeenCalled()
+  })
+
+  it('uses the dedicated bound method and refuses to reuse a choice from another host', async () => {
+    const repo = makeRepo()
+    mocks.callRuntimeRpc.mockResolvedValue({ repo })
+    mocks.fetchWorktrees.mockResolvedValue(true)
+    mocks.stateValues[1] = {
+      choice: { provider: 'github', host: 'github.com', user: 'alice' },
+      url: 'https://github.com/stablyai/orca.git',
+      hostId: 'runtime:env-1',
+      hostToken: 'env-1'
+    }
+    const { useAddRepoCloneFlow } = await import('./useAddRepoCloneFlow')
+    const bound = useAddRepoCloneFlow({
+      step: 'clone',
+      hostId: 'runtime:env-1',
+      activeRuntimeEnvironmentId: 'env-1',
+      workspaceDir: '/local/workspace',
+      fetchWorktrees: mocks.fetchWorktrees,
+      onGitRepoReady: mocks.onGitRepoReady
+    })
+    await bound.handleClone()
+    expect(mocks.callRuntimeRpc).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'env-1' },
+      'repo.cloneBoundGitHub',
+      {
+        url: 'https://github.com/stablyai/orca.git',
+        destination: '/srv',
+        account: { host: 'github.com', user: 'alice' }
+      },
+      { timeoutMs: 10 * 60_000 }
+    )
+
+    mocks.callRuntimeRpc.mockClear()
+    mocks.stateIndex = 0
+    mocks.refIndex = 0
+    const switched = useAddRepoCloneFlow({
+      step: 'clone',
+      hostId: 'runtime:env-2',
+      activeRuntimeEnvironmentId: 'env-2',
+      workspaceDir: '/local/workspace',
+      fetchWorktrees: mocks.fetchWorktrees,
+      onGitRepoReady: mocks.onGitRepoReady
+    })
+    await switched.handleClone()
+    expect(mocks.callRuntimeRpc).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'env-2' },
+      'repo.clone',
+      { url: 'https://github.com/stablyai/orca.git', destination: '/srv' },
+      { timeoutMs: 10 * 60_000 }
+    )
+  })
+
+  it('does not fall back to an unbound clone when an older host lacks the bound method', async () => {
+    mocks.stateValues[1] = {
+      choice: { provider: 'github', host: 'github.com', user: 'alice' },
+      url: 'https://github.com/stablyai/orca.git',
+      hostId: 'runtime:old-host',
+      hostToken: 'old-host'
+    }
+    mocks.callRuntimeRpc.mockRejectedValue(new Error('method_not_found'))
+    const { useAddRepoCloneFlow } = await import('./useAddRepoCloneFlow')
+    const result = useAddRepoCloneFlow({
+      step: 'clone',
+      hostId: 'runtime:old-host',
+      activeRuntimeEnvironmentId: 'old-host',
+      workspaceDir: '/local/workspace',
+      fetchWorktrees: mocks.fetchWorktrees,
+      onGitRepoReady: mocks.onGitRepoReady
+    })
+    await result.handleClone()
+
+    expect(mocks.callRuntimeRpc).toHaveBeenCalledOnce()
+    expect(mocks.callRuntimeRpc).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'old-host' },
+      'repo.cloneBoundGitHub',
+      {
+        url: 'https://github.com/stablyai/orca.git',
+        destination: '/srv',
+        account: { host: 'github.com', user: 'alice' }
+      },
+      { timeoutMs: 10 * 60_000 }
+    )
+    expect(mocks.cloneLocal).not.toHaveBeenCalled()
+    expect(mocks.onGitRepoReady).not.toHaveBeenCalled()
+    expect(mocks.stateSetters[4]).toHaveBeenCalledWith(expect.stringContaining('method_not_found'))
   })
 })

@@ -14,6 +14,7 @@ type WorkspaceKanbanSheetProps = {
   sidebarOpen: boolean
   sidebarWidth: number
   statusBarVisible: boolean
+  embedded?: boolean
 }
 
 export default function WorkspaceKanbanSheet({
@@ -26,7 +27,8 @@ export default function WorkspaceKanbanSheet({
   preserveOpenForMenu,
   sidebarOpen,
   sidebarWidth,
-  statusBarVisible
+  statusBarVisible,
+  embedded = false
 }: WorkspaceKanbanSheetProps): React.JSX.Element {
   const drawerLeft = sidebarOpen ? sidebarWidth : 0
   const drawerLeftCss = sidebarOpen
@@ -53,6 +55,23 @@ export default function WorkspaceKanbanSheet({
     if (pointerX !== null && pointerX < liveDrawerLeft) {
       event.preventDefault()
     }
+  }
+
+  if (embedded) {
+    return (
+      <div
+        className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-worktree-sidebar"
+        data-workspace-board-embedded=""
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !event.defaultPrevented && !event.nativeEvent.isComposing) {
+            event.stopPropagation()
+            onOpenChange(false)
+          }
+        }}
+      >
+        {children}
+      </div>
+    )
   }
 
   return (

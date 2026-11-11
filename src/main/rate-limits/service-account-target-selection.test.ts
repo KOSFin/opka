@@ -66,6 +66,9 @@ vi.mock('../minimax/minimax-cookie-store', () => ({
 
 describe('RateLimitService', () => {
   beforeEach(() => {
+    vi.mocked(fetchClaudeRateLimits).mockReset()
+    vi.mocked(fetchCodexRateLimits).mockReset()
+    vi.mocked(consumeCodexRateLimitResetCredit).mockReset()
     resetRateLimitProviderMocks()
   })
 
@@ -249,7 +252,10 @@ describe('RateLimitService', () => {
     )
     vi.mocked(fetchCodexRateLimits).mockResolvedValueOnce(okProvider('codex', 0, Date.now()))
 
-    service.setCodexHomePathResolver(() => ({ kind: 'ready', codexHomePath: '/tmp/new-selection' }))
+    service.setCodexHomePathResolver(() => ({
+      kind: 'ready',
+      codexHomePath: '/tmp/approved-selection'
+    }))
     const pending = service.consumeCodexRateLimitResetCredit({
       idempotencyKey,
       target: { runtime: 'host', wslDistro: null },

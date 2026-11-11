@@ -1,3 +1,8 @@
+import {
+  projectTaskDelegationHandler,
+  requireProjectTaskDelegationHost
+} from './project-task-delegation'
+import { PROJECT_TASK_DELEGATION_CAPABILITY } from '../../shared/project-task-delegation'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import type { CommandHandler, HandlerContext } from '../dispatch'
@@ -77,6 +82,10 @@ function handler(operation: string): CommandHandler {
   return async (ctx) => {
     const target = worktree(ctx)
     const params: Record<string, unknown> = { worktree: target }
+    if (ctx.flags.has('delegated')) {
+      await requireProjectTaskDelegationHost(ctx)
+      params.delegationCapability = PROJECT_TASK_DELEGATION_CAPABILITY
+    }
     if (
       [
         'show',
@@ -132,6 +141,9 @@ function handler(operation: string): CommandHandler {
         throw new RuntimeClientError('invalid_argument', 'Launch JSON must be an object')
       }
       params.launch = { ...launch, spec: 'approved-project-plan' }
+      if (ctx.flags.has('delegated')) {
+        params.requestId = getRequiredStringFlag(ctx.flags, 'request-id')
+      }
     }
     if (['claim', 'progress', 'complete'].includes(operation)) {
       params.revision = getRequiredStringFlag(ctx.flags, 'revision')
@@ -197,6 +209,7 @@ function handler(operation: string): CommandHandler {
 }
 
 export const PROJECT_TASK_HANDLERS: Record<string, CommandHandler> = {
+  'project-task delegated': projectTaskDelegationHandler,
   'project-task init': handler('init'),
   'project-task list': handler('list'),
   'project-task show': handler('show'),

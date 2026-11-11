@@ -1,4 +1,5 @@
 import { OrchestrationError } from '../../orchestration/orchestration-error'
+import { NativeCliControlError } from '../../../../shared/native-cli-control-error'
 import type { AgentLaunchTarget } from '../../../../shared/agent-launch-intent'
 import {
   WorktreeCreateCollisionError,
@@ -33,13 +34,17 @@ const REFUSAL_TEXT_MAX_LENGTH = 4096 + LAUNCH_FAILURE_CODE_MAX_LENGTH
  */
 export function agentLaunchFailureCode(error: unknown): string {
   const code =
-    error instanceof OrchestrationError ? error.code : error instanceof Error ? error.message : ''
+    error instanceof OrchestrationError || error instanceof NativeCliControlError
+      ? error.code
+      : error instanceof Error
+        ? error.message
+        : ''
   return code.length > 0 ? code.slice(0, LAUNCH_FAILURE_CODE_MAX_LENGTH) : 'agent_launch_failed'
 }
 
 /** A coded refusal's own words, kept beside its code so a replay says the same; bounded likewise. */
 export function agentLaunchFailureMessage(error: unknown): string | undefined {
-  return error instanceof OrchestrationError
+  return error instanceof OrchestrationError || error instanceof NativeCliControlError
     ? error.message.slice(0, REFUSAL_TEXT_MAX_LENGTH)
     : undefined
 }

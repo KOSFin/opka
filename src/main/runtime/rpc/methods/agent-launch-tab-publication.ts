@@ -219,7 +219,7 @@ export async function publishAgentLaunchTabEarly(
   })
 }
 
-function trackEarlyAgentLaunchTab(args: {
+export function trackEarlyAgentLaunchTab(args: {
   paneKey: string
   publishing: Promise<AgentLaunchTabPublished>
   finishRunning: (verdict: AgentLaunchPaneVerdict) => void

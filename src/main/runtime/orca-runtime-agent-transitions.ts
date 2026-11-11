@@ -1,3 +1,8 @@
+import { reportNativeCliStartupPaneVerdict } from './native-cli-startup-pane-verdict'
+import type {
+  AgentLaunchPaneAddress,
+  AgentLaunchPaneVerdict
+} from '../../shared/agent-launch-pane-verdict'
 import { AgentTransitionDetector } from '../agent-hooks/agent-transition-detector'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { parsePaneKey } from '../../shared/stable-pane-id'
@@ -16,6 +21,15 @@ import {
  * runs here. Both run on every host and in every build.
  */
 export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMigrationCatalog {
+  /** Tells the window a launch pane's fate: it keeps a final one on the tab, clears a settled one,
+   *  and takes a withdrawn pane back (the pane alone when the user split the tab). */
+  reportAgentLaunchPaneVerdict(
+    pane: AgentLaunchPaneAddress,
+    verdict: AgentLaunchPaneVerdict
+  ): void {
+    reportNativeCliStartupPaneVerdict(this, this.notifier, pane, verdict)
+  }
+
   readonly agentTransitions = new AgentTransitionDetector({
     resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),

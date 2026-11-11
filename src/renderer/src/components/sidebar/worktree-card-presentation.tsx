@@ -103,6 +103,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
   const showBranch =
     !isFolder &&
     branch.length > 0 &&
+    card.prDisplay?.state !== 'merged' &&
     !newCardStyle &&
     (!compactCards || branch !== worktree.displayName)
   // Why: rebases already surface in source control, so dense cards skip the persistent rebase chip.

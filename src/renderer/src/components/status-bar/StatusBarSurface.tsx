@@ -5,11 +5,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { lazyWithRetry } from '@/lib/lazy-with-retry'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { translate } from '@/i18n/i18n'
 import { UsageAccountsProvider } from './UsageAccountsContext'
 import { getUsageOwnerHostScope } from './use-owner-usage-rate-limits'
@@ -27,8 +23,6 @@ import { CaffeinateStatusSegment } from './CaffeinateStatusSegment'
 import { RemoteServerUpdateStatusSegment } from './RemoteServerUpdateStatusSegment'
 import { TOGGLE_FLOATING_TERMINAL_EVENT } from '@/lib/floating-terminal'
 import { FloatingTerminalIconContextMenu } from '@/components/floating-terminal/FloatingTerminalIconContextMenu'
-import { ClaudeSwitcherMenu } from './ClaudeSwitcherMenu'
-import { CodexSwitcherMenu } from './CodexSwitcherMenu'
 import { ProviderDetailsMenu } from './ProviderDetailsMenu'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import { ProviderSegment, UsageOverflowChip, getUsageTone } from './StatusBarProviderSegment'
@@ -147,12 +141,8 @@ export function StatusBarSurface({
           ) : hasVisibleUsageMeters || hasPinnedUsage ? (
             // Consolidated roster pill → opens the all-agents Usage popover (mock parity).
             <StatusBarUsageChangeNotices hasVisibleUsageMeters={hasVisibleUsageMeters}>
-              <DropdownMenu
-                open={usageMenuOpen}
-                onOpenChange={handleUsageMenuOpenChange}
-                modal={false}
-              >
-                <DropdownMenuTrigger asChild>
+              <Popover open={usageMenuOpen} onOpenChange={handleUsageMenuOpenChange}>
+                <PopoverTrigger asChild>
                   <button
                     type="button"
                     className="inline-flex items-center gap-3 rounded px-1 py-0.5 hover:bg-accent/70"
@@ -207,89 +197,73 @@ export function StatusBarSurface({
                       }
                     />
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
+                </PopoverTrigger>
+                <PopoverContent
                   {...STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS}
+                  aria-label={translate(
+                    'auto.components.status.bar.UsageRosterPanel.title',
+                    'Usage'
+                  )}
                   side="top"
                   align="start"
                   sideOffset={8}
                   // Keep the popover (and its drill-in submenus) above the status
                   // bar instead of overlapping it — bottom padding ≈ footer height.
                   collisionPadding={{ top: 8, bottom: 32, left: 8, right: 8 }}
-                  className="w-[360px] p-0"
+                  className="w-[640px] max-w-[calc(100vw-2rem)]"
+                  wheelScroll
                   onPointerDownOutside={usageMenuFocusHandoff.onPointerDownOutside}
                   onCloseAutoFocus={usageMenuFocusHandoff.onCloseAutoFocus}
                 >
-                  <UsageAccountsProvider
-                    target={getUsageOwnerHostScope(remoteOwner)}
-                    snapshot={accountSnapshot ?? null}
-                    verified={accountsVerified ?? false}
-                    rateLimits={ownerRateLimits}
-                    ownerLabel={
-                      remoteOwner?.label ?? translate('usage.accounts.localHost', 'This computer')
-                    }
-                  >
-                    <UsageRosterPanel
-                      providers={rosterProviders}
-                      display={usagePercentageDisplay}
-                      statusBarUsageMode={statusBarUsageMode}
-                      onStatusBarUsageModeChange={setStatusBarUsageMode}
-                      isRefreshing={isRefreshing || anyFetching}
-                      onRefresh={handleRefresh}
-                      onOpenProvider={handleOpenProviderAccounts}
-                      onSignIn={handleOpenProviderAccounts}
-                      canSignIn={canSignInFromUsageRow}
-                      onManageAccounts={handleManageAccounts}
-                      onUsageDetails={handleUsageDetails}
-                      renderRow={(p, rowNode) => {
-                        // Why: a placeholder has nothing to drill into; its row opens the host's accounts.
-                        if (isOwnerNotSetUpPlaceholder(p)) {
-                          return null
-                        }
-                        // Every provider drills into its detail panel (parity with the
-                        // per-provider dropdowns on main); Claude/Codex additionally get
-                        // the account switcher + runtime toggle + Codex reset credits.
-                        if (p.provider === 'claude') {
+                  <div className="max-h-(--radix-popover-content-available-height) overflow-y-auto scrollbar-sleek">
+                    <UsageAccountsProvider
+                      target={getUsageOwnerHostScope(remoteOwner)}
+                      snapshot={accountSnapshot ?? null}
+                      verified={accountsVerified ?? false}
+                      rateLimits={ownerRateLimits}
+                      ownerLabel={
+                        remoteOwner?.label ?? translate('usage.accounts.localHost', 'This computer')
+                      }
+                    >
+                      <UsageRosterPanel
+                        providers={rosterProviders}
+                        display={usagePercentageDisplay}
+                        statusBarUsageMode={statusBarUsageMode}
+                        onStatusBarUsageModeChange={setStatusBarUsageMode}
+                        isRefreshing={isRefreshing || anyFetching}
+                        onRefresh={handleRefresh}
+                        onOpenProvider={handleOpenProviderAccounts}
+                        onSignIn={handleOpenProviderAccounts}
+                        canSignIn={canSignInFromUsageRow}
+                        onManageAccounts={handleManageAccounts}
+                        onUsageDetails={handleUsageDetails}
+                        renderRow={(p, rowNode) => {
+                          // Why: a placeholder has nothing to drill into; its row opens the host's accounts.
+                          if (isOwnerNotSetUpPlaceholder(p)) {
+                            return null
+                          }
+                          if (p.provider === 'claude' || p.provider === 'codex') {
+                            return null
+                          }
                           return (
-                            <ClaudeSwitcherMenu
-                              claude={p}
+                            <ProviderDetailsMenu
+                              provider={p}
                               compact={compact}
                               iconOnly={false}
-                              asSubmenu
                               triggerContent={rowNode}
+                              ariaLabel={translate(
+                                'auto.components.status.bar.UsageRosterPanel.openDetails',
+                                'Open usage details'
+                              )}
                             />
                           )
-                        }
-                        if (p.provider === 'codex') {
-                          return (
-                            <CodexSwitcherMenu
-                              codex={p}
-                              compact={compact}
-                              iconOnly={false}
-                              asSubmenu
-                              triggerContent={rowNode}
-                            />
-                          )
-                        }
-                        return (
-                          <ProviderDetailsMenu
-                            provider={p}
-                            compact={compact}
-                            iconOnly={false}
-                            asSubmenu
-                            triggerContent={rowNode}
-                            ariaLabel={translate(
-                              'auto.components.status.bar.UsageRosterPanel.openDetails',
-                              'Open usage details'
-                            )}
-                          />
-                        )
-                      }}
-                    />
-                    <UsagePinnedAccountSettings />
-                  </UsageAccountsProvider>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                        }}
+                      />
+                      <UsagePinnedAccountSettings />
+                    </UsageAccountsProvider>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </StatusBarUsageChangeNotices>
           ) : null}
           {anyVisible && !isEmptyUsageState && (

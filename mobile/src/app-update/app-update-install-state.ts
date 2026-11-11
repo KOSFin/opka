@@ -1,15 +1,33 @@
 import { useSyncExternalStore } from 'react'
 
-type InstallPhase = 'idle' | 'preparing' | 'downloading' | 'verifying' | 'installer' | 'failed'
+type InstallPhase =
+  | 'idle'
+  | 'preparing'
+  | 'downloading'
+  | 'cancelling'
+  | 'cancelled'
+  | 'verifying'
+  | 'installer'
+  | 'failed'
 export type AppUpdateInstallState = {
   phase: InstallPhase
   label: string | null
   busy: boolean
+  canCancel: boolean
 }
-let state: AppUpdateInstallState = { phase: 'idle', label: null, busy: false }
+let state: AppUpdateInstallState = { phase: 'idle', label: null, busy: false, canCancel: false }
 const listeners = new Set<() => void>()
-export function publishAppUpdateInstall(phase: InstallPhase, label: string | null): void {
-  state = { phase, label, busy: ['preparing', 'downloading', 'verifying'].includes(phase) }
+export function publishAppUpdateInstall(
+  phase: InstallPhase,
+  label: string | null,
+  canCancel = false
+): void {
+  state = {
+    phase,
+    label,
+    busy: ['preparing', 'downloading', 'cancelling', 'verifying'].includes(phase),
+    canCancel: (phase === 'downloading' || phase === 'verifying') && canCancel
+  }
   for (const listener of listeners) {
     listener()
   }

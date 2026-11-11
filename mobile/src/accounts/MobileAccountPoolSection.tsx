@@ -36,10 +36,11 @@ export function MobileAccountPoolSection({
   const saveSequence = useRef<number | null>(null)
   const previousProjection = useRef<number | string | undefined>(undefined)
   const generation = client?.getGeneration?.() ?? 0
-  const ownerClient = useRef({ client, generation })
-  const latestOwner = useRef({ client, generation })
-  latestOwner.current = { client, generation }
+  const ownerClient = useRef({ client, generation, hostName })
+  const latestOwner = useRef({ client, generation, hostName })
+  latestOwner.current = { client, generation, hostName }
   const verifiedOwner = useRef<typeof ownerClient.current | null>(null)
+  const reasonPending = useRef(false)
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -51,6 +52,7 @@ export function MobileAccountPoolSection({
     mounted.current &&
     owner.client === latestOwner.current.client &&
     owner.generation === latestOwner.current.generation &&
+    owner.hostName === latestOwner.current.hostName &&
     owner.generation === (owner.client?.getGeneration?.() ?? 0)
   const [view, setView] = useState<AccountPoolView | null>(null)
   const [drafts, setDrafts] = useState<AccountPoolPolicy[]>([])
@@ -62,9 +64,10 @@ export function MobileAccountPoolSection({
     if (!client || !connected || busy || saveSequence.current !== null) {
       return
     }
-    const requestOwner = { client, generation }
+    const requestOwner = { client, generation, hostName }
     const sequence = ++readSequence.current
     setBusy(true)
+    reasonPending.current = true
     setSaved(false)
     setError('')
     try {
@@ -74,10 +77,12 @@ export function MobileAccountPoolSection({
         return
       }
       verifiedOwner.current = requestOwner
+      reasonPending.current = false
       setView(next)
       setDrafts((previous) => mergeMobileAccountPoolDrafts(next, previous, dirty.current))
     } catch (cause) {
       if (owns(requestOwner) && sequence === readSequence.current) {
+        reasonPending.current = false
         setError(cause instanceof Error ? cause.message : String(cause))
       }
     } finally {
@@ -85,13 +90,18 @@ export function MobileAccountPoolSection({
         setBusy(false)
       }
     }
-  }, [client, connected, generation, refreshUsage, busy])
+  }, [client, connected, generation, hostName, refreshUsage, busy])
   useEffect(() => {
     let stale = false
-    const requestOwner = { client, generation }
-    if (ownerClient.current.client !== client || ownerClient.current.generation !== generation) {
+    const requestOwner = { client, generation, hostName }
+    if (
+      ownerClient.current.client !== client ||
+      ownerClient.current.generation !== generation ||
+      ownerClient.current.hostName !== hostName
+    ) {
       ownerClient.current = requestOwner
       verifiedOwner.current = null
+      reasonPending.current = false
       previousProjection.current = undefined
       readSequence.current += 1
       saveSequence.current = null
@@ -110,6 +120,7 @@ export function MobileAccountPoolSection({
       return
     }
     previousProjection.current = refreshKey
+    reasonPending.current = true
     const sequence = ++readSequence.current
     void accountPoolsRead
       .request(client)
@@ -119,21 +130,23 @@ export function MobileAccountPoolSection({
         }
         const next = accountPoolsRead.interpret(result)
         verifiedOwner.current = requestOwner
+        reasonPending.current = false
         setView(next)
         setDrafts((previous) => mergeMobileAccountPoolDrafts(next, previous, dirty.current))
         setError('')
       })
       .catch((cause: unknown) => {
         if (!stale && owns(requestOwner) && sequence === readSequence.current) {
+          reasonPending.current = false
           setError(cause instanceof Error ? cause.message : String(cause))
         }
       })
     return () => {
       stale = true
     }
-  }, [client, connected, refreshKey, generation, busy])
+  }, [client, connected, refreshKey, generation, hostName, busy])
   function change(policy: AccountPoolPolicy) {
-    if (!owns({ client, generation })) {
+    if (!owns({ client, generation, hostName })) {
       return
     }
     dirty.current.add(policy.id)
@@ -151,7 +164,7 @@ export function MobileAccountPoolSection({
     ) {
       return
     }
-    const requestOwner = { client, generation }
+    const requestOwner = { client, generation, hostName }
     const sequence = ++readSequence.current
     saveSequence.current = sequence
     setBusy(true)
@@ -172,6 +185,7 @@ export function MobileAccountPoolSection({
         return
       }
       setView(next)
+      reasonPending.current = false
       dirty.current.delete(policy.id)
       setDrafts((previous) => mergeMobileAccountPoolDrafts(next, previous, dirty.current))
       setSaved(true)
@@ -189,7 +203,7 @@ export function MobileAccountPoolSection({
     }
   }
   function pick(value: string) {
-    if (!owns({ client, generation })) {
+    if (!owns({ client, generation, hostName })) {
       return
     }
     const policy = drafts.find((entry) => entry.id === picker?.policyId)
@@ -260,10 +274,19 @@ export function MobileAccountPoolSection({
               policy={policy}
               routingTarget={{ client, connected, hostName }}
               view={view}
+              verified={
+                connected &&
+                !busy &&
+                !error &&
+                !reasonPending.current &&
+                previousProjection.current === refreshKey &&
+                !!verifiedOwner.current &&
+                owns(verifiedOwner.current)
+              }
               disabled={disabled}
               dirty={dirty.current.has(policy.id)}
               onDiscard={() => {
-                if (!owns({ client, generation })) {
+                if (!owns({ client, generation, hostName })) {
                   return
                 }
                 dirty.current.delete(policy.id)
@@ -277,7 +300,7 @@ export function MobileAccountPoolSection({
               onChange={change}
               onSave={() => void save(policy)}
               onPick={(accountId) => {
-                if (!owns({ client, generation })) {
+                if (!owns({ client, generation, hostName })) {
                   return
                 }
                 setPicker({

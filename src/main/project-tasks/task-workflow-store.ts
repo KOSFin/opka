@@ -1,3 +1,5 @@
+import { TaskDelegationPolicy, type DelegationContext } from './task-delegation-policy'
+import { captureTaskAdmission, taskAdmission, taskResultAccepted } from './task-authorization'
 import { randomUUID } from 'node:crypto'
 import type { OrchestrationDb } from '../runtime/orchestration/db'
 import type { ProjectTaskEntry } from '../../shared/project-task-contract'
@@ -14,9 +16,11 @@ type Item = {
 }
 
 export class TaskWorkflowStore {
+  readonly delegation = new TaskDelegationPolicy(this)
+
   constructor(readonly native: OrchestrationDb) {}
 
-  register(projectId: string, root: string, task: ProjectTaskEntry): void {
+  private registerHome(projectId: string, root: string): void {
     const home = this.native.db
       .prepare('SELECT root_path FROM project_task_homes WHERE project_id = ?')
       .get(projectId)
@@ -24,8 +28,14 @@ export class TaskWorkflowStore {
       throw new Error('Project ID already belongs to another root; explicit relocation is required')
     }
     this.native.db
-      .prepare('INSERT OR IGNORE INTO project_task_homes(project_id,root_path) VALUES (?,?)')
+      .prepare(
+        'INSERT INTO project_task_homes(project_id,root_path) VALUES (?,?) ON CONFLICT(project_id) DO NOTHING'
+      )
       .run(projectId, root)
+  }
+
+  register(projectId: string, root: string, task: ProjectTaskEntry): void {
+    this.registerHome(projectId, root)
     const change = this.native.db
       .prepare(`INSERT INTO project_task_items(project_id,task_id,document_path,current_revision)
       VALUES (?,?,?,?) ON CONFLICT(project_id,task_id) DO UPDATE SET
@@ -34,8 +44,31 @@ export class TaskWorkflowStore {
       document_path=excluded.document_path,current_revision=excluded.current_revision
       WHERE document_path<>excluded.document_path OR current_revision<>excluded.current_revision`)
       .run(projectId, task.id, task.path, task.revision)
+    this.native.db
+      .prepare(`INSERT INTO project_task_graph(project_id,task_id,parent_id,dependencies_json)
+      VALUES (?,?,?,?) ON CONFLICT(project_id,task_id) DO UPDATE SET
+      parent_id=excluded.parent_id,dependencies_json=excluded.dependencies_json`)
+      .run(projectId, task.id, task.parent, JSON.stringify(task.depends_on))
     if (change.changes) {
       scheduleProjectTaskActivity(this.native.db)
+    }
+  }
+
+  syncGraph(projectId: string, root: string, tasks: ProjectTaskEntry[]): void {
+    if (tasks.length > 1000) {
+      throw new Error('Project task graph capacity exceeded')
+    }
+    const apply = () => {
+      this.registerHome(projectId, root)
+      this.native.db.prepare('DELETE FROM project_task_graph WHERE project_id=?').run(projectId)
+      for (const task of tasks) {
+        this.register(projectId, root, task)
+      }
+    }
+    if (this.native.db.isTransaction) {
+      apply()
+    } else {
+      this.transaction(apply)
     }
   }
 
@@ -112,9 +145,14 @@ export class TaskWorkflowStore {
     )
   }
 
-  requireReady(projectId: string, task: ProjectTaskEntry, dependencies: ProjectTaskEntry[]): void {
+  requireReady(
+    projectId: string,
+    task: ProjectTaskEntry,
+    dependencies: ProjectTaskEntry[],
+    context?: DelegationContext
+  ): void {
     const state = this.item(projectId, task.id)
-    if (state.archived || state.approved_revision !== task.revision || state.phase === 'done') {
+    if (!taskAdmission(this, projectId, task, context) || state.phase === 'done') {
       throw new Error('Approve the current plan revision before starting')
     }
     if (this.active(projectId, task.id)) {
@@ -124,12 +162,7 @@ export class TaskWorkflowStore {
       throw new Error('An operator must return this task to ready before another attempt')
     }
     for (const dependency of dependencies) {
-      const item = this.item(projectId, dependency.id)
-      if (
-        item.phase !== 'done' ||
-        item.current_revision !== dependency.revision ||
-        item.approved_revision !== dependency.revision
-      ) {
+      if (!taskResultAccepted(this, projectId, dependency)) {
         throw new Error('A business dependency has not been accepted at its current revision')
       }
     }
@@ -139,9 +172,10 @@ export class TaskWorkflowStore {
     projectId: string,
     task: ProjectTaskEntry,
     runId: string,
-    dependencies: ProjectTaskEntry[]
+    dependencies: ProjectTaskEntry[],
+    context?: DelegationContext
   ) {
-    this.requireReady(projectId, task, dependencies)
+    this.requireReady(projectId, task, dependencies, context)
     const nativeTask = this.native.createTask({
       runId,
       spec: projectTaskAttemptSpec(
@@ -160,6 +194,7 @@ export class TaskWorkflowStore {
         'INSERT INTO project_task_attempts(id,project_id,task_id,revision,native_task_id,run_id) VALUES (?,?,?,?,?,?)'
       )
       .run(id, projectId, task.id, task.revision, nativeTask.id, runId)
+    captureTaskAdmission(this, projectId, task, id, context)
     this.native.db
       .prepare("UPDATE project_task_items SET phase='active' WHERE project_id=? AND task_id=?")
       .run(projectId, task.id)
@@ -247,10 +282,11 @@ export class TaskWorkflowStore {
     )
   }
 
-  transaction<T>(operation: () => T): T {
+  transaction<T>(operation: () => T, beforeCommit: () => void = () => {}): T {
     this.native.db.exec('BEGIN IMMEDIATE')
     try {
       const result = operation()
+      beforeCommit()
       this.native.db.exec('COMMIT')
       return result
     } catch (error) {

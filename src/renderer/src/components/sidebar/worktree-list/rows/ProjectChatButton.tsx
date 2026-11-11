@@ -118,6 +118,12 @@ export function ProjectChatButton({
         onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
+        <p className="max-w-64 border-b px-3 py-2 text-xs text-muted-foreground">
+          {scope.kind === 'project' ? 'Project folder' : 'Repository'} working directory:{' '}
+          <span className="break-all text-foreground">
+            {scope.kind === 'project' ? (scope.group.parentPath ?? 'Unavailable') : scope.repo.path}
+          </span>
+        </p>
         {worktreeId ? (
           <QuickLaunchAgentMenuItems
             worktreeId={worktreeId}

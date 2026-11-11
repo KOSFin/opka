@@ -19,6 +19,9 @@ export function createUiViewActions(set: UISliceSet, get: UISliceGet): Partial<U
     pendingAutomationRunNavigation: null,
     setPendingAutomationRunNavigation: (navigation) =>
       set({ pendingAutomationRunNavigation: navigation }),
+    pendingCommandAutomationReportNavigation: null,
+    setPendingCommandAutomationReportNavigation: (navigation) =>
+      set({ pendingCommandAutomationReportNavigation: navigation }),
     openAutomationsPage: () => {
       get().recordViewVisit('automations')
       set((state) => ({

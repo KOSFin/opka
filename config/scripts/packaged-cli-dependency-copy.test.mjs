@@ -38,7 +38,8 @@ describe('packaged CLI dependency copying', () => {
         bundle,
         () => undefined,
         undefined,
-        (context) => calls.push(context)
+        (context) => calls.push(context),
+        () => undefined
       )
       expect(calls).toEqual([{ platform: { nodeName: process.platform }, arch: process.arch }])
     } finally {

@@ -288,7 +288,12 @@ export function renderWorktreeSectionHeaderRow(args: {
             {isRepoHeader || isProjectGroupHeader ? (
               <ProjectTreeTitle
                 label={label}
-                repoIcon={row.repo?.repoIcon}
+                repoIcon={
+                  row.repo?.repoIcon ??
+                  (row.projectGroup && 'createdFrom' in row.projectGroup
+                    ? row.projectGroup.groupIcon
+                    : undefined)
+                }
                 repoColor={repoHeaderColor}
                 kind={
                   isRepoHeader

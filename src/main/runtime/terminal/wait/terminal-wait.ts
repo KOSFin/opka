@@ -1,3 +1,4 @@
+import { currentNativeCliStartup } from '../../native-cli-startup'
 import type {
   RuntimeTerminalWait as RuntimeTerminalWaitResult,
   RuntimeTerminalWaitCondition
@@ -86,6 +87,11 @@ export class RuntimeTerminalWait {
     const condition = options?.condition ?? 'exit'
     const pty = this.deps.getLivePty(handle)
     if (pty) {
+      const startup =
+        options?.launchReadiness && condition !== 'exit' ? currentNativeCliStartup(pty.pty) : null
+      if (startup?.refusal) {
+        throw startup.refusal
+      }
       if (condition === 'exit' && !pty.pty.connected) {
         return buildPtyTerminalWaitResult(handle, condition, pty.pty)
       }
@@ -101,6 +107,13 @@ export class RuntimeTerminalWait {
         return buildPtyTerminalWaitBlockedResult(handle, condition, pty.pty, ptyVerdict.reason)
       }
       if (ptyVerdict?.kind === 'ready-strong') {
+        if (
+          startup &&
+          this.deps.getLivePty(handle)?.pty === pty.pty &&
+          currentNativeCliStartup(pty.pty) === startup
+        ) {
+          startup.finish('prepared')
+        }
         return buildPtyTerminalWaitResult(handle, condition, pty.pty)
       }
       return await new Promise<RuntimeTerminalWaitResult>((resolve, reject) => {
@@ -118,7 +131,20 @@ export class RuntimeTerminalWait {
           timeout: null,
           cancelIdlePoll: null,
           abortCleanup: null,
-          ...(options?.launchReadiness ? { launchReadiness: true } : {})
+          ...(options?.launchReadiness
+            ? {
+                launchReadiness: true,
+                onLaunchReady: () => {
+                  if (
+                    startup &&
+                    this.deps.getLivePty(handle)?.pty === pty.pty &&
+                    currentNativeCliStartup(pty.pty) === startup
+                  ) {
+                    startup.finish('prepared')
+                  }
+                }
+              }
+            : {})
         }
         if (!this.waiters.bindAbort(waiter, options?.signal)) {
           reject(new Error('request_aborted'))
@@ -131,6 +157,17 @@ export class RuntimeTerminalWait {
           }, effectiveTimeoutMs)
         }
         this.waiters.add(waiter)
+        if (startup) {
+          const abortCleanup = waiter.abortCleanup
+          const unsubscribe = startup.onRefusal((error) => {
+            this.waiters.remove(waiter)
+            reject(error)
+          })
+          waiter.abortCleanup = () => {
+            abortCleanup?.()
+            unsubscribe()
+          }
+        }
         const live = this.deps.getLivePty(handle)
         if (!live) {
           this.waiters.remove(waiter)

@@ -44,11 +44,12 @@ export function createNativeCliTerminalOwnerReader(
       if (authority && pane.ptyId !== authority.ptyId) {
         return null
       }
-      const incarnation = verified?.processIncarnation ?? external?.incarnationId
+      const incarnation = verified ? pane.incarnationId : external?.incarnationId
       return pane.connected &&
         pane.executionHostId === 'local' &&
         pane.ptyId &&
         pane.incarnationId === incarnation &&
+        (!verified || authority?.processIncarnation === `${pane.ptyId}:${incarnation}`) &&
         incarnation
         ? { paneKey, ptyId: pane.ptyId, incarnationId: incarnation }
         : null

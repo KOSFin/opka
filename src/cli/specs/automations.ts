@@ -23,6 +23,70 @@ const AUTOMATION_STATE_FLAGS = [
 
 export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
   {
+    path: ['automations', 'command', 'list'],
+    summary: 'List command automations on this execution host',
+    usage: 'orca automations command list [--json]',
+    allowedFlags: [...GLOBAL_FLAGS]
+  },
+  {
+    path: ['automations', 'command', 'show'],
+    summary: 'Show a command automation',
+    usage: 'orca automations command show <id> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id'],
+    positionalArgs: ['id']
+  },
+  {
+    path: ['automations', 'command', 'create'],
+    summary: 'Create a versioned command automation from a bounded JSON file',
+    usage: 'orca automations command create --execution-file <path> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'execution-file'],
+    notes: [
+      'The file contains a strict V1 command definition, at most 128 KiB. Unsupported hosts refuse before any effect.'
+    ]
+  },
+  {
+    path: ['automations', 'command', 'edit'],
+    summary: 'Edit a versioned command automation',
+    usage:
+      'orca automations command edit <id> --expected-revision <n> --execution-file <path> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'expected-revision', 'execution-file'],
+    positionalArgs: ['id'],
+    notes: ['The file contains a strict sparse V1 definition update. Omitted fields are preserved.']
+  },
+  {
+    path: ['automations', 'command', 'remove'],
+    destructive: true,
+    summary: 'Remove a command automation',
+    usage: 'orca automations command remove <id> --expected-revision <n> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'expected-revision'],
+    positionalArgs: ['id']
+  },
+  {
+    path: ['automations', 'command', 'run'],
+    summary: 'Run a command automation with an explicit replay key',
+    usage:
+      'orca automations command run <id> --expected-revision <n> --request-key <key> --request-created-at <unix-ms> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'expected-revision', 'request-key', 'request-created-at'],
+    positionalArgs: ['id'],
+    notes: [
+      'Reuse the same key and creation timestamp after a lost reply. A missing V2 host never falls back to an agent automation.'
+    ]
+  },
+  {
+    path: ['automations', 'command', 'cancel'],
+    summary: 'Request cancellation of an owned command run',
+    usage: 'orca automations command cancel <id> --run-id <run-id> --request-key <key> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'run-id', 'request-key'],
+    positionalArgs: ['id']
+  },
+  {
+    path: ['automations', 'command', 'runs'],
+    summary: 'Read command automation run history and report references',
+    usage: 'orca automations command runs <id> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id'],
+    positionalArgs: ['id']
+  },
+  {
     path: ['automations', 'list'],
     summary: 'List scheduled Orca automations',
     usage: 'orca automations list [--json]',

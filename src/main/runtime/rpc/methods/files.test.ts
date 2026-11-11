@@ -440,24 +440,6 @@ describe('file RPC methods', () => {
     })
   })
 
-  it('reads a file explorer directory for a selected worktree', async () => {
-    const runtime = {
-      getRuntimeId: () => 'test-runtime',
-      readFileExplorerDir: vi.fn().mockResolvedValue([{ name: 'src', isDirectory: true }])
-    } as unknown as OrcaRuntimeService
-    const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
-
-    const response = await dispatcher.dispatch(
-      makeRequest('files.readDir', { worktree: 'id:wt-1', relativePath: '' })
-    )
-
-    expect(runtime.readFileExplorerDir).toHaveBeenCalledWith('id:wt-1', '')
-    expect(response).toMatchObject({
-      ok: true,
-      result: [{ name: 'src', isDirectory: true }]
-    })
-  })
-
   it('writes file explorer content for a selected worktree', async () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',

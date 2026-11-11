@@ -1,3 +1,4 @@
+import { prepareNativeAgentExec, nativeAgentStartupParentContext } from './native-agent-prepare'
 import { nativeCodexLaunchContext } from '../shared/native-codex-launch-context'
 import { nativeCodexPositionalCommand, nativeCodexUsesRemote } from '../shared/codex-global-options'
 import { randomUUID } from 'node:crypto'
@@ -21,7 +22,6 @@ import { NATIVE_CLI_PTY_CHILD_ENV } from '../shared/native-cli-terminal'
 import { shouldUseRendererBackedInteractiveTerminal } from './codex-command-classification'
 import { quotePosixShell } from '../shared/shell-argument-quoting'
 import { nativeCliLaunchArguments } from '../shared/native-cli-launch-arguments'
-import { nativeCliParentTerminalContext } from '../shared/native-cli-parent-terminal'
 import { resolveUnwrappedNativeCliCommand } from '../shared/native-cli-unwrapped-command'
 
 /** Passthrough args belong to the native CLI, including flags unknown to this Opka version. */
@@ -69,7 +69,7 @@ export async function runNativeAgentExec(
     shouldUseRendererBackedInteractiveTerminal([provider, ...args].map(quotePosixShell).join(' '))
   )
   const { result }: { result: NativeCliAccountLaunch } = needsAccount
-    ? await client.call<NativeCliAccountLaunch>('accounts.prepareNativeCliLaunch', {
+    ? await prepareNativeAgentExec(client, {
         provider,
         launchId,
         ...(provider === 'claude'
@@ -83,7 +83,7 @@ export async function runNativeAgentExec(
         ...(provider === 'claude' && !interactive && process.platform !== 'win32'
           ? { stdio: true }
           : {}),
-        ...nativeCliParentTerminalContext(process.env),
+        ...(await nativeAgentStartupParentContext(process.env)),
         ...codexOptions
       })
     : {

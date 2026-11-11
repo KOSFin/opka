@@ -35,7 +35,8 @@ export function registerProjectGroupHandlers(mainWindow: BrowserWindow, store: S
       parentPath: args.parentPath ?? null,
       connectionId: args.connectionId ?? null,
       parentGroupId: args.parentGroupId ?? null,
-      createdFrom: args.createdFrom ?? 'manual'
+      createdFrom: args.createdFrom ?? 'manual',
+      groupIcon: args.groupIcon
     })
     notifyReposChanged(mainWindow)
     return group

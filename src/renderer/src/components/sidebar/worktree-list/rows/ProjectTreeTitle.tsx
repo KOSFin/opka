@@ -73,7 +73,7 @@ export function ProjectTreeTitle({
       ) : (
         <span className="size-5 shrink-0" aria-hidden />
       )}
-      {kind === 'repository' && repoIcon ? (
+      {repoIcon ? (
         <RepoIconGlyph repoIcon={repoIcon} color={repoColor} className="size-3.5 shrink-0" />
       ) : (
         <Icon

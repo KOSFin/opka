@@ -5,6 +5,10 @@ import type {
   DocPreviewFileAccessResult
 } from '../../shared/doc-preview-file-access'
 import type { DirEntry, FsChangeEvent, MarkdownDocument } from '../../shared/filesystem-entry-types'
+import type {
+  FileExplorerDirectoryPage,
+  FileExplorerDirectoryPageOptions
+} from '../../shared/file-explorer-directory-page'
 import type { WorkspaceSpaceDirectoryScanResult } from '../../shared/workspace-space-types'
 
 export type FileStat = {
@@ -54,6 +58,11 @@ export class FileRangeReadUnsupportedError extends Error {
 
 export type IFilesystemProvider = {
   readDir(dirPath: string, options?: { followSymlinks?: boolean }): Promise<DirEntry[]>
+  readDirPage?(
+    dirPath: string,
+    selector: string,
+    options?: FileExplorerDirectoryPageOptions
+  ): Promise<FileExplorerDirectoryPage>
   readFile(filePath: string, limits?: FileReadLimits): Promise<FileReadResult>
   readDocPreviewFile?(request: DocPreviewFileAccessRequest): Promise<DocPreviewFileAccessResult>
   /** Positional read. Optional because an older remote host cannot serve one.

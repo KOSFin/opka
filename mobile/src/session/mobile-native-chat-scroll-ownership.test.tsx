@@ -59,6 +59,10 @@ vi.mock('react-native', async () => {
   })
   const animation = () => ({ start() {}, stop() {} })
   return {
+    AppState: {
+      currentState: 'active',
+      addEventListener: () => ({ remove: () => {} })
+    },
     View,
     Text: View,
     Pressable: View,

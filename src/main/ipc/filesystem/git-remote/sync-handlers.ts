@@ -16,6 +16,10 @@ import { ipcGitWorktreeTarget, materializeWorktreePushTargetRemote } from '../..
 import type { FilesystemHandlerContext } from '../filesystem-handler-context'
 import { requireReachableGitRoute } from '../../../providers/execution-host-provider-dispatch'
 import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
+import {
+  assertNoBoundGitProfileForUnsupportedOperation,
+  boundGitLocalOperationForWorktree
+} from './bound-git-local-operation'
 
 export function registerGitRemoteSyncHandlers(context: FilesystemHandlerContext): void {
   const { store } = context
@@ -50,11 +54,20 @@ export function registerGitRemoteSyncHandlers(context: FilesystemHandlerContext)
     ): Promise<void> => {
       requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
-      const gitOptions = getLocalGitOptionsForRegisteredWorktree(
+      const localOptions = getLocalGitOptionsForRegisteredWorktree(
         store,
         args.worktreePath,
         worktreePath
       )
+      const boundOperation = await boundGitLocalOperationForWorktree(store, {
+        operation: 'fetch',
+        requestedPath: args.worktreePath,
+        resolvedPath: worktreePath,
+        worktreeId: args.worktreeId,
+        remoteName: args.pushTarget?.remoteName ?? 'origin',
+        pushTarget: args.pushTarget
+      })
+      const gitOptions = { ...localOptions, ...(boundOperation ? { boundOperation } : {}) }
       const materializedPushTarget = args.pushTarget
         ? await materializeWorktreePushTargetRemote(
             worktreePath,
@@ -93,6 +106,7 @@ export function registerGitRemoteSyncHandlers(context: FilesystemHandlerContext)
       })
       requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      await assertNoBoundGitProfileForUnsupportedOperation(store, args.worktreePath, worktreePath)
       const gitOptions = getLocalGitOptionsForRegisteredWorktree(
         store,
         args.worktreePath,

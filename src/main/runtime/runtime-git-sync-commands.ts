@@ -23,9 +23,23 @@ export class RuntimeGitSyncCommands {
    */
   private async prepareRemoteSync(
     target: RuntimeGitTarget,
-    pushTarget: GitPushTarget | undefined
+    pushTarget: GitPushTarget | undefined,
+    operation: 'fetch' | 'pull' | 'push'
   ): Promise<{ provider: LocalGitProvider; pushTarget: GitPushTarget | undefined }> {
-    const provider = requireRuntimeGitProvider(target)
+    const boundOperation = await this.host.resolveBoundGitOperation?.(
+      target,
+      operation,
+      pushTarget?.remoteName ?? 'origin',
+      pushTarget
+    )
+    if (!this.host.resolveBoundGitOperation && target.repo?.gitNetworkBinding) {
+      throw new Error('Selected Git network profile is unavailable on this host or client.')
+    }
+    const provider = requireRuntimeGitProvider(
+      boundOperation
+        ? { ...target, localGitOptions: { ...target.localGitOptions, boundOperation } }
+        : target
+    )
     const materialized = pushTarget
       ? await materializeWorktreePushTargetRemote(
           target.worktree.path,
@@ -66,7 +80,7 @@ export class RuntimeGitSyncCommands {
     pushTarget?: GitPushTarget
   ): Promise<{ ok: true }> {
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
-    const sync = await this.prepareRemoteSync(target, pushTarget)
+    const sync = await this.prepareRemoteSync(target, pushTarget, 'fetch')
     await sync.provider.fetchRemote(target.worktree.path, sync.pushTarget)
     return { ok: true }
   }
@@ -76,6 +90,7 @@ export class RuntimeGitSyncCommands {
     expectedUpstream: GitForkSyncExpectedUpstream
   ): Promise<GitForkSyncResult> {
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
+    await this.assertNoBoundProfileForUnsupportedOperation(target)
     return requireRuntimeGitProvider(target).syncForkDefaultBranch(
       target.worktree.path,
       expectedUpstream
@@ -87,7 +102,7 @@ export class RuntimeGitSyncCommands {
     pushTarget?: GitPushTarget
   ): Promise<{ ok: true }> {
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
-    const sync = await this.prepareRemoteSync(target, pushTarget)
+    const sync = await this.prepareRemoteSync(target, pushTarget, 'pull')
     await sync.provider.pullBranch(target.worktree.path, sync.pushTarget)
     return { ok: true }
   }
@@ -97,13 +112,14 @@ export class RuntimeGitSyncCommands {
     pushTarget?: GitPushTarget
   ): Promise<{ ok: true }> {
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
-    const sync = await this.prepareRemoteSync(target, pushTarget)
+    const sync = await this.prepareRemoteSync(target, pushTarget, 'pull')
     await sync.provider.fastForwardBranch(target.worktree.path, sync.pushTarget)
     return { ok: true }
   }
 
   async rebaseRuntimeGitFromBase(worktreeSelector: string, baseRef: string): Promise<{ ok: true }> {
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
+    await this.assertNoBoundProfileForUnsupportedOperation(target)
     await requireRuntimeGitProvider(target).rebaseFromBase(target.worktree.path, baseRef)
     return { ok: true }
   }
@@ -115,7 +131,7 @@ export class RuntimeGitSyncCommands {
     forceWithLease?: boolean
   ): Promise<{ ok: true }> {
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
-    const sync = await this.prepareRemoteSync(target, pushTarget)
+    const sync = await this.prepareRemoteSync(target, pushTarget, 'push')
     await sync.provider.pushBranch(target.worktree.path, publish === true, sync.pushTarget, {
       forceWithLease: forceWithLease === true
     })
@@ -131,5 +147,14 @@ export class RuntimeGitSyncCommands {
     }
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
     return requireRuntimeGitProvider(target).commit(target.worktree.path, message)
+  }
+
+  private async assertNoBoundProfileForUnsupportedOperation(
+    target: RuntimeGitTarget
+  ): Promise<void> {
+    const bound = await this.host.resolveBoundGitOperation?.(target, 'fetch', 'origin')
+    if (bound || (!this.host.resolveBoundGitOperation && target.repo?.gitNetworkBinding)) {
+      throw new Error('Selected Git network profile is unavailable on this host or client.')
+    }
   }
 }

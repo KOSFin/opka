@@ -43,3 +43,12 @@ describe('which pane shows it', () => {
     expect(agentLaunchPaneOutcomeForLeaf(undefined, 'leaf-1')).toBeNull()
   })
 })
+
+it('shows only fixed native conflict copy and keeps unknown peer codes generic', () => {
+  expect(
+    agentLaunchPaneNoticeText({ kind: 'not-started', code: 'native_cli_config_conflict' })
+  ).toContain('Native preferences changed in both the source and Orca HOME.')
+  expect(
+    agentLaunchPaneNoticeText({ kind: 'not-started', code: 'native_cli_unknown_private_path' })
+  ).toBe('智能体无法启动。')
+})

@@ -116,6 +116,9 @@ describe('OrcaRuntimeService', () => {
     await expect(runtime.readFileExplorerDir('path://server/share/repo', 'src')).rejects.toThrow(
       SshHostNotServedError
     )
+    await expect(
+      runtime.readFileExplorerDirPage('path://server/share/repo', 'src')
+    ).rejects.toThrow(SshHostNotServedError)
     await expect(runtime.getRuntimeGitStatus('path://server/share/repo')).rejects.toThrow(
       SshHostNotServedError
     )
@@ -144,6 +147,12 @@ describe('OrcaRuntimeService', () => {
       isDirectory: false,
       isSymlink: false
     })
+    await expect(
+      runtime.readFileExplorerDirPage(selector, 'src', { limit: 1 })
+    ).resolves.toMatchObject({
+      entries: [{ name: 'app.ts' }],
+      nextCursor: null
+    })
     await expect(runtime.readFileExplorerPreview(selector, 'src/app.ts')).resolves.toMatchObject({
       content: 'export {}\n',
       isBinary: false
@@ -164,6 +173,9 @@ describe('OrcaRuntimeService', () => {
     // Why: this process serves no SSH filesystem, so the folder path itself is unavailable.
     await expect(
       runtime.readFileExplorerDir(`id:${TEST_FOLDER_WORKSPACE_KEY}`, 'src')
+    ).rejects.toThrow('folder_workspace_path_unavailable:/srv/platform')
+    await expect(
+      runtime.readFileExplorerDirPage(`id:${TEST_FOLDER_WORKSPACE_KEY}`, 'src')
     ).rejects.toThrow('folder_workspace_path_unavailable:/srv/platform')
     await expect(
       runtime.readFileExplorerPreview(`id:${TEST_FOLDER_WORKSPACE_KEY}`, 'src/app.ts')

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { OptionalFiniteNumber, OptionalString, requiredString } from './rpc-param-primitives'
 import { createRepoUpdateSchema } from './repo-update-params'
-import { RepoSelector } from './github-repo-target-params'
+import { RepoSelector, RepoShow } from './github-repo-target-params'
+import { sanitizeRepoIcon } from '../repo-icon'
 
 export const RepoPath = z.object({
   path: requiredString('Missing repo path'),
@@ -18,6 +19,41 @@ export const RepoCreate = z.object({
 export const RepoClone = z.object({
   url: requiredString('Missing clone URL'),
   destination: requiredString('Missing clone destination')
+})
+
+// A separate method makes an older host reject profile selection before it starts an unbound clone.
+export const RepoCloneBoundGitLab = RepoClone.extend({
+  profileId: requiredString('Missing GitLab profile')
+})
+
+export const RepoCloneBoundGitHub = RepoClone.extend({
+  account: z.object({
+    host: requiredString('Missing GitHub host'),
+    user: requiredString('Missing GitHub user')
+  })
+})
+
+export const RepoGitLabProfileBind = RepoShow.extend({
+  expectedPath: requiredString('Missing expected repository path'),
+  profileId: z.string().nullable(),
+  remoteName: z.string().optional()
+})
+
+export const RepoGitHubNetworkBind = RepoShow.extend({
+  expectedPath: requiredString('Missing expected repository path'),
+  account: z.object({ host: z.string(), user: z.string() }).nullable(),
+  remoteName: z.string().optional()
+})
+
+export const RepoGitAuthorGet = RepoShow.extend({
+  expectedPath: requiredString('Missing expected repository path')
+})
+
+export const RepoGitAuthorUpdate = RepoGitAuthorGet.extend({
+  name: z.string().nullable(),
+  email: z.string().nullable(),
+  expectedLocalName: z.string().nullable(),
+  expectedLocalEmail: z.string().nullable()
 })
 
 export const RepoSetBaseRef = z.object({
@@ -45,7 +81,8 @@ export const ProjectGroupCreate = z.object({
   parentPath: OptionalString,
   connectionId: OptionalString.nullable().optional(),
   parentGroupId: OptionalString.nullable().optional(),
-  createdFrom: z.enum(['manual', 'folder-scan', 'migration']).optional()
+  createdFrom: z.enum(['manual', 'folder-scan', 'migration']).optional(),
+  groupIcon: z.unknown().transform(sanitizeRepoIcon).optional()
 })
 
 export const ProjectGroupUpdate = z.object({
@@ -54,7 +91,8 @@ export const ProjectGroupUpdate = z.object({
     name: OptionalString,
     isCollapsed: z.boolean().optional(),
     tabOrder: OptionalFiniteNumber,
-    color: OptionalString.nullable().optional()
+    color: OptionalString.nullable().optional(),
+    groupIcon: z.unknown().transform(sanitizeRepoIcon).optional()
   })
 })
 

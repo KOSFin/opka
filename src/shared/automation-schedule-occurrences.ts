@@ -1,6 +1,7 @@
 import type { AutomationSchedulePreset } from './automations-types'
 import { parseSchedule, type ParsedRrule } from './automation-schedule-parsing'
 import { cronMatches, floorToMinute, startOfLocalDay } from './automation-cron-occurrence'
+import { automationOccurrenceInZone } from './automation-zoned-occurrences'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000
@@ -85,8 +86,16 @@ export function buildAutomationCronSchedule(args: {
 export function nextAutomationOccurrenceAfter(
   rrule: string,
   dtstart: number,
-  after: number
+  after: number,
+  timeZone?: string
 ): number {
+  if (timeZone) {
+    const occurrence = automationOccurrenceInZone(rrule, dtstart, after, timeZone, 'next')
+    if (occurrence === null) {
+      throw new Error('Unable to compute next automation run.')
+    }
+    return occurrence
+  }
   const rule = parseSchedule(rrule)
   if (rule.kind === 'cron') {
     let candidate = floorToMinute(Math.max(dtstart, after))
@@ -127,8 +136,12 @@ export function nextAutomationOccurrenceAfter(
 export function latestAutomationOccurrenceAtOrBefore(
   rrule: string,
   dtstart: number,
-  now: number
+  now: number,
+  timeZone?: string
 ): number | null {
+  if (timeZone) {
+    return automationOccurrenceInZone(rrule, dtstart, now, timeZone, 'latest')
+  }
   if (now < dtstart) {
     return null
   }

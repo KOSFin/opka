@@ -95,7 +95,7 @@ export function renderMobileTasksProviderControls(model: ConnectionPresentationM
             }}
           >
             <Text style={styles.segmentSecondaryText}>
-              {gitlabView === 'project' ? 'Project MRs' : 'My Todos'}
+              {gitlabView === 'project' ? 'Project MRs' : 'My Todos · account-wide'}
             </Text>
           </Pressable>
           {gitlabView === 'project' && (

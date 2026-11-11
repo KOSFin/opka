@@ -115,6 +115,7 @@ vi.mock('@/components/ui/tooltip', () => ({
 vi.mock('@/components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
   DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuLabel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DropdownMenuItem: ({ children, onSelect }: { children: ReactNode; onSelect?: () => void }) => (
     <button onClick={onSelect}>{children}</button>
   ),
@@ -270,6 +271,7 @@ function setAgentLineageState(options: {
   }
 
   mockStore.state = {
+    runtimeEnvironments: [],
     // Reactive-ish toggle: the chip's onClick eventually calls
     // toggleCollapsedGroup; mutate the live Set so the next manual re-render
     // (store isn't reactive in this harness) reflects the user's toggle.

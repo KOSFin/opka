@@ -24,6 +24,7 @@ export function structuredAgentSessionStatusBlock(
     type: 'text',
     text: body.text,
     ...(presentation !== undefined ? { presentation } : {}),
+    ...(body.automationReport ? { automationReport: body.automationReport } : {}),
     ...(body.contextClear !== undefined ? { contextClear: body.contextClear } : {}),
     ...(body.tone !== undefined ? { tone: body.tone } : {}),
     ...(body.providerFrame ? { providerFrame: body.providerFrame } : {}),

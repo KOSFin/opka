@@ -329,6 +329,36 @@ describe('Codex backend rate-limit requests', () => {
     )
   })
 
+  it.each([
+    ['reset', 'reset'],
+    ['no_credit', 'noCredit']
+  ] as const)(
+    'keeps the backend %s outcome on the selected synthetic transport',
+    async (code, outcome) => {
+      readFileMock.mockResolvedValue(
+        JSON.stringify({
+          tokens: { access_token: 'synthetic-token', account_id: 'synthetic-account' }
+        })
+      )
+      const request = vi.fn(async (url: string) => {
+        if (url !== 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume') {
+          throw new Error('Unexpected external request')
+        }
+        return Response.json({ code })
+      })
+      setMainHttpClient({ fetch: request, proxySession: () => null })
+
+      await expect(
+        consumeCodexRateLimitResetCredit({
+          codexHomePath: '/managed/synthetic-home',
+          idempotencyKey: `synthetic-${code}`
+        })
+      ).resolves.toBe(outcome)
+      expect(request).toHaveBeenCalledOnce()
+      expect(fetch).not.toHaveBeenCalled()
+    }
+  )
+
   it('cancels the unread error-response body so bundled undici cannot crash on socket close', async () => {
     readFileMock.mockResolvedValue(
       JSON.stringify({
@@ -350,4 +380,44 @@ describe('Codex backend rate-limit requests', () => {
     ).rejects.toThrow('Codex reset failed: HTTP 429')
     expect(cancelledBodies).toBe(1)
   })
+
+  it.each([
+    [
+      401,
+      'Codex provider rejected the reset request (HTTP 401; reason unknown). The reset outcome is unconfirmed.'
+    ],
+    [
+      403,
+      'Codex provider rejected the reset request (HTTP 403; reason unknown). The reset outcome is unconfirmed.'
+    ],
+    [302, 'Codex backend redirected the reset request; no reset was confirmed.']
+  ])(
+    'reports reset HTTP %i without exposing the response body or following redirects',
+    async (status, reason) => {
+      readFileMock.mockResolvedValue(
+        JSON.stringify({
+          tokens: { access_token: 'synthetic-token', account_id: 'synthetic-account' }
+        })
+      )
+      const request = vi.fn(async (url: string, _init?: RequestInit) => {
+        if (url !== 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume') {
+          throw new Error('Unexpected external request')
+        }
+        return new Response('sensitive-provider-response', { status })
+      })
+      setMainHttpClient({ fetch: request, proxySession: () => null })
+
+      await expect(
+        consumeCodexRateLimitResetCredit({
+          codexHomePath: '/managed/synthetic-home',
+          idempotencyKey: `synthetic-${status}`
+        })
+      ).rejects.toMatchObject({ message: reason })
+      expect(request).toHaveBeenCalledOnce()
+      expect(request.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({ method: 'POST', redirect: 'manual' })
+      )
+      expect(fetch).not.toHaveBeenCalled()
+    }
+  )
 })

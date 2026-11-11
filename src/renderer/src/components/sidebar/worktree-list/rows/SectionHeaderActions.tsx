@@ -74,6 +74,7 @@ export function SectionHeaderActions({
             groupId={group.id}
             hostId={host}
             label={label}
+            groupIcon={group.groupIcon}
             onRename={ctx.onRenameProjectGroup}
             onDelete={ctx.onDeleteProjectGroup}
           />

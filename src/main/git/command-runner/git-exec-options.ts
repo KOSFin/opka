@@ -3,6 +3,7 @@ export const DEFAULT_GIT_MAX_BUFFER = 10 * 1024 * 1024
 
 // Why: the admission tier is a wire value, so it is declared with its params schema.
 import type { GitAdmissionTier } from '../../../shared/rpc-contract/git-admission-tier-params'
+import type { BoundGitExecution } from './bound-git-network-executor'
 
 export type { GitAdmissionTier }
 
@@ -32,4 +33,6 @@ export type GitExecOptions = {
   /** Sees each stderr chunk as it arrives; capture and errors are unchanged. Not
    *  supported with `terminationBarrier`. */
   onStderr?: (chunk: string) => void
+  /** Host-owned bound credential operation; absent for every legacy Git call. */
+  boundOperation?: BoundGitExecution
 }

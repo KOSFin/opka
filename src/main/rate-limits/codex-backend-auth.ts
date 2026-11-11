@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { readCodexAuthIdentity } from '../codex-accounts/codex-auth-identity'
 import {
   createAuthFilesystemOperation,
   type SharedAuthFilesystemOperation
@@ -71,7 +72,8 @@ export async function getCodexBackendAuthHeaders(
     return null
   }
   const authPath = join(getCodexHomePath(options?.codexHomePath), 'auth.json')
-  const auth = JSON.parse(await readBackendAuth(authPath, signal)) as CodexAuthFile
+  const authContents = await readBackendAuth(authPath, signal)
+  const auth: CodexAuthFile = JSON.parse(authContents)
   const accessToken = auth.tokens?.access_token
   if (!accessToken) {
     return null
@@ -83,8 +85,10 @@ export async function getCodexBackendAuthHeaders(
     'OpenAI-Beta': 'codex-1',
     originator: 'Codex Desktop'
   }
-  if (auth.tokens?.account_id) {
-    headers['ChatGPT-Account-Id'] = auth.tokens.account_id
+  const accountId =
+    auth.tokens?.account_id?.trim() || readCodexAuthIdentity(authContents)?.providerAccountId
+  if (accountId) {
+    headers['ChatGPT-Account-Id'] = accountId
   }
   return headers
 }

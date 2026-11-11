@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron'
 import type { BaseRefDefaultResult, BaseRefSearchResult } from '../../shared/repo-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
+import type { RepoGitAuthor, RepoGitAuthorUpdate } from '../../shared/repo-git-author'
 import type { PreloadApi } from '../api-types'
 
 export const reposApi = {
@@ -33,6 +34,10 @@ export const reposApi = {
 
   cloneAbort: () => ipcRenderer.invoke('repos:cloneAbort'),
 
+  bindGitLabNetworkProfile: (args) => ipcRenderer.invoke('repos:bindGitLabNetworkProfile', args),
+
+  bindGitHubNetworkAccount: (args) => ipcRenderer.invoke('repos:bindGitHubNetworkAccount', args),
+
   onCloneProgress: (callback: (data: { phase: string; percent: number }) => void): (() => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
@@ -44,6 +49,20 @@ export const reposApi = {
 
   getGitUsername: (args: { repoId: string }): Promise<string> =>
     ipcRenderer.invoke('repos:getGitUsername', args),
+
+  getGitAuthor: (args: {
+    repoId: string
+    hostId: ExecutionHostId
+    expectedPath: string
+  }): Promise<RepoGitAuthor> => ipcRenderer.invoke('repos:getGitAuthor', args),
+
+  updateGitAuthor: (
+    args: {
+      repoId: string
+      hostId: ExecutionHostId
+      expectedPath: string
+    } & RepoGitAuthorUpdate
+  ): Promise<RepoGitAuthor> => ipcRenderer.invoke('repos:updateGitAuthor', args),
 
   getBaseRefDefault: (args: {
     repoId: string

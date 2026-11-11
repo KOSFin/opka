@@ -1,9 +1,11 @@
 import React from 'react'
 import type { Virtualizer } from '@tanstack/react-virtual'
-import { dirname } from '@/lib/path'
+import { basename, dirname } from '@/lib/path'
 import { cn } from '@/lib/utils'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
 import { FileExplorerRow } from './FileExplorerRow'
+import { Button } from '@/components/ui/button'
+import { getExplorerDisplayDepth } from './file-explorer-display-root'
 import { InlineInputRow, type InlineInput } from './file-explorer-inline-input-row'
 import { shouldShowIgnoredDecoration, STATUS_COLORS } from './status-display'
 import type { DirCache, FileExplorerOperationOwner, TreeNode } from './file-explorer-types'
@@ -13,6 +15,9 @@ import { getFileExplorerOperationExecutionHostId } from './file-explorer-operati
 import type { WorkspaceFileDragSource } from '@/lib/workspace-file-drag'
 
 type FileExplorerVirtualRowsProps = {
+  worktreePath?: string | null
+  displayRootPath?: string | null
+  onLoadMoreDir?: (dirPath: string, depth: number) => Promise<void>
   virtualizer: Virtualizer<HTMLDivElement, Element>
   inlineInputIndex: number
   rowProjection: FileExplorerRowProjection
@@ -52,6 +57,7 @@ type FileExplorerVirtualRowsProps = {
   onRequestDelete: (node: TreeNode) => void
   onCollapseFolderSubtree: (node: TreeNode) => void
   onFindInFolder: (node: TreeNode) => void
+  onOpenHere?: (node: TreeNode) => void
   onMoveDrop: (sourcePath: string, destDir: string) => void
   onDragTargetChange: (dir: string | null) => void
   onDragSourceChange: (path: string | null) => void
@@ -109,6 +115,9 @@ function resolveDragSourceOwner(
 /** Renders virtual and inline-input rows using display-relative indentation but worktree-relative operation paths. */
 export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): React.JSX.Element {
   const {
+    worktreePath = null,
+    displayRootPath = null,
+    onLoadMoreDir,
     virtualizer,
     inlineInputIndex,
     rowProjection,
@@ -146,6 +155,7 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
     onRequestDelete,
     onCollapseFolderSubtree,
     onFindInFolder,
+    onOpenHere,
     onMoveDrop,
     onDragTargetChange,
     onDragSourceChange,
@@ -162,6 +172,28 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
   // scroll frame and only a drag ever reads this.
   const resolveSourceOwner = (paths: readonly string[]) =>
     resolveDragSourceOwner(rowProjection, dirCache, paths)
+  const continuationPathsByIndex = new Map<number, string[]>()
+  if (canCollapseFolderSubtree && dirCache && onLoadMoreDir) {
+    for (const dirPath of expanded) {
+      if (
+        dirPath === displayRootPath ||
+        !dirCache[dirPath]?.nextCursor ||
+        !rowProjection.hasPath(dirPath)
+      ) {
+        continue
+      }
+      const lastIndex = rowProjection.getInsertIndexAfterSubtree(dirPath, worktreePath) - 1
+      const paths = continuationPathsByIndex.get(lastIndex) ?? []
+      paths.push(dirPath)
+      continuationPathsByIndex.set(lastIndex, paths)
+    }
+    for (const paths of continuationPathsByIndex.values()) {
+      paths.sort(
+        (left, right) =>
+          getExplorerDisplayDepth(worktreePath, right) - getExplorerDisplayDepth(worktreePath, left)
+      )
+    }
+  }
 
   return (
     <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
@@ -264,6 +296,7 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
               onRequestDelete={() => onRequestDelete(n)}
               onCollapseFolderSubtree={() => onCollapseFolderSubtree(n)}
               onFindInFolder={() => onFindInFolder(n)}
+              onOpenHere={onOpenHere ? () => onOpenHere(n) : undefined}
               onMoveDrop={onMoveDrop}
               onDragTargetChange={onDragTargetChange}
               onDragSourceChange={onDragSourceChange}
@@ -271,6 +304,27 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
               onNativeDragTargetChange={onNativeDragTargetChange}
               onNativeDragExpandDir={onNativeDragExpandDir}
             />
+            {continuationPathsByIndex.get(rowIndex)?.map((dirPath) => (
+              <div key={dirPath} className="flex justify-center p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={loadingDirPaths.has(dirPath)}
+                  aria-label={`${dirCache?.[dirPath]?.error ? 'Retry loading' : 'Load more'} files in ${dirPath}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void onLoadMoreDir?.(
+                      dirPath,
+                      getExplorerDisplayDepth(worktreePath, dirPath) - 1
+                    )
+                  }}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  {dirCache?.[dirPath]?.error ? 'Retry loading' : 'Load more'} files in{' '}
+                  {basename(dirPath)}
+                </Button>
+              </div>
+            ))}
           </div>
         )
       })}

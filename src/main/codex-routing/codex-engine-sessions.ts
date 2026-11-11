@@ -41,6 +41,7 @@ type SessionEntry = {
   exited: boolean
   revoked: boolean
   controller: AbortController
+  heldUntilExit: Set<() => void>
 }
 export class CodexEngineSessions {
   private readonly sessions = new Map<string, SessionEntry>()
@@ -71,6 +72,7 @@ export class CodexEngineSessions {
       exited: false,
       revoked: false,
       controller: new AbortController(),
+      heldUntilExit: new Set<() => void>(),
       session: createCodexPoolTurnSession({
         db: this.options.db,
         assignmentScope: this.options.createAssignmentScope?.(),
@@ -94,6 +96,12 @@ export class CodexEngineSessions {
         entry.closed = true
         entry.exited ||= verdict === 'exited'
         entry.session.close(verdict)
+        if (verdict === 'exited') {
+          for (const release of entry.heldUntilExit) {
+            release()
+          }
+          entry.heldUntilExit.clear()
+        }
         if (verdict === 'exited' && entry.session.activeRequests === 0) {
           this.sessions.delete(token)
         }
@@ -107,12 +115,33 @@ export class CodexEngineSessions {
       throw new Error('Native routing is not ready.')
     }
     const binding = entry.session.begin(request.turn)
+    let finished = false
+    let releaseWhenExited: (() => void) | undefined
     const finish = () => {
+      if (finished) {
+        return
+      }
+      finished = true
+      if (releaseWhenExited) {
+        entry.heldUntilExit.delete(releaseWhenExited)
+      }
       binding.finish()
       if ((entry.exited || entry.revoked) && entry.session.activeRequests === 0) {
         this.sessions.delete(token)
       }
       this.notify()
+    }
+    const holdUntilOwnerExit = () => {
+      if (entry.exited) {
+        return Promise.resolve()
+      }
+      entry.closed = true
+      entry.session.close('unverifiable')
+      this.notify()
+      return new Promise<void>((resolve) => {
+        releaseWhenExited = resolve
+        entry.heldUntilExit.add(resolve)
+      })
     }
     try {
       const route = this.options.route(binding.accountId)
@@ -131,7 +160,8 @@ export class CodexEngineSessions {
             onAccountSelected: entry.launch.onAccountSelected,
             signal: entry.controller.signal,
             prepareReplacement: entry.launch.prepareQuotaRetry,
-            finish
+            finish,
+            holdUntilOwnerExit
           })
         : undefined
       return {
@@ -140,6 +170,7 @@ export class CodexEngineSessions {
         quotaIdentity: binding.quotaIdentity ?? undefined,
         signal: entry.controller.signal,
         finish,
+        holdUntilOwnerExit,
         retryRejectedQuota:
           request.turn?.auxiliary && retryRejectedQuota
             ? (failure, context) => retryRejectedQuota(failure, { ...context, allowRetry: false })
@@ -218,6 +249,21 @@ export class CodexEngineSessions {
       entry.controller.abort()
       entry.session.close('unverifiable')
     })
+    this.notify()
+  }
+  engineExited(): void {
+    for (const [token, entry] of this.sessions) {
+      entry.closed = true
+      entry.exited = true
+      entry.session.close('exited')
+      for (const release of entry.heldUntilExit) {
+        release()
+      }
+      entry.heldUntilExit.clear()
+      if (entry.session.activeRequests === 0) {
+        this.sessions.delete(token)
+      }
+    }
     this.notify()
   }
   async revokeAll(): Promise<void> {

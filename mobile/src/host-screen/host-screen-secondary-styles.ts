@@ -12,14 +12,22 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.lg
+  },
+  sectionToggle: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
     paddingTop: spacing.md,
     paddingBottom: spacing.xs
   },
   projectGroupHeader: {
     backgroundColor: colors.bgPanel,
-    paddingVertical: spacing.md,
     marginTop: spacing.sm
+  },
+  projectGroupToggle: {
+    paddingVertical: spacing.md
   },
   projectGroupTitle: {
     color: colors.textPrimary,
@@ -33,6 +41,12 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
   },
   sectionRepoIcon: {
     marginRight: spacing.xs
+  },
+  groupManageButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   sectionTitle: {
     fontSize: 11,

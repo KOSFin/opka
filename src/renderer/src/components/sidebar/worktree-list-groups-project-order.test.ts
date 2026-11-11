@@ -471,14 +471,18 @@ describe('project groups', () => {
       ...rootA,
       id: 'group-child-late',
       name: 'late',
+      parentPath: null,
       parentGroupId: rootB.id,
+      createdFrom: 'manual',
       tabOrder: 30
     }
     const childEarly: ProjectGroup = {
       ...rootA,
       id: 'group-child-early',
       name: 'early',
+      parentPath: null,
       parentGroupId: rootB.id,
+      createdFrom: 'manual',
       tabOrder: 5
     }
 

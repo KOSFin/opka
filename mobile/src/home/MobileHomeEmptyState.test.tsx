@@ -18,6 +18,7 @@ vi.mock('lucide-react-native', () => ({
 }))
 vi.mock('../app-update/app-update-runtime', () => ({
   appUpdateChecker: { dismiss: update.dismiss },
+  cancelAppUpdate: vi.fn(),
   openAppUpdate: update.open,
   useAppUpdateState: () => ({
     available: { version: '1.4.236-rc.6', url: 'https://example.test/latest-android.json' },

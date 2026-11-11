@@ -1,6 +1,11 @@
 import type { DirEntry } from '../../../shared/filesystem-entry-types'
+import type {
+  FileExplorerDirectoryPage,
+  FileExplorerDirectoryPageOptions
+} from '../../../shared/file-explorer-directory-page'
 import { normalizeRelativePath } from '@/lib/path'
 import { callRuntimeRpc } from './runtime-rpc-client'
+import { RuntimeRpcCallError } from './runtime-rpc-result'
 import type { RuntimeFileOperationArgs } from './runtime-file-client-types'
 import {
   assertLocalFilesystemFallbackAllowed,
@@ -52,6 +57,47 @@ export async function readRuntimeDirectory(
     { worktree: remoteArgs.worktreeSelector, relativePath: remoteArgs.relativePath, ...options },
     { timeoutMs: 15_000 }
   )
+}
+
+export async function readRuntimeDirectoryPage(
+  context: RuntimeFileOperationArgs,
+  dirPath: string,
+  options: FileExplorerDirectoryPageOptions = {}
+): Promise<FileExplorerDirectoryPage> {
+  const remoteArgs = getRemoteFileArgs(context, dirPath)
+  if (!remoteArgs) {
+    assertLocalFilesystemFallbackAllowed(context)
+    if (!window.api.fs.readDirPage) {
+      throw new Error('Directory paging requires a newer Orca host')
+    }
+    return window.api.fs.readDirPage({
+      dirPath,
+      connectionId: context.connectionId,
+      selector: context.worktreeId ?? context.worktreePath ?? dirPath,
+      cursor: options.cursor,
+      followSymlinks: options.followSymlinks,
+      limit: options.limit
+    })
+  }
+  try {
+    return await callRuntimeRpc<FileExplorerDirectoryPage>(
+      remoteArgs.target,
+      'files.readDirPage',
+      {
+        worktree: remoteArgs.worktreeSelector,
+        relativePath: remoteArgs.relativePath,
+        cursor: options.cursor,
+        followSymlinks: options.followSymlinks,
+        limit: options.limit
+      },
+      { timeoutMs: 15_000, signal: options.signal }
+    )
+  } catch (error) {
+    if (error instanceof RuntimeRpcCallError && error.code === 'method_not_found') {
+      throw new Error('Directory paging requires a newer Orca execution host')
+    }
+    throw error
+  }
 }
 
 /** With `diskPrecondition`, a write whose target no longer matches the baseline is refused, not written. */

@@ -214,12 +214,12 @@ def main():
         find('client', contains=True)
         find('service', contains=True)
         capture('01-project-hierarchy')
-        tap('Synthetic integration', contains=True)
+        tap('Collapse project Synthetic integration')
         collapsed = tree()
         if any(label_matches(node, label, contains=True) for node in collapsed.iter('node')
                for label in ('client', 'service')):
             raise AssertionError('Collapsed project still exposes repository children')
-        tap('Synthetic integration', contains=True)
+        tap('Expand project Synthetic integration')
         find('client', contains=True)
         find('service', contains=True)
         capture('02-project-expand-toggle')
@@ -233,7 +233,7 @@ def main():
         host_list()
         capture('05-project-return')
         tap('Tasks')
-        tap(fixture['projectName'], contains=True)
+        tap(f"Open {fixture['projectName']} / Project session")
         find('Native QA starter', contains=True)
         capture('06-board')
         tap('Add project task')
@@ -261,7 +261,7 @@ def main():
         # Normal Back intentionally returns through the catalog; reopen the saved backend card.
         host_list()
         tap('Tasks')
-        tap(fixture['projectName'], contains=True)
+        tap(f"Open {fixture['projectName']} / Project session")
         find('Native QA edited card', contains=True)
         capture('10-board-reopened')
         report = {'schema': 1, 'steps': steps, 'realCandidateApk': True, 'realSyntheticHost': True,

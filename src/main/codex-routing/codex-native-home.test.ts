@@ -15,6 +15,11 @@ import { tmpdir } from 'node:os'
 import { afterEach, expect, it as vitestIt, vi } from 'vitest'
 import { parse } from 'smol-toml'
 import { prepareCodexNativeHome, readCodexNativeHomeSource } from './codex-native-home'
+import { inspectNativeCodexGatewayAuth } from './native-codex-gateway-credential'
+import { NativeCliControlError } from '../../shared/native-cli-control-error'
+import { recoverCodexNativeHomeConfig } from './codex-native-home-recovery'
+import { inspectCodexNativeHomeConfig } from './codex-native-home-inspection'
+import { nativeHomeDigest } from './codex-native-home-inputs'
 const it = vitestIt.skipIf(process.platform !== 'linux' && process.platform !== 'darwin')
 const directories: string[] = []
 afterEach(async () => {
@@ -107,7 +112,9 @@ it('retains native preference edits on repeats and refuses concurrent source edi
   expect(await readFile(path, 'utf8')).toBe(owned)
   expect((await lstat(join(f.homeDirectory, '.opka-native-home.json'))).ino).toBe(before.ino)
   await writeFile(join(f.sourceHome, 'config.toml'), 'model="new-source"\n')
-  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow('both homes')
+  await expect(prepareCodexNativeHome(f.options)).rejects.toMatchObject({
+    code: 'native_cli_config_conflict'
+  })
   expect(await readFile(path, 'utf8')).toBe(owned)
 })
 it('copies a selected old rollout once without sharing inode or changing original history', async () => {
@@ -155,8 +162,151 @@ it('preserves and refuses interrupted owned preparation instead of discarding st
   const f = await fixture()
   await prepareCodexNativeHome(f.options)
   await writeFile(join(f.homeDirectory, '.opka-native-home-pending.json'), '{}', { mode: 0o600 })
-  await expect(prepareCodexNativeHome(f.options)).rejects.toThrow('Interrupted')
+  await expect(prepareCodexNativeHome(f.options)).rejects.toMatchObject({
+    code: 'native_cli_home_preparation_pending'
+  })
   expect(await readFile(join(f.homeDirectory, '.opka-native-home-pending.json'), 'utf8')).toBe('{}')
+})
+
+it('refuses a foreign routing login before creating a pending marker or changing config', async () => {
+  const f = await fixture()
+  await writeFile(join(f.sourceHome, 'config.toml'), 'model="source"\n', { mode: 0o600 })
+  await prepareCodexNativeHome(f.options)
+  const authPath = join(f.homeDirectory, 'auth.json')
+  const foreign = '{"auth_mode":"apikey","OPENAI_API_KEY":"synthetic-foreign"}'
+  await writeFile(authPath, foreign, { mode: 0o600 })
+  await writeFile(join(f.sourceHome, 'config.toml'), 'model="changed"\n', { mode: 0o600 })
+  const configPath = join(f.homeDirectory, 'config.toml')
+  const before = await readFile(configPath, 'utf8')
+  const options = {
+    ...f.options,
+    inspectGatewayAuth: (home: string) =>
+      inspectNativeCodexGatewayAuth(home, 'a'.repeat(64), f.options.assertExclusive)
+  }
+  await expect(prepareCodexNativeHome(options)).rejects.toBeInstanceOf(NativeCliControlError)
+  await expect(prepareCodexNativeHome(options)).rejects.toMatchObject({
+    code: 'native_cli_routing_auth_conflict'
+  })
+  expect(await readFile(authPath, 'utf8')).toBe(foreign)
+  expect(await readFile(configPath, 'utf8')).toBe(before)
+  expect(await readdir(f.homeDirectory)).not.toContain('.opka-native-home-pending.json')
+})
+
+it('identifies a foreign login in a first-launch authless HOME before ownership metadata exists', async () => {
+  const f = await fixture()
+  await mkdir(f.homeDirectory, { recursive: true, mode: 0o700 })
+  const authPath = join(f.homeDirectory, 'auth.json')
+  const foreign = '{"auth_mode":"apikey","OPENAI_API_KEY":"synthetic-foreign"}'
+  await writeFile(authPath, foreign, { mode: 0o600 })
+  const options = {
+    ...f.options,
+    inspectGatewayAuth: (home: string) =>
+      inspectNativeCodexGatewayAuth(home, 'a'.repeat(64), f.options.assertExclusive)
+  }
+  await expect(prepareCodexNativeHome(options)).rejects.toMatchObject({
+    code: 'native_cli_routing_auth_conflict'
+  })
+  expect(await readFile(authPath, 'utf8')).toBe(foreign)
+  expect(await readdir(f.homeDirectory)).not.toContain('.opka-native-home-pending.json')
+  expect(await readdir(f.homeDirectory)).not.toContain('.opka-native-home.json')
+})
+
+it('applies explicit preference choices and proven trust without losing owned edits or future conflict detection', async () => {
+  const f = await fixture()
+  const project = join(f.root, 'trusted-project')
+  await mkdir(project)
+  const firstSource = 'model="first"\nmodel_reasoning_effort="medium"\nservice_tier="priority"\n'
+  await writeFile(join(f.sourceHome, 'config.toml'), firstSource, { mode: 0o600 })
+  await prepareCodexNativeHome(f.options)
+  const ownedPath = join(f.homeDirectory, 'config.toml')
+  await appendFile(ownedPath, '\n[features]\nowned_feature=true\n')
+  const changedSource = `model="source"\nmodel_reasoning_effort="high"\nservice_tier="flex"\n[projects."${project}"]\ntrust_level="trusted"\n`
+  await writeFile(join(f.sourceHome, 'config.toml'), changedSource, { mode: 0o600 })
+  const manifestPath = join(f.homeDirectory, '.opka-native-home.json')
+  const manifest = await readFile(manifestPath)
+  const owned = await readFile(ownedPath)
+  const request = {
+    version: 1 as const,
+    requestId: '00000000-0000-4000-8000-000000000001',
+    file: 'config.toml',
+    expectedManifestHash: nativeHomeDigest(manifest),
+    expectedSourceHash: nativeHomeDigest(changedSource),
+    expectedOwnedHash: nativeHomeDigest(owned),
+    choices: {
+      model: 'owned' as const,
+      model_reasoning_effort: 'source' as const,
+      service_tier: 'source' as const
+    },
+    trustedProjects: [project]
+  }
+  const preview = await inspectCodexNativeHomeConfig({
+    storageRoot: f.options.storageRoot,
+    homeDirectory: f.homeDirectory,
+    context: f.options.context,
+    assertExclusive: f.options.assertExclusive
+  })
+  expect(preview).toMatchObject({
+    state: 'prepared',
+    manifestHash: request.expectedManifestHash,
+    files: [{ file: 'config.toml', eligibleTrustedProjects: [project] }]
+  })
+  await recoverCodexNativeHomeConfig({
+    storageRoot: f.options.storageRoot,
+    homeDirectory: f.homeDirectory,
+    context: f.options.context,
+    request,
+    assertExclusive: f.options.assertExclusive
+  })
+  const repaired = parse(await readFile(ownedPath, 'utf8'))
+  expect(repaired.model).toBe('first')
+  expect(repaired.model_reasoning_effort).toBe('high')
+  expect(repaired.service_tier).toBe('flex')
+  expect(repaired.features).toEqual({ owned_feature: true })
+  expect(repaired.projects).toEqual({ [project]: { trust_level: 'trusted' } })
+  expect(await readdir(f.homeDirectory)).not.toContain('.opka-native-home-pending.json')
+  await writeFile(join(f.sourceHome, 'config.toml'), changedSource.replace('source', 'later'))
+  await expect(prepareCodexNativeHome(f.options)).rejects.toMatchObject({
+    code: 'native_cli_config_conflict'
+  })
+})
+
+it('refuses stale recovery and an owned untrusted project without writing either file', async () => {
+  const f = await fixture()
+  const project = join(f.root, 'denied-project')
+  await mkdir(project)
+  await writeFile(join(f.sourceHome, 'config.toml'), 'model="first"\n', { mode: 0o600 })
+  await prepareCodexNativeHome(f.options)
+  const ownedPath = join(f.homeDirectory, 'config.toml')
+  await appendFile(ownedPath, `[projects."${project}"]\ntrust_level="untrusted"\n`)
+  const source = `model="second"\n[projects."${project}"]\ntrust_level="trusted"\n`
+  await writeFile(join(f.sourceHome, 'config.toml'), source, { mode: 0o600 })
+  const manifestPath = join(f.homeDirectory, '.opka-native-home.json')
+  const manifest = await readFile(manifestPath)
+  const owned = await readFile(ownedPath)
+  const request = {
+    version: 1 as const,
+    requestId: '00000000-0000-4000-8000-000000000002',
+    file: 'config.toml',
+    expectedManifestHash: nativeHomeDigest(manifest),
+    expectedSourceHash: nativeHomeDigest(source),
+    expectedOwnedHash: nativeHomeDigest(owned),
+    choices: { model: 'source' as const },
+    trustedProjects: [project]
+  }
+  const recover = () =>
+    recoverCodexNativeHomeConfig({
+      storageRoot: f.options.storageRoot,
+      homeDirectory: f.homeDirectory,
+      context: f.options.context,
+      request,
+      assertExclusive: f.options.assertExclusive
+    })
+  await expect(recover()).rejects.toMatchObject({ code: 'native_cli_trust_proof_missing' })
+  expect(await readFile(ownedPath)).toEqual(owned)
+  expect(await readFile(manifestPath)).toEqual(manifest)
+  await appendFile(ownedPath, '# later edit\n')
+  await expect(recover()).rejects.toMatchObject({ code: 'native_cli_config_conflict' })
+  expect(await readdir(f.homeDirectory)).not.toContain('.opka-native-home-pending.json')
 })
 
 it('refreshes a source config only while its owned publication is unchanged', async () => {

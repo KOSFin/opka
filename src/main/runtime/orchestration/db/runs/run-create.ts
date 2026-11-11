@@ -1,3 +1,4 @@
+import { runLifecycleWriteTransaction } from '../lifecycle-write-transaction-runner'
 import type { RunRow } from '../../types'
 import { generateId } from '../generated-id'
 import type { OrchestrationDb } from '../orchestration-db'
@@ -22,8 +23,7 @@ export function createRun(
     orcaSessionId: params.coordinatorOrcaSessionId ?? null
   }
   const id = generateId('run')
-  this.db.exec('BEGIN IMMEDIATE')
-  try {
+  return runLifecycleWriteTransaction(this.db, 'create_run', () => {
     this.unbindOtherRunsForCoordinator(coordinator)
     this.db
       .prepare(
@@ -43,12 +43,8 @@ export function createRun(
     if (address !== null) {
       this.rememberRunCoordinatorHandle(id, address)
     }
-    this.db.exec('COMMIT')
-  } catch (error) {
-    this.db.exec('ROLLBACK')
-    throw error
-  }
-  return this.getRun(id) as RunRow
+    return this.getRun(id) as RunRow
+  })
 }
 
 export type RunCreateMethods = {

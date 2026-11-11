@@ -1,3 +1,5 @@
+import { taskAuthorizationView } from './task-authorization-view'
+import type { DelegationContext } from './task-delegation-policy'
 import type { ProjectTaskEntry } from '../../shared/project-task-contract'
 import type {
   ProjectTaskAttempt,
@@ -19,7 +21,8 @@ export function projectTaskWorkflow(
   store: TaskWorkflowStore,
   projectId: string,
   task: ProjectTaskEntry,
-  summary = false
+  summary = false,
+  context?: DelegationContext
 ): ProjectTaskWorkflow {
   const state = store.item(projectId, task.id)
   const attempts = store.native.db
@@ -40,6 +43,7 @@ export function projectTaskWorkflow(
     WHERE project_id=? AND task_id=? ORDER BY sequence DESC LIMIT 200`)
         .all(projectId, task.id)
   return {
+    ...(context ? { authorization: taskAuthorizationView(store, projectId, task, context) } : {}),
     taskId: task.id,
     phase: state.phase,
     archived: state.archived === 1,

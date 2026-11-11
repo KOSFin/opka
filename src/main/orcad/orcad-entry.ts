@@ -6,9 +6,7 @@
  * serves runtime RPC. See docs/design/node-only-runtime-backend.html.
  *
  * Desktop UI surfaces stay uninstalled: no native notifications or renderer delivery.
- * Browser automation is installed through
- * the runtime factory, but only when an Electron serve sidecar or an operator-supplied
- * Chromium proves available at startup.
+ * Browser automation requires a proven Chromium at startup.
  */
 import { join } from 'node:path'
 import process from 'node:process'
@@ -168,8 +166,10 @@ async function startOrcadRuntime(
   const idleExitStartup = beginOrcadIdleExit(runtimeUserDataPath)
   // Why before the profile store: it unseals protected settings as it loads.
   await prepareOrcadSecretStoreAndMigrate(runtimeUserDataPath)
-  const { store: profileStore, authority: profileStateAuthority } =
-    await createOrcadProfileStateStartup(runtimeUserDataPath)
+  const profileStartup = await createOrcadProfileStateStartup(runtimeUserDataPath)
+  const profileStore = profileStartup.store
+  const profileStateAuthority = profileStartup.authority
+  const profileRoot = profileStartup.profileRoot
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
   const observedStatusCapture = new AgentStatusObservedPaneIdentityCapture(observedPaneIdentities)
   profileStoreForShutdown = profileStore
@@ -354,7 +354,7 @@ async function startOrcadRuntime(
   // Stops first: no RPC may write while the rest of the runtime is torn down.
   registerCleanup(() => rpc.stop())
   await rpc.start()
-  startOrcadAutomations(runtime, profileStore, registerCleanup)
+  await startOrcadAutomations(runtime, profileStore, registerCleanup, profileRoot)
   const pushService = DesktopPushService.create({
     runtime,
     runtimeRpc: rpc,

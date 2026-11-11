@@ -16,6 +16,15 @@ export function UsageAccountPoolLabel({
   const membership =
     accountId && view ? usageAccountPoolMembership(view, provider, accountId) : null
   const member = membership?.member
+  const selectionReason =
+    verified && accountId
+      ? view?.assignments.findLast(
+          (entry) =>
+            entry.provider === provider &&
+            entry.accountId === accountId &&
+            entry.poolId === membership?.policyId
+        )?.selectionReason
+      : null
   return (
     <p className="text-3xs text-muted-foreground">
       {accountId === null
@@ -29,7 +38,9 @@ export function UsageAccountPoolLabel({
                   ? translate('usage.accounts.poolManual', 'Pool · manual selection')
                   : membership.mode === 'sequential'
                     ? translate('usage.accounts.poolSequential', 'Pool · sequential')
-                    : translate('usage.accounts.poolBalanced', 'Pool · balanced'),
+                    : membership.mode === 'quota-equalize'
+                      ? translate('usage.accounts.poolEqualize', 'Pool · equalize quota usage')
+                      : translate('usage.accounts.poolBalanced', 'Pool · balanced'),
               !member
                 ? translate('usage.accounts.poolExcluded', 'Excluded')
                 : member.state === 'disabled'
@@ -56,6 +67,7 @@ export function UsageAccountPoolLabel({
                     count: membership.assignments
                   })
                 : null,
+              membership.mode === 'quota-equalize' ? selectionReason : null,
               !verified
                 ? translate('usage.accounts.poolLastKnown', 'Last known pool settings')
                 : null

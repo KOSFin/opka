@@ -113,6 +113,8 @@ export function renderMobileTasksProviderPicker(model: ConnectionPresentationMod
 export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) {
   const {
     hostedRepos,
+    gitlabView,
+    provider,
     persistRepoSelection,
     effectiveRepoIds,
     repoHostLabels,
@@ -126,7 +128,11 @@ export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) 
     <BottomDrawer visible={taskUiReady && showRepoPicker} onClose={() => setShowRepoPicker(false)}>
       <View style={styles.sheetHeader}>
         <Text style={styles.sheetTitle}>Repositories</Text>
-        <Text style={styles.sheetSubtitle}>Choose which repositories to query.</Text>
+        <Text style={styles.sheetSubtitle}>
+          {provider === 'gitlab' && gitlabView === 'todos'
+            ? 'My Todos spans the GitLab account on the first selected repository’s host; this selection does not filter Todos.'
+            : 'Choose which repositories to query.'}
+        </Text>
       </View>
 
       <View style={styles.repoPickerGroup}>

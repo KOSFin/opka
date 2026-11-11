@@ -134,6 +134,8 @@ export function createGitHubApi(): WebGitHubApi {
         GITHUB_WEB_RPC_METHODS.listBindableAccounts,
         args
       ),
+    listCloneAccounts: (args) =>
+      route<WebGitHubResult<'listCloneAccounts'>>(GITHUB_WEB_RPC_METHODS.listCloneAccounts, args),
     validateAccountBinding: (args) =>
       route<WebGitHubResult<'validateAccountBinding'>>(
         GITHUB_WEB_RPC_METHODS.validateAccountBinding,

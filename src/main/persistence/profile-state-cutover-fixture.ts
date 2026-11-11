@@ -261,6 +261,12 @@ export function buildProfileStateCutoverFixture(
   ]
   state.automations = [fixtureAutomation()]
   state.automationRuns = [fixtureAutomationRun()]
+  state.automationCommandsV1 = {
+    version: 1,
+    definitions: [],
+    activeClaims: [],
+    manualReceipts: []
+  }
   state.settings = {
     ...state.settings,
     opencodeSessionCookie: Buffer.from('vitest-sealed:fixture-secret', 'utf-8').toString('base64')

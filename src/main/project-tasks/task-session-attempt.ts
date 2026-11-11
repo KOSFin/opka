@@ -1,3 +1,6 @@
+import { freezeTaskResult } from './task-result-evidence'
+import type { DelegationContext } from './task-delegation-policy'
+import { requireReservedTaskScope, taskAdmission } from './task-authorization'
 import { z } from 'zod'
 import type { TaskWorkflowStore } from './task-workflow-store'
 import type { ProjectTaskEntry } from '../../shared/project-task-contract'
@@ -40,19 +43,21 @@ export function requireTaskSessionOwner(
   task: ProjectTaskEntry,
   attemptId: string,
   ownerKey: string,
-  allowChangedPlan = false
+  allowChangedPlan = false,
+  context?: DelegationContext
 ): TaskSessionAttempt {
   const attempt = readTaskSessionAttempt(store, projectId, task.id, attemptId)
   if (!attempt || attempt.ownerKey !== ownerKey) {
     throw new Error('This attempt belongs to another chat; no task documents were changed')
   }
+  const reserved = requireReservedTaskScope(store, attemptId, context)
   const state = store.item(projectId, task.id)
   if (
     state.archived ||
     (!allowChangedPlan &&
       (state.current_revision !== task.revision ||
         attempt.revision !== task.revision ||
-        state.approved_revision !== task.revision))
+        (!reserved && state.approved_revision !== task.revision)))
   ) {
     throw new Error('The approved plan changed; re-read the task and request operator approval')
   }
@@ -72,34 +77,57 @@ export function claimTaskSession(
   runId: string,
   ownerKey: string,
   dependencies: ProjectTaskEntry[],
-  ownerAddress: string | null = null
+  ownerAddress: string | null = null,
+  context?: DelegationContext
 ): TaskSessionAttempt {
-  return store.transaction(() => {
-    if (store.active(projectId, task.id)) {
-      const prior = readTaskSessionAttempt(store, projectId, task.id)
-      if (!prior || ['completed', 'failed', 'unknown'].includes(prior.nativeStatus)) {
-        throw new Error('An active or unverified attempt already owns this task')
-      }
-      return requireTaskSessionOwner(store, projectId, task, prior.id, ownerKey)
-    }
-    const attempt = store.prepare(projectId, task, runId, dependencies)
-    store.native.db
-      .prepare(
-        'INSERT INTO project_task_session_attempts(attempt_id,owner_key,owner_address) VALUES (?,?,?)'
-      )
-      .run(attempt.id, ownerKey, ownerAddress)
-    store.event(
+  return store.transaction(() =>
+    claimTaskSessionInTransaction(
+      store,
       projectId,
       task,
-      'attempt.claimed',
-      'Existing chat took this task; no worker was spawned'
+      runId,
+      ownerKey,
+      dependencies,
+      ownerAddress,
+      context
     )
-    const binding = readTaskSessionAttempt(store, projectId, task.id, attempt.id)
-    if (!binding) {
-      throw new Error('Session attempt was not recorded')
+  )
+}
+
+export function claimTaskSessionInTransaction(
+  store: TaskWorkflowStore,
+  projectId: string,
+  task: ProjectTaskEntry,
+  runId: string,
+  ownerKey: string,
+  dependencies: ProjectTaskEntry[],
+  ownerAddress: string | null = null,
+  context?: DelegationContext
+): TaskSessionAttempt {
+  if (store.active(projectId, task.id)) {
+    const prior = readTaskSessionAttempt(store, projectId, task.id)
+    if (!prior || ['completed', 'failed', 'unknown'].includes(prior.nativeStatus)) {
+      throw new Error('An active or unverified attempt already owns this task')
     }
-    return binding
-  })
+    return requireTaskSessionOwner(store, projectId, task, prior.id, ownerKey, false, context)
+  }
+  const attempt = store.prepare(projectId, task, runId, dependencies, context)
+  store.native.db
+    .prepare(
+      'INSERT INTO project_task_session_attempts(attempt_id,owner_key,owner_address) VALUES (?,?,?)'
+    )
+    .run(attempt.id, ownerKey, ownerAddress)
+  store.event(
+    projectId,
+    task,
+    'attempt.claimed',
+    'Existing chat took this task; no worker was spawned'
+  )
+  const binding = readTaskSessionAttempt(store, projectId, task.id, attempt.id)
+  if (!binding) {
+    throw new Error('Session attempt was not recorded')
+  }
+  return binding
 }
 
 export function recordTaskSessionProgress(
@@ -114,7 +142,10 @@ export function recordTaskSessionProgress(
     reportPath?: string
     resultHash?: string
     release?: boolean
-  }
+    reportText?: string
+  },
+  context?: DelegationContext,
+  beforeCommit?: () => void
 ): TaskSessionAttempt {
   return store.transaction(() => {
     if ((input.resultHash === undefined) !== (input.reportPath === undefined)) {
@@ -129,7 +160,8 @@ export function recordTaskSessionProgress(
       task,
       attemptId,
       ownerKey,
-      input.release
+      input.release,
+      context
     )
     if (input.release && isTaskSessionReleased(store, attemptId)) {
       return prior
@@ -157,6 +189,18 @@ export function recordTaskSessionProgress(
       )
     if (input.resultHash) {
       store.native.updateTaskStatus(prior.nativeTaskId, 'completed', input.reportPath)
+      if (context && input.reportText && input.reportText.length <= 10000) {
+        freezeTaskResult(store, {
+          attemptId,
+          nativeTaskId: prior.nativeTaskId,
+          dispatchId: null,
+          planRevision: prior.revision,
+          author: context.actor,
+          kind: 'other',
+          report: input.reportText,
+          source: null
+        })
+      }
     }
     if (input.release) {
       store.native.updateTaskStatus(
@@ -165,10 +209,8 @@ export function recordTaskSessionProgress(
         'Owner released this task attempt; chat and process were not stopped'
       )
       store.native.db
-        .prepare(
-          "UPDATE project_task_items SET phase=CASE WHEN approved_revision=? AND current_revision=? THEN 'ready' ELSE 'draft' END WHERE project_id=? AND task_id=?"
-        )
-        .run(task.revision, task.revision, projectId, task.id)
+        .prepare('UPDATE project_task_items SET phase=? WHERE project_id=? AND task_id=?')
+        .run(taskAdmission(store, projectId, task, context) ? 'ready' : 'draft', projectId, task.id)
     }
     store.event(
       projectId,
@@ -190,5 +232,5 @@ export function recordTaskSessionProgress(
       resultHash: input.resultHash ?? prior.resultHash,
       nativeStatus: input.release ? 'failed' : input.resultHash ? 'completed' : prior.nativeStatus
     }
-  })
+  }, beforeCommit)
 }

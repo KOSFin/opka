@@ -6,6 +6,9 @@ import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-qu
 import { hostStructuredAgentSessionCurrentWork } from './structured-agent-session-host-current-work'
 import { holdClosedStructuredAgentSessionSends } from './structured-agent-session-host-lifetime'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import type { AutomationCommandDefinitionV1 } from '../../../shared/automation-command-domain'
+import type { AutomationRun } from '../../../shared/automations-types'
+import { appendStructuredAutomationReport } from './structured-agent-session-automation-report'
 import {
   openStructuredAgentSessionConversation,
   resettleOpenStructuredAgentSessionConversation,
@@ -53,6 +56,11 @@ export type StructuredAgentSessionConversationDelivery = {
     sessionId: string,
     opened: OpenedStructuredAgentSessionConversation
   ) => Promise<void>
+  appendAutomationReport: (
+    runtimeId: string,
+    target: NonNullable<AutomationCommandDefinitionV1['execution']['reportTarget']>,
+    run: AutomationRun
+  ) => Promise<'delivered' | 'undelivered' | 'unverifiable'>
 }
 
 export function createStructuredAgentSessionConversationDelivery(input: {
@@ -212,6 +220,25 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   })
   return {
     loop,
+    appendAutomationReport: (runtimeId, target, run) =>
+      input.serialize(target.chatSessionId, () =>
+        appendStructuredAutomationReport({
+          deps,
+          runtimeId,
+          target,
+          run,
+          openJournal: async () => {
+            const opened = await openStructuredAgentSessionConversation(
+              { deps, sessions, adoptOpened },
+              target.chatSessionId
+            )
+            if (!opened) {
+              throw new Error('Automation report chat is unavailable.')
+            }
+            return opened.journal
+          }
+        })
+      ),
     afterCommit,
     afterSettleEdge: (sessionId, journal) => {
       input.clientDelivery.publishStatus(sessionId)

@@ -5,21 +5,19 @@ import {
 } from './automation-dispatch-request'
 export type { AutomationRendererChannel } from './automation-dispatch-request'
 import type { Store } from '../persistence'
-import {
-  isFinalAutomationRunStatus,
-  type Automation,
-  type AutomationDispatchResult,
-  type AutomationPrecheckResult,
-  type AutomationRun
+import type {
+  Automation,
+  AutomationDispatchResult,
+  AutomationPrecheckResult,
+  AutomationRun
 } from '../../shared/automations-types'
 import type { ClaudeUsageStore } from '../claude-usage/store'
 import type { CodexUsageStore } from '../codex-usage/store'
-import { failedPrecheckResult, runAutomationPrecheck } from './precheck-runner'
+import { runScheduledAutomationPrecheck } from './automation-run-precheck'
 import { resolveAutomationRunTarget, type AutomationRunTargetResult } from './run-target-resolution'
-import { writeAutomationRunUsage } from './run-usage-collection'
 import type { HeadlessAutomationDispatcher } from './headless-dispatch'
 import { runKeyedSerializedOperation } from '../cli/keyed-promise-queue'
-import { clearAutomationDispatchTokens } from './dispatch-tokens'
+import { recordAutomationDispatchResult } from './automation-dispatch-result-recording'
 import {
   AutomationRunCompletionWatcher,
   type AutomationRunTerminalObserver
@@ -38,6 +36,14 @@ import type {
   AutomationsChangedPayload,
   PublishAutomationsChanged
 } from '../../shared/runtime-client-events'
+import type {
+  CommandRunClaimRequest,
+  CommandRunClaimResult
+} from '../persistence/scheduling-automations/automation-command-claim-operations'
+import {
+  AutomationCommandService,
+  type AutomationCommandHostAdapter
+} from './automation-command-service'
 
 const DEFAULT_TICK_MS = 60 * 1000
 
@@ -54,6 +60,7 @@ export class AutomationService {
   private readonly codexUsage: CodexUsageStore | null
   private readonly allowRemoteHostScheduling: boolean
   private readonly headlessDispatcher: HeadlessAutomationDispatcher | null
+  private readonly commandService: AutomationCommandService
   private readonly automationLanes = new Map<string, Promise<void>>()
   /** Set on a headless host: closes completed, unused run terminals now; resolves how many. */
   releaseFinishedRunTerminals: (() => Promise<number>) | null = null
@@ -73,6 +80,8 @@ export class AutomationService {
       codexUsage?: CodexUsageStore
       allowRemoteHostScheduling?: boolean
       headlessDispatcher?: HeadlessAutomationDispatcher
+      commandHostAdapterFactory?: (runs: AutomationRunWriter) => AutomationCommandHostAdapter
+      commandHostGeneration?: number
       terminalObserver?: AutomationRunTerminalObserver
       onAutomationsChanged?: PublishAutomationsChanged
     } = {}
@@ -85,6 +94,14 @@ export class AutomationService {
     this.headlessDispatcher = opts.headlessDispatcher ?? null
     this.publish = opts.onAutomationsChanged ?? null
     this.runs = createAutomationRunWriter(store, this.publish)
+    this.commandService = new AutomationCommandService({
+      store,
+      runs: this.runs,
+      adapter: opts.commandHostAdapterFactory?.(this.runs) ?? null,
+      hostGeneration: opts.commandHostGeneration ?? null,
+      isActive: () => !this.stopped,
+      runInLane: (id, operation) => this.runInAutomationLane(id, operation)
+    })
     this.completionWatcher = opts.terminalObserver
       ? new AutomationRunCompletionWatcher({
           observer: opts.terminalObserver,
@@ -119,6 +136,7 @@ export class AutomationService {
       return
     }
     this.stopped = false
+    void this.commandService.reconcileRetainedCommands()
     this.timer = setInterval(() => {
       void this.evaluateDueRuns()
     }, this.tickMs)
@@ -156,6 +174,24 @@ export class AutomationService {
     return await this.requestDispatch(automation, run, target, generation)
   }
 
+  commandPipelineAvailable(): boolean {
+    return this.commandService.available()
+  }
+
+  async runCommandNow(
+    request: Pick<CommandRunClaimRequest, 'automationId' | 'definitionRevision' | 'manualRequest'>
+  ): Promise<CommandRunClaimResult> {
+    return this.commandService.runNow(request)
+  }
+
+  async requestCommandCancel(
+    automationId: string,
+    runId: string,
+    requestKey: string
+  ): Promise<{ requested: true; observation: 'live' | 'unverifiable' | 'exited' }> {
+    return this.commandService.cancel(automationId, runId, requestKey)
+  }
+
   /** The run-history row doc:94 pairs with the typed refusal an execute fence throws. */
   async recordRefusedRun(automationId: string): Promise<void> {
     const automation = this.store.listAutomations().find((entry) => entry.id === automationId)
@@ -170,51 +206,20 @@ export class AutomationService {
   }
 
   async runPrecheck(automationId: string, runId: string): Promise<AutomationPrecheckResult | null> {
-    const automation = this.store.listAutomations().find((entry) => entry.id === automationId)
-    if (!automation) {
-      throw new Error('Automation not found.')
-    }
-    const run = this.store.listAutomationRuns(automationId).find((entry) => entry.id === runId)
-    if (!run) {
-      throw new Error('Automation run not found.')
-    }
-    if (run.trigger !== 'scheduled' || !automation.precheck) {
-      return null
-    }
-    const target = this.resolveTarget(automation)
-    if (!target.ok) {
-      return failedPrecheckResult(automation.precheck, Date.now(), target.error)
-    }
-    return await runAutomationPrecheck({
-      precheck: automation.precheck,
-      target:
-        automation.executionTargetType === 'ssh'
-          ? { type: 'ssh', cwd: target.cwd, connectionId: automation.executionTargetId }
-          : { type: 'local', cwd: target.cwd }
+    return runScheduledAutomationPrecheck({
+      store: this.store,
+      automationId,
+      runId,
+      resolveTarget: (automation) => this.resolveTarget(automation)
     })
   }
 
   async markDispatchResult(result: AutomationDispatchResult): Promise<AutomationRun> {
-    const run = await this.runs.updateRun(result)
-    clearAutomationDispatchTokens(run.automationId, run.id)
-    if (!isFinalAutomationRunStatus(run.status)) {
-      if (run.status === 'dispatched') {
-        this.completionWatcher?.watch(run)
-      }
-      return run
-    }
-    this.completionWatcher?.forget(run.id)
-    // Why: the renderer's mark-completed effect can re-fire for the same run
-    // before refresh() flips its status snapshot off 'dispatched'. Re-running
-    // collectRunUsage advances the attribution window and can rewrite an
-    // already-collected 'known' usage to 'unavailable'/'ambiguous_session'.
-    if (run.usage) {
-      return run
-    }
-    return await writeAutomationRunUsage({
+    return recordAutomationDispatchResult({
+      result,
       store: this.store,
       runs: this.runs,
-      run,
+      watcher: this.completionWatcher,
       claudeUsage: this.claudeUsage,
       codexUsage: this.codexUsage
     })
@@ -250,6 +255,7 @@ export class AutomationService {
           }
         }
       }
+      await this.commandService.evaluateDue(now)
     } finally {
       this.evaluating = false
     }

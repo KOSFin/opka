@@ -1,3 +1,4 @@
+import { nativeCliControlMessage } from '../../../../shared/native-cli-control-error'
 import { translate } from '@/i18n/i18n'
 import type { AgentLaunchPaneOutcome } from '../../../../shared/agent-launch-pane-verdict'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -31,7 +32,7 @@ function notStartedReason(code: string): string | null {
       'Its workspace is no longer available.'
     )
   }
-  return null
+  return nativeCliControlMessage(code)
 }
 
 export function agentLaunchPaneNoticeText(refusal: AgentLaunchPaneOutcome): string {

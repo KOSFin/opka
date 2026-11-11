@@ -8,6 +8,7 @@ import {
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { removeWorkspaceSessionOwnersEverywhere } from '../restoring-sessions/session-owner-removal'
 import { mergeFolderProjectGroups } from '../../project-groups/folder-project-merge'
+import { sanitizeRepoIcon } from '../../../shared/repo-icon'
 
 export type ProjectGroupMutationOperations = {
   state: PersistedState
@@ -47,6 +48,7 @@ export class ProjectGroupPersistenceOperations {
     connectionId?: string | null
     parentGroupId?: string | null
     createdFrom: ProjectGroup['createdFrom']
+    groupIcon?: ProjectGroup['groupIcon']
   }): ProjectGroup {
     let maxOrder = -1
     // Why: persisted group lists can be large enough to exceed spread limits.
@@ -64,7 +66,9 @@ export class ProjectGroupPersistenceOperations {
 
   updateProjectGroup(
     groupId: string,
-    updates: Partial<Pick<ProjectGroup, 'name' | 'isCollapsed' | 'tabOrder' | 'color'>>
+    updates: Partial<
+      Pick<ProjectGroup, 'name' | 'isCollapsed' | 'tabOrder' | 'color' | 'groupIcon'>
+    >
   ): ProjectGroup | null {
     const group = (this.state.projectGroups ?? []).find((entry) => entry.id === groupId)
     if (!group) {
@@ -81,6 +85,12 @@ export class ProjectGroupPersistenceOperations {
     }
     if (updates.color !== undefined) {
       group.color = typeof updates.color === 'string' ? updates.color : null
+    }
+    if (updates.groupIcon !== undefined) {
+      const groupIcon = sanitizeRepoIcon(updates.groupIcon)
+      if (groupIcon !== undefined) {
+        group.groupIcon = groupIcon
+      }
     }
     group.updatedAt = Date.now()
     this.scheduleSave()

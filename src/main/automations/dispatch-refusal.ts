@@ -13,7 +13,7 @@ import type {
   AutomationRun
 } from '../../shared/automations-types'
 import { resolveAutomationRunTarget, type AutomationRunTargetResult } from './run-target-resolution'
-import type { AutomationRunWriter } from './automation-run-writer'
+import type { LegacyAutomationRunWriter } from './automation-run-writer'
 import { wslMoveRepoBackoff } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 
 export const NO_DISPATCH_HOST = 'No Orca window was available to launch the automation.'
@@ -59,7 +59,7 @@ export function describeScheduledRefusal(input: {
  */
 export async function recordRefusedAutomationRun(input: {
   store: Store
-  runs: AutomationRunWriter
+  runs: LegacyAutomationRunWriter
   automation: Automation
   allowRemoteHostScheduling: boolean
 }): Promise<void> {
@@ -81,7 +81,7 @@ export async function recordRefusedAutomationRun(input: {
  * broken writes one row rather than one per tick, and never throws back into the tick.
  */
 export async function recordUnevaluableAutomation(input: {
-  runs: AutomationRunWriter
+  runs: LegacyAutomationRunWriter
   automation: Automation
   error: unknown
 }): Promise<void> {
@@ -121,7 +121,7 @@ export async function recordUnevaluableAutomation(input: {
 export async function sendRendererDispatch(
   channel: Pick<WebContents, 'send'> | null,
   payload: AutomationDispatchRequest,
-  runs: AutomationRunWriter,
+  runs: LegacyAutomationRunWriter,
   run: AutomationRun
 ): Promise<AutomationRun> {
   try {
@@ -171,7 +171,7 @@ export function missedBeyondGrace(input: {
 }
 
 export async function recordMissedRun(input: {
-  runs: AutomationRunWriter
+  runs: LegacyAutomationRunWriter
   automation: Automation
   scheduledFor: number
 }): Promise<void> {

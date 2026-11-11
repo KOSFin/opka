@@ -68,6 +68,50 @@ it('installs only verified binary/license/receipt and reuses it without download
   expect(input.assertCanReplaceInstalledBinary).not.toHaveBeenCalled()
 })
 
+it('installs a protected local replay archive only for its exact binary and host architecture', async () => {
+  const linux = Buffer.alloc(64)
+  linux.write('\x7fELF', 0, 'binary')
+  linux[4] = 2
+  linux[5] = 1
+  linux.writeUInt16LE(62, 18)
+  const archive = join(root, 'packaged.zip')
+  const content = zipSync({
+    'cli-proxy-api': linux,
+    LICENSE: Buffer.from(ENGINE_MIT_NOTICE)
+  })
+  await writeFile(archive, content)
+  const input = options()
+  input.platform = 'linux'
+  input.arch = 'x64'
+  input.packaged = {
+    archivePath: archive,
+    binarySha256: createHash('sha256').update(linux).digest('hex'),
+    pin: {
+      target: 'linux-x64',
+      version: '8.0.55-orca-replay-synthetic',
+      url: '',
+      archiveSha256: createHash('sha256').update(content).digest('hex'),
+      archiveBytes: content.length,
+      binaryMember: 'cli-proxy-api'
+    }
+  }
+  const installed = await ensurePinnedEngineAsset(input)
+  expect(installed.version).toBe('8.0.55-orca-replay-synthetic')
+  expect(await readFile(installed.binaryPath)).toEqual(linux)
+  expect((await ensurePinnedEngineAsset(input)).reused).toBe(true)
+  expect(fetcher).not.toHaveBeenCalled()
+
+  input.packaged.pin.target = 'linux-arm64'
+  await expect(ensurePinnedEngineAsset(input)).rejects.toThrow('target')
+  input.packaged.pin.target = 'linux-x64'
+  input.packaged.binarySha256 = '0'.repeat(64)
+  await expect(ensurePinnedEngineAsset(input)).rejects.toThrow('binary')
+  input.packaged.binarySha256 = installed.expectedSha256
+  await writeFile(archive, 'changed packaged archive')
+  await expect(ensurePinnedEngineAsset(input)).rejects.toThrow('byte count')
+  expect(fetcher).not.toHaveBeenCalled()
+})
+
 it('recovers bounded owned crash staging under an exclusive lease', async () => {
   const input = options()
   await mkdir(join(input.cacheDirectory, '.install'), { recursive: true })

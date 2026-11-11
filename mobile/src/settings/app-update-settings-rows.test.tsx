@@ -24,8 +24,10 @@ describe('AppUpdateSettingsRows', () => {
     available?: { version: string; url: string } | null
     lastCheckedAt?: number | null
     checkStatus?: AppUpdateCheckRowStatus
+    installCanCancel?: boolean
   }) {
     const onUpdate = vi.fn()
+    const onCancel = vi.fn()
     const onCheck = vi.fn()
     act(() => {
       renderer = create(
@@ -35,7 +37,9 @@ describe('AppUpdateSettingsRows', () => {
           lastCheckedAt: opts.lastCheckedAt ?? null,
           now: NOW,
           checkStatus: opts.checkStatus ?? 'idle',
+          installCanCancel: opts.installCanCancel,
           onUpdate,
+          onCancel,
           onCheck
         })
       )
@@ -48,6 +52,7 @@ describe('AppUpdateSettingsRows', () => {
       root,
       texts,
       onUpdate,
+      onCancel,
       onCheck,
       pressables: root.findAll((node) => String(node.type) === 'Pressable')
     }
@@ -86,5 +91,16 @@ describe('AppUpdateSettingsRows', () => {
     expect(render({ checkStatus: 'up-to-date' }).texts.at(-1)).toBe('Up to date')
     act(() => renderer?.unmount())
     expect(render({ checkStatus: 'failed' }).texts.at(-1)).toBe("Couldn't check")
+  })
+
+  it('offers a separate cancel action only when the native download supports it', () => {
+    const { pressables, texts, onCancel } = render({
+      available: { version: '0.0.51', url: 'https://example.test' },
+      installCanCancel: true
+    })
+    expect(texts).toContain('Cancel download')
+    expect(pressables[1].props.accessibilityLabel).toBe('Cancel update download')
+    act(() => pressables[1].props.onPress())
+    expect(onCancel).toHaveBeenCalledOnce()
   })
 })

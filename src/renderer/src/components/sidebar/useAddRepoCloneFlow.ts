@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { AddRepoExistingWorkspaceSource } from '../../../../shared/telemetry-events'
 import type { Repo } from '../../../../shared/repo-types'
+import type { BoundGitCloneChoice } from '../../../../shared/git-network-binding'
 import { getCloneDestinationAutoFill } from './clone-defaults'
 import type { AddRepoDialogStep } from './add-repo-dialog-types'
 import { translate } from '@/i18n/i18n'
@@ -42,6 +43,8 @@ export function useAddRepoCloneFlow({
   cloneError: string | null
   cloneProgress: { phase: string; percent: number } | null
   isCloning: boolean
+  cloneChoice: BoundGitCloneChoice | null
+  setCloneChoice: (choice: BoundGitCloneChoice | null) => void
   setCloneUrl: Dispatch<SetStateAction<string>>
   setCloneDestination: Dispatch<SetStateAction<string>>
   setCloneError: Dispatch<SetStateAction<string | null>>
@@ -50,6 +53,16 @@ export function useAddRepoCloneFlow({
   handleClone: () => Promise<void>
 } {
   const [cloneUrl, setCloneUrl] = useState('')
+  const [selectedCloneChoice, setSelectedCloneChoice] = useState<{
+    choice: BoundGitCloneChoice
+    url: string
+    hostId: string | null | undefined
+    hostToken: string
+  } | null>(null)
+  const setCloneUrlAndClearChoice = useCallback<Dispatch<SetStateAction<string>>>((value) => {
+    setCloneUrl(value)
+    setSelectedCloneChoice(null)
+  }, [])
   const [cloneDestination, setCloneDestination] = useState('')
   const [isCloning, setIsCloning] = useState(false)
   const [cloneError, setCloneError] = useState<string | null>(null)
@@ -60,6 +73,20 @@ export function useAddRepoCloneFlow({
   const hostToken = activeRuntimeEnvironmentId?.trim() ?? ''
   const hostTokenRef = useRef(hostToken)
   hostTokenRef.current = hostToken
+  const hostIdRef = useRef(hostId)
+  hostIdRef.current = hostId
+  const cloneChoice =
+    selectedCloneChoice?.url === cloneUrl &&
+    selectedCloneChoice.hostId === hostId &&
+    selectedCloneChoice.hostToken === hostToken
+      ? selectedCloneChoice.choice
+      : null
+  const setCloneChoice = useCallback(
+    (choice: BoundGitCloneChoice | null): void => {
+      setSelectedCloneChoice(choice ? { choice, url: cloneUrl, hostId, hostToken } : null)
+    },
+    [cloneUrl, hostId, hostToken]
+  )
   // Why: monotonic ID so stale clone callbacks can detect they were superseded.
   const cloneGenRef = useRef(0)
   // Why: track whether we've already auto-filled for this entry into the clone step,
@@ -92,6 +119,7 @@ export function useAddRepoCloneFlow({
   const resetCloneFlow = useCallback((): void => {
     cloneGenRef.current++
     setCloneUrl('')
+    setSelectedCloneChoice(null)
     setCloneDestination('')
     setIsCloning(false)
     setCloneError(null)
@@ -125,9 +153,12 @@ export function useAddRepoCloneFlow({
       return
     }
     const requestHostToken = hostTokenRef.current
+    const requestHostId = hostIdRef.current
     const gen = ++cloneGenRef.current
     const isCurrent = (): boolean =>
-      gen === cloneGenRef.current && requestHostToken === hostTokenRef.current
+      gen === cloneGenRef.current &&
+      requestHostToken === hostTokenRef.current &&
+      requestHostId === hostIdRef.current
     setIsCloning(true)
     setCloneError(null)
     setCloneProgress(null)
@@ -138,18 +169,28 @@ export function useAddRepoCloneFlow({
           ? (
               await callRuntimeRpc<{ repo: Repo }>(
                 target,
-                'repo.clone',
+                cloneChoice?.provider === 'gitlab'
+                  ? 'repo.cloneBoundGitLab'
+                  : cloneChoice?.provider === 'github'
+                    ? 'repo.cloneBoundGitHub'
+                    : 'repo.clone',
                 {
                   url: trimmedUrl,
-                  destination: cloneDestination.trim()
+                  destination: cloneDestination.trim(),
+                  ...(cloneChoice?.provider === 'gitlab'
+                    ? { profileId: cloneChoice.profileId }
+                    : cloneChoice?.provider === 'github'
+                      ? { account: { host: cloneChoice.host, user: cloneChoice.user } }
+                      : {})
                 },
                 { timeoutMs: 10 * 60_000 }
               )
             ).repo
-          : ((await window.api.repos.clone({
+          : await window.api.repos.clone({
               url: trimmedUrl,
-              destination: cloneDestination.trim()
-            })) as Repo)
+              destination: cloneDestination.trim(),
+              ...(cloneChoice ? { gitNetworkChoice: cloneChoice } : {})
+            })
       if (!isCurrent()) {
         return
       }
@@ -183,6 +224,7 @@ export function useAddRepoCloneFlow({
     activeRuntimeEnvironmentId,
     cloneUrl,
     cloneDestination,
+    cloneChoice,
     fetchWorktrees,
     hostId,
     onGitRepoReady
@@ -191,11 +233,13 @@ export function useAddRepoCloneFlow({
   return {
     cloneUrl,
     cloneDestination,
+    cloneChoice,
     cloneError,
     cloneProgress,
     isCloning,
-    setCloneUrl,
+    setCloneUrl: setCloneUrlAndClearChoice,
     setCloneDestination,
+    setCloneChoice,
     setCloneError,
     resetCloneFlow,
     handlePickDestination,

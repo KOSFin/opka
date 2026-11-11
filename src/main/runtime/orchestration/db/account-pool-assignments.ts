@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS account_pool_assignments (
   policy_revision INTEGER NOT NULL,
   account_id TEXT NOT NULL,
   quota_identity TEXT NOT NULL,
+  selection_reason TEXT,
   released_at TEXT
 );
 CREATE TABLE IF NOT EXISTS account_pool_pty_bindings (
@@ -62,6 +63,7 @@ const AssignmentRow = z.object({
   policy_revision: z.number(),
   account_id: z.string(),
   quota_identity: z.string(),
+  selection_reason: z.string().nullable(),
   released_at: z.string().nullable(),
   pty_id: z.string().nullable().optional(),
   incarnation_id: z.string().nullable().optional()
@@ -75,6 +77,7 @@ function decodeAssignment(row: unknown) {
     policyRevision: value.policy_revision,
     accountId: value.account_id,
     quotaIdentity: value.quota_identity,
+    selectionReason: value.selection_reason,
     sequence: value.sequence,
     releasedAt: value.released_at,
     ptyId: value.pty_id ?? null,
@@ -105,14 +108,15 @@ export function acquireAccountPoolAssignmentInTransaction(
     return assignment
   }
   const selected = selectAccountPoolMember(db, args)
-  db.prepare(`INSERT INTO account_pool_assignments (owner_key, provider, pool_id, policy_revision, account_id, quota_identity)
-    VALUES (?, ?, ?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO account_pool_assignments (owner_key, provider, pool_id, policy_revision, account_id, quota_identity, selection_reason)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
     args.ownerKey,
     selected.provider,
     args.policy.id,
     args.policy.revision,
     selected.id,
-    selected.quotaIdentity
+    selected.quotaIdentity,
+    selected.selectionReason ?? null
   )
   if (args.replacesOwnerKey) {
     db.prepare(
@@ -167,6 +171,32 @@ export function bindAccountPoolAssignmentPty(
     )
     .run(args.ownerKey, args.ptyId, args.incarnationId ?? null)
 }
+export function releaseUnconsumedNativeCliStartup(
+  this: OrchestrationDb,
+  args: {
+    provider: 'codex' | 'claude'
+    ptyId: string
+    incarnationId: string
+    assertCurrent: () => boolean
+  }
+): void {
+  this.db.exec('BEGIN IMMEDIATE')
+  try {
+    if (args.assertCurrent()) {
+      this.db
+        .prepare(`UPDATE account_pool_assignments SET released_at=datetime('now')
+      WHERE released_at IS NULL AND provider=? AND owner_key LIKE 'pty:%'
+      AND owner_key IN (SELECT owner_key FROM account_pool_pty_bindings WHERE pty_id=? AND incarnation_id=?)
+      AND owner_key NOT IN (SELECT replaces_owner_key FROM account_pool_replacement_claims)`)
+        .run(args.provider, args.ptyId, args.incarnationId)
+    }
+    this.db.exec('COMMIT')
+  } catch (error) {
+    this.db.exec('ROLLBACK')
+    throw error
+  }
+}
+
 export function releaseAccountPoolAssignment(this: OrchestrationDb, ownerKey: string): void {
   this.db
     .prepare(
@@ -197,6 +227,7 @@ export function listAccountPoolAssignments(this: OrchestrationDb): AccountPoolAs
     .map(decodeAssignment)
 }
 export type AccountPoolAssignmentMethods = {
+  releaseUnconsumedNativeCliStartup: typeof releaseUnconsumedNativeCliStartup
   releaseAccountPoolPtyGeneration: typeof releaseAccountPoolPtyGeneration
   bindAccountPoolAssignmentPty: typeof bindAccountPoolAssignmentPty
   acquireAccountPoolAssignment: typeof acquireAccountPoolAssignment
@@ -205,6 +236,7 @@ export type AccountPoolAssignmentMethods = {
 }
 export function attachAccountPoolAssignments(ctor: { prototype: object }): void {
   Object.assign(ctor.prototype, {
+    releaseUnconsumedNativeCliStartup,
     releaseAccountPoolPtyGeneration,
     bindAccountPoolAssignmentPty,
     acquireAccountPoolAssignment,

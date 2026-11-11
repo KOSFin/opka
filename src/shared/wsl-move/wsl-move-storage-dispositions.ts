@@ -26,6 +26,11 @@ export const LOCAL_STORAGE_MODULE_DISPOSITIONS: Record<string, WslMoveFieldDispo
     item: 72,
     note: 'CSV column widths and PDF scale, keyed by worktree id, runtime and file path.'
   },
+  'src/renderer/src/components/task-page/project-task-view-state.ts': {
+    disposition: 'rewrite-desktop',
+    item: 38,
+    note: 'Task view selection can name a workspace on the moved host.'
+  },
   'src/renderer/src/components/native-chat/native-chat-composer-draft-journal.ts':
     notApplicableDisposition(45, 'Keyed by session id.'),
   'src/renderer/src/components/native-chat/native-chat-composer-draft-storage.ts':
@@ -69,6 +74,7 @@ export const LOCAL_STORAGE_MODULE_DISPOSITIONS: Record<string, WslMoveFieldDispo
       'src/renderer/src/components/sidebar/mobile-sidebar-onboarding-badge.ts',
       'src/renderer/src/components/sidebar/SeveredTerminalDaemonBanner.tsx',
       'src/renderer/src/components/sidebar/SidebarToolbar.tsx',
+      'src/renderer/src/components/task-page/TaskPage.tsx',
       'src/renderer/src/components/terminal-pane/terminal-freeze-breadcrumbs.ts',
       'src/renderer/src/components/terminal-pane/terminal-render-desync-trigger.ts',
       'src/renderer/src/components/terminal-pane/terminal-startup-timing.ts',
@@ -108,6 +114,10 @@ export const SQLITE_SCHEMA_FILE_DATABASES: Record<string, string> = {
   'src/main/native-chat/agent-session-journal/journal-pi-active-branch.ts': 'pi-branch-import',
   'src/main/native-chat/agent-session-journal/queued-message-schema.ts': 'agent-session-journal',
   'src/main/persistence/profile-state/profile-state-database-schema.ts': 'profile-state',
+  'src/main/project-tasks/task-delegation-schema.ts': 'orchestration',
+  'src/main/project-tasks/task-workflow-schema.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/account-pool-assignments.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/account-pool-native-fences.ts': 'orchestration',
   'src/main/runtime/orchestration/db/schema/create-core-tables-sql.ts': 'orchestration',
   'src/main/runtime/orchestration/db/schema/create-graph-tables-sql.ts': 'orchestration',
   'src/main/runtime/orchestration/db/schema/migrate-legacy-contract-storage.ts': 'orchestration',
@@ -190,7 +200,29 @@ export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> 
         'legacy_operation_receipts',
         'attempt_observation_facts',
         'structured_pointer_operations',
-        'won'
+        'won',
+        'project_task_delegation_policy',
+        'project_task_delegation_proposals',
+        'project_task_delegation_mutations',
+        'project_task_delegation_audit',
+        'project_task_delegated_plans',
+        'project_task_admissions',
+        'project_task_results',
+        'project_task_review_assignments',
+        'project_task_reviews',
+        'project_task_acceptances',
+        'project_task_homes',
+        'project_task_items',
+        'project_task_graph',
+        'project_task_attempt_placements',
+        'project_task_attempts',
+        'project_task_session_attempts',
+        'project_task_events',
+        'account_pool_assignments',
+        'account_pool_pty_bindings',
+        'account_pool_replacement_claims',
+        'account_pool_native_epochs',
+        'account_pool_native_scopes'
       ],
       {
         disposition: 'rewrite-desktop',

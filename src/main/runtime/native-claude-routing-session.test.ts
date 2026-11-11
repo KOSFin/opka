@@ -30,6 +30,7 @@ function fixture(rotation: AccountPoolPolicy['rotation'] = 'after-turn', confirm
     poolId: 'pool',
     policyRevision: 1,
     quotaIdentity: 'B',
+    selectionReason: null,
     sequence: 1,
     releasedAt: null,
     ptyId: null,

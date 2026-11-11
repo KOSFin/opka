@@ -7,6 +7,7 @@ import { folderWorkspaceToWorktree } from '../../../src/shared/folder-workspace-
 import { getFolderWorkspaceHostId } from '../../../src/shared/sidebar-list/folder-workspace-host-id'
 import type { HostSectionRow } from '../../../src/shared/sidebar-list/host-section-rows'
 import type { GroupHeaderRow } from '../../../src/shared/sidebar-list/row-types'
+import { getProjectGroupExecutionHostIdForRows } from '../../../src/shared/sidebar-list/host-filtering'
 import { PR_GROUP_LABELS } from '../../../src/shared/workspace-view/workspace-pr-groups'
 import type { Worktree as HostWorktree } from '../../../src/shared/worktree/types'
 import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
@@ -133,6 +134,17 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
           count: row.count,
           ...(row.icon.kind === 'pinned' ? { icon: 'pin' as const } : {}),
           ...(row.repo ? { repo: row.repo } : {}),
+          ...(row.projectGroup && 'groupIcon' in row.projectGroup
+            ? {
+                projectGroupHeader: true,
+                projectGroupId: row.projectGroup.id,
+                projectGroupHostId: getProjectGroupExecutionHostIdForRows(
+                  row.projectGroup,
+                  LOCAL_EXECUTION_HOST_ID
+                ),
+                groupIcon: row.projectGroup.groupIcon
+              }
+            : {}),
           data: []
         })
         break

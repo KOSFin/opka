@@ -25,9 +25,44 @@ jobs:
       build_template: true
       version: ${{ inputs.version }}
 
+  native_replay_mac_arm64:
+    name: Pinned Darwin arm64 replay engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: node
+      - name: Cache pinned replay build inputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/opka-replay-ci/source.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/go.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/modules
+          key: codex-replay-inputs-${{ hashFiles('config/scripts/codex-replay-ci-build.sh', 'config/scripts/build-codex-replay-engine.mjs', 'config/patches/cli-proxy-api-8.0.55-native-replay.patch', 'config/patches/cli-proxy-api-8.0.55-native-replay.source-sha256') }}-e6e5708e677adb2463d45accdd24bc9fd028ddd8-ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5
+      - name: Cross-build and verify Darwin arm64 replay triple
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash config/scripts/codex-replay-ci-build.sh darwin-arm64
+          node -e "require('./config/scripts/packaged-codex-replay-engine.cjs').assertReplayArtifact('.build/codex-routing-replay/darwin-arm64', 'darwin-arm64')"
+          mkdir -p out/native-replay-darwin-arm64
+          cp .build/codex-routing-replay/darwin-arm64/{cli-proxy-api,engine.zip,manifest.json} out/native-replay-darwin-arm64/
+          sha256sum out/native-replay-darwin-arm64/{cli-proxy-api,engine.zip,manifest.json} > out/native-replay-darwin-arm64/build-hashes.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-replay-darwin-arm64-${{ github.sha }}
+          path: out/native-replay-darwin-arm64/
+          if-no-files-found: error
+          retention-days: 7
+
   mac:
     name: Unsigned Mac arm64 beta
-    needs: server_template
+    needs: [server_template, native_replay_mac_arm64]
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -54,6 +89,18 @@ jobs:
         with:
           name: orcad-template
           path: out/orcad-template
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-replay-darwin-arm64-${{ github.sha }}
+          path: out/native-replay-darwin-arm64
+      - name: Restore exact Darwin arm64 replay triple before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .build/codex-routing-replay/darwin-arm64
+          cp out/native-replay-darwin-arm64/{engine.zip,manifest.json} .build/codex-routing-replay/darwin-arm64/
+          install -m 700 out/native-replay-darwin-arm64/cli-proxy-api .build/codex-routing-replay/darwin-arm64/cli-proxy-api
+          node -e "require('./config/scripts/packaged-codex-replay-engine.cjs').assertReplayArtifact('.build/codex-routing-replay/darwin-arm64', 'darwin-arm64')"
       - name: Build desktop and native Mac components
         run: |
           pnpm run build:desktop:assets

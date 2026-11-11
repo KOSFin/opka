@@ -114,15 +114,16 @@ export function useMobileHomeData() {
       })
       for (const entry of allClientsRef.current) {
         if (entry.client.getState() === 'connected') {
-          fetchMobileHomeStats(entry.client, entry.hostId, setStatsByHost, () => stale)
-          void fetchHomeHostWorktreeInfo(entry.client, entry.hostId, setWorktreeInfo, () => stale)
-          fetchMobileHomeAccounts(entry.client, entry.hostId, setAccountsByHost, () => stale)
-          fetchMobileHomeTaskProviders(
-            entry.client,
-            entry.hostId,
-            setTaskProvidersByHost,
-            () => stale
-          )
+          const isStale = () =>
+            stale ||
+            entry.client.getState() !== 'connected' ||
+            !allClientsRef.current.some(
+              (current) => current.hostId === entry.hostId && current.client === entry.client
+            )
+          fetchMobileHomeStats(entry.client, entry.hostId, setStatsByHost, isStale)
+          void fetchHomeHostWorktreeInfo(entry.client, entry.hostId, setWorktreeInfo, isStale)
+          fetchMobileHomeAccounts(entry.client, entry.hostId, setAccountsByHost, isStale)
+          fetchMobileHomeTaskProviders(entry.client, entry.hostId, setTaskProvidersByHost, isStale)
         }
       }
       return () => {

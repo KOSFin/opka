@@ -72,12 +72,12 @@ describe('ProjectGroupDeleteDialog', () => {
     renderDialog({ onRemoveContainedProjectsChange })
 
     expect(document.body.textContent).toContain('Delete Platform.')
-    expect(document.body.textContent).toContain('Contained projects')
+    expect(document.body.textContent).toContain('Repositories in this project')
     expect(document.body.textContent).not.toContain('unless selected below')
     expect(getCheckbox().getAttribute('aria-checked')).toBe('false')
-    expect(document.body.textContent).toContain('Remove 2 contained projects')
+    expect(document.body.textContent).toContain('Remove 2 repositories from Orca')
     expect(document.body.textContent).not.toContain('Remove 2 contained projects from Orca')
-    expect(document.body.textContent).toContain('Project folders on disk are not deleted.')
+    expect(document.body.textContent).toContain('Repository folders on disk are not deleted.')
     expect(document.body.textContent).toContain('API')
     expect(document.body.textContent).toContain('Web app')
 
@@ -91,7 +91,7 @@ describe('ProjectGroupDeleteDialog', () => {
   it('focuses the delete group action when opened', () => {
     renderDialog()
 
-    expect(document.activeElement).toBe(findButton('Delete Group'))
+    expect(document.activeElement).toBe(findButton('Delete project'))
   })
 
   it('keeps the panel copy and destructive action label stable when project removal is selected', () => {
@@ -102,7 +102,7 @@ describe('ProjectGroupDeleteDialog', () => {
     expect(document.body.textContent).not.toContain('will be removed from Orca')
     expect(document.body.textContent).not.toContain('unless selected below')
     expect(getCheckbox().getAttribute('aria-checked')).toBe('true')
-    expect(findButton('Delete Group')).toBeTruthy()
+    expect(findButton('Delete project')).toBeTruthy()
     expect(document.body.textContent).not.toContain('Delete Group and Remove Projects')
   })
 
@@ -117,7 +117,7 @@ describe('ProjectGroupDeleteDialog', () => {
     renderDialog({ onConfirm })
 
     act(() => {
-      findButton('Delete Group').click()
+      findButton('Delete project').click()
     })
 
     expect(getCheckbox().disabled).toBe(true)

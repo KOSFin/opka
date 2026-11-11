@@ -11,6 +11,7 @@ import { invalidateGhAccountTokenCache } from '../../github/gh-account-token'
 import { sanitizeRepoUpdatesForPersistence } from './repo-sanitization'
 import { isFolderRepo } from '../../../shared/repo-kind'
 import { findExtraFolderWorkspaceIds } from '../../folder-workspace-meta-presence'
+import { isGitNetworkBinding, type GitNetworkBinding } from '../../../shared/git-network-binding'
 
 export type RepoUpdateMutationOperations = {
   state: Pick<PersistedState, 'repos' | 'projectGroups' | 'worktreeMeta'>
@@ -92,6 +93,51 @@ export class RepoUpdatePersistenceOperations {
 
   private hydrateRepo(repo: Repo): Repo {
     return this.operations.hydrateRepo(repo)
+  }
+
+  setRepoGitNetworkBinding(
+    target: RepoHostTarget,
+    expectedPath: string,
+    expectedAddedAt: number,
+    expectedGeneration: string | null,
+    binding: GitNetworkBinding | null
+  ): Repo {
+    const row = findRepoRowForHostScopedWrite(
+      this.state.repos,
+      target.id,
+      getRepoExecutionHostId(target)
+    )
+    if (
+      !row ||
+      getRepoExecutionHostId(row) !== 'local' ||
+      row.path !== expectedPath ||
+      row.addedAt !== expectedAddedAt ||
+      isFolderRepo(row) ||
+      (row.gitNetworkBinding?.generation ?? null) !== expectedGeneration ||
+      (binding !== null && !isGitNetworkBinding(binding))
+    ) {
+      throw new Error('Git network binding unavailable for this repository.')
+    }
+    if (binding?.provider === 'gitlab') {
+      row.gitNetworkBinding = {
+        provider: 'gitlab',
+        id: binding.id,
+        host: binding.host,
+        user: binding.user,
+        generation: binding.generation
+      }
+    } else if (binding?.provider === 'github') {
+      row.gitNetworkBinding = {
+        provider: 'github',
+        host: binding.host,
+        user: binding.user,
+        generation: binding.generation
+      }
+    } else {
+      delete row.gitNetworkBinding
+    }
+    this.scheduleSave()
+    return this.hydrateRepo(row)
   }
 
   updateRepo(

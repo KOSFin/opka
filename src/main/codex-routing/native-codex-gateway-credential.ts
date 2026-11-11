@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { readNodeFileSyncWithinLimit } from '../../shared/node-bounded-file-reader'
 import { publishFileWithoutOverwrite } from '../codex-accounts/fs-utils'
 import { ensurePrivateEngineDirectory } from './engine-runtime-config'
+import { NativeCliControlError } from '../../shared/native-cli-control-error'
 
 function isAbsent(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT'
@@ -140,12 +141,44 @@ export function prepareNativeCodexGatewayAuth(
   ensurePrivateEngineDirectory(home)
   const path = join(home, 'auth.json')
   const contents = JSON.stringify({ auth_mode: 'apikey', OPENAI_API_KEY: key })
-  assertNoPending(path)
-  if (readPrivate(path) === null) {
+  const existing = inspectNativeCodexGatewayAuth(home, key, assertExclusive)
+  if (existing === 'absent') {
     publish(home, path, contents, assertExclusive)
   }
   if (readPrivate(path) !== contents) {
-    throw new Error('Native routing HOME contains a different or unverifiable login.')
+    throw new NativeCliControlError('routing_auth_conflict')
   }
   assertExclusive()
+}
+
+/** Read-only check before native HOME creates its interrupted-preparation marker. */
+export function inspectNativeCodexGatewayAuth(
+  home: string,
+  key: string,
+  assertExclusive: () => void
+): 'absent' | 'matching' {
+  assertExclusive()
+  assertKey(key)
+  const path = join(home, 'auth.json')
+  try {
+    assertNoPending(path)
+  } catch {
+    throw new NativeCliControlError('routing_auth_pending')
+  }
+  try {
+    const existing = readPrivate(path)
+    if (existing === null) {
+      return 'absent'
+    }
+    if (existing !== JSON.stringify({ auth_mode: 'apikey', OPENAI_API_KEY: key })) {
+      throw new NativeCliControlError('routing_auth_conflict')
+    }
+  } catch (error) {
+    if (error instanceof NativeCliControlError) {
+      throw error
+    }
+    throw new NativeCliControlError('routing_auth_conflict')
+  }
+  assertExclusive()
+  return 'matching'
 }

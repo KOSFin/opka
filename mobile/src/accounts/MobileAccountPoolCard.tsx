@@ -23,6 +23,7 @@ export function MobileAccountPoolCard({
   policy,
   view,
   disabled,
+  verified,
   dirty,
   onDiscard,
   onChange,
@@ -33,6 +34,7 @@ export function MobileAccountPoolCard({
 }: {
   policy: AccountPoolPolicy
   view: AccountPoolView
+  verified: boolean
   dirty: boolean
   onDiscard: () => void
   disabled: boolean
@@ -48,8 +50,19 @@ export function MobileAccountPoolCard({
   const Icon = policy.provider === 'claude' ? ClaudeIcon : OpenAIIcon
   const accounts = view.accounts[policy.provider]
   const enabled = policy.applyToNewWork && policy.strategy !== 'manual'
+  const activeAccount = accounts.accounts.find((account) => account.id === accounts.activeAccountId)
   const applied = view.policies.find((entry) => entry.id === policy.id)
   const manualBlocked = enabled || Boolean(applied?.applyToNewWork && applied.strategy !== 'manual')
+  const latestAssignment =
+    verified &&
+    !dirty &&
+    applied?.provider === policy.provider &&
+    applied.applyToNewWork &&
+    applied.strategy === 'quota-equalize'
+      ? view.assignments.findLast(
+          (entry) => entry.provider === policy.provider && entry.poolId === applied.id
+        )
+      : null
   return (
     <MobileNativePoolRoutingScope
       target={routingTarget}
@@ -84,6 +97,11 @@ export function MobileAccountPoolCard({
             <Text style={styles.rowSubtitle}>
               Manual mode uses the selected account. Automatic pool mode chooses from the same
               accounts below. Save changes before starting new work.
+            </Text>
+            <Text style={styles.rowSubtitle}>
+              {enabled
+                ? `Current active account: ${activeAccount?.email ?? 'CLI login or none'}. Next selection uses eligible ${policy.allowReserve ? 'primary, then reserve' : 'primary'} accounts${policy.strategy === 'quota-equalize' ? ' with comparable fresh quota' : policy.strategy === 'balanced' ? ' weighted within a priority level' : ' in priority order'}; cooldown and exhausted quota can exclude an account.`
+                : `Manual default for new work: ${activeAccount?.email ?? 'CLI login on this host'}. Select an account below to change it.`}
             </Text>
             {presentation?.renderProviderSignIn?.(policy.provider)}
             <MobileAccountPoolLaunchSettings
@@ -158,6 +176,13 @@ export function MobileAccountPoolCard({
               const controls = (
                 <View style={poolStyles.memberSettings}>
                   <MobileNativePoolConnection accountId={account.id} />
+                  {latestAssignment?.accountId === account.id &&
+                  applied?.members.some((entry) => entry.accountId === account.id) &&
+                  latestAssignment.selectionReason ? (
+                    <Text style={styles.rowSubtitle}>
+                      Host selection for running work: {latestAssignment.selectionReason}
+                    </Text>
+                  ) : null}
                   {!enabled && !presentation && accounts.activeAccountId === account.id ? (
                     <Text style={styles.rowSubtitle}>Default for new manual launches</Text>
                   ) : null}

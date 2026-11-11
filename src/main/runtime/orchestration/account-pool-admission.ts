@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type Database from '../../sqlite/sync-database'
 import type { AccountPoolCandidate, AccountPoolPolicy } from '../../../shared/account-pool-policy'
 import { OrchestrationError } from './orchestration-error'
-import { rankQuotaEqualizeMembers } from '../account-pool-quota-equalize'
+import { rankQuotaEqualizeMembersWithReason } from '../account-pool-quota-equalize'
 
 const AllocationSequence = z.object({ sequence: z.number() })
 const PoolSlot = z.object({
@@ -93,19 +93,30 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
           'SELECT sequence FROM account_pool_assignments WHERE provider=? AND quota_identity=? ORDER BY sequence DESC LIMIT 1'
         )
       : null
+  const exclusions = new Map<string, number>()
+  const excluded = (reason: string) => {
+    exclusions.set(reason, (exclusions.get(reason) ?? 0) + 1)
+    return []
+  }
   const eligible = policy.members.flatMap((member) => {
     const candidate = candidates.find((entry) => entry.accountId === member.accountId)
-    if (
-      !candidate ||
-      candidate.auth !== 'ready' ||
-      member.state !== 'enabled' ||
-      member.role === 'manual' ||
-      (member.role === 'reserve' && !policy.allowReserve) ||
-      (member.cooldownUntil ?? 0) > Date.now() ||
-      candidate.quota === 'exhausted' ||
-      (candidate.quota === 'unknown' && policy.unknownQuota === 'exclude')
-    ) {
-      return []
+    if (!candidate || candidate.auth !== 'ready') {
+      return excluded('unavailable account')
+    }
+    if (member.state !== 'enabled' || member.role === 'manual') {
+      return excluded('disabled or manual member')
+    }
+    if (member.role === 'reserve' && !policy.allowReserve) {
+      return excluded('reserve off')
+    }
+    if ((member.cooldownUntil ?? 0) > Date.now()) {
+      return excluded('cooldown')
+    }
+    if (candidate.quota === 'exhausted') {
+      return excluded('exhausted quota')
+    }
+    if (candidate.quota === 'unknown' && policy.unknownQuota === 'exclude') {
+      return excluded('unknown quota policy')
     }
     const usesQuota = (entry: { provider: unknown; quotaIdentity: unknown; accountId: unknown }) =>
       entry.provider === policy.provider &&
@@ -117,7 +128,7 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
     const active = assignments.filter(usesQuota).length
     const retainedOwnSlot = replacement && usesQuota(replacement) ? 1 : 0
     if (member.maxConcurrent !== undefined && active - retainedOwnSlot >= member.maxConcurrent) {
-      return []
+      return excluded('no free slot')
     }
     const last = lastAllocation?.get(policy.provider, candidate.quotaIdentity)
     const sequence = last ? AllocationSequence.parse(last).sequence : 0
@@ -150,6 +161,7 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
     }
     return policy.members.indexOf(a.member) - policy.members.indexOf(b.member)
   })
+  let selectionReason: string | undefined
   if (policy.strategy === 'quota-equalize') {
     for (let start = 0; start < eligible.length;) {
       let end = start + 1
@@ -160,14 +172,14 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
       ) {
         end += 1
       }
-      eligible.splice(
-        start,
-        end - start,
-        ...rankQuotaEqualizeMembers(
-          eligible.slice(start, end).map((entry) => ({ ...entry, weight: entry.member.weight })),
-          admission.preferredAccountId
-        )
+      const ranking = rankQuotaEqualizeMembersWithReason(
+        eligible.slice(start, end).map((entry) => ({ ...entry, weight: entry.member.weight })),
+        admission.preferredAccountId
       )
+      if (start === 0) {
+        selectionReason = ranking.reason
+      }
+      eligible.splice(start, end - start, ...ranking.ranked)
       start = end
     }
   }
@@ -190,6 +202,11 @@ export function selectAccountPoolMember(db: Database.Database, admission: Accoun
   return {
     provider: policy.provider,
     id: selected.candidate.accountId,
-    quotaIdentity: selected.candidate.quotaIdentity
+    quotaIdentity: selected.candidate.quotaIdentity,
+    ...(selectionReason
+      ? {
+          selectionReason: `Priority ${selected.member.priority} ${selected.member.role}. ${selectionReason}${exclusions.size ? ` Excluded: ${[...exclusions].map(([reason, count]) => `${reason} (${count})`).join(', ')}.` : ''}`
+        }
+      : {})
   }
 }

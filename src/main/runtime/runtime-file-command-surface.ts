@@ -13,6 +13,7 @@ type RuntimeFileCommandName =
   | 'writeTerminalArtifactFile'
   | 'revokeTerminalFileGrantsForClient'
   | 'readFileExplorerDir'
+  | 'readFileExplorerDirPage'
   | 'watchFileExplorer'
   | 'readFileExplorerPreview'
   | 'readFileExplorerChunk'
@@ -52,6 +53,7 @@ export function installRuntimeFileCommandSurface(
     writeTerminalArtifactFile: commands.writeTerminalArtifactFile.bind(commands),
     revokeTerminalFileGrantsForClient: commands.revokeTerminalFileGrantsForClient.bind(commands),
     readFileExplorerDir: commands.readFileExplorerDir.bind(commands),
+    readFileExplorerDirPage: commands.readFileExplorerDirPage.bind(commands),
     watchFileExplorer: commands.watchFileExplorer.bind(commands),
     readFileExplorerPreview: commands.readFileExplorerPreview.bind(commands),
     readFileExplorerChunk: commands.readFileExplorerChunk.bind(commands),

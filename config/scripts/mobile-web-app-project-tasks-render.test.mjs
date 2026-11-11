@@ -200,6 +200,12 @@ render.each(sizes)('project work on $name', (size) => {
       ).toBe(0)
       expect(await page.getByText('test@example.invalid', { exact: true }).count()).toBe(1)
       await capture(page, size, 'pools')
+      const accountDetailsClose = page.getByRole('button', {
+        name: 'Close account details',
+        exact: true
+      })
+      await accountDetailsClose.click()
+      await accountDetailsClose.waitFor({ state: 'hidden' })
       await page.getByText('Add Codex account', { exact: true }).click()
       await page.getByText('TEST-ABCDE', { exact: true }).waitFor()
       await capture(page, size, 'device-sign-in')

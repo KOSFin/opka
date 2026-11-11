@@ -4,6 +4,14 @@ import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { AUTOMATION_METHODS } from './automations'
+import { AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY } from '../../../../shared/automation-runtime-capabilities'
+import { readAutomationCommandsV1Domain } from '../../../../shared/automation-command-domain'
+import { buildProfileStateCutoverFixture } from '../../../persistence/profile-state-cutover-fixture'
+import { createCommandAutomationDefinition } from '../../../persistence/scheduling-automations/automation-command-definition-operations'
+import {
+  commandDefinitionFromDraft,
+  emptyAutomationCommandDraft
+} from '../../../../renderer/src/components/automations/automation-command-draft'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
   return { id: 'req-1', authToken: 'tok', method, params }
@@ -123,6 +131,161 @@ describe('automation RPC methods', () => {
       result: { nextCursor: '100' }
     })
     expect(runtime.listAutomationRunsPage).toHaveBeenCalledWith('auto-1', undefined, 100, undefined)
+  })
+
+  it('hides command runs from legacy history reads, including cursor pages', async () => {
+    const commandRun = { id: 'command-run', automationId: 'command-1', sessionKind: 'command' }
+    const legacyRun = { id: 'legacy-run', automationId: 'legacy-1', sessionKind: 'terminal' }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher fixture supplies every runtime method exercised by its requests.
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      listAutomationRuns: vi.fn().mockReturnValue([commandRun, legacyRun]),
+      listAutomationRunsPage: vi.fn().mockReturnValue({
+        runs: [commandRun, legacyRun],
+        nextCursor: null
+      })
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: AUTOMATION_METHODS })
+
+    await expect(dispatcher.dispatch(makeRequest('automation.runs', {}))).resolves.toMatchObject({
+      ok: true,
+      result: { runs: [legacyRun] }
+    })
+    await expect(
+      dispatcher.dispatch(makeRequest('automation.runs', { limit: 100 }))
+    ).resolves.toMatchObject({ ok: true, result: { runs: [legacyRun] } })
+  })
+
+  it('exposes command definitions and runs only to a capable reader', async () => {
+    const command = { id: 'command-1', name: 'Command' }
+    const commandRun = { id: 'command-run', automationId: 'command-1', sessionKind: 'command' }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher fixture supplies every runtime method exercised by its requests.
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      listAutomationsForScope: vi.fn().mockReturnValue({ automations: [], items: [] }),
+      listCommandAutomations: vi.fn().mockReturnValue([command]),
+      listAutomationRuns: vi.fn().mockReturnValue([commandRun])
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: AUTOMATION_METHODS })
+    const clientCapabilities = [AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY]
+
+    await expect(dispatcher.dispatch(makeRequest('automation.list'))).resolves.toMatchObject({
+      ok: true,
+      result: { automations: [] }
+    })
+    expect(runtime.listCommandAutomations).not.toHaveBeenCalled()
+    await expect(
+      dispatcher.dispatch(makeRequest('automation.list'), { clientCapabilities })
+    ).resolves.toMatchObject({ ok: true, result: { commandAutomations: [command] } })
+    await expect(
+      dispatcher.dispatch(makeRequest('automation.runs', { automationId: command.id }), {
+        clientCapabilities
+      })
+    ).resolves.toMatchObject({ ok: true, result: { runs: [commandRun] } })
+  })
+
+  it('reads one command manual receipt only for a capable local owner', async () => {
+    const receipt = {
+      automationId: 'command-1',
+      requestKey: 'request-1',
+      payloadHash: 'a'.repeat(64),
+      createdAt: 1,
+      runId: 'run-1'
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher fixture supplies every runtime method exercised by its requests.
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      commandAutomationAvailable: () => true,
+      commandAutomationManualReceipt: vi.fn().mockReturnValue(receipt),
+      listAutomationRuns: vi.fn().mockReturnValue([])
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: AUTOMATION_METHODS })
+    const params = {
+      automationId: 'command-1',
+      manualRequestKey: 'request-1',
+      expectedOwner: { selector: { kind: 'self' } }
+    }
+    await expect(
+      dispatcher.dispatch(makeRequest('automation.runs', params))
+    ).resolves.toMatchObject({ ok: false })
+    expect(runtime.commandAutomationManualReceipt).not.toHaveBeenCalled()
+    await expect(
+      dispatcher.dispatch(makeRequest('automation.runs', params), {
+        clientCapabilities: [AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY]
+      })
+    ).resolves.toMatchObject({ ok: true, result: { manualReceipt: receipt, runs: [] } })
+    expect(runtime.commandAutomationManualReceipt).toHaveBeenCalledWith('command-1', 'request-1')
+  })
+
+  it('refuses a stale local project in the actual V2 create handler before any definition write', async () => {
+    const state = buildProfileStateCutoverFixture('/fixture')
+    const localSetup = state.projectHostSetups.find((entry) => entry.id === 'setup-local')
+    const localRepo = state.repos.find((entry) => entry.id === 'repo-local')
+    if (!localSetup || !localRepo) {
+      throw new Error('Fixture local project missing.')
+    }
+    const setup = { ...localSetup, projectId: 'repo-local' }
+    const definition = commandDefinitionFromDraft(
+      {
+        ...emptyAutomationCommandDraft(),
+        name: 'Check',
+        setupId: setup.id,
+        commandText: 'true',
+        timezone: 'UTC'
+      },
+      setup,
+      Date.UTC(2026, 10, 11, 8),
+      'same-create-key'
+    )
+    localRepo.executionHostId = 'ssh:build-host'
+    const flush = vi.fn()
+    const operations = { state, flush, markDomainDirty: vi.fn() }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher fixture supplies every runtime method exercised by its request.
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      commandAutomationAvailable: () => true,
+      createCommandAutomation: vi.fn((input: typeof definition) =>
+        Promise.resolve(createCommandAutomationDefinition(operations, input))
+      )
+    } as unknown as OrcaRuntimeService
+    const response = await new RpcDispatcher({ runtime, methods: AUTOMATION_METHODS }).dispatch(
+      makeRequest('automation.createV2', { version: 2, definition })
+    )
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'runtime_error', message: 'Command automation project is unavailable.' }
+    })
+    expect(runtime.createCommandAutomation).toHaveBeenCalledOnce()
+    expect(readAutomationCommandsV1Domain(state.automationCommandsV1).definitions).toEqual([])
+    expect(flush).not.toHaveBeenCalled()
+  })
+
+  it('refuses versioned execution before any legacy fallback or effect', async () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher fixture supplies every runtime method exercised by its requests.
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      commandAutomationAvailable: vi.fn().mockReturnValue(false),
+      runAutomationNow: vi.fn(),
+      createCommandAutomation: vi.fn()
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: AUTOMATION_METHODS })
+
+    await expect(
+      dispatcher.dispatch(
+        makeRequest('automation.runNowV2', {
+          version: 2,
+          id: 'command-1',
+          expectedRevision: 1,
+          expectedOwner: { selector: { kind: 'self' } },
+          requestKey: 'request-1',
+          requestCreatedAt: 1,
+          payloadHash: 'a'.repeat(64)
+        })
+      )
+    ).resolves.toMatchObject({ ok: false })
+    expect(runtime.commandAutomationAvailable).toHaveBeenCalledOnce()
+    expect(runtime.runAutomationNow).not.toHaveBeenCalled()
+    expect(runtime.createCommandAutomation).not.toHaveBeenCalled()
   })
 
   it('rejects unknown providers and invalid schedules', async () => {

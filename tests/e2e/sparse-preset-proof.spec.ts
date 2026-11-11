@@ -10,9 +10,6 @@ test('sparse preset editor visual proof', async ({ orcaPage }, testInfo) => {
   await waitForSessionReady(orcaPage)
   await waitForActiveWorktree(orcaPage)
   await orcaPage.setViewportSize({ width: 1200, height: 800 })
-  const board = orcaPage.getByRole('button', { name: 'Workspace board', exact: true })
-  await board.click()
-  await board.click()
   await orcaPage.evaluate(() => {
     window.__store!.getState().openModal('new-workspace-composer', {})
   })

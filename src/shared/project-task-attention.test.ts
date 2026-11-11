@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import type { ProjectTaskAttempt, ProjectTaskWorkflow } from './project-task-workflow'
-import { projectTaskNeedsDecision } from './project-task-attention'
+import { projectTaskNeedsDecision, projectTaskNextAction } from './project-task-attention'
 
 const ready: ProjectTaskWorkflow = {
   taskId: 'fixture',
@@ -73,4 +73,27 @@ it('uses a session task blocker rather than the absence of a managed-worker rece
       ]
     })
   ).toBe(false)
+})
+
+it('names the next operator step without treating an unknown attempt as exited', () => {
+  expect(projectTaskNextAction({ ...ready, phase: 'draft' })).toBe('Review and approve the plan')
+  expect(projectTaskNextAction({ ...ready, phase: 'review' })).toBe(
+    'Review the report and record a decision'
+  )
+  expect(projectTaskNextAction({ ...ready, revisionChanged: true })).toBe(
+    'Review the changed plan before dispatching again'
+  )
+  expect(projectTaskNextAction({ ...ready, archived: true, phase: 'review' })).toBeNull()
+  expect(
+    projectTaskNextAction({
+      ...ready,
+      phase: 'active',
+      attempts: [
+        {
+          nativeStatus: 'unknown',
+          workerState: null
+        }
+      ]
+    })
+  ).toBe('Inspect the attempt and decide how to resume')
 })

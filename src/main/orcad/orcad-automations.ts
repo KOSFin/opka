@@ -6,17 +6,46 @@ import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { createRuntimeAutomationService } from '../automations/runtime-automation-service'
 import { isFinalAutomationRunStatus } from '../../shared/automations-types'
+import { probeLinuxAutomationHost } from '../automations/automation-linux-host-probe'
 
 type AutomationStore = Pick<Store, 'listAutomations' | 'listAutomationRuns'>
 
 let stopScheduler: (() => void) | null = null
 
-export function startOrcadAutomations(
+export async function startOrcadAutomations(
   runtime: OrcaRuntimeService,
   store: Store,
-  registerCleanup: (cleanup: () => void) => void
-): void {
-  const service = createRuntimeAutomationService({ store, runtime, headless: true })
+  registerCleanup: (cleanup: () => void) => void,
+  profileRoot?: string
+): Promise<void> {
+  let generation: number | null = null
+  if (profileRoot) {
+    try {
+      const runtimeId = runtime.getRuntimeId()
+      const epoch = store.advanceCommandHostEpoch()
+      await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
+      const stillOwns = () =>
+        runtime.getRuntimeId() === runtimeId && store.getCommandHostEpoch() === epoch
+      if (
+        await probeLinuxAutomationHost({
+          root: profileRoot,
+          hostEpoch: epoch,
+          runtimeId,
+          stillOwns
+        })
+      ) {
+        generation = epoch
+      }
+    } catch {
+      generation = null
+    }
+  }
+  const service = createRuntimeAutomationService({
+    store,
+    runtime,
+    headless: true,
+    ...(generation ? { verifiedCommandHost: { generation } } : {})
+  })
   stopScheduler = () => service.stop()
   // Stops before the store flushes, so no run is written after the final profile save.
   registerCleanup(() => service.stop())

@@ -51,7 +51,7 @@ export function useGitLabItemDetailsEffect(
 }
 
 export function useGitLabItemScopeResetEffect(
-  itemId: string | null,
+  itemScopeKey: string | null,
   state: GitLabItemDialogState
 ): void {
   const {
@@ -94,7 +94,7 @@ export function useGitLabItemScopeResetEffect(
     setJobTraceById({})
     setRetryingJobId(null)
   }, [
-    itemId,
+    itemScopeKey,
     setBodyDraft,
     setEditingDetails,
     setExpandedJobId,

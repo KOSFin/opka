@@ -274,6 +274,7 @@ export function makeStoreState(): AutomationsPageStoreFixtures {
       selectedAutomationId: null,
       setSelectedAutomationId: noop,
       pendingAutomationRunNavigation: null,
+      pendingCommandAutomationReportNavigation: null,
       setPendingAutomationRunNavigation: noop,
       hydratePersistedUI: noop,
       recordFeatureInteraction: noop,

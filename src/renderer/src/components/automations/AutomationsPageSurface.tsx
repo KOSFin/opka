@@ -12,11 +12,22 @@ import { AutomationRunsDashboardSurface } from './AutomationRunsDashboardSurface
 import { AutomationRunDetailsPage } from './AutomationRunDetailsPage'
 import { AutomationsPageDeleteDialogs } from './AutomationsPageDeleteDialogs'
 import { AutomationsPageListPanel } from './AutomationsPageListPanel'
+import { AutomationCommandModePanel } from './AutomationCommandModePanel'
+import { useAppStore } from '../../store'
 export function AutomationsPageSurface({
   controller
 }: {
   controller: AutomationsPageController
 }): React.JSX.Element {
+  const pendingCommandReport = useAppStore(
+    (state) => state.pendingCommandAutomationReportNavigation
+  )
+  const [commandMode, setCommandMode] = React.useState(pendingCommandReport !== null)
+  React.useEffect(() => {
+    if (pendingCommandReport) {
+      setCommandMode(true)
+    }
+  }, [pendingCommandReport])
   const {
     store,
     local,
@@ -133,6 +144,16 @@ export function AutomationsPageSurface({
     setIsDetailOpen(true)
     setActivePaneTab('runs')
   }
+  if (commandMode) {
+    return (
+      <AutomationCommandModePanel
+        target={{ kind: 'local' }}
+        setups={projectHostSetups}
+        requestedReport={pendingCommandReport}
+        onBack={() => setCommandMode(false)}
+      />
+    )
+  }
   return (
     <main className="relative flex h-full min-h-0 flex-col bg-background pt-5 text-foreground md:pt-6">
       <AutomationsPageTopBar
@@ -146,6 +167,7 @@ export function AutomationsPageSurface({
         showAutomationsList={showAutomationsList}
         showRunsDashboard={showRunsDashboard}
         showAutomationDetails={showAutomationDetails}
+        openCommandMode={() => setCommandMode(true)}
       />
       <AutomationEditorDialog
         open={createOpen}

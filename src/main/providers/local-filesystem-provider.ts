@@ -13,6 +13,7 @@ import type { RuntimeStore } from '../runtime/runtime-store-contract'
 import { runBundledRipgrepTextSearch } from '../ripgrep/bundled-ripgrep-text-search'
 import { resolveBundledRipgrepWslRouting } from '../ripgrep/bundled-ripgrep-wsl-routing'
 import type { IFilesystemProvider } from './filesystem-provider-contract'
+import { readBoundedFileExplorerDirectoryPage } from './file-explorer-directory-page'
 import type {
   FileWriteDiskPrecondition,
   FileWriteResult
@@ -34,6 +35,7 @@ export type LocalFilesystemProvider = Required<Pick<IFilesystemProvider, 'listMa
   Pick<
     IFilesystemProvider,
     | 'readDir'
+    | 'readDirPage'
     | 'readDocPreviewFile'
     | 'writeFile'
     | 'writeFileBase64'
@@ -89,6 +91,14 @@ export function createLocalFilesystemProvider(
     return writeLocalTextFileWithDiskPrecondition(authorizedPath, content, precondition)
   }
   return {
+    readDirPage: (dirPath, selector, readOptions = {}) =>
+      readBoundedFileExplorerDirectoryPage(dirPath, selector, authorize, {
+        ...readOptions,
+        followSymlinks:
+          readOptions.followSymlinks ??
+          options.requireStore().getSettings().followSymlinkedDirectories ??
+          false
+      }),
     readDir: async (dirPath, readOptions = {}) => {
       const entries = await readdir(await authorize(dirPath), { withFileTypes: true })
       const store = options.requireStore()

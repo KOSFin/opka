@@ -1,10 +1,12 @@
+import { PROJECT_TASK_DELEGATION_CAPABILITY } from '../project-task-delegation'
 import { z } from 'zod'
 import { ProjectTaskIdentity } from './project-task-params'
 import { WorkerLaunchParams } from './orchestration-worker-start-params'
 
 export const ProjectTaskAction = ProjectTaskIdentity.extend({
   revision: z.string().regex(/^[a-f0-9]{64}$/),
-  expectedExecutionHostId: z.string().min(1)
+  expectedExecutionHostId: z.string().min(1),
+  delegationCapability: z.literal(PROJECT_TASK_DELEGATION_CAPABILITY).optional()
 })
 export const ProjectTaskDecision = ProjectTaskAction.extend({
   action: z.enum(['changes', 'integration', 'accept']),
@@ -19,7 +21,10 @@ export const ProjectTaskStop = ProjectTaskIdentity.extend({
   expectedExecutionHostId: z.string().min(1),
   dispatch: z.string().min(1).max(100)
 })
-export const ProjectTaskStart = ProjectTaskAction.extend({ launch: WorkerLaunchParams })
+export const ProjectTaskStart = ProjectTaskAction.extend({
+  launch: WorkerLaunchParams,
+  requestId: z.string().uuid().optional()
+})
 export const ProjectTaskRename = ProjectTaskAction.extend({
   title: z.string().trim().min(1).max(200)
 })

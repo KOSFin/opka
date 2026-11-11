@@ -6,7 +6,7 @@ import { resolveEffectiveGitUpstream } from '../../shared/git-effective-upstream
 import { resolveConfiguredGitPushTarget } from '../../shared/git-push-target-resolution'
 import type { GitPushTarget } from '../../shared/worktree/types'
 import type { GitRuntimeOptions } from './git-runtime-options'
-import { gitOptionsForWorktree } from './git-runtime-options'
+import { gitNetworkOptionsForWorktree, gitOptionsForWorktree } from './git-runtime-options'
 import {
   postponeRepoRefMaintenance,
   withRepoRefMaintenancePaused
@@ -48,13 +48,17 @@ export async function gitPush(
       : await resolveConfiguredGitPushTarget((args) =>
           gitExecFileAsync(args, gitOptionsForWorktree(worktreePath, options))
         )
+    const remoteName = target?.remote ?? 'origin'
+    if (options.boundOperation && options.boundOperation.identity.remoteName !== remoteName) {
+      throw new Error('Bound Git remote unavailable.')
+    }
     const args = [
       'push',
       ...(options.forceWithLease ? ['--force-with-lease'] : []),
       '--set-upstream',
       ...(target ? [target.remote, target.refspec] : ['origin', 'HEAD'])
     ]
-    await gitExecFileAsync(args, gitOptionsForWorktree(worktreePath, options))
+    await gitExecFileAsync(args, gitNetworkOptionsForWorktree(worktreePath, options))
   } catch (error) {
     throw new Error(normalizeGitErrorMessage(error, 'push'))
   }
@@ -71,23 +75,36 @@ async function gitPullWithArgs(
       const target = await validateGitPushTarget(worktreePath, pushTarget, options)
       await gitExecFileAsync(
         ['pull', ...effectiveArgs, target.remoteName, target.branchName],
-        gitOptionsForWorktree(worktreePath, options)
+        gitNetworkOptionsForWorktree(worktreePath, options)
       )
       return
     }
     const upstream = await resolveEffectiveGitUpstream((args) =>
       gitExecFileAsync(args, gitOptionsForWorktree(worktreePath, options))
     )
-    if (upstream && !upstream.isConfiguredUpstream) {
+    if (
+      upstream?.remoteName &&
+      upstream.branchName &&
+      (!upstream.isConfiguredUpstream || options.boundOperation)
+    ) {
+      if (
+        options.boundOperation &&
+        options.boundOperation.identity.remoteName !== upstream.remoteName
+      ) {
+        throw new Error('Bound Git remote unavailable.')
+      }
       // Why: legacy Orca branches may still track origin/main while pushes
       // target origin/<branch>. Pull the same effective branch the UI reports.
       await gitExecFileAsync(
         ['pull', ...effectiveArgs, upstream.remoteName, upstream.branchName],
-        gitOptionsForWorktree(worktreePath, options)
+        gitNetworkOptionsForWorktree(worktreePath, options)
       )
       return
     }
 
+    if (options.boundOperation) {
+      throw new Error('Bound Git upstream unavailable.')
+    }
     await gitExecFileAsync(['pull', ...effectiveArgs], gitOptionsForWorktree(worktreePath, options))
   }
 
@@ -107,11 +124,13 @@ export async function gitPull(
   // default) so diverged branches reconcile instead of erroring out. Conflicts
   // surface through the existing conflict-resolution flow.
   postponeRepoRefMaintenance()
-  await withRepoRefMaintenancePaused('git-pull', () =>
-    runWithGitWorktreeOperationLock(worktreePath, options.signal, () =>
+  await withRepoRefMaintenancePaused('git-pull', () => {
+    const run = () =>
       runWithGitReadCacheInvalidation(() => gitPullWithArgs(worktreePath, [], pushTarget, options))
-    )
-  )
+    return options.boundOperation
+      ? run()
+      : runWithGitWorktreeOperationLock(worktreePath, options.signal, run)
+  })
 }
 
 export async function gitFastForward(
@@ -120,13 +139,15 @@ export async function gitFastForward(
   options: GitRuntimeOptions = {}
 ): Promise<void> {
   postponeRepoRefMaintenance()
-  await withRepoRefMaintenancePaused('git-fast-forward', () =>
-    runWithGitWorktreeOperationLock(worktreePath, options.signal, () =>
+  await withRepoRefMaintenancePaused('git-fast-forward', () => {
+    const run = () =>
       runWithGitReadCacheInvalidation(() =>
         gitPullWithArgs(worktreePath, ['--ff-only'], pushTarget, options)
       )
-    )
-  )
+    return options.boundOperation
+      ? run()
+      : runWithGitWorktreeOperationLock(worktreePath, options.signal, run)
+  })
 }
 
 export async function gitFetch(
@@ -140,6 +161,9 @@ export async function gitFetch(
   postponeRepoRefMaintenance()
   try {
     await withRepoRefMaintenancePaused('git-fetch', async () => {
+      if (options.boundOperation && pushTarget) {
+        throw new Error('Bound Git fork fetch unavailable.')
+      }
       if (pushTarget) {
         const target = await validateGitPushTarget(worktreePath, pushTarget, options)
         const runtimeOptions = gitOptionsForWorktree(worktreePath, options)
@@ -154,7 +178,14 @@ export async function gitFetch(
         )
         return
       }
-      await gitExecFileAsync(['fetch', '--prune'], gitOptionsForWorktree(worktreePath, options))
+      const remote = options.boundOperation?.identity.remoteName
+      if (options.boundOperation && !remote) {
+        throw new Error('Bound Git remote unavailable.')
+      }
+      await gitExecFileAsync(
+        ['fetch', '--prune', ...(remote ? [remote] : [])],
+        gitNetworkOptionsForWorktree(worktreePath, options)
+      )
     })
   } catch (error) {
     throw new Error(normalizeGitErrorMessage(error, 'fetch'))

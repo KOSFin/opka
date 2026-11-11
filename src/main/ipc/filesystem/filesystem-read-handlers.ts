@@ -24,6 +24,11 @@ import { buildReadDirErrorBreadcrumb, type ReadDirThrowSite } from '../readdir-e
 import type { FilesystemHandlerContext } from './filesystem-handler-context'
 import { registerFilesystemChunkReadHandler } from './filesystem-chunk-read-handler'
 import { readMediaPreview } from '../../media/media-preview-protocol'
+import { readBoundedFileExplorerDirectoryPage } from '../../providers/file-explorer-directory-page'
+import type {
+  FileExplorerDirectoryPage,
+  FileExplorerDirectoryPageOptions
+} from '../../../shared/file-explorer-directory-page'
 import {
   readLocalFileContent,
   readLocalLogSnapshot,
@@ -69,6 +74,28 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
         )
         throw error
       }
+    }
+  )
+
+  ipcMain.handle(
+    'fs:readDirPage',
+    async (
+      _event,
+      args: {
+        dirPath: string
+        connectionId?: string
+        selector: string
+      } & FileExplorerDirectoryPageOptions
+    ): Promise<FileExplorerDirectoryPage> => {
+      if (args.connectionId) {
+        throw new SshHostNotServedError(args.connectionId)
+      }
+      return readBoundedFileExplorerDirectoryPage(
+        args.dirPath,
+        args.selector,
+        (path) => resolveDesktopAuthorizedPath(path, store),
+        { cursor: args.cursor, followSymlinks: args.followSymlinks, limit: args.limit }
+      )
     }
   )
 

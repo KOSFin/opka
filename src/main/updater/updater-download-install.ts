@@ -97,6 +97,7 @@ export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
     const canStart =
       this.currentStatus.state === 'available' ||
       (this.currentStatus.state === 'error' &&
+        this.currentStatus.retryable !== false &&
         (this.hasInstallableDownloadedVersion() ||
           (usesManualMacInstaller() && this.availableVersion !== null)))
     if (!canStart) {
@@ -144,7 +145,14 @@ export abstract class UpdaterDownloadInstall extends UpdaterRemoteStatus {
           this.downloadInFlight = true
         })
         .then(() => this.sendStatus({ state: 'downloaded', version }))
-        .catch((error) => this.sendErrorStatus(String(error.message)))
+        .catch((error) => {
+          const message = String(error.message)
+          if (message === 'Unsupported Mac architecture') {
+            this.sendStatus({ state: 'error', message, version, retryable: false })
+          } else {
+            this.sendErrorStatus(message)
+          }
+        })
         .finally(() => {
           this.downloadInFlight = false
         })

@@ -66,6 +66,11 @@ export async function main(
   argv = process.argv.slice(2),
   cwd = resolveInvocationCwd()
 ): Promise<void> {
+  if (argv[0] === 'internal-git-credential') {
+    const { runInternalGitCredentialCli } = await import('./internal-git-credential.js')
+    await runInternalGitCredentialCli(argv.slice(1))
+    return
+  }
   // Why: version audits use the bundled launcher; Electron intercepts direct binary version flags.
   if (argv.length === 1 && (argv[0] === '--version' || argv[0] === '-v')) {
     const version = readOrcaCliVersion()

@@ -121,8 +121,9 @@ jobs:
           - { shard: 3, group: root, label: '3/4' }
           - { shard: 4, group: root, label: '4/4' }
           - { shard: 1, group: shared, label: 'mobile and integration' }
+          - { shard: 1, group: automation-containment, label: 'automation physical scope' }
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: ${{ matrix.group == 'automation-containment' && 40 || matrix.group == 'shared' && 55 || 25 }}
     env:
       OPKA_FORK_TEST_GROUP: ${{ matrix.group }}
       OPKA_FORK_TEST_SHARD_INDEX: ${{ matrix.shard }}
@@ -137,10 +138,13 @@ jobs:
         with:
           native-runtime: node
       - uses: ./.github/actions/install-mobile-dependencies
+        if: matrix.group != 'automation-containment'
       - name: Install the pinned headless renderer browser
         if: matrix.group == 'shared'
+        timeout-minutes: 8
         run: node node_modules/playwright-core/cli.js install --with-deps chromium webkit
       - name: Test host accounts, mobile state and generated pages
+        if: matrix.group != 'automation-containment'
         env:
           OPKA_MOBILE_EVIDENCE_DIR: ${{ github.workspace }}/out/mobile-web-qa
           ORCA_MOBILE_WEB_APP_DEPS_REQUIRED: '1'
@@ -154,6 +158,72 @@ jobs:
           else
             pnpm run test:fork
           fi
+      - name: Cache pinned Codex replay build inputs
+        if: matrix.group == 'shared'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/opka-replay-ci/source.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/go.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/modules
+          key: codex-replay-inputs-${{ hashFiles('config/scripts/codex-replay-ci-build.sh', 'config/scripts/build-codex-replay-engine.mjs', 'config/patches/cli-proxy-api-8.0.55-native-replay.patch', 'config/patches/cli-proxy-api-8.0.55-native-replay.source-sha256') }}-e6e5708e677adb2463d45accdd24bc9fd028ddd8-ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5
+      - name: Build exact native replay engine from pinned public inputs
+        if: matrix.group == 'shared'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash config/scripts/codex-replay-ci-build.sh linux-x64
+          sha256sum .build/codex-routing-replay/linux-x64/{cli-proxy-api,engine.zip,manifest.json} > out/native-transport/engine-hashes.txt
+          printf '%s  %s\n' 'e94a00b52f2889369f663e5ec72be141ccaaaf943a3ebf039df44330cffc487f' '.build/codex-routing-replay/linux-x64/cli-proxy-api' '07cb29062e910eb7047d23a70b71caae32e112b4dd3a341bc4a1a5651c17b89d' '.build/codex-routing-replay/linux-x64/engine.zip' 'a83672b2e5e3ce564e936c128bad15313f97ca68874053c971141a42d8b0bbd7' '.build/codex-routing-replay/linux-x64/manifest.json' | sha256sum -c -
+      - name: Qualify public Codex opaque compact and resumed request in isolation
+        if: matrix.group == 'shared'
+        shell: bash
+        run: |
+          set -euo pipefail
+          codex_root="$RUNNER_TEMP/opka-codex-transport"
+          timeout --signal=TERM --kill-after=10s 240s npm install --no-audit --no-fund --ignore-scripts --prefix "$codex_root" '@openai/codex@0.166.0'
+          codex_binary="$codex_root/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+          if [ ! -f "$codex_binary" ]; then
+            codex_binary="$codex_root/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+          fi
+          printf '%s  %s\n' 'b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8' "$codex_binary" | sha256sum -c -
+          timeout --signal=TERM --kill-after=10s 300s docker pull ubuntu:24.04
+          docker image inspect ubuntu:24.04 --format '{{index .RepoDigests 0}}' > out/native-transport/container-image.txt
+          node_bin_dir="$(dirname "$(command -v node)")"
+          timeout --signal=TERM --kill-after=10s 180s docker run --rm \
+            --network none --read-only --tmpfs /tmp:rw,nosuid,nodev,size=512m,mode=1777 \
+            --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 128 --memory 2304m --memory-swap 2304m \
+            --mount "type=bind,src=$PWD,dst=$PWD" \
+            --mount "type=bind,src=$codex_root,dst=$codex_root,readonly" \
+            --mount "type=bind,src=$node_bin_dir,dst=/opka-node,readonly" \
+            --env PATH=/opka-node:/usr/bin:/bin --workdir "$PWD" --entrypoint /bin/bash \
+            ubuntu:24.04 config/scripts/codex-routing-transport-compact-ci.sh --inside \
+            "$codex_binary" "$PWD/.build/codex-routing-replay/linux-x64/cli-proxy-api" \
+            "$PWD/out/native-transport/public-compact-resume.json" \
+            > out/native-transport/public-compact-resume.log 2>&1
+      - name: Keep exact synthetic native transport evidence
+        if: always() && matrix.group == 'shared'
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-transport-${{ github.sha }}
+          path: out/native-transport/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify command automation physical scope and fresh-process recovery
+        if: matrix.group == 'automation-containment'
+        timeout-minutes: 36
+        env:
+          ORCA_DAEMON_SCOPE_ARTIFACT_DIR: ${{ github.workspace }}/out/automation-scope
+        run: node config/scripts/run-daemon-scope-lifetime-docker.mjs --baseline 0e2fc2618b5317120b1323c90eafbd47ac1b7cb4
+      - name: Preserve mandatory physical scope receipts
+        if: ${{ always() && matrix.group == 'automation-containment' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: automation-physical-scope-${{ github.sha }}
+          path: out/automation-scope/
+          if-no-files-found: error
+          retention-days: 7
       - name: Save synthetic mobile page evidence
         if: ${{ always() && matrix.group == 'shared' }}
         uses: actions/upload-artifact@v7
@@ -163,7 +233,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Save this shard's test selection
-        if: always()
+        if: always() && matrix.group != 'automation-containment'
         uses: actions/upload-artifact@v7
         with:
           name: fork-test-selection-${{ github.sha }}-${{ matrix.group }}-${{ matrix.shard }}
@@ -253,6 +323,8 @@ jobs:
       - name: Exercise project navigation and task boards
         env:
           SKIP_BUILD: '1'
+          ORCA_GIT_HIDDEN_EVIDENCE_DIR: ${{ runner.temp }}/opka-git-hidden-evidence
+          ORCA_SPARSE_PROOF_DIR: ${{ runner.temp }}/opka-sparse-proof
         run: >-
           pnpm exec playwright test
           tests/e2e/fork-nested-project-tree.spec.ts
@@ -262,17 +334,28 @@ jobs:
           tests/e2e/fork-five-projects.spec.ts
           tests/e2e/fork-beta-update.spec.ts
           tests/e2e/fork-project-tasks.spec.ts
+          tests/e2e/fork-delegation-controls.spec.ts
           tests/e2e/fork-task-rpc-discovery.spec.ts
           tests/e2e/fork-packaged-tasks.spec.ts
           tests/e2e/fork-account-pool-settings.spec.ts
           tests/e2e/fork-worker-capacity-settings.spec.ts
+          tests/e2e/fork-usage-extra-review.spec.ts
+          tests/e2e/fork-usage-corrected-review.spec.ts
+          tests/e2e/git-project-trackers-hidden.spec.ts
+          tests/e2e/sparse-explorer-proof.spec.ts
+          tests/e2e/sparse-preset-proof.spec.ts
+          tests/e2e/automation-command-ui.spec.ts
           --config tests/playwright.config.ts --project electron-headless --workers=1
       - name: Save task lifecycle visual evidence
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: task-ui-evidence-${{ github.sha }}
-          path: test-results/**/*.png
+          path: |
+            test-results/**/*.png
+            test-results/desktop-usage-independent-evidence/
+            ${{ runner.temp }}/opka-git-hidden-evidence/
+            ${{ runner.temp }}/opka-sparse-proof/
           if-no-files-found: error
           retention-days: 7
       - name: Install pinned Codex for the account-free terminal contract

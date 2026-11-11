@@ -266,6 +266,7 @@ export type TerminalWaiter = {
   abortCleanup: (() => void) | null
   /** Main-internal: waiting for a just-launched agent, so a name-only title must be held to a
    *  quiet stream (`TuiIdleEvaluationInput.launchReadiness`). */
+  onLaunchReady?: () => void
   launchReadiness?: boolean
 }
 

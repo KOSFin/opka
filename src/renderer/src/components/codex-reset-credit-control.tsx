@@ -71,9 +71,12 @@ export function CodexResetCreditControl({
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const mounted = useRef(false)
+  const resetButtonRef = useRef<HTMLButtonElement>(null)
+  const focusViewVersion = useRef<number | null>(null)
   const ownerKey = owner.kind === 'local' ? 'local' : `environment:${owner.environmentId}`
   const environmentId = owner.kind === 'environment' ? owner.environmentId : null
   const credits = limits?.rateLimitResetCredits
+  const expires = credits?.nextExpiresAt
   const count = credits?.availableCount
   const hasAccountProof =
     account !== null &&
@@ -119,6 +122,22 @@ export function CodexResetCreditControl({
   }, [])
 
   useEffect(() => {
+    setNow(Date.now())
+  }, [limits])
+
+  useEffect(() => {
+    if (typeof expires !== 'number' || !Number.isFinite(expires)) {
+      return
+    }
+    const delay = expires - Date.now() + 1
+    if (delay <= 0) {
+      return
+    }
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(delay, 2_147_483_647))
+    return () => window.clearTimeout(timer)
+  }, [expires])
+
+  useEffect(() => {
     setConfirming(null)
     if (environmentId === null) {
       setSupported(true)
@@ -145,11 +164,12 @@ export function CodexResetCreditControl({
   if (count == null || !Number.isInteger(count) || count < 0) {
     return null
   }
-  const expires = credits?.nextExpiresAt
   const expiry =
     typeof expires === 'number' && Number.isFinite(expires)
       ? new Date(expires).toLocaleString()
       : null
+  const creditIsCurrent = (): boolean =>
+    expires == null || (Number.isFinite(expires) && expires > Date.now())
   const fresh = !!limits && now - limits.updatedAt < 10 * 60_000 && limits.updatedAt <= now + 60_000
   const canUse =
     supported &&
@@ -203,7 +223,7 @@ export function CodexResetCreditControl({
           throw new Error('Reset unavailable on this host.')
         }
       }
-      if (!stillCurrent()) {
+      if (!stillCurrent() || !creditIsCurrent()) {
         return
       }
       const reply = await callRuntimeRpc<ResetReply>(
@@ -284,11 +304,13 @@ export function CodexResetCreditControl({
           {expiry ? ` · ${count === 1 ? 'Expires' : 'Next expires'} ${expiry}` : ''}
         </span>
         <Button
+          ref={resetButtonRef}
           variant="outline"
           size="xs"
           disabled={!canUse}
           onClick={() => {
-            if (scope) {
+            if (scope && creditIsCurrent()) {
+              focusViewVersion.current = currentView.current.version
               setConfirming({ scope, ownerKey, viewVersion: currentView.current.version })
             }
           }}
@@ -321,7 +343,16 @@ export function CodexResetCreditControl({
           }
         }}
       >
-        <DialogContent surface="security">
+        <DialogContent
+          surface="security"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            if (focusViewVersion.current === currentView.current.version) {
+              resetButtonRef.current?.focus()
+            }
+            focusViewVersion.current = null
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Use one manual reset?</DialogTitle>
             <DialogDescription>
@@ -346,7 +377,8 @@ export function CodexResetCreditControl({
                 setConfirming(null)
                 if (
                   pinned?.ownerKey === ownerKey &&
-                  pinned.viewVersion === currentView.current.version
+                  pinned.viewVersion === currentView.current.version &&
+                  creditIsCurrent()
                 ) {
                   void consume(pinned.scope, pinned.viewVersion)
                 }
