@@ -75,6 +75,20 @@ describe('worktree list indentation', () => {
     expect(getFolderBackedRepoWorktreeCardSurfaceInset({ groupDepth: 4, lineageDepth: 1 })).toBe(56)
   })
 
+  it('bounds compact folder indentation at the existing depth cap and clamps invalid depths', () => {
+    expect(
+      getFolderBackedRepoWorktreeCardContentIndent({ groupDepth: 100_000, lineageDepth: 0 })
+    ).toBe(80)
+    expect(
+      getFolderBackedRepoWorktreeCardSurfaceInset({ groupDepth: 100_000, lineageDepth: 0 })
+    ).toBe(74)
+    expect(getFolderWorkspaceCardContentIndent({ groupDepth: 100_000 })).toBe(70)
+    expect(getFolderBackedRepoWorktreeCardContentIndent({ groupDepth: -1, lineageDepth: 0 })).toBe(
+      20
+    )
+    expect(getFolderWorkspaceCardContentIndent({ groupDepth: Number.NaN })).toBe(10)
+  })
+
   it('keeps folder workspace content one step under its owning group', () => {
     expect(getFolderWorkspaceCardContentIndent({ groupDepth: 1 })).toBe(20)
     expect(getFolderWorkspaceCardContentIndent({ groupDepth: 2 })).toBe(30)
@@ -199,6 +213,8 @@ describe('worktree list indentation', () => {
   })
 
   it('caps header indentation separately from workspace content indentation', () => {
+    expect(getProjectGroupHeaderPaddingLeft(1)).toBe(20)
+    expect(getProjectGroupHeaderPaddingLeft(4)).toBe(50)
     expect(getProjectGroupHeaderPaddingLeft(100)).toBe(70)
   })
 

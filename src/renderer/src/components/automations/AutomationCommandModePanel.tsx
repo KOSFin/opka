@@ -1,23 +1,35 @@
 import React from 'react'
-import type { AutomationCommandDefinitionV1 } from '../../../../shared/automation-command-domain'
+import { useAppStore } from '../../store'
+import type {
+  AutomationCommandDefinitionV1,
+  AutomationCommandReportTargetOption
+} from '../../../../shared/automation-command-domain'
 import type { AutomationRun } from '../../../../shared/automations-types'
 import type { ProjectHostSetup } from '../../../../shared/project-types'
 import {
   deleteCommandAutomationForTarget,
   listCommandAutomationRunsForTarget,
-  listCommandAutomationsForTarget
+  listCommandAutomationsAndReportTargetsForTarget
 } from './automation-command-host-client'
 import {
   getAutomationHostTargetFromKey,
   getAutomationHostTargetKey,
   type AutomationHostTarget
 } from './automation-host-client'
-import { AutomationCommandEditorDialog } from './AutomationCommandEditorDialog'
-import { AutomationCommandDetails } from './AutomationCommandDetails'
-import { AutomationCommandDefinitionList } from './AutomationCommandDefinitionList'
+import { AutomationCommandModeDialogs } from './AutomationCommandModeDialogs'
+import { AutomationCommandModeContent } from './AutomationCommandModeContent'
+import {
+  selectCommandDefinitionId,
+  selectCommandReportRunId,
+  visibleCommandReportRun,
+  missingCommandDefinitionReport,
+  missingCommandRunReport,
+  settleVisibleCommandCreate,
+  commandHostErrorMessage,
+  type RequestedCommandReport
+} from './automation-command-report-selection'
 import { AutomationCommandModeToolbar } from './AutomationCommandModeToolbar'
 import { AutomationCommandArchive } from './AutomationCommandArchive'
-import { AutomationCommandRemoveDialog } from './AutomationCommandRemoveDialog'
 import { pendingCommandRequests } from './automation-command-pending-requests'
 import { useAutomationCommandViewFence } from './use-automation-command-view-fence'
 import { saveCommandAutomationDraft } from './automation-command-save-operation'
@@ -32,15 +44,20 @@ import {
 type Props = {
   target: AutomationHostTarget
   setups: readonly ProjectHostSetup[]
+  requestedReport?: RequestedCommandReport | null
   onBack(): void
 }
 
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : 'The execution host did not answer.'
-}
-
-export function AutomationCommandModePanel({ target, setups, onBack }: Props): React.JSX.Element {
+export function AutomationCommandModePanel({
+  target,
+  setups,
+  requestedReport,
+  onBack
+}: Props): React.JSX.Element {
   const [definitions, setDefinitions] = React.useState<AutomationCommandDefinitionV1[]>([])
+  const [reportTargets, setReportTargets] = React.useState<AutomationCommandReportTargetOption[]>(
+    []
+  )
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [runs, setRuns] = React.useState<AutomationRun[]>([])
   const [selectedRunId, setSelectedRunId] = React.useState<string | null>(null)
@@ -62,40 +79,36 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
   const definitionRequest = React.useRef(0)
   const runRequest = React.useRef(0)
   const selected = definitions.find((definition) => definition.id === selectedId) ?? null
-  const selectedRun = runs.find((run) => run.id === selectedRunId) ?? runs[0] ?? null
+  const selectedRun = visibleCommandReportRun(runs, selectedRunId, selectedId, requestedReport)
   const selectedPendingRun = selected ? (pending.runs.get(selected.id) ?? null) : null
 
   const refresh = React.useCallback(async (): Promise<void> => {
     const request = ++definitionRequest.current
     try {
-      const next = await listCommandAutomationsForTarget(stableTarget)
+      const { definitions: next, reportTargets: availableTargets } =
+        await listCommandAutomationsAndReportTargetsForTarget(stableTarget)
       if (request !== definitionRequest.current) {
         return
       }
       setDefinitions(next)
-      if (
-        pending.create &&
-        next.some((entry) => entry.creationKey === pending.create?.input.creationKey)
-      ) {
-        pending.create = null
-      }
-      setSelectedId((id) => (next.some((entry) => entry.id === id) ? id : (next[0]?.id ?? null)))
-      setError(null)
+      setReportTargets(availableTargets)
+      settleVisibleCommandCreate(pending, next)
+      setSelectedId((id) => selectCommandDefinitionId(next, id, requestedReport))
+      setError(missingCommandDefinitionReport(next, requestedReport))
     } catch (cause) {
       if (request !== definitionRequest.current) {
         return
       }
       setDefinitions([])
+      setReportTargets([])
       setSelectedId(null)
-      setError(errorMessage(cause))
+      setError(commandHostErrorMessage(cause))
     }
-  }, [stableTarget, pending])
+  }, [stableTarget, pending, requestedReport])
 
   React.useEffect(() => {
     setDefinitions([])
-    setRuns([])
-    setSelectedId(null)
-    setSelectedRunId(null)
+    setReportTargets([])
     void refresh()
     return () => {
       definitionRequest.current += 1
@@ -115,20 +128,23 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
         return
       }
       setRuns(next)
-      setSelectedRunId((id) => (next.some((run) => run.id === id) ? id : (next[0]?.id ?? null)))
-      setError(null)
+      const linkedRun = requestedReport?.automationId === selectedId ? requestedReport.runId : null
+      setSelectedRunId((id) => selectCommandReportRunId(next, id, linkedRun))
+      setError(missingCommandRunReport(next, linkedRun))
+      if (linkedRun && next.some((run) => run.id === linkedRun)) {
+        useAppStore.getState().setPendingCommandAutomationReportNavigation(null)
+      }
     } catch (cause) {
       if (request !== runRequest.current) {
         return
       }
       setRuns([])
-      setError(errorMessage(cause))
+      setError(commandHostErrorMessage(cause))
     }
-  }, [selectedId, stableTarget])
+  }, [selectedId, stableTarget, requestedReport])
 
   React.useEffect(() => {
     setRuns([])
-    setSelectedRunId(null)
     void refreshRuns()
   }, [refreshRuns])
 
@@ -160,6 +176,7 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
       const { saved, createRequest } = await saveCommandAutomationDraft({
         target: stableTarget,
         setups,
+        reportTargets,
         draft,
         editingId,
         selected,
@@ -178,7 +195,7 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
       await refresh()
     } catch (cause) {
       if (view.current(actionEpoch)) {
-        setError(errorMessage(cause))
+        setError(commandHostErrorMessage(cause))
       }
     } finally {
       if (view.current(actionEpoch)) {
@@ -209,7 +226,7 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
       await refreshRuns()
     } catch (cause) {
       if (view.current(actionEpoch)) {
-        setError(errorMessage(cause))
+        setError(commandHostErrorMessage(cause))
       }
     } finally {
       if (view.current(actionEpoch)) {
@@ -241,7 +258,7 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
       await refreshRuns()
     } catch (cause) {
       if (view.current(actionEpoch)) {
-        setError(errorMessage(cause))
+        setError(commandHostErrorMessage(cause))
       }
     } finally {
       if (view.current(actionEpoch)) {
@@ -268,7 +285,7 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
       await refresh()
     } catch (cause) {
       if (view.current(actionEpoch)) {
-        setError(errorMessage(cause))
+        setError(commandHostErrorMessage(cause))
       }
     } finally {
       if (view.current(actionEpoch)) {
@@ -303,65 +320,68 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
       {archiveOpen ? (
         <AutomationCommandArchive target={stableTarget} onClose={() => setArchiveOpen(false)} />
       ) : (
-        <div className="grid min-h-0 flex-1 gap-4 pt-4 md:grid-cols-[minmax(12rem,18rem)_minmax(0,1fr)]">
-          <AutomationCommandDefinitionList
-            definitions={definitions}
-            selectedId={selectedId}
-            busy={busy}
-            onSelect={(id) => {
-              view.advance()
-              setSelectedId(id)
-              setConfirmDelete(false)
-            }}
-          />
-          <AutomationCommandDetails
-            selected={selected}
-            runs={runs}
-            selectedRun={selectedRun}
-            busy={busy}
-            retrySameRequest={selected ? pending.runs.has(selected.id) : false}
-            target={stableTarget}
-            pendingRun={selectedPendingRun}
-            onRunReconciled={(runId, overlap) => {
-              if (!selected || pending.runs.get(selected.id) !== selectedPendingRun) {
-                return
-              }
-              pending.runs.delete(selected.id)
-              setNotice(
-                overlap
-                  ? 'The prior request overlapped an active run.'
-                  : 'The prior request already admitted a run.'
-              )
-              setError(null)
-              setSelectedRunId(runId)
-              void refreshRuns()
-            }}
-            onStartNewRun={() => {
-              if (!selected || pending.runs.get(selected.id) !== selectedPendingRun) {
-                return
-              }
-              pending.runs.delete(selected.id)
-              setError(null)
-              void runNow()
-            }}
-            onEdit={openEdit}
-            onRun={() => void runNow()}
-            onRemove={() => setConfirmDelete(true)}
-            onSelectRun={setSelectedRunId}
-            onRefreshRuns={() => void refreshRuns()}
-            onCancel={() => void cancel()}
-          />
-        </div>
+        <AutomationCommandModeContent
+          definitions={definitions}
+          selectedId={selectedId}
+          busy={busy}
+          onSelectDefinition={(id) => {
+            view.advance()
+            useAppStore.getState().setPendingCommandAutomationReportNavigation(null)
+            setError(null)
+            setSelectedId(id)
+            setConfirmDelete(false)
+          }}
+          selected={selected}
+          runs={runs}
+          selectedRun={selectedRun}
+          retrySameRequest={selected ? pending.runs.has(selected.id) : false}
+          target={stableTarget}
+          pendingRun={selectedPendingRun}
+          onRunReconciled={(runId, overlap) => {
+            if (!selected || pending.runs.get(selected.id) !== selectedPendingRun) {
+              return
+            }
+            pending.runs.delete(selected.id)
+            setNotice(
+              overlap
+                ? 'The prior request overlapped an active run.'
+                : 'The prior request already admitted a run.'
+            )
+            setError(null)
+            setSelectedRunId(runId)
+            void refreshRuns()
+          }}
+          onStartNewRun={() => {
+            if (!selected || pending.runs.get(selected.id) !== selectedPendingRun) {
+              return
+            }
+            pending.runs.delete(selected.id)
+            setError(null)
+            void runNow()
+          }}
+          onEdit={openEdit}
+          onRun={() => void runNow()}
+          onRemove={() => setConfirmDelete(true)}
+          onSelectRun={(id) => {
+            useAppStore.getState().setPendingCommandAutomationReportNavigation(null)
+            setError(null)
+            setSelectedRunId(id)
+          }}
+          onRefreshRuns={() => void refreshRuns()}
+          onCancel={() => void cancel()}
+        />
       )}
-      <AutomationCommandEditorDialog
-        open={editorOpen}
+      <AutomationCommandModeDialogs
+        editorOpen={editorOpen}
         editing={editingId !== null}
+        pendingCreate={editingId === null && pending.create !== null}
         busy={busy}
         draft={draft}
         setups={setups}
+        reportTargets={reportTargets}
         error={error}
-        pendingCreate={editingId === null && pending.create !== null}
-        onOpenChange={(open) => {
+        removeName={confirmDelete ? (selected?.name ?? null) : null}
+        onEditorOpenChange={(open) => {
           if (!open && busy) {
             return
           }
@@ -376,16 +396,12 @@ export function AutomationCommandModePanel({ target, setups, onBack }: Props): R
           }
         }}
         onSave={() => void save()}
-      />
-      <AutomationCommandRemoveDialog
-        name={confirmDelete ? (selected?.name ?? null) : null}
-        busy={busy}
-        onOpenChange={(open) => {
+        onRemoveOpenChange={(open) => {
           if (!busy) {
             setConfirmDelete(open)
           }
         }}
-        onConfirm={() => void remove()}
+        onRemove={() => void remove()}
       />
     </main>
   )

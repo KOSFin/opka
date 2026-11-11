@@ -80,7 +80,7 @@ export class AutomationService {
       codexUsage?: CodexUsageStore
       allowRemoteHostScheduling?: boolean
       headlessDispatcher?: HeadlessAutomationDispatcher
-      commandHostAdapter?: AutomationCommandHostAdapter
+      commandHostAdapterFactory?: (runs: AutomationRunWriter) => AutomationCommandHostAdapter
       commandHostGeneration?: number
       terminalObserver?: AutomationRunTerminalObserver
       onAutomationsChanged?: PublishAutomationsChanged
@@ -97,7 +97,7 @@ export class AutomationService {
     this.commandService = new AutomationCommandService({
       store,
       runs: this.runs,
-      adapter: opts.commandHostAdapter ?? null,
+      adapter: opts.commandHostAdapterFactory?.(this.runs) ?? null,
       hostGeneration: opts.commandHostGeneration ?? null,
       isActive: () => !this.stopped,
       runInLane: (id, operation) => this.runInAutomationLane(id, operation)

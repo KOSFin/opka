@@ -80,6 +80,16 @@ class NativeActionTargets(unittest.TestCase):
         self.assertIs(journey.actionable_match(root, 'Save task'), label)
         self.assertIsNone(journey.visible_bounds(root, label))
 
+    def test_captured_project_header_refuses_ambiguous_title_as_collapse_target(self):
+        fixture = Path(__file__).with_name('fixtures') / 'android-webview-accessibility/project-header-ambiguous.xml'
+        root = ET.parse(fixture).getroot()
+        ambiguous = journey.actionable_match(root, 'Synthetic integration', contains=True)
+        self.assertIsNotNone(ambiguous)
+        self.assertIn('Manage project', ambiguous.get('text', ''))
+        self.assertEqual(ambiguous.get('bounds'), '[0,280][1080,441]')
+        self.assertIsNone(journey.actionable_match(root, 'Collapse project Synthetic integration'))
+        self.assertIsNone(journey.actionable_match(root, 'Expand project Synthetic integration'))
+
     def test_captured_accounts_radio_tab_wins_over_clickable_whole_page_ancestor(self):
         fixture = Path(__file__).with_name('fixtures') / 'android-webview-accessibility/accounts-pools.xml'
         root = ET.parse(fixture).getroot()

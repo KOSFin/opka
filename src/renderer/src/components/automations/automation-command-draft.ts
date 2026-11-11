@@ -3,6 +3,10 @@ import {
   AutomationCommandDefinitionCreateV1,
   type AutomationCommandDefinitionV1
 } from '../../../../shared/automation-command-domain'
+import type {
+  AutomationCommandReportTarget,
+  AutomationCommandReportTargetOption
+} from '../../../../shared/automation-command-domain'
 import type { AutomationCommandConditionV1 } from '../../../../shared/automation-command-execution'
 import type { ProjectHostSetup } from '../../../../shared/project-types'
 
@@ -13,6 +17,9 @@ export type AutomationCommandDraft = {
   commandText: string
   programArgs: string
   condition: AutomationCommandConditionV1
+  agentEnabled: boolean
+  agentPrompt: string
+  reportTarget: AutomationCommandReportTarget | null
   time: string
   timezone: string
   timeoutSeconds: string
@@ -26,6 +33,9 @@ export function emptyAutomationCommandDraft(): AutomationCommandDraft {
     commandText: '',
     programArgs: '',
     condition: 'never_agent',
+    agentEnabled: false,
+    agentPrompt: '',
+    reportTarget: null,
     time: '09:00',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     timeoutSeconds: '900'
@@ -44,6 +54,9 @@ export function draftFromCommandAutomation(
     commandText: command.kind === 'program' ? command.executable : command.text,
     programArgs: command.kind === 'program' ? command.argv.join('\n') : '',
     condition: definition.execution.condition,
+    agentEnabled: definition.execution.agent !== null,
+    agentPrompt: definition.execution.agent?.prompt ?? '',
+    reportTarget: definition.execution.reportTarget,
     time: schedule ? `${schedule[1].padStart(2, '0')}:${schedule[2].padStart(2, '0')}` : '09:00',
     timezone: definition.timezone,
     timeoutSeconds: String(definition.execution.policy.timeoutSeconds)
@@ -54,7 +67,8 @@ export function commandDefinitionFromDraft(
   draft: AutomationCommandDraft,
   setup: ProjectHostSetup,
   now: number,
-  creationKey = createUuidV4()
+  creationKey = createUuidV4(),
+  reportTargets: readonly AutomationCommandReportTargetOption[] = []
 ) {
   if (setup.setupState !== 'ready' || setup.hostId !== 'local') {
     throw new Error('Select a ready project on this execution host.')
@@ -79,6 +93,19 @@ export function commandDefinitionFromDraft(
           language: draft.commandKind,
           text: draft.commandText
         }
+  if (draft.agentEnabled && draft.condition === 'never_agent') {
+    throw new Error('Choose a condition that can start the agent.')
+  }
+  if (
+    draft.reportTarget &&
+    !reportTargets.some(
+      (option) =>
+        option.setupId === setup.id &&
+        JSON.stringify(option.target) === JSON.stringify(draft.reportTarget)
+    )
+  ) {
+    throw new Error('Report chat changed or is unavailable on this project host.')
+  }
   return AutomationCommandDefinitionCreateV1.parse({
     creationKey,
     name: draft.name.trim(),
@@ -96,7 +123,7 @@ export function commandDefinitionFromDraft(
     executionTargetId: 'local',
     schedulerOwner: 'local_host_service',
     workspaceMode: 'existing',
-    workspaceId: null,
+    workspaceId: draft.reportTarget?.workspaceId ?? null,
     baseBranch: null,
     timezone: draft.timezone.trim(),
     rrule: `FREQ=DAILY;BYHOUR=${Number(time[1])};BYMINUTE=${Number(time[2])}`,
@@ -108,8 +135,10 @@ export function commandDefinitionFromDraft(
       version: 1,
       command,
       condition: draft.condition,
-      agent: null,
-      reportTarget: null,
+      agent: draft.agentEnabled
+        ? { agentId: 'codex', prompt: draft.agentPrompt, sessionPolicy: 'ephemeral' }
+        : null,
+      reportTarget: draft.reportTarget,
       policy: {
         timeoutSeconds,
         commandTimeoutSeconds: timeoutSeconds,

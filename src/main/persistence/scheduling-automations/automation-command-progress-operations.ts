@@ -4,6 +4,9 @@ import {
 } from '../../../shared/automation-command-domain'
 import type { AutomationRun, AutomationRunOutputSnapshot } from '../../../shared/automations-types'
 import type { PersistedState } from '../../../shared/persisted-state-types'
+import { randomUUID } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 export type CommandProgressOperations = {
   state: PersistedState
@@ -68,6 +71,7 @@ export function advanceAutomationCommandRun(
     observation: Observation
     outputSnapshot?: AutomationRunOutputSnapshot
     finalReason?: string | null
+    pendingStatus?: 'completed' | 'skipped_precheck' | 'dispatch_failed'
   }
 ): AutomationRun {
   const { domain, claim, run } = readFencedClaim(operations, fence)
@@ -84,6 +88,7 @@ export function advanceAutomationCommandRun(
     throw new Error('Command final reason exceeds 4 KiB.')
   }
   boundedSnapshot(update.outputSnapshot ?? null)
+  const agentAcquisitionId = update.phase === 'agent' ? randomUUID() : null
   const updatedRun: AutomationRun = {
     ...run,
     ...(update.outputSnapshot ? { outputSnapshot: update.outputSnapshot } : {}),
@@ -93,6 +98,9 @@ export function advanceAutomationCommandRun(
       attempt: claim.attempt,
       observation: update.observation,
       finalReason: update.finalReason ?? run.commandExecution?.finalReason ?? null,
+      ...(update.pendingStatus || run.commandExecution?.pendingStatus
+        ? { pendingStatus: update.pendingStatus ?? run.commandExecution?.pendingStatus }
+        : {}),
       ...(run.commandExecution?.overlapCount !== undefined
         ? { overlapCount: run.commandExecution.overlapCount }
         : {})
@@ -100,13 +108,24 @@ export function advanceAutomationCommandRun(
   }
   const updatedClaim: AutomationCommandClaimV1 = {
     ...claim,
+    ...(agentAcquisitionId
+      ? {
+          agentIntent: {
+            backend: 'linux_cgroup_v1' as const,
+            unitName: `orca-automation-${agentAcquisitionId}.scope`,
+            childName: 'agent' as const,
+            receiptDirectory: join(tmpdir(), `orca-automation-${agentAcquisitionId}`)
+          }
+        }
+      : {}),
     phase: update.phase,
     observation: update.observation,
     runSnapshot: claim.runSnapshot
       ? {
           ...claim.runSnapshot,
           ...(update.outputSnapshot ? { outputSnapshot: update.outputSnapshot } : {}),
-          ...(update.finalReason !== undefined ? { finalReason: update.finalReason } : {})
+          ...(update.finalReason !== undefined ? { finalReason: update.finalReason } : {}),
+          ...(update.pendingStatus ? { pendingStatus: update.pendingStatus } : {})
         }
       : undefined
   }
@@ -123,6 +142,57 @@ export function advanceAutomationCommandRun(
   operations.markDomainsDirty()
   operations.flush()
   return updatedRun
+}
+
+/** Transfer only a proven pre-agent condition into the current exclusive boot epoch. */
+export function adoptProvenAutomationCommandCondition(
+  operations: CommandProgressOperations,
+  fence: CommandProgressFence,
+  nextHostGeneration: number
+): AutomationCommandClaimV1 {
+  const { domain, claim, run } = readFencedClaim(operations, fence)
+  const definition = domain.definitions.find((entry) => entry.id === claim.automationId)
+  if (
+    claim.phase !== 'condition' ||
+    claim.observation !== 'exited' ||
+    !claim.processIntent?.exitProof ||
+    !claim.processIntent.execMayHappen ||
+    claim.agentIntent ||
+    claim.cancelRequestedAt !== undefined ||
+    !definition ||
+    definition.revision !== claim.definitionRevision ||
+    !Number.isSafeInteger(nextHostGeneration) ||
+    nextHostGeneration <= claim.hostGeneration ||
+    domain.hostEpoch !== nextHostGeneration
+  ) {
+    throw new Error('Command condition cannot be adopted by this host epoch.')
+  }
+  const adopted = { ...claim, hostGeneration: nextHostGeneration }
+  const adoptedRun: AutomationRun = {
+    ...run,
+    status: 'dispatching',
+    commandExecution: {
+      version: 1,
+      phase: 'condition',
+      attempt: claim.attempt,
+      observation: 'exited',
+      finalReason: null,
+      ...(claim.overlapCount !== undefined ? { overlapCount: claim.overlapCount } : {})
+    }
+  }
+  operations.state.automationCommandsV1 = {
+    ...domain,
+    activeClaims: domain.activeClaims.map((entry) =>
+      entry.automationId === claim.automationId ? adopted : entry
+    )
+  }
+  operations.state.automationRuns = operations.state.automationRuns.map((entry) =>
+    entry.id === run.id ? adoptedRun : entry
+  )
+  operations.recordAutomationRunsMutation?.(operations.state.automationRuns)
+  operations.markDomainsDirty()
+  operations.flush()
+  return adopted
 }
 
 export function requestAutomationCommandCancel(

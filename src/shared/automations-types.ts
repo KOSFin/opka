@@ -154,6 +154,7 @@ export type AutomationRun = {
     attempt: number
     observation: 'live' | 'unverifiable' | 'exited'
     finalReason: string | null
+    pendingStatus?: 'completed' | 'skipped_precheck' | 'dispatch_failed'
     overlapCount?: number
     deliveryStatus?: 'history_only' | 'delivered' | 'failed'
   }

@@ -12,6 +12,7 @@ import {
   replaceCommandAutomationDefinition
 } from '../scheduling-automations/automation-command-definition-operations'
 import {
+  adoptProvenAutomationCommandCondition,
   advanceAutomationCommandRun,
   requestAutomationCommandCancel,
   releaseAutomationCommandClaim,
@@ -19,7 +20,9 @@ import {
   type CommandProgressFence
 } from '../scheduling-automations/automation-command-progress-operations'
 import {
+  bindAutomationAgentProcessIntent,
   bindAutomationCommandProcessIntent,
+  recordAutomationAgentExitProof,
   recordAutomationCommandExitProof
 } from '../scheduling-automations/automation-command-process-operations'
 import type { StoreRuntimeState } from './store-runtime-state'
@@ -72,6 +75,25 @@ export class AutomationCommandPersistence {
     )
   }
 
+  advanceCommandHostEpoch(): number {
+    const { runtime, flushBarriers } = this[commandPersistenceContext]
+    const domain = readAutomationCommandsV1Domain(runtime.state.automationCommandsV1)
+    const previous = domain.hostEpoch ?? 0
+    if (previous >= Number.MAX_SAFE_INTEGER) {
+      throw new Error('Command host epoch exhausted.')
+    }
+    const next = previous + 1
+    runtime.state.automationCommandsV1 = { ...domain, hostEpoch: next }
+    runtime.dirtyProfileStateDomains?.add('automationCommandsV1')
+    flushBarriers.flush()
+    return next
+  }
+
+  getCommandHostEpoch(): number {
+    const { runtime } = this[commandPersistenceContext]
+    return readAutomationCommandsV1Domain(runtime.state.automationCommandsV1).hostEpoch ?? 0
+  }
+
   createCommandAutomation(value: unknown, now?: number) {
     return createCommandAutomationDefinition(this.definitionOperations(), value, now)
   }
@@ -110,11 +132,26 @@ export class AutomationCommandPersistence {
     return advanceAutomationCommandRun(this.progressOperations(), fence, update)
   }
 
+  adoptProvenCommandCondition(fence: CommandProgressFence, nextHostGeneration: number) {
+    return adoptProvenAutomationCommandCondition(
+      this.progressOperations(),
+      fence,
+      nextHostGeneration
+    )
+  }
+
   bindCommandAutomationProcessIntent(
     fence: CommandProgressFence,
     receipt: Parameters<typeof bindAutomationCommandProcessIntent>[2]
   ) {
     return bindAutomationCommandProcessIntent(this.progressOperations(), fence, receipt)
+  }
+
+  bindAutomationAgentProcessIntent(
+    fence: CommandProgressFence,
+    receipt: Parameters<typeof bindAutomationAgentProcessIntent>[2]
+  ) {
+    return bindAutomationAgentProcessIntent(this.progressOperations(), fence, receipt)
   }
 
   recordCommandAutomationExitProof(
@@ -128,6 +165,14 @@ export class AutomationCommandPersistence {
       observation,
       verifiedAt
     )
+  }
+
+  recordAutomationAgentExitProof(
+    fence: CommandProgressFence,
+    observation: Parameters<typeof recordAutomationAgentExitProof>[2],
+    verifiedAt: number
+  ) {
+    return recordAutomationAgentExitProof(this.progressOperations(), fence, observation, verifiedAt)
   }
 
   requestCommandAutomationCancel(fence: CommandProgressFence, requestKey: string, now: number) {

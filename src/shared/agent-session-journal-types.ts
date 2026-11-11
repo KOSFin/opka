@@ -322,6 +322,7 @@ type AgentJournalStatusItemFields = {
   kind: 'status'
   /** Optional display hints; unknown values retain the ordinary text fallback. */
   presentation?: string
+  automationReport?: { automationId: string; runId: string }
   contextClear?: AgentSessionProviderContextBoundary
   tone?: string
   /** Legacy carrier of a turn record: written by hosts before v3, and published

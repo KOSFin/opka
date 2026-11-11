@@ -51,6 +51,7 @@ export type NativeChatTextBlock = {
   text: string
   /** Optional journal display hints; readers narrow only the values they know. */
   presentation?: string
+  automationReport?: { automationId: string; runId: string }
   contextClear?: AgentSessionProviderContextBoundary
   tone?: string
   /** Optional structured detail for an otherwise ordinary fallback line. */

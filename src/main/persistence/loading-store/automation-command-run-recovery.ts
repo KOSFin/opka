@@ -17,6 +17,14 @@ export function recoverActiveAutomationCommandRuns(
   const releasedClaims = new Set<string>()
   for (const claim of domain.data.activeClaims) {
     const existing = byId.get(claim.runId)
+    const snapshot = claim.runSnapshot
+    const reportReady =
+      claim.phase === 'report' &&
+      claim.observation === 'exited' &&
+      snapshot?.pendingStatus !== undefined &&
+      snapshot.outputSnapshot !== undefined &&
+      snapshot.finalReason !== undefined &&
+      snapshot.finalReason !== null
     if (existing && existing.automationId === claim.automationId) {
       if (
         claim.phase === 'report' &&
@@ -25,6 +33,27 @@ export function recoverActiveAutomationCommandRuns(
         existing.commandExecution.deliveryStatus !== undefined
       ) {
         releasedClaims.add(claim.automationId)
+        continue
+      }
+      if (reportReady && snapshot) {
+        const retained: AutomationRun = {
+          ...existing,
+          status: 'dispatching',
+          outputSnapshot: snapshot.outputSnapshot ?? null,
+          commandExecution: {
+            version: 1,
+            phase: 'report',
+            attempt: claim.attempt,
+            observation: 'exited',
+            finalReason: snapshot.finalReason ?? null,
+            pendingStatus: snapshot.pendingStatus,
+            ...(claim.overlapCount !== undefined ? { overlapCount: claim.overlapCount } : {})
+          }
+        }
+        if (JSON.stringify(existing) !== JSON.stringify(retained)) {
+          byId.set(claim.runId, retained)
+          repaired = true
+        }
         continue
       }
       if (
@@ -48,7 +77,6 @@ export function recoverActiveAutomationCommandRuns(
       repaired = true
       continue
     }
-    const snapshot = claim.runSnapshot
     const definition = domain.data.definitions.find((entry) => entry.id === claim.automationId)
     if (!snapshot || !definition) {
       continue
@@ -65,14 +93,24 @@ export function recoverActiveAutomationCommandRuns(
       workspaceId: snapshot.workspaceId,
       workspaceDisplayName: null,
       sessionKind: 'command',
-      commandExecution: {
-        version: 1,
-        phase: 'unverifiable',
-        attempt: claim.attempt,
-        observation: 'unverifiable',
-        finalReason: null,
-        ...(claim.overlapCount !== undefined ? { overlapCount: claim.overlapCount } : {})
-      },
+      commandExecution: reportReady
+        ? {
+            version: 1,
+            phase: 'report',
+            attempt: claim.attempt,
+            observation: 'exited',
+            finalReason: snapshot.finalReason ?? null,
+            pendingStatus: snapshot.pendingStatus,
+            ...(claim.overlapCount !== undefined ? { overlapCount: claim.overlapCount } : {})
+          }
+        : {
+            version: 1,
+            phase: 'unverifiable',
+            attempt: claim.attempt,
+            observation: 'unverifiable',
+            finalReason: null,
+            ...(claim.overlapCount !== undefined ? { overlapCount: claim.overlapCount } : {})
+          },
       chatSessionId: null,
       terminalSessionId: null,
       terminalPaneKey: null,

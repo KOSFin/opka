@@ -2,6 +2,12 @@ import { AUTOMATION_OWNER_FENCING_RUNTIME_CAPABILITY } from '../../../../shared/
 import { AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY } from '../../../../shared/automation-runtime-capabilities'
 import type { AutomationOwnerPrecondition } from '../../../../shared/automation-owner-precondition'
 import { defineMethod, type RpcContext } from '../core'
+import { getStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import {
+  listStructuredAutomationReportTargets,
+  supportsStructuredAutomationReportTarget
+} from '../../../native-chat/agent-session-wire/structured-agent-session-automation-report'
+import type { AutomationCommandDefinitionCreateV1 } from '../../../../shared/automation-command-domain'
 import {
   AutomationCreate,
   AutomationId,
@@ -29,6 +35,29 @@ function canReadCommands(context: RpcContext): boolean {
   )
 }
 
+async function assertReportTarget(
+  context: RpcContext,
+  definition: AutomationCommandDefinitionCreateV1
+): Promise<void> {
+  const target = definition.execution.reportTarget
+  if (!target) {
+    return
+  }
+  const host = getStructuredAgentSessionHost()
+  if (
+    !host ||
+    !(await supportsStructuredAutomationReportTarget({
+      deps: host.deps,
+      runtimeId: context.runtime.getRuntimeId(),
+      target,
+      workspaceId: definition.workspaceId,
+      runPath: definition.runContext?.path ?? null
+    }))
+  ) {
+    throw new Error('Automation report chat changed or is unavailable on this host.')
+  }
+}
+
 function mutationOwner(
   id: string,
   expectedOwner: AutomationOwnerPrecondition | undefined,
@@ -52,6 +81,7 @@ export const AUTOMATION_METHODS = [
     params: AutomationCreateV2,
     handler: async (params, context) => {
       assertCommandHost(context)
+      await assertReportTarget(context, params.definition)
       return { automation: await context.runtime.createCommandAutomation(params.definition) }
     }
   }),
@@ -61,6 +91,13 @@ export const AUTOMATION_METHODS = [
     params: AutomationUpdateV2,
     handler: async (params, context) => {
       assertCommandHost(context)
+      const current = context.runtime
+        .listCommandAutomations()
+        .find((entry) => entry.id === params.id)
+      if (!current || current.revision !== params.expectedRevision) {
+        throw new Error('Command automation changed or is unavailable.')
+      }
+      await assertReportTarget(context, { ...current, ...params.updates })
       return {
         automation: await context.runtime.updateCommandAutomation(
           params.id,
@@ -121,11 +158,24 @@ export const AUTOMATION_METHODS = [
     permission: 'workspace',
     params: AutomationList,
     // The projection retains `automations`, so old clients ignore the added owner metadata.
-    handler: (params, context) => {
+    handler: async (params, context) => {
       const result = context.runtime.listAutomationsForScope(params)
-      return canReadCommands(context)
-        ? { ...result, commandAutomations: context.runtime.listCommandAutomations() }
-        : result
+      if (!canReadCommands(context)) {
+        return result
+      }
+      const host = getStructuredAgentSessionHost()
+      const commandReportTargets = host
+        ? await listStructuredAutomationReportTargets({
+            deps: host.deps,
+            runtimeId: context.runtime.getRuntimeId(),
+            setups: context.runtime.listVisibleProjectHostSetups()
+          })
+        : []
+      return {
+        ...result,
+        commandAutomations: context.runtime.listCommandAutomations(),
+        commandReportTargets
+      }
     }
   }),
   defineMethod({

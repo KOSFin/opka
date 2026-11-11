@@ -21,6 +21,10 @@ function procStart(pid) {
   const stat = fs.readFileSync('/proc/' + pid + '/stat', 'utf8');
   return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
 }
+function fingerprint(program) {
+  const stats = fs.statSync(program);
+  return [stats.dev, stats.ino, stats.size, stats.mtimeMs, stats.ctimeMs, stats.mode].join(':');
+}
 function ownCgroup() {
   const line = fs.readFileSync('/proc/self/cgroup', 'utf8').split('\n').find((entry) => entry.startsWith('0::'));
   if (!line) throw new Error('cgroup_v2_required');
@@ -41,13 +45,14 @@ async function child() {
   const args = command.kind === 'program' ? command.argv : [file(command.language === 'shell' ? 'command.sh' : 'command.py')];
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  if (spec.binaryFingerprint && fingerprint(program) !== spec.binaryFingerprint) process.exit(92);
   let stdout = '', stderr = '', stdoutTruncated = false, stderrTruncated = false;
   const append = (value, chunk) => {
     const remaining = 16380 - Buffer.byteLength(value);
     return remaining > 0 ? value + chunk.subarray(0, remaining).toString('utf8') : value;
   };
   let root;
-  try { root = spawn(program, args, { cwd: spec.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] }); }
+  try { root = spawn(program, args, { cwd: spec.cwd, env, stdio: [spec.stdinFile ? fs.openSync(file(spec.stdinFile), 'r') : 'ignore', 'pipe', 'pipe'] }); }
   catch (error) { atomic('root.json', { exitCode: null, error: String(error), stdout, stderr, stdoutTruncated, stderrTruncated }); return; }
   root.stdout.on('data', (chunk) => {
     stdoutTruncated ||= Buffer.byteLength(stdout) + chunk.length > 16380;
@@ -65,7 +70,8 @@ async function child() {
 }
 async function supervisor() {
   const parentCgroup = ownCgroup();
-  const childCgroup = path.join(parentCgroup, 'command');
+  if (spec.childName !== 'command' && spec.childName !== 'agent') throw new Error('invalid_child_name');
+  const childCgroup = path.join(parentCgroup, spec.childName);
   fs.mkdirSync(childCgroup);
   const blocked = spawn(process.execPath, [__filename, 'child', directory], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: 'ignore'
@@ -93,7 +99,7 @@ async function supervisor() {
   fs.rmdirSync(childCgroup);
   for (const name of [
     'spec.json', 'supervisor.cjs', 'command.sh', 'command.py', 'receipt.json', 'gate.json', 'root.json',
-    'empty.json', 'timeout.json', 'release.json', 'supervisor-error.json'
+    'empty.json', 'timeout.json', 'release.json', 'supervisor-error.json', 'agent-prompt.txt'
   ]) fs.rmSync(file(name), { force: true });
   fs.rmdirSync(directory);
 }

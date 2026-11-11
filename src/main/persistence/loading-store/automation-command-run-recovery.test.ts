@@ -145,4 +145,46 @@ describe('active command run recovery', () => {
     expect(readAutomationCommandsV1Domain(state.automationCommandsV1).activeClaims).toEqual([])
     expect(markNeedsSave).toHaveBeenCalledOnce()
   })
+
+  it('restores a report-stage row from the claim without scheduling another effect', () => {
+    const state = fixture()
+    const domain = readAutomationCommandsV1Domain(state.automationCommandsV1)
+    const originalSnapshot = domain.activeClaims[0]?.runSnapshot
+    if (!originalSnapshot) {
+      throw new Error('Fixture run snapshot is missing.')
+    }
+    state.automationCommandsV1 = {
+      ...domain,
+      activeClaims: domain.activeClaims.map((claim) => ({
+        ...claim,
+        phase: 'report' as const,
+        observation: 'exited' as const,
+        runSnapshot: {
+          ...originalSnapshot,
+          pendingStatus: 'skipped_precheck' as const,
+          finalReason: 'condition_false',
+          outputSnapshot: {
+            format: 'plain_text' as const,
+            content: 'Original report',
+            capturedAt: NOW,
+            truncated: false
+          }
+        }
+      }))
+    }
+    const markNeedsSave = vi.fn()
+    const [run] = recoverActiveAutomationCommandRuns(state, [], markNeedsSave)
+    expect(run).toMatchObject({
+      id: 'run-1',
+      status: 'dispatching',
+      outputSnapshot: { content: 'Original report' },
+      commandExecution: {
+        phase: 'report',
+        observation: 'exited',
+        pendingStatus: 'skipped_precheck',
+        finalReason: 'condition_false'
+      }
+    })
+    expect(markNeedsSave).toHaveBeenCalledOnce()
+  })
 })

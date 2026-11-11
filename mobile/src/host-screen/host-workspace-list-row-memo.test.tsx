@@ -63,6 +63,33 @@ import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/wor
 import { HostWorkspaceList } from './host-workspace-list'
 import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 
+function projectGroup(name: string): ProjectGroup {
+  return {
+    id: 'group-a',
+    name,
+    parentPath: null,
+    connectionId: null,
+    parentGroupId: null,
+    createdFrom: 'manual',
+    tabOrder: 0,
+    isCollapsed: false,
+    color: null,
+    createdAt: 1,
+    updatedAt: 1
+  }
+}
+
+function projectSection(group: ProjectGroup): Section {
+  return {
+    key: `project-group:local:${group.id}`,
+    title: group.name,
+    data: [],
+    projectGroupHeader: true,
+    projectGroupId: group.id,
+    projectGroupHostId: 'local'
+  }
+}
+
 function worktree(id: string, overrides: Partial<Worktree> = {}): Worktree {
   return {
     worktreeId: `repo-1::${id}`,
@@ -86,7 +113,13 @@ const stable = { ref: { current: null }, repoById: new Map() }
 
 function listProps(
   worktrees: Worktree[],
-  options: { hostId?: string; sections?: Section[]; projectGroups?: ProjectGroup[] } = {}
+  options: {
+    hostId?: string
+    sections?: Section[]
+    projectGroups?: ProjectGroup[]
+    collapsedGroups?: Set<string>
+    onToggleCollapsed?: (key: string) => void
+  } = {}
 ) {
   // Each poll re-parses the payload, so rows are fresh objects even when nothing changed.
   const polled: Worktree[] = JSON.parse(JSON.stringify(worktrees))
@@ -99,7 +132,7 @@ function listProps(
     catalog: { refreshing: false, onRefresh: noop },
     connState: 'connected',
     hostId: options.hostId ?? 'host-a',
-    collapsedGroups: new Set(),
+    collapsedGroups: options.collapsedGroups ?? new Set(),
     displayWorktrees: polled,
     embedded: true,
     insets: { bottom: 0 },
@@ -111,6 +144,7 @@ function listProps(
     settings: {
       activeFilterCount: 0,
       toggleWorktreeLineage: noop,
+      toggleCollapsed: options.onToggleCollapsed ?? noop,
       pendingViewChanges: { pending: [], stale: false }
     },
     state: {
@@ -129,29 +163,8 @@ function listProps(
 
 describe('host list rows across polls', () => {
   it('drops an open group sheet on A→B→A and ignores the old close callback', () => {
-    const group: ProjectGroup = {
-      id: 'group-a',
-      name: 'Group A',
-      parentPath: null,
-      connectionId: null,
-      parentGroupId: null,
-      createdFrom: 'manual',
-      tabOrder: 0,
-      isCollapsed: false,
-      color: null,
-      createdAt: 1,
-      updatedAt: 1
-    }
-    const sections: Section[] = [
-      {
-        key: 'project-group:local:group-a',
-        title: 'Group A',
-        data: [],
-        projectGroupHeader: true,
-        projectGroupId: group.id,
-        projectGroupHostId: 'local'
-      }
-    ]
+    const group = projectGroup('Group A')
+    const sections = [projectSection(group)]
     const props = (hostId: string) => listProps([], { hostId, sections, projectGroups: [group] })
     let tree!: ReactTestRenderer
     act(() => {
@@ -175,6 +188,50 @@ describe('host list rows across polls', () => {
     }
     act(() => oldClose())
     expect(managerRows()).toHaveLength(1)
+    act(() => tree.unmount())
+  })
+  it('keeps project collapse and Manage project as distinct touch targets', () => {
+    const group = projectGroup('Synthetic integration')
+    const section = projectSection(group)
+    const toggled = vi.fn()
+    const options = {
+      sections: [section],
+      projectGroups: [group],
+      onToggleCollapsed: toggled
+    }
+    let tree!: ReactTestRenderer
+    act(() => {
+      tree = create(createElement(HostWorkspaceList, listProps([], options)))
+    })
+    const collapse = tree.root.findByProps({
+      accessibilityLabel: 'Collapse project Synthetic integration'
+    })
+    const manage = tree.root.findByProps({
+      accessibilityLabel: 'Manage project Synthetic integration'
+    })
+    expect(collapse.parent).toBe(manage.parent)
+    expect(String(collapse.parent?.type)).toBe('View')
+    expect(collapse.props.accessibilityState).toEqual({ expanded: true })
+    act(() => collapse.props.onPress())
+    expect(toggled).toHaveBeenCalledWith(section.key)
+    expect(tree.root.findAll((node) => String(node.type) === 'GroupManager')).toHaveLength(0)
+    act(() => manage.props.onPress())
+    expect(toggled).toHaveBeenCalledTimes(1)
+    expect(tree.root.findAll((node) => String(node.type) === 'GroupManager')).toHaveLength(1)
+    act(() =>
+      tree.update(
+        createElement(
+          HostWorkspaceList,
+          listProps([], { ...options, collapsedGroups: new Set([section.key]) })
+        )
+      )
+    )
+    const expand = tree.root.findByProps({
+      accessibilityLabel: 'Expand project Synthetic integration'
+    })
+    expect(expand.props.accessibilityState).toEqual({ expanded: false })
+    act(() => expand.props.onPress())
+    expect(toggled).toHaveBeenCalledTimes(2)
     act(() => tree.unmount())
   })
   it('re-renders only the row whose worktree changed', () => {

@@ -30,6 +30,7 @@ const accountHome = join(root, 'codex')
 const workspace = join(root, 'workspace')
 let child
 let lines
+/** @type {Promise<{code: number | null, signal: string | null}> | undefined} */
 let childClosed
 let childDidClose = false
 let server
@@ -393,6 +394,9 @@ try {
     if (!childDidClose) {
       exiting.kill('SIGTERM')
     }
+    if (!childClosed) {
+      throw new Error('First public app-server close promise was not installed')
+    }
     const force = setTimeout(() => exiting.kill('SIGKILL'), 2000)
     let deadline
     const closed = await Promise.race([
@@ -488,6 +492,9 @@ try {
     if (child?.pid && !childDidClose) {
       const exiting = child
       exiting.kill('SIGTERM')
+      if (!childClosed) {
+        throw new Error('Public app-server close promise was not installed')
+      }
       const force = setTimeout(() => exiting.kill('SIGKILL'), 2000)
       let deadline
       await Promise.race([

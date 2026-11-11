@@ -9,8 +9,12 @@ module.exports = {
   },
   safeStorage: {
     isEncryptionAvailable: () => false,
-    encryptString: () => { throw new Error('Fixture must not encrypt credentials') },
-    decryptString: () => { throw new Error('Fixture must not decrypt credentials') }
+    encryptString: () => {
+      throw new Error('Fixture must not encrypt credentials')
+    },
+    decryptString: () => {
+      throw new Error('Fixture must not decrypt credentials')
+    }
   },
   ipcMain: { on: () => {}, handle: () => {} },
   BrowserWindow: { getAllWindows: () => [] }

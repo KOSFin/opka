@@ -15,6 +15,16 @@ import {
 } from '../../shared/tui-agent-config'
 import { launchHeadlessAutomationAgent, runOwnHandle } from './headless-automation-agent-launch'
 import { createRuntimeAutomationRunTerminalObserver } from './runtime-terminal-run-observer'
+import {
+  createLinuxCommandAutomationAdapter,
+  type CommandAdapterInputs
+} from './automation-linux-command-adapter'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
+import { stat } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
+import { supportsStructuredAutomationReportTarget } from '../native-chat/agent-session-wire/structured-agent-session-automation-report'
+import { createLinuxOneShotAutomationAgent } from './automation-linux-one-shot-agent'
 
 const MAX_REMEMBERED_LAUNCHES = 256
 
@@ -25,6 +35,11 @@ export function createRuntimeAutomationService(input: {
   codexUsage?: CodexUsageStore
   /** A server process: it executes remote_host_service-owned schedules and dispatches headlessly. */
   headless: boolean
+  /** Supplied only after this owning runtime has independently verified its command scope. */
+  verifiedCommandHost?: {
+    generation: number
+    oneShotAgent?: CommandAdapterInputs['oneShotAgent']
+  }
 }): AutomationService {
   const { store, runtime, claudeUsage, codexUsage } = input
   // The handle each headless launch returned, so its watcher never depends on a pane-key lookup.
@@ -39,6 +54,89 @@ export function createRuntimeAutomationService(input: {
   const service = new AutomationService(store, {
     claudeUsage,
     codexUsage,
+    ...(input.verifiedCommandHost
+      ? {
+          commandHostGeneration: input.verifiedCommandHost.generation,
+          commandHostAdapterFactory: (runs) => {
+            const ownerRuntimeId = runtime.getRuntimeId()
+            const hostGeneration = input.verifiedCommandHost?.generation ?? 0
+            const isCurrentOwner = () =>
+              runtime.getRuntimeId() === ownerRuntimeId &&
+              store.getCommandHostEpoch() === hostGeneration
+            const resolveExistingWorkspaceCwd: CommandAdapterInputs['resolveExistingWorkspaceCwd'] =
+              async (definition) => {
+                const context = definition.runContext
+                const setup = store
+                  .getProjectHostSetups()
+                  .find((entry) => entry.id === context?.projectHostSetupId)
+                const repo = store.getRepo(context?.repoId ?? '')
+                if (
+                  !context ||
+                  !setup ||
+                  !repo ||
+                  context.hostId !== 'local' ||
+                  setup.setupState !== 'ready' ||
+                  setup.hostId !== 'local' ||
+                  getRepoExecutionHostId(repo) !== 'local' ||
+                  setup.repoId !== context.repoId ||
+                  repo.path !== setup.path ||
+                  setup.path !== context.path ||
+                  resolve(setup.path) !== resolve(context.path)
+                ) {
+                  return null
+                }
+                try {
+                  return (await stat(setup.path)).isDirectory() ? setup.path : null
+                } catch {
+                  return null
+                }
+              }
+            return createLinuxCommandAutomationAdapter({
+              store,
+              runs,
+              hostGeneration,
+              isCurrentOwner,
+              resolveExistingWorkspaceCwd,
+              oneShotAgent:
+                input.verifiedCommandHost?.oneShotAgent ??
+                createLinuxOneShotAutomationAgent({
+                  store,
+                  runs,
+                  hostGeneration,
+                  isCurrentOwner,
+                  resolveExistingWorkspaceCwd
+                }),
+              reportDelivery: {
+                supportsTarget: async (definition) => {
+                  const target = definition.execution.reportTarget
+                  const host = getStructuredAgentSessionHost()
+                  return target && host
+                    ? supportsStructuredAutomationReportTarget({
+                        deps: host.deps,
+                        runtimeId: runtime.getRuntimeId(),
+                        target,
+                        workspaceId: definition.workspaceId,
+                        runPath: definition.runContext?.path ?? null
+                      })
+                    : false
+                },
+                deliver: async (target, run) => {
+                  const host = getStructuredAgentSessionHost()
+                  if (!host) {
+                    return false
+                  }
+                  const status = await host.appendAutomationReport(
+                    runtime.getRuntimeId(),
+                    target,
+                    run
+                  )
+                  return status === 'unverifiable' ? status : status === 'delivered'
+                }
+              }
+            })
+          }
+        }
+      : {}),
     terminalObserver: {
       ...observer,
       // This host's own launch handle first: it names the run's terminal without a lookup.

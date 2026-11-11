@@ -13,12 +13,21 @@ import { AutomationRunDetailsPage } from './AutomationRunDetailsPage'
 import { AutomationsPageDeleteDialogs } from './AutomationsPageDeleteDialogs'
 import { AutomationsPageListPanel } from './AutomationsPageListPanel'
 import { AutomationCommandModePanel } from './AutomationCommandModePanel'
+import { useAppStore } from '../../store'
 export function AutomationsPageSurface({
   controller
 }: {
   controller: AutomationsPageController
 }): React.JSX.Element {
-  const [commandMode, setCommandMode] = React.useState(false)
+  const pendingCommandReport = useAppStore(
+    (state) => state.pendingCommandAutomationReportNavigation
+  )
+  const [commandMode, setCommandMode] = React.useState(pendingCommandReport !== null)
+  React.useEffect(() => {
+    if (pendingCommandReport) {
+      setCommandMode(true)
+    }
+  }, [pendingCommandReport])
   const {
     store,
     local,
@@ -140,6 +149,7 @@ export function AutomationsPageSurface({
       <AutomationCommandModePanel
         target={{ kind: 'local' }}
         setups={projectHostSetups}
+        requestedReport={pendingCommandReport}
         onBack={() => setCommandMode(false)}
       />
     )

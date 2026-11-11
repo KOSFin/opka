@@ -19,7 +19,7 @@ const GROUPED_WORKTREE_CARD_SURFACE_INDENT = 14
 export const PROJECT_GROUP_HEADER_BASE_PADDING = 10
 // Why: shared with project headers so titles don't shift when grouping mode changes.
 export const WORKTREE_SECTION_HEADER_PADDING_LEFT = PROJECT_GROUP_HEADER_BASE_PADDING
-export const PROJECT_GROUP_HEADER_INDENT = 18
+export const PROJECT_GROUP_HEADER_INDENT = PROJECT_GROUP_HEADER_BASE_PADDING
 export const MAX_PROJECT_GROUP_HEADER_DEPTH = 6
 
 function clampDepth(depth: number): number {
@@ -72,9 +72,8 @@ export function getFolderBackedRepoWorktreeCardSurfaceInset(args: {
 }
 
 export function getFolderWorkspaceCardContentIndent(args: { groupDepth: number }): number {
-  const parentGroupDepth = Math.max(0, clampDepth(args.groupDepth) - 1)
   // Why: folder workspaces are direct children of their folder group: one compact header step.
-  return getProjectGroupHeaderPaddingLeft(parentGroupDepth) + PROJECT_GROUP_HEADER_INDENT
+  return getProjectGroupHeaderPaddingLeft(args.groupDepth)
 }
 
 export function getFolderWorkspaceCardSurfaceInset(args: {

@@ -210,49 +210,63 @@ function HostWorkspaceListContent({ controller }: { controller: HostScreenContro
               ).length === 1
             return (
               <>
-                <Pressable
+                <View
                   style={[
                     styles.sectionHeader,
                     section.projectGroupHeader && styles.projectGroupHeader,
                     section.headerDepth ? styles.nestedRepoHeader : null
                   ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: !isCollapsed }}
-                  onPress={() => settings.toggleCollapsed(section.key)}
                 >
-                  {isCollapsed ? (
-                    <ChevronRight size={12} color={colors.textMuted} style={styles.sectionIcon} />
-                  ) : (
-                    <ChevronDown size={12} color={colors.textMuted} style={styles.sectionIcon} />
-                  )}
-                  {section.icon === 'pin' && (
-                    <Pin size={12} color={colors.textMuted} style={styles.sectionIcon} />
-                  )}
-                  {state.view.groupBy === 'repo' ? (
-                    <View style={styles.sectionRepoIcon}>
-                      <MobileRepoIcon
-                        repoIcon={repoSectionIcon}
-                        size={14}
-                        color={repoSectionColor ?? colors.textSecondary}
-                      />
-                    </View>
-                  ) : null}
-                  <Text
+                  <Pressable
                     style={[
-                      styles.sectionTitle,
-                      section.projectGroupHeader && styles.projectGroupTitle
+                      styles.sectionToggle,
+                      section.projectGroupHeader && styles.projectGroupToggle
                     ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${isCollapsed ? 'Expand' : 'Collapse'} ${section.projectGroupHeader ? 'project' : 'section'} ${section.title}`}
+                    accessibilityState={{ expanded: !isCollapsed }}
+                    onPress={() => settings.toggleCollapsed(section.key)}
                   >
-                    {section.title}
-                  </Text>
-                  <Text style={styles.sectionCount}>{count}</Text>
+                    {isCollapsed ? (
+                      <ChevronRight size={12} color={colors.textMuted} style={styles.sectionIcon} />
+                    ) : (
+                      <ChevronDown size={12} color={colors.textMuted} style={styles.sectionIcon} />
+                    )}
+                    {section.icon === 'pin' && (
+                      <Pin size={12} color={colors.textMuted} style={styles.sectionIcon} />
+                    )}
+                    {state.view.groupBy === 'repo' ? (
+                      <View style={styles.sectionRepoIcon}>
+                        <MobileRepoIcon
+                          repoIcon={repoSectionIcon}
+                          size={14}
+                          color={repoSectionColor ?? colors.textSecondary}
+                        />
+                      </View>
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        section.projectGroupHeader && styles.projectGroupTitle
+                      ]}
+                    >
+                      {section.title}
+                    </Text>
+                    <Text style={styles.sectionCount}>{count}</Text>
+                    {pendingCollapseKeys.has(section.key) && (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.textMuted}
+                        style={styles.sectionIcon}
+                      />
+                    )}
+                  </Pressable>
                   {manageableGroup && hostId && connState === 'connected' && !isReadOnly ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Manage project ${section.title}`}
                       style={styles.groupManageButton}
-                      onPress={(event) => {
-                        event.stopPropagation()
+                      onPress={() => {
                         if (section.projectGroupId && section.projectGroupHostId) {
                           setManagedGroup({
                             id: section.projectGroupId,
@@ -266,14 +280,7 @@ function HostWorkspaceListContent({ controller }: { controller: HostScreenContro
                       <MoreHorizontal size={18} color={colors.textSecondary} />
                     </Pressable>
                   ) : null}
-                  {pendingCollapseKeys.has(section.key) && (
-                    <ActivityIndicator
-                      size="small"
-                      color={colors.textMuted}
-                      style={styles.sectionIcon}
-                    />
-                  )}
-                </Pressable>
+                </View>
                 {pendingCreations}
               </>
             )

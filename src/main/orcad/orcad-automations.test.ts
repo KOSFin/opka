@@ -5,8 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeTestStores, createStore, makeRepo, testState } from '../persistence-test-harness'
 import type { AutomationService } from '../automations/service'
 import { orcadAutomationsKeepHostBusy, startOrcadAutomations } from './orcad-automations'
+import { probeLinuxAutomationHost } from '../automations/automation-linux-host-probe'
 
 vi.mock('electron', () => ({ app: { getPath: () => testState.dir } }))
+vi.mock('../automations/automation-linux-host-probe', () => ({
+  probeLinuxAutomationHost: vi.fn(async () => false)
+}))
 
 function headlessRuntime() {
   let bound: AutomationService | null = null
@@ -15,6 +19,7 @@ function headlessRuntime() {
       bound = service
     }),
     notifyAutomationsChanged: vi.fn(),
+    getRuntimeId: vi.fn(() => 'runtime-1'),
     createManagedWorktree: vi.fn(async () => ({
       worktree: { id: 'r1::/repo/wt', displayName: 'wt' },
       startupTerminal: { handle: 'term-1', tabId: 'tab-1', paneKey: 'tab-1:1', ptyId: 'pty-1' }
@@ -52,7 +57,7 @@ describe('orcad automations', () => {
     const { runtime, service } = headlessRuntime()
     const cleanups: (() => void)[] = []
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the headless dispatcher reaches only the runtime methods stubbed above.
-    startOrcadAutomations(runtime as never, store, (cleanup) => cleanups.push(cleanup))
+    await startOrcadAutomations(runtime as never, store, (cleanup) => cleanups.push(cleanup))
     try {
       expect(runtime.setAutomationService).toHaveBeenCalledOnce()
       const run = await service()!.runNow(automation.id)
@@ -69,10 +74,34 @@ describe('orcad automations', () => {
     expect(orcadAutomationsKeepHostBusy(store)).toBe(false)
   })
 
+  it('keeps command capability off when the durable host probe refuses', async () => {
+    const store = createStore()
+    const { runtime, service } = headlessRuntime()
+    const cleanups: (() => void)[] = []
+    await startOrcadAutomations(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the probe refuses before command execution; this runtime stub covers service startup.
+      runtime as never,
+      store,
+      (cleanup) => cleanups.push(cleanup),
+      testState.dir
+    )
+    try {
+      expect(store.getCommandHostEpoch()).toBe(1)
+      expect(probeLinuxAutomationHost).toHaveBeenCalledWith(
+        expect.objectContaining({ root: testState.dir, hostEpoch: 1, runtimeId: 'runtime-1' })
+      )
+      expect(service()?.commandPipelineAvailable()).toBe(false)
+    } finally {
+      cleanups.forEach((cleanup) => cleanup())
+    }
+  })
+
   // Booting orcad here would need its whole runtime; the wiring is pinned by the entry point's text.
   it('orcad starts the service with its runtime and feeds it to managed idle exit', () => {
     const entry = readFileSync(join(import.meta.dirname, 'orcad-entry.ts'), 'utf8')
-    expect(entry).toContain('startOrcadAutomations(runtime, profileStore, registerCleanup)')
+    expect(entry).toContain(
+      'await startOrcadAutomations(runtime, profileStore, registerCleanup, profileRoot)'
+    )
     expect(entry).toContain('automationsBusy: () => orcadAutomationsKeepHostBusy(profileStore)')
   })
 })

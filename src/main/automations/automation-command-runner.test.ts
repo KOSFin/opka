@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AutomationCommandDefinitionV1 } from '../../shared/automation-command-domain'
 import { buildProfileStateCutoverFixture } from '../persistence/profile-state-cutover-fixture'
-import { runClaimedAutomationCommand } from './automation-command-runner'
+import {
+  runClaimedAutomationCommand,
+  type AutomationCommandRunAdapter
+} from './automation-command-runner'
 import type { AutomationRunWriter } from './automation-run-writer'
 
 const NOW = Date.UTC(2026, 10, 9, 12)
@@ -88,10 +91,10 @@ function fixture() {
       }
     })),
     runOneShotAgent: vi.fn(async () => ({ verdict: 'exited' as const, success: true })),
-    deliverReport: vi.fn(async () => true),
+    deliverReport: vi.fn<AutomationCommandRunAdapter['deliverReport']>(async () => true),
     now: () => NOW
   }
-  return { definition, claim, runs, adapter }
+  return { definition, claim, run, runs, adapter }
 }
 
 describe('claimed command pipeline', () => {
@@ -125,6 +128,135 @@ describe('claimed command pipeline', () => {
       'agent',
       'report'
     ])
+  })
+
+  it('writes the report stage before handing its stable run reference to delivery', async () => {
+    const input = fixture()
+    const reportTarget = {
+      runtimeId: 'runtime-1',
+      hostId: 'local',
+      workspaceId: 'repo-local::/fixture/local',
+      chatSessionId: 'chat-1',
+      registrationGeneration: 1
+    }
+    const definition = {
+      ...input.definition,
+      execution: { ...input.definition.execution, reportTarget }
+    }
+    input.adapter.executeCommand.mockResolvedValue({
+      verdict: 'exited',
+      observation: {
+        exitCode: 0,
+        timedOut: false,
+        error: null,
+        stdout: '{"version":1,"changed":true}',
+        stdoutTruncated: false
+      }
+    })
+    await runClaimedAutomationCommand({ ...input, definition })
+    expect(input.adapter.runOneShotAgent).toHaveBeenCalledOnce()
+    expect(input.adapter.deliverReport).toHaveBeenCalledWith(
+      reportTarget,
+      expect.objectContaining({ id: input.claim.runId })
+    )
+    const reportWrite = input.runs.advanceCommandRun.mock.calls.findIndex(
+      (call) => call[1].phase === 'report'
+    )
+    expect(reportWrite).toBeGreaterThan(-1)
+    expect(input.runs.advanceCommandRun.mock.calls[reportWrite][1]).toMatchObject({
+      outputSnapshot: { format: 'plain_text' }
+    })
+    expect(input.runs.advanceCommandRun.mock.invocationCallOrder[reportWrite]).toBeLessThan(
+      input.adapter.deliverReport.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('retains the claim when the journal answer is uncertain after the report write', async () => {
+    const input = fixture()
+    const definition = {
+      ...input.definition,
+      execution: {
+        ...input.definition.execution,
+        agent: null,
+        reportTarget: {
+          runtimeId: 'runtime-1',
+          hostId: 'local',
+          workspaceId: 'repo-local::/fixture/local',
+          chatSessionId: 'chat-1',
+          registrationGeneration: 1
+        }
+      }
+    }
+    input.adapter.deliverReport.mockResolvedValue('unverifiable')
+    input.runs.advanceCommandRun.mockImplementation(async (fence, update) => {
+      if (update.phase === 'report') {
+        expect(fence.expectedPhase).toBe('condition')
+      }
+      return input.run
+    })
+    const result = await runClaimedAutomationCommand({ ...input, definition })
+    expect(result.kind).toBe('unverifiable')
+    expect(input.runs.advanceCommandRun.mock.calls.some((call) => call[1].phase === 'report')).toBe(
+      true
+    )
+    expect(input.runs.settleCommandRun).not.toHaveBeenCalled()
+    expect(input.adapter.runOneShotAgent).not.toHaveBeenCalled()
+  })
+
+  it('retries only delivery from a retained report after restart', async () => {
+    const input = fixture()
+    const reportTarget = {
+      runtimeId: 'runtime-1',
+      hostId: 'local',
+      workspaceId: 'repo-local::/fixture/local',
+      chatSessionId: 'chat-1',
+      registrationGeneration: 1
+    }
+    const definition = {
+      ...input.definition,
+      execution: { ...input.definition.execution, reportTarget }
+    }
+    const retained = {
+      ...buildProfileStateCutoverFixture('/fixture').automationRuns[0],
+      id: input.claim.runId,
+      automationId: input.claim.automationId,
+      sessionKind: 'command' as const,
+      status: 'dispatching' as const,
+      outputSnapshot: {
+        format: 'plain_text' as const,
+        content: 'Original report',
+        capturedAt: NOW,
+        truncated: false
+      },
+      commandExecution: {
+        version: 1 as const,
+        phase: 'report' as const,
+        attempt: 1,
+        observation: 'exited' as const,
+        finalReason: 'condition_true',
+        pendingStatus: 'completed' as const
+      }
+    }
+    const claim = { ...input.claim, phase: 'report' as const, observation: 'exited' as const }
+    const adapter = {
+      ...input.adapter,
+      readReportRun: vi.fn(() => retained)
+    }
+    const result = await runClaimedAutomationCommand({
+      definition,
+      claim,
+      runs: input.runs,
+      adapter
+    })
+    expect(result.kind).toBe('settled')
+    expect(adapter.executeCommand).not.toHaveBeenCalled()
+    expect(adapter.runOneShotAgent).not.toHaveBeenCalled()
+    expect(input.runs.advanceCommandRun).not.toHaveBeenCalled()
+    expect(adapter.deliverReport).toHaveBeenCalledWith(reportTarget, retained)
+    expect(input.runs.settleCommandRun).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedPhase: 'report' }),
+      expect.objectContaining({ status: 'completed', finalReason: 'condition_true' })
+    )
   })
 
   it('keeps an unverifiable command nonfinal and blocks report delivery', async () => {
@@ -176,6 +308,51 @@ describe('claimed command pipeline', () => {
       expect.objectContaining({ expectedPhase: 'report' }),
       expect.objectContaining({ status: 'skipped_precheck' })
     )
+  })
+
+  it('resumes a proven condition into one agent and report without rerunning the command', async () => {
+    const input = fixture()
+    const definition = {
+      ...input.definition,
+      execution: {
+        ...input.definition.execution,
+        reportTarget: {
+          runtimeId: 'runtime-1',
+          hostId: 'local',
+          workspaceId: 'repo-local::/fixture/local',
+          chatSessionId: 'chat-1',
+          registrationGeneration: 1
+        }
+      }
+    }
+    const claim = {
+      ...input.claim,
+      phase: 'condition' as const,
+      processIntent: {
+        backend: 'linux_cgroup_v1' as const,
+        unitName: 'orca-automation-11111111-1111-4111-8111-111111111111.scope',
+        childName: 'command' as const,
+        receiptDirectory: '/tmp/claim',
+        exitProof: {
+          verifiedAt: NOW,
+          exitCode: 0,
+          timedOut: false,
+          error: null,
+          stdout: '{"version":1,"changed":true}',
+          stdoutTruncated: false,
+          stderr: '',
+          stderrTruncated: false
+        }
+      }
+    }
+    await runClaimedAutomationCommand({ ...input, definition, claim })
+    expect(input.adapter.executeCommand).not.toHaveBeenCalled()
+    expect(input.adapter.runOneShotAgent).toHaveBeenCalledOnce()
+    expect(input.adapter.deliverReport).toHaveBeenCalledOnce()
+    expect(input.runs.advanceCommandRun.mock.calls.map((call) => call[1].phase)).toEqual([
+      'agent',
+      'report'
+    ])
   })
 
   it('refuses replay of an agent stage even when the command exit was proven', async () => {

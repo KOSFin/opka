@@ -53,6 +53,25 @@ describe('AutomationService', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
+  it('passes its one durable run writer to a verified command adapter factory', async () => {
+    const store = await createStore()
+    const factory = vi.fn(() => ({
+      isHostReady: () => true,
+      supportsDefinition: vi.fn(async () => false),
+      executeCommand: vi.fn(async () => ({ verdict: 'unverifiable' as const })),
+      cancelRun: vi.fn(async () => 'unverifiable' as const),
+      deliverReport: vi.fn(async () => false),
+      now: () => 1
+    }))
+    const service = new AutomationService(store, {
+      commandHostAdapterFactory: factory,
+      commandHostGeneration: 1
+    })
+    expect(factory).toHaveBeenCalledOnce()
+    expect(factory.mock.calls[0]).toHaveLength(1)
+    expect(service.commandPipelineAvailable()).toBe(true)
+  })
+
   it('dispatches an enabled automation when its next run is due', async () => {
     vi.setSystemTime(new Date('2026-05-13T08:59:00'))
     const store = await createStore()

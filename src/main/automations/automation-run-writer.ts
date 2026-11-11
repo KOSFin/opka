@@ -10,8 +10,11 @@ export type AutomationRunWriter = {
   createRun: DurableWrite<Store['createAutomationRun']>
   claimCommandRun: DurableWrite<Store['claimCommandAutomationRun']>
   advanceCommandRun: DurableWrite<Store['advanceCommandAutomationRun']>
+  adoptCommandCondition: DurableWrite<Store['adoptProvenCommandCondition']>
   bindCommandProcessIntent: DurableWrite<Store['bindCommandAutomationProcessIntent']>
   recordCommandExitProof: DurableWrite<Store['recordCommandAutomationExitProof']>
+  bindAgentProcessIntent: DurableWrite<Store['bindAutomationAgentProcessIntent']>
+  recordAgentExitProof: DurableWrite<Store['recordAutomationAgentExitProof']>
   requestCommandCancel: DurableWrite<Store['requestCommandAutomationCancel']>
   settleCommandRun: DurableWrite<Store['settleCommandAutomationRun']>
   advanceCommandNextRun: DurableWrite<Store['advanceCommandAutomationNextRun']>
@@ -35,8 +38,11 @@ export function createAutomationRunWriter(
     | 'createAutomationRun'
     | 'claimCommandAutomationRun'
     | 'advanceCommandAutomationRun'
+    | 'adoptProvenCommandCondition'
     | 'bindCommandAutomationProcessIntent'
     | 'recordCommandAutomationExitProof'
+    | 'bindAutomationAgentProcessIntent'
+    | 'recordAutomationAgentExitProof'
     | 'requestCommandAutomationCancel'
     | 'settleCommandAutomationRun'
     | 'releaseCommandAutomationClaim'
@@ -74,6 +80,12 @@ export function createAutomationRunWriter(
       announce(run.automationId, 'run')
       return run
     },
+    adoptCommandCondition: async (fence, nextHostGeneration) => {
+      const claim = store.adoptProvenCommandCondition(fence, nextHostGeneration)
+      await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
+      announce(claim.automationId, 'run')
+      return claim
+    },
     bindCommandProcessIntent: async (fence, receipt) => {
       const claim = store.bindCommandAutomationProcessIntent(fence, receipt)
       await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
@@ -82,6 +94,18 @@ export function createAutomationRunWriter(
     },
     recordCommandExitProof: async (fence, observation, verifiedAt) => {
       const claim = store.recordCommandAutomationExitProof(fence, observation, verifiedAt)
+      await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
+      announce(claim.automationId, 'run')
+      return claim
+    },
+    bindAgentProcessIntent: async (fence, receipt) => {
+      const claim = store.bindAutomationAgentProcessIntent(fence, receipt)
+      await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
+      announce(claim.automationId, 'run')
+      return claim
+    },
+    recordAgentExitProof: async (fence, observation, verifiedAt) => {
+      const claim = store.recordAutomationAgentExitProof(fence, observation, verifiedAt)
       await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
       announce(claim.automationId, 'run')
       return claim

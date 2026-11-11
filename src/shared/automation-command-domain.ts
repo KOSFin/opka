@@ -70,6 +70,15 @@ export const AutomationCommandExecutionV1 = z
     }
   })
 
+export type AutomationCommandReportTarget = NonNullable<
+  z.infer<typeof AutomationCommandExecutionV1>['reportTarget']
+>
+export type AutomationCommandReportTargetOption = {
+  setupId: string
+  label: string
+  target: AutomationCommandReportTarget
+}
+
 export const AutomationCommandDefinitionV1 = z
   .object({
     id: z.string().min(1),
@@ -125,7 +134,36 @@ export const AutomationCommandRunSnapshotV1 = z
       })
       .strict()
       .optional(),
-    finalReason: z.string().max(4096).nullable().optional()
+    finalReason: z.string().max(4096).nullable().optional(),
+    pendingStatus: z.enum(['completed', 'skipped_precheck', 'dispatch_failed']).optional()
+  })
+  .strict()
+
+const AutomationProcessIntent = z
+  .object({
+    backend: z.literal('linux_cgroup_v1'),
+    unitName: z.string().regex(/^orca-automation-[0-9a-f-]{36}\.scope$/),
+    childName: z.enum(['command', 'agent']),
+    receiptDirectory: z.string().min(1).max(4096),
+    childCgroupPath: z.string().min(1).max(4096).optional(),
+    blockedChildPid: z.number().int().positive().optional(),
+    blockedChildStartTime: z.string().regex(/^\d+$/).optional(),
+    binaryPath: z.string().min(1).max(4096).optional(),
+    binaryFingerprint: z.string().min(1).max(256).optional(),
+    execMayHappen: z.literal(true).optional(),
+    exitProof: z
+      .object({
+        verifiedAt: finiteTimestamp,
+        exitCode: z.number().int().nullable(),
+        timedOut: z.boolean(),
+        error: z.string().max(4096).nullable(),
+        stdout: z.string().max(16 * 1024),
+        stdoutTruncated: z.boolean(),
+        stderr: z.string().max(16 * 1024),
+        stderrTruncated: z.boolean()
+      })
+      .strict()
+      .optional()
   })
   .strict()
 
@@ -145,32 +183,8 @@ export const AutomationCommandClaimV1 = z
     cancelRequestKey: z.string().min(1).max(128).optional(),
     overlapCount: z.number().int().nonnegative().max(1_000_000_000).optional(),
     lastOverlapAt: finiteTimestamp.optional(),
-    processIntent: z
-      .object({
-        backend: z.literal('linux_cgroup_v1'),
-        unitName: z.string().regex(/^orca-automation-[0-9a-f-]{36}\.scope$/),
-        childName: z.literal('command'),
-        receiptDirectory: z.string().min(1).max(4096),
-        childCgroupPath: z.string().min(1).max(4096).optional(),
-        blockedChildPid: z.number().int().positive().optional(),
-        blockedChildStartTime: z.string().regex(/^\d+$/).optional(),
-        execMayHappen: z.literal(true).optional(),
-        exitProof: z
-          .object({
-            verifiedAt: finiteTimestamp,
-            exitCode: z.number().int().nullable(),
-            timedOut: z.boolean(),
-            error: z.string().max(4096).nullable(),
-            stdout: z.string().max(16 * 1024),
-            stdoutTruncated: z.boolean(),
-            stderr: z.string().max(16 * 1024),
-            stderrTruncated: z.boolean()
-          })
-          .strict()
-          .optional()
-      })
-      .strict()
-      .optional(),
+    processIntent: AutomationProcessIntent.extend({ childName: z.literal('command') }).optional(),
+    agentIntent: AutomationProcessIntent.extend({ childName: z.literal('agent') }).optional(),
     runSnapshot: AutomationCommandRunSnapshotV1.optional()
   })
   .strict()
@@ -189,6 +203,7 @@ export const AutomationCommandManualReceiptV1 = z
 export const AutomationCommandsV1Domain = z
   .object({
     version: z.literal(1),
+    hostEpoch: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
     definitions: z.array(AutomationCommandDefinitionV1).max(1000),
     activeClaims: z.array(AutomationCommandClaimV1).max(1000),
     manualReceipts: z.array(AutomationCommandManualReceiptV1).max(100_000)
@@ -234,6 +249,6 @@ export type AutomationCommandsV1Domain = z.infer<typeof AutomationCommandsV1Doma
 
 export function readAutomationCommandsV1Domain(value: unknown): AutomationCommandsV1Domain {
   return AutomationCommandsV1Domain.parse(
-    value ?? { version: 1, definitions: [], activeClaims: [], manualReceipts: [] }
+    value ?? { version: 1, hostEpoch: 0, definitions: [], activeClaims: [], manualReceipts: [] }
   )
 }

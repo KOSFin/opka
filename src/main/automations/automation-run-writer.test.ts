@@ -38,8 +38,11 @@ function writerWith(selector: ReturnType<Store['automationChangeSelector']>) {
       claim
     })),
     advanceCommandAutomationRun: vi.fn(() => run),
+    adoptProvenCommandCondition: vi.fn(() => claim),
     bindCommandAutomationProcessIntent: vi.fn(() => claim),
     recordCommandAutomationExitProof: vi.fn(() => claim),
+    bindAutomationAgentProcessIntent: vi.fn(() => claim),
+    recordAutomationAgentExitProof: vi.fn(() => claim),
     requestCommandAutomationCancel: vi.fn(() => claim),
     settleCommandAutomationRun: vi.fn(() => run),
     releaseCommandAutomationClaim: vi.fn(),

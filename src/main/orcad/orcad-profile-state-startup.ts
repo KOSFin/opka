@@ -4,6 +4,7 @@ import { ensureActiveOrcaProfile, initOrcaProfilePaths } from '../orca-profiles/
 import { initSshHostKeyStoreFile } from '../ssh/ssh-host-key-store'
 import { initOrcadHeldFenceTokenFile } from '../ssh/orcad-held-fence-tokens'
 import { emitOrcadProfileStateAuthoritySelected } from './orcad-profile-state-telemetry'
+import { dirname } from 'node:path'
 
 export type OrcadProfileStateProfile = {
   dataFile: string
@@ -13,6 +14,7 @@ export type OrcadProfileStateProfile = {
 
 export type OrcadProfileStateStartup = {
   store: ProfileStateStoreFactoryResult['store']
+  profileRoot: string
   authority: {
     backend: ProfileStateStoreFactoryResult['backend']
     classification: ProfileStateStoreFactoryResult['classification']
@@ -49,7 +51,7 @@ export async function createOrcadProfileStateStartup(
     initSshHostKeyStoreFile(profile.dataFile)
     initOrcadHeldFenceTokenFile(profile.dataFile)
     emitOrcadProfileStateAuthoritySelected(authority)
-    return { store: result.store, authority }
+    return { store: result.store, profileRoot: dirname(profile.dataFile), authority }
   } catch (error) {
     try {
       await result.store.freezeWritesAsync()

@@ -24,6 +24,8 @@ authority.state.automationRuns = production.recoverActiveAutomationCommandRuns(
 authority.persist()
 const runs = production.createAutomationRunWriter(authority.store, null)
 const adapter = production.createLinuxCommandAutomationAdapter({
+  hostGeneration: 1,
+  isCurrentOwner: () => true,
   store: authority.store,
   runs,
   resolveExistingWorkspaceCwd: async () => root

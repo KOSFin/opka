@@ -1,15 +1,27 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { z } from 'zod'
 import { spawnProcess } from '@orca/process-host'
 import type {
   AutomationCommandClaimV1,
   AutomationCommandDefinitionV1
 } from '../../shared/automation-command-domain'
-import type { AutomationCommandObservation } from '../../shared/automation-command-execution'
+import type {
+  AutomationCommandObservation,
+  AutomationCommandV1
+} from '../../shared/automation-command-execution'
 import { userManagerEnv, isDurableDaemonScopeSupported } from '../daemon/daemon-cgroup-scope'
 import { AUTOMATION_CGROUP_SUPERVISOR_SOURCE } from './automation-cgroup-supervisor-source'
 import { writeDurableJson, writeDurableText } from './automation-durable-receipt-write'
+import {
+  isAutomationCgroupEmpty,
+  releaseLinuxCgroupAutomationProcess
+} from './automation-linux-cgroup-lifecycle'
+export {
+  cancelLinuxCgroupAutomationAgent,
+  cancelLinuxCgroupAutomationCommand,
+  releaseLinuxCgroupAutomationCommand
+} from './automation-linux-cgroup-lifecycle'
 
 const ReceiptSchema = z
   .object({
@@ -32,24 +44,25 @@ const RootSchema = z
   })
   .strict()
 
-type LinuxCommandInput = {
-  definition: AutomationCommandDefinitionV1
+type LinuxProcessInput = {
   claim: AutomationCommandClaimV1
+  intent: NonNullable<AutomationCommandClaimV1['processIntent' | 'agentIntent']>
+  command: AutomationCommandV1
   cwd: string
-  resolvedExecutable: string
+  timeoutSeconds: number
+  stdinText?: string
+  binaryFingerprint?: string
   bindReceipt(
     receipt: Pick<Receipt, 'childCgroupPath' | 'blockedChildPid' | 'blockedChildStartTime'>
   ): Promise<void>
   persistExitProof(observation: AutomationCommandObservation): Promise<void>
-  mayReleaseGate(): boolean
+  mayReleaseGate(): boolean | Promise<boolean>
 }
 
 const CGROUP_ROOT = '/sys/fs/cgroup'
 const RECEIPT_WAIT_MS = 15_000
 
-function readJsonFile(file: string): unknown {
-  return JSON.parse(readFileSync(file, 'utf8'))
-}
+const readJsonFile = (file: string): unknown => JSON.parse(readFileSync(file, 'utf8'))
 
 function readStartTime(pid: number): string | null {
   try {
@@ -72,8 +85,8 @@ function blockedChildMatches(receipt: Receipt): boolean {
   }
 }
 
-function verifyReceipt(claim: AutomationCommandClaimV1, candidate: unknown): Receipt | null {
-  const intent = claim.processIntent
+function verifyReceipt(input: LinuxProcessInput, candidate: unknown): Receipt | null {
+  const { claim, intent } = input
   const parsed = ReceiptSchema.safeParse(candidate)
   if (!intent || !parsed.success) {
     return null
@@ -100,10 +113,6 @@ function verifyReceipt(claim: AutomationCommandClaimV1, candidate: unknown): Rec
   return blockedChildMatches(receipt) || priorBindingMatches ? receipt : null
 }
 
-function isEmpty(childCgroupPath: string): boolean {
-  return /^populated 0$/m.test(readFileSync(join(childCgroupPath, 'cgroup.events'), 'utf8'))
-}
-
 async function waitForFile(file: string, deadline: number): Promise<boolean> {
   while (Date.now() < deadline) {
     if (existsSync(file)) {
@@ -114,24 +123,24 @@ async function waitForFile(file: string, deadline: number): Promise<boolean> {
   return existsSync(file)
 }
 
-function startSupervisor(input: LinuxCommandInput): void {
-  const intent = input.claim.processIntent
-  if (!intent) {
-    throw new Error('command_process_intent_missing')
-  }
+function startSupervisor(input: LinuxProcessInput): void {
+  const { intent } = input
   const directory = intent.receiptDirectory
   mkdirSync(directory, { mode: 0o700 })
-  const command = input.definition.execution.command
+  const command = input.command
   writeDurableJson(join(directory, 'spec.json'), {
     acquisitionId: input.claim.acquisitionId,
     unitName: intent.unitName,
-    command:
-      command.kind === 'program'
-        ? { ...command, executable: input.resolvedExecutable }
-        : { ...command, interpreter: input.resolvedExecutable },
+    childName: intent.childName,
+    command,
     cwd: input.cwd,
-    timeoutMs: input.definition.execution.policy.commandTimeoutSeconds * 1000
+    timeoutMs: input.timeoutSeconds * 1000,
+    ...(input.stdinText !== undefined ? { stdinFile: 'agent-prompt.txt' } : {}),
+    ...(input.binaryFingerprint ? { binaryFingerprint: input.binaryFingerprint } : {})
   })
+  if (input.stdinText !== undefined) {
+    writeDurableText(join(directory, 'agent-prompt.txt'), input.stdinText)
+  }
   if (command.kind === 'script') {
     writeDurableText(
       join(directory, command.language === 'shell' ? 'command.sh' : 'command.py'),
@@ -161,18 +170,15 @@ function startSupervisor(input: LinuxCommandInput): void {
 }
 
 /** A checked receipt permits the gate; physical cgroup emptiness permits an exited verdict. */
-export async function executeLinuxCgroupAutomationCommand(
-  input: LinuxCommandInput
+export async function executeLinuxCgroupAutomationProcess(
+  input: LinuxProcessInput
 ): Promise<
   { verdict: 'exited'; observation: AutomationCommandObservation } | { verdict: 'unverifiable' }
 > {
-  const intent = input.claim.processIntent
-  if (!intent) {
-    return { verdict: 'unverifiable' }
-  }
+  const { intent } = input
   if (intent.exitProof) {
     try {
-      releaseLinuxCgroupAutomationCommand(input.claim)
+      releaseLinuxCgroupAutomationProcess(intent, input.claim.acquisitionId)
     } catch {}
     const { verifiedAt: _verifiedAt, ...observation } = intent.exitProof
     return { verdict: 'exited', observation }
@@ -188,7 +194,7 @@ export async function executeLinuxCgroupAutomationCommand(
     if (!(await waitForFile(join(directory, 'receipt.json'), Date.now() + RECEIPT_WAIT_MS))) {
       return { verdict: 'unverifiable' }
     }
-    const receipt = verifyReceipt(input.claim, readJsonFile(join(directory, 'receipt.json')))
+    const receipt = verifyReceipt(input, readJsonFile(join(directory, 'receipt.json')))
     if (!receipt) {
       return { verdict: 'unverifiable' }
     }
@@ -201,14 +207,13 @@ export async function executeLinuxCgroupAutomationCommand(
     ) {
       return { verdict: 'unverifiable' }
     }
-    if (!input.mayReleaseGate()) {
+    if (!(await input.mayReleaseGate())) {
       return { verdict: 'unverifiable' }
     }
     if (!existsSync(join(directory, 'gate.json'))) {
       writeDurableJson(join(directory, 'gate.json'), { acquisitionId: input.claim.acquisitionId })
     }
-    const deadline =
-      Date.now() + input.definition.execution.policy.commandTimeoutSeconds * 1000 + 20_000
+    const deadline = Date.now() + input.timeoutSeconds * 1000 + 20_000
     if (!(await waitForFile(join(directory, 'empty.json'), deadline))) {
       return { verdict: 'unverifiable' }
     }
@@ -220,7 +225,7 @@ export async function executeLinuxCgroupAutomationCommand(
       !empty.success ||
       empty.data.acquisitionId !== input.claim.acquisitionId ||
       empty.data.childCgroupPath !== receipt.childCgroupPath ||
-      !isEmpty(receipt.childCgroupPath)
+      !isAutomationCgroupEmpty(receipt.childCgroupPath)
     ) {
       return { verdict: 'unverifiable' }
     }
@@ -243,55 +248,65 @@ export async function executeLinuxCgroupAutomationCommand(
       stderrTruncated: result.stderrTruncated
     }
     await input.persistExitProof(observation)
-    releaseLinuxCgroupAutomationCommand({
-      ...input.claim,
-      processIntent: { ...intent, childCgroupPath: receipt.childCgroupPath }
-    })
+    releaseLinuxCgroupAutomationProcess(
+      { ...intent, childCgroupPath: receipt.childCgroupPath },
+      input.claim.acquisitionId
+    )
     return { verdict: 'exited', observation }
   } catch {
     return { verdict: 'unverifiable' }
   }
 }
 
-export function cancelLinuxCgroupAutomationCommand(
-  claim: AutomationCommandClaimV1
-): 'live' | 'unverifiable' | 'exited' {
-  const intent = claim.processIntent
-  if (
-    !intent?.childCgroupPath ||
-    basename(intent.childCgroupPath) !== intent.childName ||
-    basename(dirname(intent.childCgroupPath)) !== intent.unitName
-  ) {
-    return 'unverifiable'
+export async function executeLinuxCgroupAutomationCommand(
+  input: Omit<
+    LinuxProcessInput,
+    'intent' | 'command' | 'timeoutSeconds' | 'stdinText' | 'binaryFingerprint'
+  > & {
+    definition: AutomationCommandDefinitionV1
+    resolvedExecutable: string
   }
-  try {
-    if (isEmpty(intent.childCgroupPath)) {
-      const empty = z
-        .object({ acquisitionId: z.string().uuid(), childCgroupPath: z.string() })
-        .strict()
-        .safeParse(readJsonFile(join(intent.receiptDirectory, 'empty.json')))
-      const root = RootSchema.safeParse(readJsonFile(join(intent.receiptDirectory, 'root.json')))
-      return empty.success &&
-        empty.data.acquisitionId === claim.acquisitionId &&
-        empty.data.childCgroupPath === intent.childCgroupPath &&
-        root.success
-        ? 'exited'
-        : 'unverifiable'
-    }
-    writeFileSync(join(intent.childCgroupPath, 'cgroup.kill'), '1')
-    return 'live'
-  } catch {
-    return 'unverifiable'
+): Promise<
+  { verdict: 'exited'; observation: AutomationCommandObservation } | { verdict: 'unverifiable' }
+> {
+  const intent = input.claim.processIntent
+  if (!intent) {
+    return { verdict: 'unverifiable' }
   }
+  const command = input.definition.execution.command
+  return executeLinuxCgroupAutomationProcess({
+    ...input,
+    intent,
+    command:
+      command.kind === 'program'
+        ? { ...command, executable: input.resolvedExecutable }
+        : { ...command, interpreter: input.resolvedExecutable },
+    timeoutSeconds: input.definition.execution.policy.commandTimeoutSeconds
+  })
 }
 
-export function releaseLinuxCgroupAutomationCommand(claim: AutomationCommandClaimV1): void {
-  const intent = claim.processIntent
-  if (!intent?.childCgroupPath || !isEmpty(intent.childCgroupPath)) {
-    return
+export async function executeLinuxCgroupAutomationAgent(
+  input: Omit<
+    LinuxProcessInput,
+    'intent' | 'command' | 'timeoutSeconds' | 'stdinText' | 'binaryFingerprint'
+  > & {
+    executable: string
+    args: string[]
+    prompt: string
+    timeoutSeconds: number
+    binaryFingerprint: string
   }
-  const release = join(intent.receiptDirectory, 'release.json')
-  if (!existsSync(release)) {
-    writeDurableJson(release, { acquisitionId: claim.acquisitionId })
+): Promise<
+  { verdict: 'exited'; observation: AutomationCommandObservation } | { verdict: 'unverifiable' }
+> {
+  const intent = input.claim.agentIntent
+  if (!intent) {
+    return { verdict: 'unverifiable' }
   }
+  return executeLinuxCgroupAutomationProcess({
+    ...input,
+    intent,
+    command: { kind: 'program', executable: input.executable, argv: input.args },
+    stdinText: input.prompt
+  })
 }

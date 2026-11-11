@@ -2,7 +2,8 @@ import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import {
   AutomationCommandDefinitionCreateV1,
   AutomationCommandManualReceiptV1,
-  type AutomationCommandDefinitionV1
+  type AutomationCommandDefinitionV1,
+  type AutomationCommandReportTargetOption
 } from '../../../../shared/automation-command-domain'
 import { AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY } from '../../../../shared/automation-runtime-capabilities'
 import type { AutomationRun } from '../../../../shared/automations-types'
@@ -42,14 +43,24 @@ async function requireCommandHost(target: AutomationHostTarget): Promise<void> {
 export async function listCommandAutomationsForTarget(
   target: AutomationHostTarget
 ): Promise<AutomationCommandDefinitionV1[]> {
+  return (await listCommandAutomationsAndReportTargetsForTarget(target)).definitions
+}
+
+export async function listCommandAutomationsAndReportTargetsForTarget(
+  target: AutomationHostTarget
+): Promise<{
+  definitions: AutomationCommandDefinitionV1[]
+  reportTargets: AutomationCommandReportTargetOption[]
+}> {
   await requireCommandHost(target)
-  const result = await callRuntimeRpc<{ commandAutomations?: AutomationCommandDefinitionV1[] }>(
-    target,
-    'automation.list',
-    {},
-    options
-  )
-  return result.commandAutomations ?? []
+  const result = await callRuntimeRpc<{
+    commandAutomations?: AutomationCommandDefinitionV1[]
+    commandReportTargets?: AutomationCommandReportTargetOption[]
+  }>(target, 'automation.list', {}, options)
+  return {
+    definitions: result.commandAutomations ?? [],
+    reportTargets: result.commandReportTargets ?? []
+  }
 }
 
 export async function createCommandAutomationForTarget(

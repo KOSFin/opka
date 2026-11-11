@@ -18,6 +18,7 @@ type CommandExit =
 type AgentExit = { verdict: 'exited'; success: boolean } | { verdict: 'unverifiable' }
 
 export type AutomationCommandRunAdapter = {
+  readReportRun?(claim: AutomationCommandClaimV1): AutomationRun | null
   executeCommand(
     definition: AutomationCommandDefinitionV1,
     claim: AutomationCommandClaimV1
@@ -30,7 +31,7 @@ export type AutomationCommandRunAdapter = {
   deliverReport(
     target: NonNullable<AutomationCommandDefinitionV1['execution']['reportTarget']>,
     run: AutomationRun
-  ): Promise<boolean>
+  ): Promise<boolean | 'unverifiable'>
   isCancelRequested?(claim: AutomationCommandClaimV1): boolean
   now(): number
 }
@@ -54,12 +55,30 @@ export async function runClaimedAutomationCommand(input: {
     hostGeneration: claim.hostGeneration,
     expectedPhase: claim.phase
   }
-  if (
-    (claim.phase === 'condition' || claim.phase === 'report') &&
-    (definition.execution.agent ||
-      definition.execution.reportTarget ||
-      !claim.processIntent?.exitProof)
-  ) {
+  if (claim.phase === 'report') {
+    const retained = adapter.readReportRun?.(claim)
+    if (
+      !retained ||
+      retained.id !== claim.runId ||
+      retained.automationId !== claim.automationId ||
+      retained.commandExecution?.phase !== 'report' ||
+      !retained.commandExecution.pendingStatus ||
+      !retained.outputSnapshot ||
+      retained.commandExecution.finalReason === null
+    ) {
+      throw new Error('Retained report cannot be verified without its durable row.')
+    }
+    return deliverAndSettleReport({
+      definition,
+      report: retained,
+      fence,
+      runs,
+      adapter,
+      status: retained.commandExecution.pendingStatus,
+      reason: retained.commandExecution.finalReason
+    })
+  }
+  if (claim.phase === 'condition' && !claim.processIntent?.exitProof) {
     throw new Error('Command stage cannot be resumed without a replay-safe proof.')
   }
   if (claim.phase === 'acquiring') {
@@ -70,7 +89,7 @@ export async function runClaimedAutomationCommand(input: {
   }
 
   let command: CommandExit
-  if (claim.phase === 'condition' || claim.phase === 'report') {
+  if (claim.phase === 'condition') {
     const proof = claim.processIntent?.exitProof
     if (!proof) {
       throw new Error('Command exit proof disappeared.')
@@ -162,24 +181,37 @@ export async function runClaimedAutomationCommand(input: {
       command.observation.stdoutTruncated ||
       command.observation.stderrTruncated === true
   }
-  const report =
-    fence.expectedPhase === 'report'
-      ? null
-      : await runs.advanceCommandRun(fence, {
-          phase: 'report',
-          observation: 'exited',
-          finalReason: reason,
-          outputSnapshot
-        })
+  const report = await runs.advanceCommandRun(fence, {
+    phase: 'report',
+    observation: 'exited',
+    finalReason: reason,
+    pendingStatus: status,
+    outputSnapshot
+  })
   fence.expectedPhase = 'report'
+  return deliverAndSettleReport({ definition, report, fence, runs, adapter, status, reason })
+}
+
+async function deliverAndSettleReport(input: {
+  definition: AutomationCommandDefinitionV1
+  report: AutomationRun
+  fence: CommandProgressFence
+  runs: Pick<AutomationRunWriter, 'settleCommandRun'>
+  adapter: AutomationCommandRunAdapter
+  status: 'completed' | 'skipped_precheck' | 'dispatch_failed'
+  reason: string
+}): Promise<AutomationCommandRunOutcome> {
+  const { definition, report, fence, runs, adapter, status, reason } = input
   let deliveryStatus: 'history_only' | 'delivered' | 'failed' = 'history_only'
-  if (definition.execution.reportTarget && report) {
+  if (definition.execution.reportTarget) {
     try {
-      deliveryStatus = (await adapter.deliverReport(definition.execution.reportTarget, report))
-        ? 'delivered'
-        : 'failed'
+      const delivered = await adapter.deliverReport(definition.execution.reportTarget, report)
+      if (delivered === 'unverifiable') {
+        return { kind: 'unverifiable', run: report }
+      }
+      deliveryStatus = delivered ? 'delivered' : 'failed'
     } catch {
-      deliveryStatus = 'failed'
+      return { kind: 'unverifiable', run: report }
     }
   }
   return {
@@ -187,7 +219,7 @@ export async function runClaimedAutomationCommand(input: {
     run: await runs.settleCommandRun(fence, {
       status,
       finalReason: reason,
-      outputSnapshot,
+      outputSnapshot: report.outputSnapshot,
       deliveryStatus
     })
   }

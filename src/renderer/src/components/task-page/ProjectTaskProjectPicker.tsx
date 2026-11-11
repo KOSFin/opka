@@ -25,6 +25,16 @@ export function taskProjectPickerSections(projects: TaskProjectScope[]) {
   return [...sections.values()]
 }
 
+export function taskProjectGroupOptionLabel(name: string, hostLabel: string): string {
+  return `Project: ${name} · ${hostLabel}`
+}
+
+export function taskProjectRootOptionLabel(project: TaskProjectScope, grouped: boolean): string {
+  return grouped
+    ? `Repository: ${project.repositoryName ?? project.name} · ${project.hostLabel}`
+    : `Project: ${project.name} · ${project.hostLabel}`
+}
+
 export function toggleTaskProject(
   selected: string[],
   projects: readonly Pick<TaskProjectScope, 'key'>[],
@@ -120,7 +130,7 @@ export function ProjectTaskProjectPicker({
                   }
                   onSelect={(event) => event.preventDefault()}
                 >
-                  {section.name} · {section.projects[0]?.hostLabel}
+                  {taskProjectGroupOptionLabel(section.name, section.projects[0]?.hostLabel ?? '')}
                 </DropdownMenuCheckboxItem>
               ) : null}
               {section.projects.map((project) => (
@@ -132,8 +142,7 @@ export function ProjectTaskProjectPicker({
                   }
                   onSelect={(event) => event.preventDefault()}
                 >
-                  {section.name ? (project.repositoryName ?? project.name) : project.name} ·{' '}
-                  {project.hostLabel}
+                  {taskProjectRootOptionLabel(project, Boolean(section.name))}
                 </DropdownMenuCheckboxItem>
               ))}
             </Fragment>

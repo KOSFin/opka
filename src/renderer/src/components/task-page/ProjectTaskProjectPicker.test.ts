@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest'
 import {
+  taskProjectGroupOptionLabel,
   taskProjectPickerLabel,
   taskProjectPickerSections,
+  taskProjectRootOptionLabel,
   toggleTaskProject,
   toggleTaskProjectGroup
 } from './ProjectTaskProjectPicker'
@@ -15,6 +17,51 @@ it('selects and deselects all projects without losing host-scoped keys', () => {
   expect(toggleTaskProject(['local', 'ssh'], projects, 'local')).toEqual(['ssh'])
   expect(toggleTaskProject([], projects, '*')).toEqual(['*'])
   expect(toggleTaskProject(['*'], projects, '*')).toEqual([])
+})
+
+it('distinguishes a same-name project group from its repository and keeps host-scoped selection', () => {
+  const local = {
+    key: 'local-repo',
+    selector: 'path:/local/repo',
+    root: '/local/repo',
+    name: 'Shared',
+    state: 'configured' as const,
+    target: { kind: 'local' as const },
+    hostLabel: 'This computer',
+    groupId: 'shared-group',
+    groupName: 'Shared',
+    repositoryName: 'Shared'
+  }
+  const second = {
+    ...local,
+    key: 'second-repo',
+    selector: 'path:/local/second',
+    root: '/local/second',
+    repositoryName: 'Second'
+  }
+  const remote = {
+    ...local,
+    key: 'remote-repo',
+    selector: 'path:/remote/repo',
+    root: '/remote/repo',
+    target: { kind: 'environment' as const, environmentId: 'remote-host' },
+    hostLabel: 'Remote host'
+  }
+  const roots: TaskProjectScope[] = [local, second, remote]
+  expect(taskProjectGroupOptionLabel('Shared', local.hostLabel)).toBe(
+    'Project: Shared · This computer'
+  )
+  expect(taskProjectRootOptionLabel(local, true)).toBe('Repository: Shared · This computer')
+  expect(taskProjectRootOptionLabel(remote, true)).toBe('Repository: Shared · Remote host')
+  expect(taskProjectRootOptionLabel(local, false)).toBe('Project: Shared · This computer')
+  expect(
+    taskProjectPickerSections(roots).map((section) => section.projects.map((p) => p.key))
+  ).toEqual([['local-repo', 'second-repo'], ['remote-repo']])
+  expect(toggleTaskProjectGroup([], roots, ['local-repo', 'second-repo'])).toEqual([
+    'local-repo',
+    'second-repo'
+  ])
+  expect(toggleTaskProject([], roots, local.key)).toEqual(['local-repo'])
 })
 
 it('counts a grouped project once and names partial repository selection honestly', () => {

@@ -9,7 +9,10 @@ assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
 const source = JSON.parse(fs.readFileSync(path.join(root, 'state.json'), 'utf8'))
 const database = path.join(root, 'profile-state.db')
 const dataFile = path.join(root, 'orca-data.json')
-const authority = new production.ProfileStateSqliteAuthority(database, 'automation-disposable-fixture')
+const authority = new production.ProfileStateSqliteAuthority(
+  database,
+  'automation-disposable-fixture'
+)
 authority.scheduleBackup = () => {}
 authority.writeSerializedState(Buffer.from(JSON.stringify(source)))
 const store = new production.Store({ dataFile, profileStateAuthority: authority })
@@ -23,7 +26,13 @@ async function main() {
   await store.flushPendingOrThrowAsync()
   store.freezeWrites()
   authority.close()
-  console.log(JSON.stringify({ oracle: 'automation-sqlite-store-prepared', runId: claim.runId, processId: process.pid }))
+  console.log(
+    JSON.stringify({
+      oracle: 'automation-sqlite-store-prepared',
+      runId: claim.runId,
+      processId: process.pid
+    })
+  )
 }
 
 main().catch((error) => {

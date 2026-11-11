@@ -2,15 +2,13 @@
 set -euo pipefail
 if [ "$(uname -s)" != Linux ]; then exit 78; fi
 
-if [ "${1-}" != '--inside' ]; then
-  test "$#" -eq 3
-  /usr/bin/unshare --user --map-root-user --net -- /bin/bash "$0" --inside "$1" "$2" "$3"
-  exit
-fi
-
 test "$#" -eq 4
-/usr/bin/ip link set lo up
-test "$(/usr/bin/ip -o link show | wc -l)" -eq 1
+test "$1" = '--inside'
+links=(/sys/class/net/*)
+test "${#links[@]}" -eq 1 && test "${links[0]##*/}" = lo
+while read -r interface _; do
+  test "$interface" = Iface || test "$interface" = lo || exit 78
+done < /proc/net/route
 
 codex_program="$2"
 engine_program="$3"

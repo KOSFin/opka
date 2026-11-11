@@ -64,6 +64,7 @@ describe('orcad profile-state startup', () => {
       storageAuthority: 'runtime'
     })
     expect(result.store).toBe(store)
+    expect(result.profileRoot).toBe('/tmp/profile')
     expect(result.authority).toEqual({
       backend: 'sqlite',
       classification: 'json-only',

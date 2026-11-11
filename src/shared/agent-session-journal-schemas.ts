@@ -82,6 +82,9 @@ const Block = openDiscriminatedUnion(
       type: z.literal('text'),
       text: z.string(),
       presentation: z.string().optional(),
+      automationReport: z
+        .object({ automationId: z.string().min(1), runId: z.string().min(1) })
+        .optional(),
       tone: z.string().optional(),
       providerFrame: ProviderFrame.optional()
     }),
@@ -260,6 +263,9 @@ const KnownItemBody = z.discriminatedUnion('kind', [
     kind: z.literal('status'),
     text: z.string(),
     presentation: z.string().optional(),
+    automationReport: z
+      .object({ automationId: z.string().min(1), runId: z.string().min(1) })
+      .optional(),
     contextClear: z
       .object({
         operationId: z.string().min(1).max(512),

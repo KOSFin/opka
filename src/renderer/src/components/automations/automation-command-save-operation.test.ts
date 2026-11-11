@@ -35,6 +35,48 @@ function draft(name: string) {
 beforeEach(() => vi.mocked(callRuntimeRpc).mockReset())
 
 describe('command automation create lifecycle', () => {
+  it('binds a current host chat tuple and refuses a stale tuple before create', async () => {
+    const pending = pendingCommandRequests('fixture:report-target')
+    pending.create = null
+    const reportTarget = {
+      runtimeId: 'runtime-1',
+      hostId: 'local',
+      workspaceId: 'folder-1',
+      chatSessionId: 'chat-1',
+      registrationGeneration: 4
+    }
+    const withReport = { ...draft('Report'), reportTarget }
+    await expect(
+      saveCommandAutomationDraft({
+        target,
+        setups: [setup],
+        reportTargets: [],
+        draft: withReport,
+        editingId: null,
+        selected: null,
+        pending
+      })
+    ).rejects.toThrow('Report chat changed')
+    expect(pending.create).toBeNull()
+    expect(callRuntimeRpc).not.toHaveBeenCalled()
+
+    vi.mocked(callRuntimeRpc)
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockResolvedValueOnce({ automation: { id: 'created-1', name: 'Report' } })
+    await saveCommandAutomationDraft({
+      target,
+      setups: [setup],
+      reportTargets: [{ setupId: setup.id, label: 'Primary', target: reportTarget }],
+      draft: withReport,
+      editingId: null,
+      selected: null,
+      pending
+    })
+    expect(vi.mocked(callRuntimeRpc).mock.calls[1][2]).toMatchObject({
+      definition: { workspaceId: 'folder-1', execution: { reportTarget } }
+    })
+  })
+
   it('releases a definitively refused stale project so the draft can be edited', async () => {
     const pending = pendingCommandRequests('fixture:stale-project-create')
     pending.create = null
@@ -108,9 +150,48 @@ describe('command automation create lifecycle', () => {
       selected: null,
       pending: pendingCommandRequests(hostKey)
     })
-    expect(pendingCommandRequests(hostKey).create).toBe(first)
+    expect(pending.create).toBe(first)
     expect(vi.mocked(callRuntimeRpc).mock.calls[3][2]).toMatchObject({
       definition: first?.input
     })
+  })
+
+  it('releases a definite definition-limit refusal but keeps a key-conflict answer frozen', async () => {
+    const pending = pendingCommandRequests('fixture:limit-create')
+    pending.create = null
+    vi.mocked(callRuntimeRpc)
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockRejectedValueOnce(
+        new RuntimeRpcCallError({
+          id: 'req-limit',
+          ok: false,
+          error: { code: 'runtime_error', message: 'Command automation definition limit reached.' }
+        })
+      )
+    const input = {
+      target,
+      setups: [setup],
+      draft: draft('Limited'),
+      editingId: null,
+      selected: null,
+      pending
+    }
+    await expect(saveCommandAutomationDraft(input)).rejects.toThrow('definition limit')
+    expect(pending.create).toBeNull()
+
+    vi.mocked(callRuntimeRpc)
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockRejectedValueOnce(
+        new RuntimeRpcCallError({
+          id: 'req-conflict',
+          ok: false,
+          error: {
+            code: 'runtime_error',
+            message: 'Command creation key was reused with different content.'
+          }
+        })
+      )
+    await expect(saveCommandAutomationDraft(input)).rejects.toThrow('different content')
+    expect(pendingCommandRequests('fixture:limit-create').create?.input.creationKey).toBeTruthy()
   })
 })

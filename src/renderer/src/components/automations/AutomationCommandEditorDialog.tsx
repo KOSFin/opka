@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { ProjectHostSetup } from '../../../../shared/project-types'
+import type { AutomationCommandReportTargetOption } from '../../../../shared/automation-command-domain'
 import { commandDefinitionFromDraft, type AutomationCommandDraft } from './automation-command-draft'
 
 type Props = {
@@ -27,6 +28,7 @@ type Props = {
   pendingCreate: boolean
   draft: AutomationCommandDraft
   setups: readonly ProjectHostSetup[]
+  reportTargets: readonly AutomationCommandReportTargetOption[]
   error: string | null
   onOpenChange(open: boolean): void
   onDraftChange(draft: AutomationCommandDraft): void
@@ -40,6 +42,7 @@ export function AutomationCommandEditorDialog({
   pendingCreate,
   draft,
   setups,
+  reportTargets,
   error,
   onOpenChange,
   onDraftChange,
@@ -48,6 +51,13 @@ export function AutomationCommandEditorDialog({
   const [preview, setPreview] = React.useState<string | null>(null)
   const readySetups = setups.filter(
     (setup) => setup.setupState === 'ready' && setup.hostId === 'local'
+  )
+  const availableChats = reportTargets.filter((option) => option.setupId === draft.setupId)
+  const selectedChat = availableChats.find(
+    (option) =>
+      option.target.chatSessionId === draft.reportTarget?.chatSessionId &&
+      option.target.registrationGeneration === draft.reportTarget.registrationGeneration &&
+      option.target.runtimeId === draft.reportTarget.runtimeId
   )
   const change = (updates: Partial<AutomationCommandDraft>): void => {
     onDraftChange({ ...draft, ...updates })
@@ -60,7 +70,7 @@ export function AutomationCommandEditorDialog({
       return
     }
     try {
-      commandDefinitionFromDraft(draft, setup, 0)
+      commandDefinitionFromDraft(draft, setup, 0, undefined, reportTargets)
       setPreview('Draft is valid. No command ran.')
     } catch (cause) {
       setPreview(cause instanceof Error ? cause.message : 'The draft is invalid.')
@@ -71,7 +81,7 @@ export function AutomationCommandEditorDialog({
       <DialogContent
         surface="security"
         scrollable
-        className="scrollbar-sleek max-h-[90vh] max-w-2xl overflow-y-auto"
+        className="max-w-2xl"
         aria-describedby={undefined}
       >
         <DialogHeader>
@@ -98,7 +108,10 @@ export function AutomationCommandEditorDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="command-automation-project">Project folder on this host</Label>
-            <Select value={draft.setupId} onValueChange={(setupId) => change({ setupId })}>
+            <Select
+              value={draft.setupId}
+              onValueChange={(setupId) => change({ setupId, reportTarget: null })}
+            >
               <SelectTrigger id="command-automation-project" className="w-full">
                 <SelectValue placeholder="Choose project" />
               </SelectTrigger>
@@ -136,16 +149,18 @@ export function AutomationCommandEditorDialog({
               {draft.commandKind === 'program' ? 'Executable path or name' : 'Script'}
             </Label>
             {draft.commandKind === 'program' ? (
-              <Input
-                id="command-automation-script"
-                className="font-mono"
-                value={draft.commandText}
-                onChange={(event) => change({ commandText: event.target.value })}
-              />
+              <div className="font-mono">
+                <Input
+                  id="command-automation-script"
+                  value={draft.commandText}
+                  onChange={(event) => change({ commandText: event.target.value })}
+                />
+              </div>
             ) : (
               <Textarea
                 id="command-automation-script"
-                className="min-h-28 font-mono"
+                variant="code"
+                className="min-h-28"
                 value={draft.commandText}
                 onChange={(event) => change({ commandText: event.target.value })}
               />
@@ -159,7 +174,8 @@ export function AutomationCommandEditorDialog({
               <Label htmlFor="command-automation-args">Arguments, one per line</Label>
               <Textarea
                 id="command-automation-args"
-                className="min-h-20 font-mono"
+                variant="code"
+                className="min-h-20"
                 value={draft.programArgs}
                 onChange={(event) => change({ programArgs: event.target.value })}
               />
@@ -218,6 +234,63 @@ export function AutomationCommandEditorDialog({
                 onChange={(event) => change({ timeoutSeconds: event.target.value })}
               />
             </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="command-automation-agent">Agent after condition</Label>
+            <Select
+              value={draft.agentEnabled ? 'codex' : 'none'}
+              onValueChange={(value) => change({ agentEnabled: value === 'codex' })}
+            >
+              <SelectTrigger id="command-automation-agent" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No agent</SelectItem>
+                <SelectItem value="codex">Codex, one turn</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {draft.agentEnabled && (
+            <div className="grid gap-2">
+              <Label htmlFor="command-automation-agent-prompt">Agent instructions</Label>
+              <Textarea
+                id="command-automation-agent-prompt"
+                variant="code"
+                className="min-h-28"
+                value={draft.agentPrompt}
+                onChange={(event) => change({ agentPrompt: event.target.value })}
+              />
+            </div>
+          )}
+          <div className="grid gap-2">
+            <Label htmlFor="command-automation-report-chat">Primary chat report</Label>
+            <Select
+              value={selectedChat ? selectedChat.target.chatSessionId : 'none'}
+              onValueChange={(value) =>
+                change({
+                  reportTarget:
+                    availableChats.find((option) => option.target.chatSessionId === value)
+                      ?.target ?? null
+                })
+              }
+            >
+              <SelectTrigger id="command-automation-report-chat" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">History only</SelectItem>
+                {availableChats.map((option) => (
+                  <SelectItem key={option.target.chatSessionId} value={option.target.chatSessionId}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {draft.reportTarget && !selectedChat && (
+              <p role="status" className="text-sm text-destructive">
+                This chat registration changed. Choose a current chat before saving.
+              </p>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">An overlapping run is skipped.</p>
           {(error || preview) && (

@@ -1,4 +1,4 @@
-import type { Page } from '@stablyai/playwright-test'
+import { expect, type Page } from '@stablyai/playwright-test'
 
 const allProjects = (page: Page) =>
   page.getByRole('menuitemcheckbox', { name: 'Select all projects', exact: true })
@@ -10,7 +10,11 @@ export async function selectTaskProject(page: Page, name: RegExp): Promise<void>
     await all.click()
   }
   await all.click()
-  await page.getByRole('menuitemcheckbox', { name }).click()
+  const project = page
+    .getByRole('menuitemcheckbox', { name: /^Project:/ })
+    .filter({ hasText: name })
+  await expect(project).toHaveCount(1)
+  await project.click()
   await page.keyboard.press('Escape')
 }
 

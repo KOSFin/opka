@@ -1,4 +1,7 @@
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import type { AutomationRun } from '../../../shared/automations-types'
+import { buildProfileStateCutoverFixture } from '../../persistence/profile-state-cutover-fixture'
 // What an open chat receives, asserted at its subscriber rather than in the journal: a fresh
 // subscribe re-reads the journal and hides a write that never reached the readers already open.
 
@@ -38,6 +41,7 @@ let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let generation = 0
+let workspaceRoot = '/fixture/local'
 
 /** Everything a live subscriber was sent after its opening snapshot. */
 async function liveReader() {
@@ -116,6 +120,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-append-delivery-'))
   resetHostTestOperationIds()
   generation = 0
+  workspaceRoot = '/fixture/local'
   acquire = vi.fn(async ({ fence, spawnToken }) => ({
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
@@ -143,6 +148,7 @@ beforeEach(async () => {
       setOption: vi.fn(async () => undefined)
     },
     journalDatabase: openTestJournalHostDatabase(root),
+    resolveWorkspacePath: async () => workspaceRoot,
     claimKeyId: 'key-1',
     mintSpawnToken: () => `spawn-${generation + 1}`,
     now: () => NOW
@@ -150,6 +156,70 @@ beforeEach(async () => {
   await expect(host.attach(CALLER, hostTestAttachParams(null))).resolves.toMatchObject({
     ok: true
   })
+})
+
+it('keeps one durable Automation report reference after a lost append answer and refuses stale targets', async () => {
+  const fence = store.getRecord(SESSION)?.lease.runtimeFence
+  if (!fence) {
+    throw new Error('The attached chat has no registration fence.')
+  }
+  const target = {
+    runtimeId: 'runtime-1',
+    hostId: 'local',
+    workspaceId: 'workspace-1',
+    chatSessionId: SESSION,
+    registrationGeneration: fence
+  }
+  const original = buildProfileStateCutoverFixture('/fixture').automationRuns[0]
+  if (!original) {
+    throw new Error('The fixture has no Automation run.')
+  }
+  const run: AutomationRun = {
+    ...original,
+    id: 'command-run-1',
+    automationId: 'command-1',
+    workspaceId: target.workspaceId,
+    sessionKind: 'command',
+    runContext: {
+      kind: 'workspace-run',
+      projectId: 'repo-local',
+      hostId: 'local',
+      projectHostSetupId: 'setup-local',
+      repoId: 'repo-local',
+      path: workspaceRoot
+    }
+  }
+  expect(await host.appendAutomationReport('runtime-1', target, run)).toBe('undelivered')
+  await store.setSessionTabVisibility(SESSION, true)
+  const journal = host['sessions'].get(SESSION)?.journal
+  if (!journal) {
+    throw new Error('The attached chat has no journal.')
+  }
+  const append = journal.appendItem.bind(journal)
+  vi.spyOn(journal, 'appendItem').mockImplementation(async (...args) => {
+    await append(...args)
+    throw new Error('answer_lost_after_commit')
+  })
+  expect(await host.appendAutomationReport('runtime-1', target, run)).toBe('delivered')
+  const key = agentJournalItemKey({
+    provider: 'orca',
+    clientMessageId: `automation-report:${run.automationId}:${run.id}`
+  })
+  const first = (await host.journalSnapshot(SESSION)).items.filter((item) => item.itemId === key)
+  expect(first).toHaveLength(1)
+  expect(await host.appendAutomationReport('runtime-1', target, run)).toBe('delivered')
+  const second = (await host.journalSnapshot(SESSION)).items.filter((item) => item.itemId === key)
+  expect(second).toEqual(first)
+  expect(await host.appendAutomationReport('other-runtime', target, run)).toBe('undelivered')
+  expect(
+    await host.appendAutomationReport(
+      'runtime-1',
+      { ...target, registrationGeneration: fence + 1 },
+      run
+    )
+  ).toBe('undelivered')
+  workspaceRoot = '/replacement/root'
+  expect(await host.appendAutomationReport('runtime-1', target, run)).toBe('undelivered')
 })
 
 afterEach(async () => {

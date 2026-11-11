@@ -17,6 +17,7 @@ import type { AutomationRunWriter } from './automation-run-writer'
 
 export type AutomationCommandHostAdapter = AutomationCommandRunAdapter & {
   isHostReady(): boolean
+  provePriorCommandExit?(claim: AutomationCommandClaimV1): boolean
   supportsDefinition(definition: AutomationCommandDefinitionV1): Promise<boolean>
   cancelRun(claim: AutomationCommandClaimV1): Promise<'live' | 'unverifiable' | 'exited'>
 }
@@ -31,6 +32,7 @@ type CommandServiceOptions = {
     | 'claimCommandRun'
     | 'advanceCommandNextRun'
     | 'advanceCommandRun'
+    | 'adoptCommandCondition'
     | 'settleCommandRun'
     | 'requestCommandCancel'
   >
@@ -63,8 +65,31 @@ export class AutomationCommandService {
         continue
       }
       try {
-        if (await adapter.supportsDefinition(definition)) {
+        if (claim.phase === 'report') {
           this.continueRun(definition, claim, adapter)
+          continue
+        }
+        if (!(await adapter.supportsDefinition(definition))) {
+          continue
+        }
+        if (claim.hostGeneration === this.options.hostGeneration) {
+          this.continueRun(definition, claim, adapter)
+        } else if (
+          claim.phase === 'condition' &&
+          adapter.provePriorCommandExit?.(claim) &&
+          this.options.hostGeneration
+        ) {
+          const adopted = await this.options.runs.adoptCommandCondition(
+            {
+              automationId: claim.automationId,
+              runId: claim.runId,
+              acquisitionId: claim.acquisitionId,
+              hostGeneration: claim.hostGeneration,
+              expectedPhase: 'condition'
+            },
+            this.options.hostGeneration
+          )
+          this.continueRun(definition, adopted, adapter)
         }
       } catch {
         // The retained claim still blocks a second effect.

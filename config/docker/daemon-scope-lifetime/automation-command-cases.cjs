@@ -190,6 +190,8 @@ const checkedRuns = {
 }
 adapter = createLinuxCommandAutomationAdapter({
   store: authority.store,
+  hostGeneration: 1,
+  isCurrentOwner: () => true,
   runs: checkedRuns,
   resolveExistingWorkspaceCwd: async () => root
 })
@@ -203,9 +205,26 @@ async function main() {
     false
   )
   assert.equal(fs.existsSync(marker), false, 'unsupported host must not run the command')
-  const executing = adapter.executeCommand(definition, claim)
+  let earlyOutcome = null
+  const executing = adapter.executeCommand(definition, claim).then((outcome) => {
+    earlyOutcome = outcome
+    return outcome
+  })
   await boundPromise
-  await until(() => fs.existsSync(path.join(receiptDirectory, 'gate.json')), 'durable effect gate')
+  await until(
+    () => fs.existsSync(path.join(receiptDirectory, 'gate.json')) || earlyOutcome !== null,
+    'durable effect gate or an early verdict'
+  )
+  assert.ok(
+    fs.existsSync(path.join(receiptDirectory, 'gate.json')),
+    JSON.stringify({
+      earlyOutcome,
+      current: authority.store.getCommandAutomationClaim(claim.automationId, claim.runId),
+      supervisorError: fs.existsSync(path.join(receiptDirectory, 'supervisor-error.json'))
+        ? fs.readFileSync(path.join(receiptDirectory, 'supervisor-error.json'), 'utf8')
+        : null
+    })
+  )
   await until(() => fs.existsSync(path.join(receiptDirectory, 'root.json')), 'root result')
   assert.ok(populated(receipt.childCgroupPath), 'detached descendant must keep child cgroup live')
   assert.equal(fs.existsSync(path.join(receiptDirectory, 'empty.json')), false)
