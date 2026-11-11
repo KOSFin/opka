@@ -1,6 +1,18 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+function installAutomationFixtureEnvironment(production, directory) {
+  production.setAppEnvironment({
+    getPath: () => directory,
+    getAppPath: () => directory,
+    getVersion: () => '0.0.0-automation-fixture',
+    isPackaged: () => false,
+    onWillQuit: () => {},
+    exit: () => {},
+    getAppMetrics: () => []
+  })
+}
+
 function openAutomationState(production, directory, initialState) {
   const file = path.join(directory, 'state.json')
   const state = initialState ?? JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -40,6 +52,10 @@ function openAutomationState(production, directory, initialState) {
       production.bindAutomationCommandProcessIntent(operations, fence, receipt),
     recordCommandAutomationExitProof: (fence, observation, verifiedAt) =>
       production.recordAutomationCommandExitProof(operations, fence, observation, verifiedAt),
+    bindAutomationAgentProcessIntent: (fence, receipt) =>
+      production.bindAutomationAgentProcessIntent(operations, fence, receipt),
+    recordAutomationAgentExitProof: (fence, observation, verifiedAt) =>
+      production.recordAutomationAgentExitProof(operations, fence, observation, verifiedAt),
     settleCommandAutomationRun: (fence, result) =>
       production.settleAutomationCommandRun(operations, fence, result),
     releaseCommandAutomationClaim: (fence) =>
@@ -49,4 +65,4 @@ function openAutomationState(production, directory, initialState) {
   return { file, state, store, persist }
 }
 
-module.exports = { openAutomationState }
+module.exports = { installAutomationFixtureEnvironment, openAutomationState }

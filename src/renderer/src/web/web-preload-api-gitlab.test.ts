@@ -89,7 +89,13 @@ describe('web GitLab preload API', () => {
     }[] = [
       {
         key: 'listNetworkProfiles',
-        invoke: (gl) => gl.listNetworkProfiles(),
+        invoke: (gl) => {
+          const listNetworkProfiles = gl.listNetworkProfiles
+          if (!listNetworkProfiles) {
+            throw new Error('GitLab network profiles are unavailable')
+          }
+          return listNetworkProfiles()
+        },
         expectedMethod: 'gitlab.listNetworkProfiles',
         expectedParams: undefined
       },

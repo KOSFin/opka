@@ -116,6 +116,8 @@ function recordCase(baseImage, name, result) {
   process.stderr.write(result.stderr ?? '')
 }
 
+let agentReportCasePending = true
+
 function runCases(baseImage) {
   runDocker([
     'build',
@@ -233,6 +235,34 @@ function runCases(baseImage) {
     if (automation.status !== 0) {
       throw new Error(`${name} scope oracle failed on ${baseImage} with ${automation.status}`)
     }
+  }
+  if (agentReportCasePending) {
+    const agentReport = runDocker(
+      [
+        'exec',
+        container,
+        'timeout',
+        '--kill-after=5s',
+        '90s',
+        'runuser',
+        '-u',
+        'orca-repro',
+        '--',
+        'env',
+        'XDG_RUNTIME_DIR=/run/user/1100',
+        'ORCA_BACKGROUND_LAUNCH=1',
+        'node',
+        '/opt/daemon-scope-lifetime/automation-command-agent-report.cjs',
+        '/opt/daemon-scope-lifetime/candidate.cjs',
+        `${stateRoot}-agent-report`
+      ],
+      true
+    )
+    recordCase(baseImage, 'automation-agent-report', agentReport)
+    if (agentReport.status !== 0) {
+      throw new Error(`automation-agent-report scope oracle failed on ${baseImage}`)
+    }
+    agentReportCasePending = false
   }
 }
 

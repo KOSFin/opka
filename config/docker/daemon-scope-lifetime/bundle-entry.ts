@@ -5,9 +5,12 @@ import { initializeTerminalScopes } from '../../../src/main/daemon/terminal-scop
 export { buildDurableDaemonScopeCommand } from '../../../src/main/daemon/daemon-cgroup-scope'
 export { wrapPtySpawnInTerminalScope } from '../../../src/main/daemon/terminal-scopes-runtime'
 export { createLinuxCommandAutomationAdapter } from '../../../src/main/automations/automation-linux-command-adapter'
+export { executeLinuxCgroupAutomationAgent } from '../../../src/main/automations/automation-linux-cgroup-command'
 export { AutomationCommandService } from '../../../src/main/automations/automation-command-service'
+export { runClaimedAutomationCommand } from '../../../src/main/automations/automation-command-runner'
 export { createAutomationRunWriter } from '../../../src/main/automations/automation-run-writer'
 export { Store } from '../../../src/main/persistence/loading-store/store'
+export { setAppEnvironment } from '../../../src/shared/app-environment'
 export { ProfileStateSqliteAuthority } from '../../../src/main/persistence/profile-state/profile-state-sqlite-authority'
 export {
   AutomationCommandDefinitionV1,
@@ -22,8 +25,13 @@ export {
 } from '../../../src/main/persistence/scheduling-automations/automation-command-progress-operations'
 export {
   bindAutomationCommandProcessIntent,
-  recordAutomationCommandExitProof
+  recordAutomationCommandExitProof,
+  bindAutomationAgentProcessIntent,
+  recordAutomationAgentExitProof
 } from '../../../src/main/persistence/scheduling-automations/automation-command-process-operations'
+export { JournalHostDatabase } from '../../../src/main/native-chat/agent-session-journal/journal-host-database'
+export { openAgentSessionJournal } from '../../../src/main/native-chat/agent-session-journal/journal-store-factory'
+export { appendStructuredAutomationReport } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-automation-report'
 
 export function startScopeReaper(launchNonce: string, freshScope: boolean) {
   return startDaemonScopeDeathWatch({

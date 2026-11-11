@@ -1,11 +1,13 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { installAutomationFixtureEnvironment } = require('./automation-command-state.cjs')
 
 const production = require(process.argv[2])
 const root = process.argv[3]
 assert.ok(root.startsWith('/tmp/orca-automation-case-'))
 assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+installAutomationFixtureEnvironment(production, root)
 const database = path.join(root, 'profile-state.db')
 const dataFile = path.join(root, 'orca-data.json')
 const authority = new production.ProfileStateSqliteAuthority(
