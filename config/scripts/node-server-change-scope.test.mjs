@@ -32,6 +32,11 @@ function moduleTree(files) {
   return root
 }
 
+const ARCHIVED_WORKFLOW_URL = new URL(
+  '../../.github/upstream-workflows/node-server-tests.yml',
+  import.meta.url
+)
+
 it('follows static imports, re-exports, dynamic imports and require without executing source', async () => {
   const root = moduleTree({
     'entry.ts': `import './first'; export * from './exports'; import('./dynamic'); require('./required'); throw Error('never execute')`,
@@ -544,10 +549,8 @@ describe('the actual Bun build and profile-test dependency graph', () => {
   })
 })
 
-it('keeps every platform job and runs them when detection is skipped or fails', () => {
-  const workflow = parse(
-    readFileSync(new URL('../../.github/workflows/node-server-tests.yml', import.meta.url), 'utf8')
-  )
+it('preserves the archived upstream platform and detection contract', () => {
+  const workflow = parse(readFileSync(ARCHIVED_WORKFLOW_URL, 'utf8'))
   expect(workflow.on).toHaveProperty('workflow_dispatch')
   expect(workflow.on).toHaveProperty('workflow_call')
   expect(workflow.on).not.toHaveProperty('push')
@@ -582,10 +585,8 @@ it('keeps every platform job and runs them when detection is skipped or fails', 
   }
 })
 
-it('runs the Bun and Node cross-runtime tests on Linux against pinned inputs', () => {
-  const workflow = parse(
-    readFileSync(new URL('../../.github/workflows/node-server-tests.yml', import.meta.url), 'utf8')
-  )
+it('keeps archived upstream Bun and Node cross-runtime tests on Linux against pinned inputs', () => {
+  const workflow = parse(readFileSync(ARCHIVED_WORKFLOW_URL, 'utf8'))
   const steps = workflow.jobs.persistence.steps
   const setupBun = steps.find((step) => String(step.uses).startsWith('oven-sh/setup-bun@'))
   expect(setupBun.uses).toMatch(/^oven-sh\/setup-bun@[0-9a-f]{40}$/)

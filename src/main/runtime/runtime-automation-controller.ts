@@ -224,6 +224,9 @@ export class RuntimeAutomationController {
     expectedOwner: AutomationOwnerPrecondition | undefined,
     operation: AutomationOwnerFenceOperation
   ): void {
+    if (this.commands.ownedDefinition(id, expectedOwner)) {
+      return
+    }
     if (!this.store?.assertAutomationOwnerFence) {
       if (expectedOwner) {
         throw new Error('runtime_unavailable')

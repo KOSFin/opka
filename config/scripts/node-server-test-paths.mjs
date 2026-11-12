@@ -12,10 +12,14 @@ export const TEMPLATE_TEST_PATHS = [
   'src/main/orcad/orcad-packaged-structured-chat.integration.test.ts'
 ]
 
+// Require the real owning-host user manager; CI invokes this group explicitly.
+export const SYSTEMD_TEST_PATHS = ['src/main/orcad/orcad-command-automation.integration.test.ts']
+
 export function nodeServerTestPaths({
   artifact = false,
   crossRuntime = false,
-  template = false
+  template = false,
+  systemd = false
 } = {}) {
   return [
     'src/main/persistence/profile-state',
@@ -51,6 +55,7 @@ export function nodeServerTestPaths({
         ]
       : []),
     ...(crossRuntime ? CROSS_RUNTIME_TEST_PATHS : []),
-    ...(template ? TEMPLATE_TEST_PATHS : [])
+    ...(template ? TEMPLATE_TEST_PATHS : []),
+    ...(systemd ? SYSTEMD_TEST_PATHS : [])
   ]
 }
