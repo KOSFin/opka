@@ -22,6 +22,44 @@ function providerTerminalProof(response: IncomingMessage, replay: boolean): bool
   return response.complete && (!replay || response.trailers['x-orca-provider-terminal-v1'] === '1')
 }
 
+async function forwardReplayStream(
+  response: IncomingMessage,
+  outgoing: ServerResponse
+): Promise<void> {
+  for await (const chunk of response) {
+    if (outgoing.destroyed) {
+      continue
+    }
+    if (!outgoing.write(chunk)) {
+      await new Promise<void>((resolve) => {
+        const cleanup = () => {
+          outgoing.removeListener('drain', onDrain)
+          outgoing.removeListener('close', onDrain)
+          outgoing.removeListener('error', onError)
+          response.removeListener('close', onDrain)
+          response.removeListener('error', onDrain)
+        }
+        const onDrain = () => {
+          cleanup()
+          resolve()
+        }
+        const onError = () => {
+          cleanup()
+          resolve()
+        }
+        outgoing.once('drain', onDrain)
+        outgoing.once('close', onDrain)
+        outgoing.once('error', onError)
+        response.once('close', onDrain)
+        response.once('error', onDrain)
+      })
+    }
+  }
+  if (!outgoing.destroyed) {
+    outgoing.end()
+  }
+}
+
 export async function forwardCodexRoutingResponse({
   response,
   outgoing,
@@ -105,7 +143,7 @@ export async function forwardCodexRoutingResponse({
     response.setTimeout(responseHeaderTimeoutMs, () =>
       response.destroy(new Error('Local engine body idle deadline'))
     )
-    await pipeline(response, outgoing)
+    await forwardReplayStream(response, outgoing)
     state.positiveTerminal = providerTerminalProof(response, true)
     return null
   }
@@ -113,7 +151,14 @@ export async function forwardCodexRoutingResponse({
   const budget = new Transform({
     transform(chunk, _encoding, done) {
       sent += chunk.length
-      done(sent > maxResponseBytes ? new Error('Local response byte budget exceeded') : null, chunk)
+      if (sent > maxResponseBytes) {
+        const failure = new Error('Local response byte budget exceeded')
+        outgoing.destroy(failure)
+        response.destroy(failure)
+        done(failure)
+        return
+      }
+      done(null, chunk)
     }
   })
   await pipeline(response, budget, outgoing)

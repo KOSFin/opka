@@ -2,6 +2,8 @@ import type { CodexEngineFailure } from './codex-quota-failover'
 import type { CodexRequestTurnIdentity } from './codex-request-turn-identity'
 import type { CodexReplaySpoolBudget } from './codex-replay-spool'
 
+export const CODEX_ROUTING_RESPONSE_HEADER_TIMEOUT_MS = 120_000
+
 export type CodexHttpAccountRoute = {
   port: number
   clientKey: string
@@ -24,6 +26,9 @@ export type CodexRoutingHttpOptions = {
   maxResponseBytes: number
   responseHeaderTimeoutMs: number
   onCleanupUnverifiable: () => void
+  onRequestHeld?: () => void
+  onClientInterrupted?: () => void
+  waitForReady?: (token: string, signal: AbortSignal) => Promise<void>
   /** Available only after a patched engine with seekable-body support is verified. */
   replayBudget?: CodexReplaySpoolBudget
   /** Only ready host-owned state: this must not start unbounded async preparation. */

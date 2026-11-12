@@ -9,7 +9,8 @@ import { afterEach, expect, it } from 'vitest'
 const require = createRequire(import.meta.url)
 const {
   assertReplayArtifact,
-  finalizeReplayArtifact
+  finalizeReplayArtifact,
+  stageReplayArtifact
 } = require('./packaged-codex-replay-engine.cjs')
 const license = await readFile(
   new URL('../../resources/licenses/cli-proxy-api/LICENSE', import.meta.url)
@@ -102,5 +103,38 @@ it.skipIf(process.platform === 'win32')(
     await rm(join(directory, 'engine.zip'))
     await symlink(join(directory, 'cli-proxy-api'), join(directory, 'engine.zip'))
     expect(() => assertReplayArtifact(directory, 'linux-x64')).toThrow('link')
+  }
+)
+
+it('copies the verified Linux replay triple into the installed server resource root', async () => {
+  const { directory, manifest } = await packageFixture('linux-x64')
+  const resources = join(root, 'installed-orcad')
+  const installed = stageReplayArtifact(directory, resources, 'linux-x64')
+  expect(installed).toBe(join(resources, 'codex-routing-replay', 'linux-x64'))
+  await rm(directory, { recursive: true })
+  expect(assertReplayArtifact(installed, 'linux-x64').manifest).toEqual(manifest)
+  expect(await readFile(join(installed, 'manifest.json'), 'utf8')).toBe(JSON.stringify(manifest))
+})
+
+it('fails before staging a missing or mismatched replay artifact', async () => {
+  const { directory } = await packageFixture('linux-x64')
+  const resources = join(root, 'installed-orcad')
+  expect(() => stageReplayArtifact(directory, resources, 'linux-arm64')).toThrow('provenance')
+  expect(() => stageReplayArtifact(join(root, 'missing'), resources, 'linux-x64')).toThrow(
+    'missing'
+  )
+})
+
+it.skipIf(process.platform === 'win32')(
+  'rejects a dangling destination link without writing outside the package',
+  async () => {
+    const { directory } = await packageFixture('linux-x64')
+    const resources = join(root, 'installed-orcad')
+    const installed = join(resources, 'codex-routing-replay', 'linux-x64')
+    const outside = join(root, 'outside-engine')
+    await mkdir(installed, { recursive: true })
+    await symlink(outside, join(installed, 'cli-proxy-api'))
+    expect(() => stageReplayArtifact(directory, resources, 'linux-x64')).toThrow('link')
+    await expect(readFile(outside)).rejects.toMatchObject({ code: 'ENOENT' })
   }
 )

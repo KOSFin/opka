@@ -547,6 +547,20 @@ jobs:
           name: orcad-mobile-web-bundle
           path: out/mobile-web
       - run: pnpm build:orcad-template
+      - name: Cache pinned replay build inputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/opka-replay-ci/source.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/go.tar.gz
+            ${{ runner.temp }}/opka-replay-ci/modules
+          key: codex-replay-inputs-${{ hashFiles('config/scripts/codex-replay-ci-build.sh', 'config/scripts/build-codex-replay-engine.mjs', 'config/patches/cli-proxy-api-8.0.55-native-replay.patch', 'config/patches/cli-proxy-api-8.0.55-native-replay.source-sha256') }}-e6e5708e677adb2463d45accdd24bc9fd028ddd8-ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5
+      - name: Build and verify the pinned Linux x64 replay engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash config/scripts/codex-replay-ci-build.sh linux-x64
+          node -e "require('./config/scripts/packaged-codex-replay-engine.cjs').assertReplayArtifact('.build/codex-routing-replay/linux-x64', 'linux-x64')"
       - name: Package the qualified Linux x64 server and pinned runtime
         env:
           OPKA_VERSION: ${{ inputs.version }}

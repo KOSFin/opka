@@ -12,7 +12,8 @@ export function createCodexEngineNativeSessionLifetime(
   options: CodexEngineHostOptions,
   accepting: () => boolean,
   readState: (launchId: string) => CodexPoolSelectionState,
-  connection: (accountId: string) => EngineGrantDescriptor | null
+  connection: (accountId: string) => EngineGrantDescriptor | null,
+  onRequestHeld?: () => void
 ) {
   let epoch: ReturnType<typeof beginNativeAccountPoolEpoch> | undefined
   const lifecycle = new CodexEngineLifecycle({
@@ -32,6 +33,7 @@ export function createCodexEngineNativeSessionLifetime(
     db: options.db,
     readState,
     accepting,
+    onRequestHeld,
     recordQuotaFailure: options.recordQuotaFailure,
     createAssignmentScope() {
       if (!epoch) {

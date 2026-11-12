@@ -1,4 +1,5 @@
 import type { Server } from 'node:http'
+import { CODEX_ROUTING_RESPONSE_HEADER_TIMEOUT_MS } from './codex-routing-http-types'
 import {
   createCodexRoutingHttpServer,
   type CodexRoutingHttpOptions
@@ -13,7 +14,10 @@ export class CodexEngineHttpListener {
     private readonly prepare: CodexRoutingHttpOptions['prepare'],
     private readonly onCleanup: () => void,
     private readonly readNativeClientKey?: () => string,
-    private readonly replayBudget?: CodexReplaySpoolBudget
+    private readonly replayBudget?: CodexReplaySpoolBudget,
+    private readonly onRequestHeld?: () => void,
+    private readonly waitForReady?: CodexRoutingHttpOptions['waitForReady'],
+    private readonly onClientInterrupted?: () => void
   ) {}
   async listen(): Promise<void> {
     if (this.server) {
@@ -24,10 +28,13 @@ export class CodexEngineHttpListener {
       nativeClientKey: this.readNativeClientKey?.(),
       maxRequestBytes: this.maxRequestBytes,
       maxResponseBytes: 32 * 1024 * 1024,
-      responseHeaderTimeoutMs: 120000,
+      responseHeaderTimeoutMs: CODEX_ROUTING_RESPONSE_HEADER_TIMEOUT_MS,
       prepare: this.prepare,
       onCleanupUnverifiable: this.onCleanup,
-      replayBudget: this.replayBudget
+      replayBudget: this.replayBudget,
+      onRequestHeld: this.onRequestHeld,
+      waitForReady: this.waitForReady,
+      onClientInterrupted: this.onClientInterrupted
     })
     try {
       await new Promise<void>((resolve, reject) => {

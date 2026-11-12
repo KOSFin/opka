@@ -1,24 +1,25 @@
-import { createHash } from 'node:crypto'
-import { createReadStream } from 'node:fs'
 import {
   chmod,
   copyFile,
   lstat,
   mkdir,
   readFile,
-  readdir,
   rename,
   rm,
   stat,
   writeFile
 } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import { z } from 'zod'
 import { isDefinitiveAbsence } from '../../shared/definitive-filesystem-absence'
 import { getMainHttpClient, type MainHttpClient } from '../network/http-client'
 import { downloadVerifiedArchive } from '../node-runtime/runtime-archive-download'
 import { ENGINE_LICENSE_SHA256, getEngineAssetPin, type EngineAssetPin } from './engine-asset-pin'
 import { extractEngineAsset } from './engine-asset-extraction'
+import {
+  EngineAssetCacheReceipt,
+  digestEngineAssetFile as digest
+} from './engine-asset-cache-integrity'
+import { retireEngineAssetCacheVersions } from './engine-asset-cache-retirement'
 import { assertEngineAssetTargetFormat } from './engine-asset-target-format'
 
 export type EngineAssetCacheOptions = {
@@ -33,25 +34,6 @@ export type EngineAssetCacheOptions = {
   assertExclusiveInstallLease: () => void
   /** The host must prove no live or unverifiable engine uses a damaged/old installed directory. */
   assertCanReplaceInstalledBinary: (directory: string) => void
-}
-const Receipt = z.object({
-  archiveSha256: z.string(),
-  archiveBytes: z.number(),
-  target: z.string(),
-  version: z.string(),
-  binarySha256: z.string().regex(/^[a-f0-9]{64}$/),
-  binaryBytes: z
-    .number()
-    .int()
-    .positive()
-    .max(120 * 1024 * 1024)
-})
-async function digest(path: string, signal: AbortSignal): Promise<string> {
-  const hash = createHash('sha256')
-  for await (const chunk of createReadStream(path, { signal })) {
-    hash.update(chunk)
-  }
-  return hash.digest('hex')
 }
 async function existing(path: string) {
   try {
@@ -107,16 +89,6 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
   await ownedDirectory(root)
   const destination = join(root, `${pin.version}-${pin.target}`)
   const staging = join(root, '.install')
-  const names = await readdir(root)
-  for (const name of names) {
-    if (name === '.install' || name === `${pin.version}-${pin.target}`) {
-      continue
-    }
-    // Unknown/older copies can remain in use; this component does not prune their lifetime.
-    throw new Error(
-      'Routing engine cache contains another version; retire it through its owning host first'
-    )
-  }
   const stage = await existing(staging)
   if (stage && (!stage.isDirectory() || stage.isSymbolicLink())) {
     throw new Error('Routing engine staging path is not a regular directory')
@@ -128,6 +100,15 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
   if (installed && (!installed.isDirectory() || installed.isSymbolicLink())) {
     throw new Error('Routing engine release path is not a regular directory')
   }
+  let reused:
+    | {
+        binaryPath: string
+        expectedSha256: string
+        archiveSha256: string
+        version: string
+        reused: boolean
+      }
+    | undefined
   if (installed) {
     try {
       const receiptPath = join(destination, 'receipt.json')
@@ -135,7 +116,7 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
       if (!receiptStat.isFile() || receiptStat.isSymbolicLink() || receiptStat.size > 4096) {
         throw new Error('Invalid engine receipt')
       }
-      const receipt = Receipt.parse(JSON.parse(await readFile(receiptPath, 'utf8')))
+      const receipt = EngineAssetCacheReceipt.parse(JSON.parse(await readFile(receiptPath, 'utf8')))
       const file = await lstat(binaryPath),
         license = await lstat(join(destination, 'LICENSE'))
       if (
@@ -158,7 +139,7 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
       if (options.packaged) {
         await assertEngineAssetTargetFormat(binaryPath, pin.target)
       }
-      return {
+      reused = {
         binaryPath,
         expectedSha256: receipt.binarySha256,
         archiveSha256: pin.archiveSha256,
@@ -172,6 +153,10 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
       }
       options.assertCanReplaceInstalledBinary(destination)
     }
+  }
+  if (reused) {
+    await retireEngineAssetCacheVersions(options, pin, signal)
+    return reused
   }
   try {
     await ownedDirectory(staging)
@@ -241,6 +226,7 @@ export async function ensurePinnedEngineAsset(options: EngineAssetCacheOptions) 
       await rename(destination, join(staging, 'retired'))
     }
     await rename(release, destination)
+    await retireEngineAssetCacheVersions(options, pin, signal)
     return {
       binaryPath,
       expectedSha256: binarySha256,

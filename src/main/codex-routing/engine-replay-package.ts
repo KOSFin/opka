@@ -3,6 +3,7 @@ import { isAbsolute, join } from 'node:path'
 import { z } from 'zod'
 import { ensurePinnedEngineAsset, type EngineAssetCacheOptions } from './engine-asset-cache'
 import { ENGINE_ASSET_COMMIT, ENGINE_LICENSE_SHA256 } from './engine-asset-pin'
+import { resolveOrcadInstallRoot } from '../orcad/orcad-app-paths'
 
 const PATCH_SHA256 = '3bd902df9fa05bbc88c268a4b9d52a0e134f596f9e7ddf299148e2e4780a2fce'
 const SOURCE_ARCHIVE_SHA256 = '45d766358b7e6c453031800af6f1ba6fa1a30bf06a9aca9de8e39141aeaf5b56'
@@ -85,12 +86,16 @@ export async function readPackagedReplayEngineAsset(
   }
 }
 
+export function resolveReplayEngineResourceRoot(
+  electronResources = process.resourcesPath,
+  scriptPath = process.argv[1]
+): string {
+  return electronResources || resolveOrcadInstallRoot(scriptPath)
+}
+
 /** Missing or wrong target assets fail before the account route can open provider traffic. */
 export async function ensurePackagedReplayEngineAsset(options: EngineAssetCacheOptions) {
-  const resourceRoot = process.resourcesPath
-  if (!resourceRoot) {
-    throw new Error('Native replay asset is not installed on this execution host.')
-  }
+  const resourceRoot = resolveReplayEngineResourceRoot()
   const packaged = await readPackagedReplayEngineAsset(
     resourceRoot,
     `${options.platform ?? process.platform}-${options.arch ?? process.arch}`

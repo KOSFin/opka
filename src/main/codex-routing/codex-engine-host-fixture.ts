@@ -1,4 +1,4 @@
-import { createServer } from 'node:http'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,6 +27,13 @@ export function engineHostFixture(
     dbPath?: string
     recordQuotaFailure?: CodexEngineHostOptions['recordQuotaFailure']
     ensureAsset?: CodexEngineHostOptions['ensureAsset']
+    readPrefixes?: CodexEngineHostOptions['readPrefixes']
+    replay?: boolean
+    respond?: (
+      request: IncomingMessage,
+      response: ServerResponse,
+      payload: unknown
+    ) => Promise<boolean>
   } = {}
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'opka-engine-host-'))
@@ -108,11 +115,13 @@ export function engineHostFixture(
   const options: CodexEngineHostOptions = {
     directory,
     cacheDirectory: join(directory, 'asset-cache'),
+    ...(settings.replay ? { replaySpoolDirectory: join(directory, 'replay-spool') } : {}),
     db,
     memoryMiB: 128,
     maxRequestBytes: 65536,
     transitionTimeoutMs: timeout,
     recordQuotaFailure: settings.recordQuotaFailure,
+    readPrefixes: settings.readPrefixes,
     readAccount: (id) => accounts.get(id) ?? null,
     listAccounts: () => [...accounts.values()],
     readSelectionState: () => state,
@@ -188,6 +197,9 @@ export function engineHostFixture(
           typeof payload.model === 'string'
         ) {
           stats.models.push(payload.model)
+        }
+        if (await settings.respond?.(req, res, payload)) {
+          return
         }
         if (stats.holdResponse) {
           await new Promise<void>((resolve) => res.once('close', resolve))
@@ -284,16 +296,4 @@ export function engineHostFixture(
     }
   }
 }
-export async function syntheticTurn(launch: { baseUrl: string; apiKey: string }, turn = '1') {
-  const response = await fetch(`${launch.baseUrl}/responses`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${launch.apiKey}`,
-      'content-type': 'application/json',
-      'x-codex-turn-metadata': JSON.stringify({ thread_id: 'synthetic-thread', turn_id: turn })
-    },
-    body: JSON.stringify({ model: 'synthetic', input: 'local fixture' })
-  })
-  await response.arrayBuffer()
-  return response
-}
+export { syntheticTurn } from './codex-engine-host-fixture-request'

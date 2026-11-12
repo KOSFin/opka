@@ -91,7 +91,22 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
       let failurePhase: CodexRoutingFailurePhase = 'admission'
       let providerPossible = false
       let positiveTerminal = false
-      outgoing.once('close', cancel)
+      let interruptionTimer: ReturnType<typeof setTimeout> | undefined
+      const onOutgoingClose = (): void => {
+        if (outgoing.writableFinished) {
+          return
+        }
+        if (options.replayBudget && providerPossible) {
+          if (options.onClientInterrupted) {
+            options.onClientInterrupted()
+            // Grace permits terminal trailers to arrive; expiry proves nothing about provider exit.
+            interruptionTimer = setTimeout(cancel, 200)
+          }
+        } else {
+          cancel()
+        }
+      }
+      outgoing.once('close', onOutgoingClose)
       try {
         const ingressState: { replay?: CodexReplaySpool } = {}
         const ingress = await readCodexRoutingIngress(
@@ -111,6 +126,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
         if (outgoing.destroyed) {
           return
         }
+        await options.waitForReady?.(token, requestController.signal)
         route = options.prepare(token, {
           model,
           turn: readCodexRequestTurnIdentity(incoming.headers['x-codex-turn-metadata']),
@@ -258,7 +274,8 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
             : codexRoutingFailureMessage(error, failurePhase)
         )
       } finally {
-        outgoing.off('close', cancel)
+        outgoing.off('close', onOutgoingClose)
+        clearTimeout(interruptionTimer)
         requestController.abort()
         routeSignal?.removeEventListener('abort', cancel)
         upstream?.destroy()

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { createReadStream, readFileSync } from 'node:fs'
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
@@ -10,6 +11,7 @@ import { productReleaseDownloadUrl } from '../../src/shared/product-identity.ts'
 import { isDirectInvocation } from './script-entry-detection.mjs'
 import { packagedNodeRuntimePath } from './build-orcad-node.mjs'
 
+const { stageReplayArtifact } = createRequire(import.meta.url)('./packaged-codex-replay-engine.cjs')
 const target = 'linux-x64-glibc'
 const packageNames = [
   'opka-macos-arm64.dmg',
@@ -160,6 +162,7 @@ async function packageServer(stage, directory, version, commit) {
     [resolve('config/scripts/build-orcad-node.mjs'), '--target', target, '--out-dir', paths.slot],
     { stdio: 'inherit', env: { ...process.env, ORCAD_OMIT_AGENT_BROWSER: '1' } }
   )
+  stageReplayArtifact(resolve('.build/codex-routing-replay/linux-x64'), paths.slot, 'linux-x64')
   const runtime = NODE_RUNTIME_ASSETS[target]
   const metadata = JSON.parse(await readFile(join(paths.slot, 'out', 'package.json'), 'utf8'))
   if (metadata.version !== version) {

@@ -23,6 +23,9 @@ export async function finishCodexRoutingRequest(
           },
           () => options.onCleanupUnverifiable()
         )
+        // A fenced session keeps its lease until the host proves engine or owner exit.
+        options.onRequestHeld?.()
+        return
       }
       options.onCleanupUnverifiable()
     } else {

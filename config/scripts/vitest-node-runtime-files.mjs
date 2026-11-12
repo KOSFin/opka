@@ -23,6 +23,8 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/ai-vault/session-scanner-scope-walk.test.ts',
   // Electron main bridges streams with Node's implementation.
   'src/main/host/electron-http-client.test.ts',
+  // Node's HTTP framing and aborted-stream rejection are the shipped transport contract.
+  'src/main/codex-routing/codex-routing-http-server.test.ts',
   'src/main/daemon/daemon-init-provider-installation.test.ts',
   'src/main/orcad/orcad-daemon-teardown-linux.test.ts',
   'src/renderer/src/components/terminal-pane/pty-input-write-queue.test.ts',
