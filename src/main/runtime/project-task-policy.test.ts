@@ -18,6 +18,8 @@ import { RpcDispatcher } from './rpc/dispatcher'
 import { PROJECT_TASK_DELEGATION_METHODS } from './rpc/methods/project-task-delegation'
 import {
   createSessionCallerHarness,
+  orchestrationRequest,
+  WORKSPACE_X,
   SESSION_X,
   type SessionCallerHarness
 } from './rpc/orchestration-session-caller-test-fixture'
@@ -269,6 +271,61 @@ it('requires v2 peers for project agents and persists until revoked without a sy
   expect(
     h.db.db.prepare('SELECT generation,grant_json FROM project_task_delegation_policy').get()
   ).toMatchObject({ generation: 2, grant_json: null })
+})
+it('permits an agent on its board and rejects another board on the same host', async () => {
+  const projectTarget = { ...target(), capability: PROJECT_TASK_PROJECT_AGENTS_CAPABILITY }
+  const modernPhone = {
+    ...phone,
+    clientCapabilities: [cap, PROJECT_TASK_PROJECT_AGENTS_CAPABILITY]
+  }
+  const proposed = await dispatcher.dispatch(
+    request('projectTask.policy.propose', {
+      ...projectTarget,
+      expectedGeneration: 0,
+      grant: { mode: 'project-agents' }
+    }),
+    modernPhone
+  )
+  if (!proposed.ok) {
+    throw new Error(proposed.error.message)
+  }
+  const proposal = z.object({ id: z.string(), digest: z.string() }).parse(proposed.result)
+  const confirmed = await dispatcher.dispatch(
+    request('projectTask.policy.confirm', {
+      ...projectTarget,
+      proposal: proposal.id,
+      digest: proposal.digest,
+      requestId: randomUUID()
+    }),
+    modernPhone
+  )
+  expect(confirmed.ok).toBe(true)
+  const task = await workspace.show('task-11111111-1111-4111-8111-111111111111')
+  const approval = () =>
+    orchestrationRequest(
+      'projectTask.approveDelegated',
+      {
+        ...target(),
+        id: task.id,
+        revision: task.revision,
+        requestId: randomUUID()
+      },
+      { sessionId: SESSION_X }
+    )
+  const original = await h.runtime.resolveRuntimeFileTarget(WORKSPACE_X)
+  const otherRoot = await mkdtemp(join(tmpdir(), 'other-project-'))
+  try {
+    vi.mocked(h.runtime.resolveRuntimeFileTarget).mockImplementation(async (selector) =>
+      selector === WORKSPACE_X
+        ? { ...original, worktree: { ...original.worktree, path: otherRoot } }
+        : original
+    )
+    expect((await dispatcher.dispatch(approval())).ok).toBe(false)
+    vi.mocked(h.runtime.resolveRuntimeFileTarget).mockResolvedValue(original)
+    expect((await dispatcher.dispatch(approval())).ok).toBe(true)
+  } finally {
+    await rm(otherRoot, { recursive: true, force: true })
+  }
 })
 it('fails closed for old mobile capability, bare unverified handles, changed config and SSH host mismatch', async () => {
   expect(

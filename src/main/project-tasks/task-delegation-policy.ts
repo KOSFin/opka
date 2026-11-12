@@ -26,6 +26,7 @@ export type DelegationContext = {
   binding: DelegationBinding
   actor: DelegationActor
   runId: string | null
+  callerProjectId?: string
 }
 
 export class TaskDelegationPolicy {
@@ -190,6 +191,7 @@ export class TaskDelegationPolicy {
       (grant.expiresAt !== null && grant.expiresAt <= this.clock()) ||
       delegationDigest(grant.binding) !== delegationDigest(context.binding) ||
       (grant.schema === 1 && grant.actor.key !== context.actor.key) ||
+      (grant.schema === 2 && context.callerProjectId !== context.binding.projectId) ||
       !grant.actions.includes(action) ||
       (grant.schema === 1 && grant.taskIds && !grant.taskIds.includes(taskId)) ||
       (grant.schema === 1 && grant.runId !== null && grant.runId !== context.runId)

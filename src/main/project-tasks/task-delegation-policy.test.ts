@@ -199,8 +199,8 @@ it('allows future in-project cards while exact revision approval, optional narro
   store.transaction(() => store.delegation.approve(context, future, randomUUID()))
   expect(taskAdmission(store, 'project', future, context)?.source).toBe('delegated')
   const grant = store.delegation.read('project').grant
-  if (!grant) {
-    throw new Error('Fixture grant missing')
+  if (!grant || grant.schema !== 1) {
+    throw new Error('Fixture session grant missing')
   }
   const p = store.transaction(() =>
     store.delegation.propose(
@@ -392,9 +392,17 @@ it('allows verified project actors until revoked while enforcing the bound host 
   )
   const otherAgent = {
     ...context,
+    callerProjectId: 'project',
     actor: { key: 'other-verified-agent', aliases: ['other-verified-agent'] }
   }
   expect(store.delegation.require(otherAgent, task.id, 'approve-plan').expiresAt).toBeNull()
+  expect(() =>
+    store.delegation.require(
+      { ...otherAgent, callerProjectId: 'another-project' },
+      task.id,
+      'approve-plan'
+    )
+  ).toThrow(/scope/)
   expect(() =>
     store.delegation.require(
       { ...otherAgent, binding: { ...context.binding, machineBinding: 'other-host' } },

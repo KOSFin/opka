@@ -3,7 +3,10 @@ import {
   projectTaskSessionPlacement
 } from './project-task-attempt-source'
 import { captureTaskSessionPlacement } from '../project-tasks/task-attempt-placement'
-import { optionalProjectTaskDelegationContext } from './project-task-delegation'
+import {
+  optionalProjectTaskDelegationContext,
+  verifyProjectTaskCallerProject
+} from './project-task-delegation'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
 import type { z } from 'zod'
@@ -95,6 +98,7 @@ export async function claimProjectTaskSession(
     params.worktree,
     params.expectedExecutionHostId
   )
+  await verifyProjectTaskCallerProject(context, resources, params.from)
   const placement = await projectTaskSessionPlacement(context, params.from).catch(() => null)
   const attempt = await resources.workspace.withTaskRevision(
     params.id,
@@ -178,6 +182,7 @@ export async function progressProjectTaskSession(
     params.worktree,
     params.expectedExecutionHostId
   )
+  await verifyProjectTaskCallerProject(context, resources, params.from)
   const attempt = await resources.workspace.withTaskRevision(
     params.id,
     params.revision,

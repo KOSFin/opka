@@ -1,5 +1,8 @@
 import { reserveProjectTaskLaunch } from '../project-tasks/task-launch-reservation'
-import { optionalProjectTaskDelegationContext } from './project-task-delegation'
+import {
+  optionalProjectTaskDelegationContext,
+  verifyProjectTaskCallerProject
+} from './project-task-delegation'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import type { z } from 'zod'
 import { WorkerStartParams } from '../../shared/rpc-contract/orchestration-worker-start-params'
@@ -45,6 +48,9 @@ export async function startProjectTask(
     params.worktree,
     params.expectedExecutionHostId
   )
+  if (!isManualProjectTaskOperatorStart(context, params)) {
+    await verifyProjectTaskCallerProject(context, resources, params.launch.from)
+  }
   const { store, projectId, workspace, root } = resources
   const coordinator = resolveOrchestrationCaller(context.runtime, {
     callerTerminalHandle: params.launch.from,

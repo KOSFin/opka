@@ -135,12 +135,12 @@ function readActiveDelegationReferences(
       }
       const grant = TaskDelegationGrant.parse(JSON.parse(row.grant_json))
       if (
-        grant.expiresAt <= now ||
+        (grant.expiresAt !== null && grant.expiresAt <= now) ||
         (proposal && typeof proposalExpiresAt === 'number' && proposalExpiresAt <= now)
       ) {
         continue
       }
-      if (addresses.has(grant.actorAddress)) {
+      if (grant.schema === 1 && addresses.has(grant.actorAddress)) {
         return 'present'
       }
     }

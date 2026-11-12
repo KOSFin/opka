@@ -9,11 +9,12 @@ import {
 } from '../../../../shared/rpc-contract/project-task-delegation-params'
 import {
   projectTaskResources,
-  requireInteractiveTaskOperator,
-  taskWorkflowAction
+  requireInteractiveTaskOperator
 } from '../../project-task-workflow-service'
 import {
   projectTaskBinding,
+  projectTaskDelegationResources,
+  delegatedTaskWorkflowAction,
   projectTaskDelegationContext,
   requireTaskDelegationCapability
 } from '../../project-task-delegation'
@@ -38,10 +39,11 @@ export const PROJECT_TASK_DELEGATION_METHODS = [
     params: TaskDelegationRead,
     handler: async (params, context) => {
       requireTaskDelegationCapability(context, params.capability)
-      const resources = await projectTaskResources(
-        context.runtime,
+      const resources = await projectTaskDelegationResources(
+        context,
         params.worktree,
-        params.expectedExecutionHostId
+        params.expectedExecutionHostId,
+        params.from
       )
       return resumeProjectTask(
         context.runtime,
@@ -194,8 +196,8 @@ export const PROJECT_TASK_DELEGATION_METHODS = [
     handler: async (params, context) => {
       requireTaskDelegationCapability(context, params.capability)
       let receipt: unknown
-      const workflow = await taskWorkflowAction(
-        context.runtime,
+      const workflow = await delegatedTaskWorkflowAction(
+        context,
         params,
         (resources, task) => {
           receipt = resources.store.delegation.approve(
