@@ -18,27 +18,13 @@ import { CodexNativeAffinityCapacityError } from './codex-native-affinity-capaci
 import { CodexTurnBoundaryError } from './codex-turn-boundary-error'
 import { readCodexRequestTurnIdentity } from './codex-request-turn-identity'
 import { CodexReplayAdmissionError, type CodexReplaySpool } from './codex-replay-spool'
+import { recordLocalCodex429 } from './codex-routing-429-diagnostic'
+import { assertCodexRoutingHttpBudget } from './codex-routing-http-budget'
 
 /** Local HTTP Responses transport only; no history cache or WebSocket translation. */
 export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
-  const { maxConcurrent, maxRequestBytes, maxResponseBytes, responseHeaderTimeoutMs } = options
-  if (
-    !Number.isInteger(maxConcurrent) ||
-    maxConcurrent < 1 ||
-    maxConcurrent > 16 ||
-    !Number.isSafeInteger(maxRequestBytes) ||
-    maxRequestBytes < 1 ||
-    maxRequestBytes > 32 * 1024 * 1024 ||
-    !Number.isSafeInteger(maxResponseBytes) ||
-    maxResponseBytes < 1 ||
-    maxResponseBytes > 64 * 1024 * 1024 ||
-    maxConcurrent * maxRequestBytes > 64 * 1024 * 1024 ||
-    !Number.isSafeInteger(responseHeaderTimeoutMs) ||
-    responseHeaderTimeoutMs < 1 ||
-    responseHeaderTimeoutMs > 300_000
-  ) {
-    throw new Error('Codex routing HTTP resource budget is invalid')
-  }
+  assertCodexRoutingHttpBudget(options)
+  const { maxConcurrent, maxRequestBytes, responseHeaderTimeoutMs } = options
   let active = 0
   const server = createServer(
     {
@@ -70,6 +56,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
         return
       }
       if (active >= maxConcurrent) {
+        recordLocalCodex429('host-budget')
         reject(
           outgoing,
           429,
@@ -258,6 +245,11 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
           break
         }
       } catch (error) {
+        if (error instanceof CodexNativeAffinityCapacityError) {
+          recordLocalCodex429('native-affinity')
+        } else if (error instanceof CodexReplayAdmissionError && error.status === 429) {
+          recordLocalCodex429('replay-capacity')
+        }
         reject(
           outgoing,
           error instanceof CodexTurnBoundaryError

@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises'
 import { readCodexQuotaError, forwardCodexQuotaError } from './codex-quota-error-response'
 import { retryCodexQuotaBeforeDeadline } from './codex-quota-retry-deadline'
 import { codexRoutingHeaders } from './codex-routing-http-headers'
+import { recordUpstreamCodex429 } from './codex-routing-429-diagnostic'
 import type { CodexHttpAccountRoute, CodexRoutingHttpOptions } from './codex-routing-http-types'
 
 type ResponseContext = {
@@ -78,6 +79,14 @@ export async function forwardCodexRoutingResponse({
     const failure = captured.failure
     state.positiveTerminal =
       !captured.remainder && providerTerminalProof(response, Boolean(options.replayBudget))
+    recordUpstreamCodex429({
+      body: captured.body,
+      contentType,
+      complete: !captured.remainder && response.complete,
+      terminal: state.positiveTerminal,
+      retryAfter: response.headers['retry-after'],
+      failure
+    })
     if (
       failure?.kind === 'quota' &&
       state.positiveTerminal &&
@@ -134,6 +143,14 @@ export async function forwardCodexRoutingResponse({
     return null
   }
   const status = response.statusCode ?? 502
+  if (status === 429) {
+    recordUpstreamCodex429({
+      contentType,
+      complete: false,
+      terminal: false,
+      retryAfter: response.headers['retry-after']
+    })
+  }
   const headers = codexRoutingHeaders(response.headers)
   outgoing.writeHead(
     status,
