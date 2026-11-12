@@ -46,12 +46,13 @@ export function useTaskPageRepoSelectionState(
     const legacy = settings?.defaultRepoSelection
     const focusedHostId =
       selectionHost === 'local' ? 'local' : toRuntimeExecutionHostId(selectionHost)
+    const focusedRepoIds = new Set(
+      eligibleRepos
+        .filter((repo) => getRepoExecutionHostId(repo) === focusedHostId)
+        .map((repo) => repo.id)
+    )
     const legacyForHost = Array.isArray(legacy)
-      ? legacy.filter((id) =>
-          eligibleRepos.some(
-            (repo) => repo.id === id && getRepoExecutionHostId(repo) === focusedHostId
-          )
-        )
+      ? legacy.filter((id) => focusedRepoIds.has(id))
       : null
     const persisted =
       savedSelection !== undefined
