@@ -139,6 +139,9 @@ jobs:
           native-runtime: node
       - uses: ./.github/actions/install-mobile-dependencies
         if: matrix.group != 'automation-containment'
+      - name: Test operator retention safeguards
+        if: matrix.group == 'shared'
+        run: python3 config/scripts/test_operator_dev_retention.py
       - name: Install the pinned headless renderer browser
         if: matrix.group == 'shared'
         timeout-minutes: 8
