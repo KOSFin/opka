@@ -16,8 +16,24 @@ import {
   matchesRepositoryGitNetworkChoice
 } from './repository-git-network-binding'
 import { CloneGitLabProfileDialog } from '../sidebar/CloneGitLabProfileDialog'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { RemoteGlabProfileImport } from './RemoteGlabProfileImport'
+import { normalizeGitHttpsHost } from '../../../../shared/git-https-host'
 
 const UNBOUND = '__git_network_unbound__'
+
+function initialImportHost(repo: Repo): string {
+  if (repo.gitNetworkBinding?.provider === 'gitlab') {
+    return repo.gitNetworkBinding.host
+  }
+  try {
+    const url = new URL(repo.gitRemoteIdentity?.remoteUrl ?? '')
+    return url.protocol === 'https:' ? (normalizeGitHttpsHost(url.host) ?? '') : ''
+  } catch {
+    return ''
+  }
+}
 
 function bindingKey(repo: Repo): string {
   const binding = repo.gitNetworkBinding
@@ -53,6 +69,7 @@ export function RepositoryGitNetworkSection({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [importHost, setImportHost] = useState(() => initialImportHost(repo))
   const generation = useRef(0)
 
   useEffect(() => {
@@ -147,7 +164,10 @@ export function RepositoryGitNetworkSection({
     setSaving(true)
     setError(null)
     try {
-      const updated = await bindRepositoryGitNetworkAccount(repo, choice)
+      const updated = await bindRepositoryGitNetworkAccount(
+        { ...repo, gitNetworkBinding: binding },
+        choice
+      )
       if (!matchesRepositoryGitNetworkChoice(updated, choice)) {
         throw new Error(
           'This host did not save the selected Git network account. Update or reconnect it.'
@@ -225,6 +245,30 @@ export function RepositoryGitNetworkSection({
             <Button variant="outline" onClick={() => setAddOpen(true)} disabled={saving}>
               Add GitLab profile
             </Button>
+          )}
+          {owner?.kind === 'runtime' && runtimeEnvironmentId && (
+            <div className="w-full space-y-2">
+              <Label htmlFor={`gitlab-import-host-${repo.id}`}>GitLab HTTPS host</Label>
+              <Input
+                id={`gitlab-import-host-${repo.id}`}
+                value={importHost}
+                onChange={(event) => setImportHost(event.target.value)}
+                placeholder="gitlab.example.com"
+                disabled={loading || saving}
+              />
+              <RemoteGlabProfileImport
+                runtimeEnvironmentId={runtimeEnvironmentId}
+                host={importHost}
+                disabled={loading || saving}
+                onImported={(profile) => {
+                  setProfiles((current) => [
+                    ...current.filter((entry) => entry.id !== profile.id),
+                    profile
+                  ])
+                  setChoiceKey(`gitlab:${profile.id}`)
+                }}
+              />
+            </div>
           )}
         </div>
         {unavailable && (

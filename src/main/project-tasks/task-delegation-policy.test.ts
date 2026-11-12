@@ -199,8 +199,8 @@ it('allows future in-project cards while exact revision approval, optional narro
   store.transaction(() => store.delegation.approve(context, future, randomUUID()))
   expect(taskAdmission(store, 'project', future, context)?.source).toBe('delegated')
   const grant = store.delegation.read('project').grant
-  if (!grant) {
-    throw new Error('Fixture grant missing')
+  if (!grant || grant.schema !== 1) {
+    throw new Error('Fixture session grant missing')
   }
   const p = store.transaction(() =>
     store.delegation.propose(
@@ -358,4 +358,78 @@ it('rolls back approval if structured audit fails and denies expired grants with
   expect(store.native.db.prepare('SELECT COUNT(*) AS n FROM project_task_attempts').get()?.n).toBe(
     0
   )
+})
+
+it('allows verified project actors until revoked while enforcing the bound host and project', () => {
+  const { store, task, context } = setup()
+  const proposed = store.transaction(() =>
+    store.delegation.propose(
+      'project',
+      'interactive:owner',
+      'connection',
+      0,
+      {
+        schema: 2,
+        binding: context.binding,
+        scope: 'project-agents',
+        actions: ['approve-plan', 'request-changes', 'send-to-integration', 'accept-result'],
+        expiresAt: null,
+        generation: 1
+      },
+      context.binding
+    )
+  )
+  store.transaction(() =>
+    store.delegation.confirm(
+      'project',
+      'interactive:owner',
+      'connection',
+      proposed.id,
+      proposed.digest,
+      randomUUID(),
+      context.binding
+    )
+  )
+  const otherAgent = {
+    ...context,
+    callerProjectId: 'project',
+    actor: { key: 'other-verified-agent', aliases: ['other-verified-agent'] }
+  }
+  expect(store.delegation.require(otherAgent, task.id, 'approve-plan').expiresAt).toBeNull()
+  expect(() =>
+    store.delegation.require(
+      { ...otherAgent, callerProjectId: 'another-project' },
+      task.id,
+      'approve-plan'
+    )
+  ).toThrow(/scope/)
+  expect(() =>
+    store.delegation.require(
+      { ...otherAgent, binding: { ...context.binding, machineBinding: 'other-host' } },
+      task.id,
+      'approve-plan'
+    )
+  ).toThrow(/scope/)
+  expect(() =>
+    store.delegation.require(
+      { ...otherAgent, binding: { ...context.binding, projectId: 'another-project' } },
+      task.id,
+      'approve-plan'
+    )
+  ).toThrow(/scope/)
+  const revoked = store.transaction(() =>
+    store.delegation.propose('project', 'interactive:owner', 'connection', 1, null, context.binding)
+  )
+  store.transaction(() =>
+    store.delegation.confirm(
+      'project',
+      'interactive:owner',
+      'connection',
+      revoked.id,
+      revoked.digest,
+      randomUUID(),
+      context.binding
+    )
+  )
+  expect(() => store.delegation.require(otherAgent, task.id, 'approve-plan')).toThrow(/revoked/)
 })

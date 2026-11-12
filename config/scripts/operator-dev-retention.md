@@ -1,0 +1,15 @@
+# Reviewed development-output retention
+
+This operator tool complements `reclaim-worktree-space.mjs`. It does not discover repositories, clean Git, change installations, install timers, or remove archives/checkouts. It uses only Python's standard library on Linux.
+
+Run `python3 config/scripts/operator_dev_retention.py --manifest PRIVATE_POLICY` to preview. Only `--apply` deletes. Apply requires root for a complete process census and a private root-owned policy. Serialize invocations against the same manifest through its file lock. Keep dispatch/build scheduling quiescent during apply: `/proc` and identity rechecks detect observed use, but cannot exclude a new uncooperative process starting immediately after the last check.
+
+The policy is JSON with `schema: 1`, `ownerUid`, integer `minAgeDays`, `keepNewest`, `maxDeletes`, `maxBytes`, `reserveBytes`, `protectedPaths`, and `roots`. Each reviewed root has an ASCII `id`, canonical absolute `path`, pinned filesystem `device` and `inode`, and exact `outputs`. Only `out`, `dist`, `node_modules`, and `.build` are allowed. Policy paths and host identities belong in private operator configuration, never this repository.
+
+Always protect current installations, current workspaces, SDK/Gradle warm caches, current engine assets, profiles, credentials and history through `protectedPaths`. Paths must already exist and resolve without symlinks. Whole archives/build copies and `.orca`/`fork-docs`/reports remain outside deletion scope. Embedded project source or protected material also blocks an output; dependency source inside declared `node_modules` is reproducible, while ownership and Git/private-state protections still apply.
+
+Candidates require age eligibility, expected ownership, no mount crossings, one global 100,000-entry snapshot/traversal budget across all trees, and no active process cwd/executable/argv reference to their reviewed root. The entire process census is capped at 8 MiB of argv bytes and 65,536 argument words; process count is also bounded. Unknown or over-budget process state blocks cleanup. Recheck the process census and every scanned file identity before deletion. Nested symlinks are unlinked without following their targets; a symlink candidate/root is never selected. Unknown siblings are never enumerated for deletion.
+
+Retention keeps the newest configured count per output name across reviewed roots, then applies the per-run entry and allocated-byte limits. Allocation is measured with filesystem blocks; hard links mean this is not a claim about physical space reclaimed. One bounded JSON summary reports actual `statvfs` available bytes before/after and whether the requested reserve is satisfied. Apply exits 3 if safe candidates cannot establish that reserve; it never expands into protected data. The script has no internal retry, model, timer or log-writing loop.
+
+Fixture checks: `python3 -m unittest discover -s config/scripts -p test_operator_dev_retention.py`. Run those before preparing a private policy and a NEW-only operational schedule. No schedule is installed by this source.

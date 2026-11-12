@@ -19,6 +19,7 @@ export type UsageAccounts = {
   rateLimits: RateLimitState
   verified: boolean
   ownerLabel?: string
+  dismiss?: () => void
 }
 const UsageAccountsContext = createContext<UsageAccounts | null>(null)
 export const useUsageAccounts = () => useContext(UsageAccountsContext)
@@ -52,6 +53,7 @@ export function UsageAccountsProvider({
   verified,
   rateLimits = createEmptyRateLimitState(),
   ownerLabel,
+  dismiss,
   children
 }: Omit<UsageAccounts, 'rateLimits'> & {
   rateLimits?: RateLimitState
@@ -120,11 +122,12 @@ export function UsageAccountsProvider({
             target,
             rateLimits,
             ownerLabel,
+            dismiss,
             snapshot: localSource.owner === owner ? local.snapshot : null,
             verified: localSource.owner === owner && local.verified
           }
-        : { target, rateLimits, ownerLabel, snapshot, verified },
-    [target, rateLimits, ownerLabel, local, localSource, owner, snapshot, verified]
+        : { target, rateLimits, ownerLabel, dismiss, snapshot, verified },
+    [target, rateLimits, ownerLabel, dismiss, local, localSource, owner, snapshot, verified]
   )
   return <UsageAccountsContext.Provider value={value}>{children}</UsageAccountsContext.Provider>
 }

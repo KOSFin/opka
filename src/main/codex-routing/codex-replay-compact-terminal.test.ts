@@ -56,6 +56,7 @@ it('withholds a complete compact artifact when the provider remains live without
     ownerExited = resolve
   })
   const cleanup = vi.fn()
+  const onRequestHeld = vi.fn()
   const finish = vi.fn()
   const frontPort = await listen(
     createCodexRoutingHttpServer({
@@ -65,6 +66,7 @@ it('withholds a complete compact artifact when the provider remains live without
       responseHeaderTimeoutMs: 1000,
       replayBudget,
       onCleanupUnverifiable: cleanup,
+      onRequestHeld,
       prepare: () => ({
         port: enginePort,
         clientKey: 'synthetic-engine-key-1234567890123456',
@@ -81,7 +83,8 @@ it('withholds a complete compact artifact when the provider remains live without
   })
   expect(response.status).toBe(502)
   expect(await response.text()).not.toContain('encrypted_content')
-  await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(onRequestHeld).toHaveBeenCalledOnce())
+  expect(cleanup).not.toHaveBeenCalled()
   expect(held?.destroyed).toBe(false)
   expect(finish).not.toHaveBeenCalled()
   expect(replayBudget.snapshot().active).toBe(1)
@@ -90,4 +93,5 @@ it('withholds a complete compact artifact when the provider remains live without
   await vi.waitFor(() => expect(finish).toHaveBeenCalledOnce())
   expect(replayBudget.snapshot()).toEqual({ active: 0, large: 0, reservedBytes: 0 })
   expect(await readdir(directory)).toEqual([])
+  expect(cleanup).not.toHaveBeenCalled()
 })

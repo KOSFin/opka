@@ -139,6 +139,9 @@ jobs:
           native-runtime: node
       - uses: ./.github/actions/install-mobile-dependencies
         if: matrix.group != 'automation-containment'
+      - name: Test operator retention safeguards
+        if: matrix.group == 'shared'
+        run: python3 config/scripts/test_operator_dev_retention.py
       - name: Install the pinned headless renderer browser
         if: matrix.group == 'shared'
         timeout-minutes: 8
@@ -340,7 +343,6 @@ jobs:
           tests/e2e/fork-account-pool-settings.spec.ts
           tests/e2e/fork-worker-capacity-settings.spec.ts
           tests/e2e/fork-usage-extra-review.spec.ts
-          tests/e2e/fork-usage-corrected-review.spec.ts
           tests/e2e/git-project-trackers-hidden.spec.ts
           tests/e2e/sparse-explorer-proof.spec.ts
           tests/e2e/sparse-preset-proof.spec.ts

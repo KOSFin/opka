@@ -10,9 +10,10 @@ import {
 import { assignTaskReview, recordTaskReview } from '../../../project-tasks/task-independent-review'
 import { decideDelegatedResult } from '../../../project-tasks/task-result-decisions'
 import { freezeTaskResult, readTaskResult } from '../../../project-tasks/task-result-evidence'
-import { projectTaskResources, taskWorkflowAction } from '../../project-task-workflow-service'
 import {
   projectTaskDelegationContext,
+  projectTaskDelegationResources,
+  delegatedTaskWorkflowAction,
   requireTaskDelegationCapability
 } from '../../project-task-delegation'
 import {
@@ -27,10 +28,11 @@ export const PROJECT_TASK_RESULT_METHODS = [
     params: TaskResultSnapshot,
     handler: async (params, context) => {
       requireTaskDelegationCapability(context, params.capability)
-      const resources = await projectTaskResources(
-        context.runtime,
+      const resources = await projectTaskDelegationResources(
+        context,
         params.worktree,
-        params.expectedExecutionHostId
+        params.expectedExecutionHostId,
+        params.from
       )
       const task = await resources.workspace.show(params.id)
       const author = projectTaskDelegationContext(context, resources, params.from)
@@ -62,8 +64,8 @@ export const PROJECT_TASK_RESULT_METHODS = [
         params.attempt
       )
       let receipt: unknown
-      const workflow = await taskWorkflowAction(
-        context.runtime,
+      const workflow = await delegatedTaskWorkflowAction(
+        context,
         params,
         (current, entry) => {
           const actor = projectTaskDelegationContext(context, current, params.from)
@@ -115,10 +117,11 @@ export const PROJECT_TASK_RESULT_METHODS = [
     params: TaskReviewAssignment,
     handler: async (params, context) => {
       requireTaskDelegationCapability(context, params.capability)
-      const resources = await projectTaskResources(
-        context.runtime,
+      const resources = await projectTaskDelegationResources(
+        context,
         params.worktree,
-        params.expectedExecutionHostId
+        params.expectedExecutionHostId,
+        params.from
       )
       const task = await resources.workspace.show(params.id)
       const actor = projectTaskDelegationContext(context, resources, params.from)
@@ -143,8 +146,8 @@ export const PROJECT_TASK_RESULT_METHODS = [
         params.resultDigest
       )
       let receipt: unknown
-      const workflow = await taskWorkflowAction(
-        context.runtime,
+      const workflow = await delegatedTaskWorkflowAction(
+        context,
         params,
         (resources, task) => {
           const actor = projectTaskDelegationContext(context, resources, params.from)
@@ -181,10 +184,11 @@ export const PROJECT_TASK_RESULT_METHODS = [
     params: TaskReviewSubmission,
     handler: async (params, context) => {
       requireTaskDelegationCapability(context, params.capability)
-      const resources = await projectTaskResources(
-        context.runtime,
+      const resources = await projectTaskDelegationResources(
+        context,
         params.worktree,
-        params.expectedExecutionHostId
+        params.expectedExecutionHostId,
+        params.from
       )
       const task = await resources.workspace.show(params.id)
       const actor = projectTaskDelegationContext(context, resources, params.from)
@@ -209,8 +213,8 @@ export const PROJECT_TASK_RESULT_METHODS = [
         params.resultDigest
       )
       let receipt: unknown
-      const workflow = await taskWorkflowAction(
-        context.runtime,
+      const workflow = await delegatedTaskWorkflowAction(
+        context,
         params,
         (resources) => {
           const actor = projectTaskDelegationContext(context, resources, params.from)
@@ -244,10 +248,11 @@ export const PROJECT_TASK_RESULT_METHODS = [
     params: TaskDelegatedDecision,
     handler: async (params, context) => {
       requireTaskDelegationCapability(context, params.capability)
-      const resources = await projectTaskResources(
-        context.runtime,
+      const resources = await projectTaskDelegationResources(
+        context,
         params.worktree,
-        params.expectedExecutionHostId
+        params.expectedExecutionHostId,
+        params.from
       )
       const task = await resources.workspace.show(params.id)
       const actor = projectTaskDelegationContext(context, resources, params.from)
@@ -272,8 +277,8 @@ export const PROJECT_TASK_RESULT_METHODS = [
         params.resultDigest
       )
       let receipt: unknown
-      const workflow = await taskWorkflowAction(
-        context.runtime,
+      const workflow = await delegatedTaskWorkflowAction(
+        context,
         params,
         (resources, task) => {
           receipt = decideDelegatedResult(

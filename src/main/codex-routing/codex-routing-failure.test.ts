@@ -19,3 +19,12 @@ it('does not print arbitrary provider codes, messages, URLs or non-Error values'
     'admission/UNCLASSIFIED'
   )
 })
+
+it('distinguishes a bounded recovery queue deadline without exposing error contents', () => {
+  const failure = Object.assign(new Error('synthetic private details'), {
+    code: 'RECOVERY_QUEUE_TIMEOUT'
+  })
+  expect(codexRoutingFailureMessage(failure, 'admission')).toBe(
+    'Account routing failed (admission/RECOVERY_QUEUE_TIMEOUT); check the execution host diagnostics.'
+  )
+})

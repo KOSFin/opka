@@ -13,7 +13,7 @@ import { useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useHostClient } from '../transport/host-client-hooks'
 import { useOptionalHostProtocolGates } from '../components/host-protocol-gates-context'
-import { PROJECT_TASK_DELEGATION_CAPABILITY } from '../../../src/shared/project-task-delegation'
+import { PROJECT_TASK_PROJECT_AGENTS_CAPABILITY } from '../../../src/shared/project-task-delegation'
 import { useBackClaim } from '../navigation/use-back-claim'
 import { useRouteHandoff } from '../navigation/route-handoff'
 import { MobileSegmentedControl, MobileSectionReveal } from '../components/MobileSegmentedControl'
@@ -341,7 +341,7 @@ export function MobileProjectTasksScreen() {
                   client={client}
                   connected={state === 'connected' && verified}
                   supported={
-                    hostGates?.hostCapabilities.includes(PROJECT_TASK_DELEGATION_CAPABILITY) ===
+                    hostGates?.hostCapabilities.includes(PROJECT_TASK_PROJECT_AGENTS_CAPABILITY) ===
                     true
                   }
                   hostId={params.hostId}

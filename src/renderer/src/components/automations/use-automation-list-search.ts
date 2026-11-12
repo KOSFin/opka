@@ -46,6 +46,7 @@ export function useAutomationListSearch({
   worktreeMap,
   selectedRowKey,
   selectedExternalKey,
+  hasSelectedCommand = false,
   selectAutomationRow,
   selectExternalKey
 }: {
@@ -57,6 +58,7 @@ export function useAutomationListSearch({
   /** The row currently on screen, not the bare id: two hosts can hold that id. */
   selectedRowKey: string | null
   selectedExternalKey: string | null
+  hasSelectedCommand?: boolean
   selectAutomationRow: (rowKey: string | null) => void
   selectExternalKey: (externalKey: string | null) => void
 }): {
@@ -160,7 +162,7 @@ export function useAutomationListSearch({
   // Why: when search hides the current row, move selection to the first visible
   // match so list highlight and detail stay aligned. No matches → keep detail.
   useEffect(() => {
-    if (activeListSearchQuery === null) {
+    if (activeListSearchQuery === null || hasSelectedCommand) {
       return
     }
     const localVisible =
@@ -189,6 +191,7 @@ export function useAutomationListSearch({
     }
   }, [
     activeListSearchQuery,
+    hasSelectedCommand,
     filteredRows,
     filteredExternalAutomationEntries,
     selectAutomationRow,

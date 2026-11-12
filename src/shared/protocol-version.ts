@@ -1,4 +1,7 @@
-import { PROJECT_TASK_DELEGATION_CAPABILITY } from './project-task-delegation'
+import {
+  PROJECT_TASK_DELEGATION_CAPABILITY,
+  PROJECT_TASK_PROJECT_AGENTS_CAPABILITY
+} from './project-task-delegation'
 import { AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY } from './agent-session-current-requests-capability'
 import { AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY } from './ai-vault-resume-preparation'
 import { PROGRAM_STATUS_RUNTIME_CAPABILITY } from './program-status/protocol'
@@ -76,6 +79,7 @@ import { REMOTE_SERVER_UPDATE_CAPABILITY } from './remote-server-update'
 import { MOBILE_RELAY_RUNTIME_CAPABILITIES } from './mobile-desktop-relay-contract'
 import { SKILL_RUNTIME_CAPABILITIES } from './skill-install-capability'
 import { REPO_GIT_AUTHOR_RUNTIME_CAPABILITY } from './repo-git-author'
+import { GITLAB_NATIVE_PROFILE_IMPORT_RUNTIME_CAPABILITY } from './gitlab-network-profile'
 import { ACCOUNT_RUNTIME_CAPABILITIES } from './account-runtime-capabilities'
 import * as agentLaunchCapabilities from './agent-launch-runtime-capability'
 import {
@@ -176,6 +180,7 @@ export * from './agent-session-stop-capabilities'
 // Native clients include the CLI, which cannot place Electron browser pages.
 export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
   PROJECT_TASK_DELEGATION_CAPABILITY,
+  PROJECT_TASK_PROJECT_AGENTS_CAPABILITY,
   SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY,
   AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY,
   WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY,
@@ -187,8 +192,10 @@ export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
 ] as const
 
 export const RUNTIME_CAPABILITIES = [
+  GITLAB_NATIVE_PROFILE_IMPORT_RUNTIME_CAPABILITY,
   REPO_GIT_AUTHOR_RUNTIME_CAPABILITY,
   PROJECT_TASK_DELEGATION_CAPABILITY,
+  PROJECT_TASK_PROJECT_AGENTS_CAPABILITY,
   AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY,
   jiraDetailCapabilities.JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
   JIRA_AGENT_ACCESS_RUNTIME_CAPABILITY,

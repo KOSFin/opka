@@ -14,6 +14,24 @@ test('command automation UI creates, edits and reads synthetic history without e
   orcaPage: page
 }, testInfo) => {
   await waitForSessionReady(page)
+  const setup = await page.evaluate(() => {
+    const repo = window.__store!.getState().repos[0]
+    if (!repo) {
+      throw new Error('Seeded synthetic repo is unavailable')
+    }
+    return {
+      id: 'synthetic-setup',
+      projectId: repo.id,
+      hostId: 'local',
+      repoId: repo.id,
+      path: repo.path,
+      displayName: 'Synthetic project folder',
+      setupState: 'ready',
+      setupMethod: 'imported-existing-folder',
+      createdAt: 1,
+      updatedAt: 1
+    }
+  })
   const reportTarget = {
     runtimeId: 'synthetic-host',
     hostId: 'local',
@@ -22,7 +40,7 @@ test('command automation UI creates, edits and reads synthetic history without e
     registrationGeneration: 1
   }
   await electronApp.evaluate(
-    ({ ipcMain }, { reportTarget }) => {
+    ({ ipcMain }, { reportTarget, setup }) => {
       let definition: Record<string, unknown> | null = null
       const calls: { method: string; params: unknown }[] = []
       Reflect.set(globalThis, '__syntheticCommandCalls', calls)
@@ -46,6 +64,7 @@ test('command automation UI creates, edits and reads synthetic history without e
             ![
               'status.get',
               'automation.list',
+              'projectHostSetup.list',
               'automation.createV2',
               'automation.updateV2',
               'automation.runs'
@@ -59,6 +78,9 @@ test('command automation UI creates, edits and reads synthetic history without e
             return success({
               capabilities: ['automation.command-pipeline.v1', 'automation.list-host-scope.v1']
             })
+          }
+          if (request.method === 'projectHostSetup.list') {
+            return success({ setups: [setup] })
           }
           if (request.method === 'automation.list') {
             return success({
@@ -142,35 +164,13 @@ test('command automation UI creates, edits and reads synthetic history without e
         }
       )
     },
-    { reportTarget }
+    { reportTarget, setup }
   )
-  await page.evaluate(() => {
-    const store = window.__store!
-    const repo = store.getState().repos[0]
-    if (!repo) {
-      throw new Error('Seeded synthetic repo is unavailable')
-    }
-    store.setState({
-      projectHostSetups: [
-        {
-          id: 'synthetic-setup',
-          projectId: repo.id,
-          hostId: 'local',
-          repoId: repo.id,
-          path: repo.path,
-          displayName: 'Synthetic project folder',
-          setupState: 'ready',
-          setupMethod: 'imported-existing-folder',
-          createdAt: 1,
-          updatedAt: 1
-        }
-      ]
-    })
-    store.getState().openAutomationsPage()
-  })
-  await page.getByRole('button', { name: 'Command mode (local)' }).click()
-  await page.getByRole('button', { name: 'New command automation' }).click()
-  const editor = page.getByRole('dialog', { name: 'New command automation' })
+  await page.evaluate(() => window.__store!.getState().openAutomationsPage())
+  await page.getByRole('button', { name: 'New Automation' }).click()
+  const editor = page.getByRole('dialog', { name: 'Create automation' })
+  await editor.getByRole('combobox', { name: 'Automation type' }).click()
+  await page.getByRole('option', { name: 'Script with optional agent' }).click()
   await editor.getByRole('textbox', { name: 'Name' }).fill('Synthetic command')
   await editor.getByRole('combobox', { name: 'Project folder on this host' }).click()
   await page.getByRole('option', { name: 'Synthetic project folder' }).click()
@@ -179,19 +179,22 @@ test('command automation UI creates, edits and reads synthetic history without e
   await page.getByRole('option', { name: 'Synthetic primary chat' }).click()
   await editor.getByRole('button', { name: 'Validate draft' }).click()
   await expect(editor.getByText('Draft is valid. No command ran.')).toBeVisible()
-  await editor.getByRole('button', { name: 'Save draft' }).click()
+  await editor.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(editor).toBeHidden()
-  await expect(page.getByRole('heading', { name: 'Synthetic command' })).toBeVisible()
-  await page.getByRole('button', { name: 'Edit', exact: true }).click()
-  const edit = page.getByRole('dialog', { name: 'Edit command automation' })
+  await page.getByRole('button', { name: 'Synthetic command', exact: true }).click()
+  const details = page.getByRole('region', { name: 'Command automation details' })
+  await expect(details.getByRole('heading', { name: 'Synthetic command' })).toBeVisible()
+  await details.getByRole('button', { name: 'Edit', exact: true }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit automation' })
   await expect(edit.getByRole('combobox', { name: 'Primary chat report' })).toContainText(
     'Synthetic primary chat'
   )
   await edit.getByRole('textbox', { name: 'Name' }).fill('Synthetic command edited')
-  await edit.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByRole('heading', { name: 'Synthetic command edited' })).toBeVisible()
-  await expect(page.getByText('SYNTHETIC_REPORT_ONLY').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Retained reports' }).click()
+  await edit.getByRole('button', { name: 'Save Changes', exact: true }).click()
+  await expect(details.getByRole('heading', { name: 'Synthetic command edited' })).toBeVisible()
+  await page.getByRole('button', { name: 'Back to automations', exact: true }).click()
+  await page.getByRole('button', { name: 'Runs', exact: true }).click()
+  await page.getByRole('button', { name: 'Script run reports' }).click()
   await expect(page.getByRole('region', { name: 'Retained command reports' })).toContainText(
     'SYNTHETIC_REPORT_ONLY'
   )

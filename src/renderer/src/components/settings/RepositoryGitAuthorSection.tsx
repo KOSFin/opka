@@ -97,20 +97,24 @@ export function RepositoryGitAuthorSection({
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const generation = useRef(0)
+  const repoRef = useRef(repo)
+  repoRef.current = repo
+  const hostId = getRepoExecutionHostId(repo)
 
   useEffect(() => {
+    const currentRepo = repoRef.current
     const current = ++generation.current
     setAuthor(null)
     setOwner(null)
     setError(null)
     setBusy(true)
-    void readAuthor(repo)
+    void readAuthor(currentRepo)
       .then((result) => {
         if (generation.current !== current) {
           return
         }
         setAuthor(result.author)
-        setOwner({ repo, runtimeId: result.runtimeId })
+        setOwner({ repo: currentRepo, runtimeId: result.runtimeId })
         setName(result.author.name.local ?? '')
         setEmail(result.author.email.local ?? '')
       })
@@ -127,7 +131,7 @@ export function RepositoryGitAuthorSection({
     return () => {
       generation.current = current + 1
     }
-  }, [repo, reload])
+  }, [repo.id, repo.path, hostId, reload])
 
   async function save(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -144,12 +148,12 @@ export function RepositoryGitAuthorSection({
         expectedLocalName: author.name.local,
         expectedLocalEmail: author.email.local
       })
-      const result = await readAuthor(repo, owner.runtimeId)
+      const result = await readAuthor(owner.repo, owner.runtimeId)
       if (generation.current !== current) {
         return
       }
       setAuthor(result.author)
-      setOwner({ repo, runtimeId: result.runtimeId })
+      setOwner({ repo: owner.repo, runtimeId: result.runtimeId })
       setName(result.author.name.local ?? '')
       setEmail(result.author.email.local ?? '')
     } catch (cause) {

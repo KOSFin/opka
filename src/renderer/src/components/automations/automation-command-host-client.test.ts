@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import {
+  commandAutomationEditorSetupsForTarget,
+  updateCommandAutomationForTarget,
   createCommandAutomationForTarget,
   listCommandAutomationsForTarget,
   reconcileCommandManualRequestForTarget,
@@ -153,5 +155,73 @@ describe('command automation host client', () => {
     await expect(
       reconcileCommandManualRequestForTarget(target, 'command-1', 'same-request')
     ).rejects.toMatchObject({ code: 'unsupported_host_scope' })
+  })
+  it('keeps project choices, list, create, edit and run on the selected remote host', async () => {
+    const setup: ProjectHostSetup = {
+      id: 'remote-setup',
+      projectId: 'project',
+      hostId: 'local',
+      repoId: 'repo',
+      path: '/remote/folder',
+      displayName: 'Remote folder',
+      setupState: 'ready',
+      setupMethod: 'imported-existing-folder',
+      createdAt: 1,
+      updatedAt: 1
+    }
+    const definition = commandDefinitionFromDraft(
+      {
+        ...emptyAutomationCommandDraft(),
+        name: 'Remote check',
+        setupId: setup.id,
+        commandText: 'true',
+        timezone: 'UTC'
+      },
+      setup,
+      1000,
+      'remote-create'
+    )
+    vi.mocked(callRuntimeRpc)
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockResolvedValueOnce({ setups: [setup] })
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockResolvedValueOnce({ commandAutomations: [] })
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockResolvedValueOnce({ automation: { ...definition, id: 'remote-command', revision: 1 } })
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockResolvedValueOnce({ automation: { ...definition, id: 'remote-command', revision: 2 } })
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockResolvedValueOnce({ admission: { kind: 'overlap', activeRunId: 'active' } })
+    expect(await commandAutomationEditorSetupsForTarget(target)).toEqual([setup])
+    await listCommandAutomationsForTarget(target)
+    await createCommandAutomationForTarget(target, definition)
+    await updateCommandAutomationForTarget(target, 'remote-command', 1, { name: 'Changed' })
+    await runCommandAutomationForTarget(target, 'remote-command', 1, 'remote-run', 1000)
+    expect(
+      vi.mocked(callRuntimeRpc).mock.calls.every(([destination]) => destination === target)
+    ).toBe(true)
+    expect(vi.mocked(callRuntimeRpc).mock.calls.map(([, method]) => method)).toEqual([
+      'status.get',
+      'projectHostSetup.list',
+      'status.get',
+      'automation.list',
+      'status.get',
+      'automation.createV2',
+      'status.get',
+      'automation.updateV2',
+      'status.get',
+      'automation.runNowV2'
+    ])
+  })
+
+  it('never loads desktop projects after a remote project read fails', async () => {
+    vi.mocked(callRuntimeRpc)
+      .mockResolvedValueOnce({ capabilities: ['automation.command-pipeline.v1'] })
+      .mockRejectedValueOnce(new Error('remote offline'))
+    await expect(commandAutomationEditorSetupsForTarget(target)).rejects.toThrow('remote offline')
+    expect(
+      vi.mocked(callRuntimeRpc).mock.calls.every(([destination]) => destination === target)
+    ).toBe(true)
+    expect(callRuntimeRpc).toHaveBeenCalledTimes(2)
   })
 })

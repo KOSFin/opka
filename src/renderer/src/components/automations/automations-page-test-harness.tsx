@@ -43,6 +43,8 @@ export const RUNTIME_REPO_ID = RUNTIME_REPO_ID_FIXTURE
 export const RUNTIME_WORKSPACE_ID = RUNTIME_WORKSPACE_ID_FIXTURE
 
 export type ListPanelProps = {
+  commandRows?: readonly { id: string; content: ReactNode }[]
+  onOpenRuns?: () => void
   sortedListItems: readonly AutomationListViewItem[]
   selectedExternal: ExternalAutomationListEntry | null
   externalActionKey: string | null
@@ -199,6 +201,10 @@ vi.mock('./AutomationsListPanel', () => ({
     return (
       <div data-testid="list-panel">
         <button aria-label="Refresh automations" onClick={props.onRefresh} />
+        <button aria-label="Runs" onClick={props.onOpenRuns} />
+        {props.commandRows?.map((row) => (
+          <div key={row.id}>{row.content}</div>
+        ))}
         {props.sortedListItems.map((item) =>
           item.kind === 'local' ? (
             <button

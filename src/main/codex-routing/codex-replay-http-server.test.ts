@@ -323,7 +323,7 @@ it('refuses seekable non-stream Responses before engine traffic', async () => {
   expect(replayBudget.snapshot()).toEqual({ active: 0, large: 0, reservedBytes: 0 })
 })
 
-it('keeps the lease after a complete local error while the synthetic provider remains live', async () => {
+it('isolates a local error to its held session while healthy and new sessions remain available', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'synthetic-native-replay-'))
   directories.push(directory)
   const replayBudget = new CodexReplaySpoolBudget(directory, 512 * 1024 * 1024, () => {})
@@ -335,8 +335,18 @@ it('keeps the lease after a complete local error while the synthetic provider re
   let held: ReturnType<typeof request> | undefined
   const engine = await listen(
     createServer(async (req, res) => {
-      for await (const _chunk of req) {
-        // Wait for the complete synthetic request before the local failure.
+      let body = ''
+      for await (const chunk of req) {
+        body += chunk
+      }
+      if (body.includes('b/native')) {
+        res.writeHead(200, {
+          'content-type': 'text/event-stream',
+          trailer: 'x-orca-provider-terminal-v1'
+        })
+        res.addTrailers({ 'x-orca-provider-terminal-v1': '1' })
+        res.end('event: response.completed\ndata: {"type":"response.completed"}\n\n')
+        return
       }
       held = request(provider, { method: 'POST' })
       held.on('error', () => {})
@@ -351,8 +361,110 @@ it('keeps the lease after a complete local error while the synthetic provider re
     ownerExited = resolve
   })
   const finish = vi.fn()
-  const cleanup = vi.fn()
+  const healthyFinish = vi.fn()
+  let hostClosed = false
+  let failedSessionHeld = false
+  const cleanup = vi.fn(() => {
+    hostClosed = true
+  })
+  const hold = vi.fn(() => {
+    failedSessionHeld = true
+    return exited
+  })
   const retry = vi.fn()
+  const front = await listen(
+    createCodexRoutingHttpServer({
+      maxConcurrent: 4,
+      maxRequestBytes: 16 * 1024 * 1024,
+      maxResponseBytes: 4096,
+      responseHeaderTimeoutMs: 1000,
+      onCleanupUnverifiable: cleanup,
+      replayBudget,
+      prepare: (sessionToken) => {
+        if (hostClosed || (sessionToken === token && failedSessionHeld)) {
+          throw new Error('Synthetic session is closed')
+        }
+        return {
+          port: Number(new URL(engine).port),
+          clientKey: engineKey,
+          prefix: sessionToken === token ? 'a' : 'b',
+          finish: sessionToken === token ? finish : healthyFinish,
+          holdUntilOwnerExit: hold,
+          retryRejectedQuota: retry
+        }
+      }
+    })
+  )
+  const response = await fetch(`${front}/v1/responses`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: '{"model":"native","stream":true,"input":[]}'
+  })
+  expect(response.status).toBe(500)
+  await response.text()
+  await vi.waitFor(() => expect(hold).toHaveBeenCalledOnce())
+  expect(cleanup).not.toHaveBeenCalled()
+  expect(held?.destroyed).toBe(false)
+  expect(finish).not.toHaveBeenCalled()
+  expect(retry).not.toHaveBeenCalled()
+  expect(replayBudget.snapshot().active).toBe(1)
+  const fenced = await fetch(`${front}/v1/responses`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: '{"model":"native","stream":true,"input":[]}'
+  })
+  expect(fenced.status).toBe(502)
+  await fenced.text()
+  for (const sessionToken of [
+    'synthetic-healthy-session-1234567890123456',
+    'synthetic-new-launch-session-1234567890123456'
+  ]) {
+    const healthy = await fetch(`${front}/v1/responses`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${sessionToken}` },
+      body: '{"model":"native","stream":true,"input":[]}'
+    })
+    expect(healthy.status).toBe(200)
+    await healthy.text()
+  }
+  await vi.waitFor(() => expect(healthyFinish).toHaveBeenCalledTimes(2))
+  expect(cleanup).not.toHaveBeenCalled()
+  expect(finish).not.toHaveBeenCalled()
+  expect(hold).toHaveBeenCalledOnce()
+  expect(retry).not.toHaveBeenCalled()
+  expect(held?.destroyed).toBe(false)
+  expect(replayBudget.snapshot().active).toBe(1)
+  held?.destroy()
+  ownerExited()
+  await vi.waitFor(() => expect(finish).toHaveBeenCalledOnce())
+  expect(replayBudget.snapshot()).toEqual({ active: 0, large: 0, reservedBytes: 0 })
+  expect(await readdir(directory)).toEqual([])
+  expect(cleanup).not.toHaveBeenCalled()
+})
+
+it('keeps routing available when native SSE readers stop at the completed event before engine EOF', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'synthetic-native-completed-close-'))
+  directories.push(directory)
+  const replayBudget = new CodexReplaySpoolBudget(directory, 512 * 1024 * 1024, () => {})
+  const engine = await listen(
+    createServer(async (req, res) => {
+      for await (const _chunk of req) {
+        /* Drain the synthetic request. */
+      }
+      res.writeHead(200, {
+        'content-type': 'text/event-stream',
+        trailer: 'x-orca-provider-terminal-v1'
+      })
+      res.write('event: response.completed\ndata: {"type":"response.completed"}\n\n')
+      setTimeout(() => {
+        res.addTrailers({ 'x-orca-provider-terminal-v1': '1' })
+        res.end()
+      }, 40)
+    })
+  )
+  const finish = vi.fn()
+  const cleanup = vi.fn()
+  const hold = vi.fn(async () => {})
   const front = await listen(
     createCodexRoutingHttpServer({
       maxConcurrent: 4,
@@ -366,25 +478,40 @@ it('keeps the lease after a complete local error while the synthetic provider re
         clientKey: engineKey,
         prefix: 'a',
         finish,
-        holdUntilOwnerExit: () => exited,
-        retryRejectedQuota: retry
+        holdUntilOwnerExit: hold
       })
     })
   )
-  const response = await fetch(`${front}/v1/responses`, {
+  await new Promise<void>((resolve, reject) => {
+    const req = request(
+      `${front}/v1/responses`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+      },
+      (res) => {
+        res.once('data', () => {
+          res.destroy()
+          resolve()
+        })
+        res.on('error', () => {})
+      }
+    )
+    req.on('error', reject)
+    req.end('{"model":"native","stream":true,"input":[]}')
+  })
+  await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(1))
+  expect(cleanup).not.toHaveBeenCalled()
+  expect(hold).not.toHaveBeenCalled()
+  const second = await fetch(`${front}/v1/responses`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
     body: '{"model":"native","stream":true,"input":[]}'
   })
-  expect(response.status).toBe(500)
-  await response.text()
-  await vi.waitFor(() => expect(cleanup).toHaveBeenCalled())
-  expect(held?.destroyed).toBe(false)
-  expect(finish).not.toHaveBeenCalled()
-  expect(retry).not.toHaveBeenCalled()
-  expect(replayBudget.snapshot().active).toBe(1)
-  held?.destroy()
-  ownerExited()
-  await vi.waitFor(() => expect(finish).toHaveBeenCalledOnce())
+  expect(second.status).toBe(200)
+  await second.text()
+  await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(2))
+  expect(cleanup).not.toHaveBeenCalled()
   expect(replayBudget.snapshot()).toEqual({ active: 0, large: 0, reservedBytes: 0 })
+  expect(await readdir(directory)).toEqual([])
 })

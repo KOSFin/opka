@@ -220,11 +220,9 @@ export function filterExternalAutomationListEntries(
  * `locale` is a parameter, not a `getIntlLocale()` read, so callers memoizing this
  * can declare it — a hidden read is invisible to a dependency array.
  */
-export function sortAutomationListViewItems(
-  items: readonly AutomationListViewItem[],
-  sort: AutomationListSort | null,
-  locale: string
-): AutomationListViewItem[] {
+export function sortAutomationListViewItems<
+  T extends { id: string; name: string; lastRunAt: number | null }
+>(items: readonly T[], sort: AutomationListSort | null, locale: string): T[] {
   if (!sort || items.length < 2) {
     return [...items]
   }

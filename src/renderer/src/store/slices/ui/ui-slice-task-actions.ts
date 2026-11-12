@@ -130,7 +130,9 @@ export function createUiTaskActions(set: UISliceSet, get: UISliceGet): Partial<U
             const repo = eligibleRepos.find((r) => r.id === preferred)
             return repo ? [repo] : []
           }
-          const persisted = state.settings?.defaultRepoSelection
+          const selectionHost = state.settings?.activeRuntimeEnvironmentId?.trim() || 'local'
+          const saved = state.settings?.defaultRepoSelections?.[selectionHost]?.github
+          const persisted = saved !== undefined ? saved : state.settings?.defaultRepoSelection
           if (Array.isArray(persisted)) {
             const selected = eligibleRepos.filter((repo) => persisted.includes(repo.id))
             if (selected.length > 0) {

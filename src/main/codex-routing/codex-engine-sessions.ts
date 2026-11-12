@@ -1,3 +1,4 @@
+import { waitForCodexEngineSessions } from './codex-engine-session-wait'
 import type { NativeAccountPoolScope } from '../runtime/orchestration/db/account-pool-native-fences'
 import type { CodexTranscriptReadBudget } from '../../shared/codex-rollout-jsonl-cursor'
 import type { CodexRequestTurnIdentity } from './codex-request-turn-identity'
@@ -40,6 +41,7 @@ type SessionEntry = {
   closed: boolean
   exited: boolean
   revoked: boolean
+  recovering: boolean
   controller: AbortController
   heldUntilExit: Set<() => void>
 }
@@ -56,6 +58,7 @@ export class CodexEngineSessions {
       accepting: () => boolean
       createAssignmentScope?: () => NativeAccountPoolScope
       recordQuotaFailure?: (event: CodexHostQuotaFailure) => boolean
+      onRequestHeld?: () => void
     }
   ) {}
   register(launch: NativeEngineLaunch) {
@@ -71,6 +74,7 @@ export class CodexEngineSessions {
       closed: false,
       exited: false,
       revoked: false,
+      recovering: false,
       controller: new AbortController(),
       heldUntilExit: new Set<() => void>(),
       session: createCodexPoolTurnSession({
@@ -93,13 +97,12 @@ export class CodexEngineSessions {
       notifyBoundaryChanged: () => this.notify(),
       revoke: () => this.revokeEntry(token, entry),
       close: (verdict: 'exited' | 'unverifiable') => {
+        entry.recovering = false
         entry.closed = true
         entry.exited ||= verdict === 'exited'
         entry.session.close(verdict)
         if (verdict === 'exited') {
-          for (const release of entry.heldUntilExit) {
-            release()
-          }
+          entry.heldUntilExit.forEach((release) => release())
           entry.heldUntilExit.clear()
         }
         if (verdict === 'exited' && entry.session.activeRequests === 0) {
@@ -111,6 +114,9 @@ export class CodexEngineSessions {
   }
   prepare: CodexRoutingHttpOptions['prepare'] = (token, request) => {
     const entry = this.sessions.get(token)
+    if (entry?.recovering) {
+      this.options.onRequestHeld?.()
+    }
     if (!entry || entry.closed || !this.options.accepting()) {
       throw new Error('Native routing is not ready.')
     }
@@ -136,12 +142,13 @@ export class CodexEngineSessions {
         return Promise.resolve()
       }
       entry.closed = true
-      entry.session.close('unverifiable')
-      this.notify()
-      return new Promise<void>((resolve) => {
+      entry.recovering = true
+      const held = new Promise<void>((resolve) => {
         releaseWhenExited = resolve
         entry.heldUntilExit.add(resolve)
       })
+      this.notify()
+      return held
     }
     try {
       const route = this.options.route(binding.accountId)
@@ -191,12 +198,32 @@ export class CodexEngineSessions {
         return false
       }
     }
-    return this.wait(signal, safe)
+    return waitForCodexEngineSessions(this.changed, signal, safe)
   }
   async waitForIdleRequests(signal: AbortSignal): Promise<void> {
-    return this.wait(signal, () =>
+    return waitForCodexEngineSessions(this.changed, signal, () =>
       [...this.sessions.values()].every((entry) => entry.session.activeRequests === 0)
     )
+  }
+  async waitForNonHeldRequests(signal: AbortSignal): Promise<void> {
+    return waitForCodexEngineSessions(this.changed, signal, () =>
+      [...this.sessions.values()].every(
+        (entry) => entry.session.activeRequests <= entry.heldUntilExit.size
+      )
+    )
+  }
+  releaseHeldRequestsAfterEngineExit(signal: AbortSignal): Promise<void> {
+    this.sessions.forEach(({ heldUntilExit }) => heldUntilExit.forEach((release) => release()))
+    return this.waitForIdleRequests(signal)
+  }
+  resumeAfterEngineRecovery(): void {
+    for (const entry of this.sessions.values()) {
+      if (entry.recovering && !entry.exited && !entry.revoked && !entry.controller.signal.aborted) {
+        entry.recovering = false
+        entry.closed = false
+      }
+    }
+    this.notify()
   }
   assertAccountUnused(accountId: string): void {
     if (
@@ -211,40 +238,12 @@ export class CodexEngineSessions {
       )
     }
   }
-  private async wait(signal: AbortSignal, safe: () => boolean): Promise<void> {
-    signal.throwIfAborted()
-    if (safe()) {
-      return
-    }
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        this.changed.delete(check)
-        signal.removeEventListener('abort', abort)
-      }
-      const check = () => {
-        if (safe()) {
-          cleanup()
-          resolve()
-        }
-      }
-      const abort = () => {
-        cleanup()
-        reject(new Error('Native routing boundary wait was cancelled.'))
-      }
-      this.changed.add(check)
-      signal.addEventListener('abort', abort, { once: true })
-      if (signal.aborted) {
-        abort()
-      } else {
-        check()
-      }
-    })
-  }
   notify(): void {
     this.changed.forEach((listener) => listener())
   }
   suspend(): void {
     this.sessions.forEach((entry) => {
+      entry.recovering = false
       entry.closed = true
       entry.controller.abort()
       entry.session.close('unverifiable')
@@ -253,12 +252,11 @@ export class CodexEngineSessions {
   }
   engineExited(): void {
     for (const [token, entry] of this.sessions) {
+      entry.recovering = false
       entry.closed = true
       entry.exited = true
       entry.session.close('exited')
-      for (const release of entry.heldUntilExit) {
-        release()
-      }
+      entry.heldUntilExit.forEach((release) => release())
       entry.heldUntilExit.clear()
       if (entry.session.activeRequests === 0) {
         this.sessions.delete(token)
@@ -270,6 +268,7 @@ export class CodexEngineSessions {
     await Promise.all([...this.sessions].map(([token, entry]) => this.revokeEntry(token, entry)))
   }
   private revokeEntry(token: string, entry: SessionEntry): Promise<void> {
+    entry.recovering = false
     entry.closed = true
     entry.revoked = true
     entry.controller.abort()
@@ -290,6 +289,9 @@ export class CodexEngineSessions {
       this.changed.add(check)
       check()
     })
+  }
+  get hasHeldRequests(): boolean {
+    return [...this.sessions.values()].some((entry) => entry.heldUntilExit.size > 0)
   }
   get size(): number {
     return this.sessions.size

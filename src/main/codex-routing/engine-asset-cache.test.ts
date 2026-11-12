@@ -172,11 +172,38 @@ it('cleans a cancelled download without publishing a binary', async () => {
   expect(await readdir(input.cacheDirectory)).toEqual([])
 })
 
-it('preserves other versions instead of pruning an unknown or live engine', async () => {
+it('installs an upgrade beside an old engine without replacing or pruning its files', async () => {
   const input = options()
-  await mkdir(join(input.cacheDirectory, 'older-engine'), { recursive: true })
-  await expect(ensurePinnedEngineAsset(input)).rejects.toThrow('another version')
-  expect(await readdir(input.cacheDirectory)).toEqual(['older-engine'])
+  const old = join(input.cacheDirectory, '8.0.54-synthetic-x64')
+  await mkdir(old, { recursive: true })
+  await writeFile(join(old, 'cli-proxy-api'), 'retained-old-binary')
+  await writeFile(join(old, 'receipt.json'), 'retained-old-receipt')
+  input.assertCanReplaceInstalledBinary = () => {
+    throw new Error('Old owner still retains its binary')
+  }
+  const installed = await ensurePinnedEngineAsset(input)
+  expect(installed.reused).toBe(false)
+  expect((await ensurePinnedEngineAsset(input)).reused).toBe(true)
+  expect((await readdir(input.cacheDirectory)).sort()).toEqual([
+    '8.0.54-synthetic-x64',
+    '8.0.55-synthetic-x64'
+  ])
+  expect(await readFile(join(old, 'cli-proxy-api'), 'utf8')).toBe('retained-old-binary')
+  expect(await readFile(join(old, 'receipt.json'), 'utf8')).toBe('retained-old-receipt')
+  expect(fetcher).toHaveBeenCalledOnce()
+})
+
+it('does not install an upgrade without the owning host exclusive lease', async () => {
+  const input = options()
+  const old = join(input.cacheDirectory, '8.0.54-synthetic-x64')
+  await mkdir(old, { recursive: true })
+  await writeFile(join(old, 'cli-proxy-api'), 'retained-old-binary')
+  input.assertExclusiveInstallLease = () => {
+    throw new Error('Previous writer is unverifiable')
+  }
+  await expect(ensurePinnedEngineAsset(input)).rejects.toThrow('Previous writer is unverifiable')
+  expect(await readdir(input.cacheDirectory)).toEqual(['8.0.54-synthetic-x64'])
+  expect(await readFile(join(old, 'cli-proxy-api'), 'utf8')).toBe('retained-old-binary')
   expect(fetcher).not.toHaveBeenCalled()
 })
 

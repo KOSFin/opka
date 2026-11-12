@@ -6,6 +6,7 @@ import {
   type AutomationCommandReportTargetOption
 } from '../../../../shared/automation-command-domain'
 import { AUTOMATION_COMMAND_PIPELINE_RUNTIME_CAPABILITY } from '../../../../shared/automation-runtime-capabilities'
+import type { ProjectHostSetup } from '../../../../shared/project-types'
 import type { AutomationRun } from '../../../../shared/automations-types'
 import {
   AutomationCancelRunV1,
@@ -221,4 +222,17 @@ export async function listCommandAutomationHistoryPageForTarget(
     runs: result.runs.filter((run) => run.sessionKind === 'command'),
     nextCursor: result.nextCursor
   }
+}
+
+export async function commandAutomationEditorSetupsForTarget(
+  target: AutomationHostTarget
+): Promise<ProjectHostSetup[]> {
+  await requireCommandHost(target)
+  const result = await callRuntimeRpc<{ setups: ProjectHostSetup[] }>(
+    target,
+    'projectHostSetup.list',
+    undefined,
+    options
+  )
+  return result.setups.filter((setup) => setup.hostId === 'local' && setup.setupState === 'ready')
 }

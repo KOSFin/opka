@@ -56,6 +56,33 @@ describe('fork CI safety and required checks', () => {
     )
     expect(workflow.jobs.verify.needs).toContain('regression')
   })
+  it('runs Linux operator safeguards once and retains the repair regression families in full qualification', () => {
+    expect(workflow.jobs.regression['runs-on']).toBe('ubuntu-24.04')
+    const operatorStep = workflow.jobs.regression.steps.find(
+      (step) => step.name === 'Test operator retention safeguards'
+    )
+    expect(operatorStep).toMatchObject({
+      if: "matrix.group == 'shared'",
+      run: 'python3 config/scripts/test_operator_dev_retention.py'
+    })
+    expect(classifyCiPaths(['config/scripts/operator_dev_retention.py']).regression).toBe(true)
+    for (const path of [
+      'src/main/codex-routing/codex-routing-http-server.test.ts',
+      'src/main/codex-routing/codex-engine-request-recovery.test.ts',
+      'src/main/gitlab/gitlab-native-profile-import.test.ts',
+      'src/main/runtime/project-task-policy.test.ts',
+      'src/renderer/src/components/automations/AutomationsPage.command-navigation.test.tsx',
+      'src/renderer/src/components/settings/RemoteGlabProfileImport.test.tsx',
+      'src/renderer/src/components/sidebar/CloneNetworkAccountPicker.remote-import.test.tsx',
+      'src/renderer/src/components/task-page/ProjectTaskDelegationControls.test.tsx',
+      'src/renderer/src/components/task-page-provider-repo-selection.test.tsx',
+      'config/scripts/packaged-codex-replay-engine.test.mjs'
+    ]) {
+      expect(FORK_TEST_FILTERS.some((filter) => path.includes(filter))).toBe(true)
+    }
+    expect(FORK_TEST_FILTERS).not.toContain('src/')
+    expect(FORK_TEST_FILTERS).not.toContain('src/main/')
+  })
   it('runs rendered pages with Node and installs the browser their library owns', () => {
     const steps = workflow.jobs.regression.steps
     expect(

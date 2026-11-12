@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises'
 import { readCodexQuotaError, forwardCodexQuotaError } from './codex-quota-error-response'
 import { retryCodexQuotaBeforeDeadline } from './codex-quota-retry-deadline'
 import { codexRoutingHeaders } from './codex-routing-http-headers'
+import { recordUpstreamCodex429 } from './codex-routing-429-diagnostic'
 import type { CodexHttpAccountRoute, CodexRoutingHttpOptions } from './codex-routing-http-types'
 
 type ResponseContext = {
@@ -20,6 +21,44 @@ type ResponseContext = {
 
 function providerTerminalProof(response: IncomingMessage, replay: boolean): boolean {
   return response.complete && (!replay || response.trailers['x-orca-provider-terminal-v1'] === '1')
+}
+
+async function forwardReplayStream(
+  response: IncomingMessage,
+  outgoing: ServerResponse
+): Promise<void> {
+  for await (const chunk of response) {
+    if (outgoing.destroyed) {
+      continue
+    }
+    if (!outgoing.write(chunk)) {
+      await new Promise<void>((resolve) => {
+        const cleanup = () => {
+          outgoing.removeListener('drain', onDrain)
+          outgoing.removeListener('close', onDrain)
+          outgoing.removeListener('error', onError)
+          response.removeListener('close', onDrain)
+          response.removeListener('error', onDrain)
+        }
+        const onDrain = () => {
+          cleanup()
+          resolve()
+        }
+        const onError = () => {
+          cleanup()
+          resolve()
+        }
+        outgoing.once('drain', onDrain)
+        outgoing.once('close', onDrain)
+        outgoing.once('error', onError)
+        response.once('close', onDrain)
+        response.once('error', onDrain)
+      })
+    }
+  }
+  if (!outgoing.destroyed) {
+    outgoing.end()
+  }
 }
 
 export async function forwardCodexRoutingResponse({
@@ -40,6 +79,14 @@ export async function forwardCodexRoutingResponse({
     const failure = captured.failure
     state.positiveTerminal =
       !captured.remainder && providerTerminalProof(response, Boolean(options.replayBudget))
+    recordUpstreamCodex429({
+      body: captured.body,
+      contentType,
+      complete: !captured.remainder && response.complete,
+      terminal: state.positiveTerminal,
+      retryAfter: response.headers['retry-after'],
+      failure
+    })
     if (
       failure?.kind === 'quota' &&
       state.positiveTerminal &&
@@ -96,6 +143,14 @@ export async function forwardCodexRoutingResponse({
     return null
   }
   const status = response.statusCode ?? 502
+  if (status === 429) {
+    recordUpstreamCodex429({
+      contentType,
+      complete: false,
+      terminal: false,
+      retryAfter: response.headers['retry-after']
+    })
+  }
   const headers = codexRoutingHeaders(response.headers)
   outgoing.writeHead(
     status,
@@ -105,7 +160,7 @@ export async function forwardCodexRoutingResponse({
     response.setTimeout(responseHeaderTimeoutMs, () =>
       response.destroy(new Error('Local engine body idle deadline'))
     )
-    await pipeline(response, outgoing)
+    await forwardReplayStream(response, outgoing)
     state.positiveTerminal = providerTerminalProof(response, true)
     return null
   }
@@ -113,7 +168,14 @@ export async function forwardCodexRoutingResponse({
   const budget = new Transform({
     transform(chunk, _encoding, done) {
       sent += chunk.length
-      done(sent > maxResponseBytes ? new Error('Local response byte budget exceeded') : null, chunk)
+      if (sent > maxResponseBytes) {
+        const failure = new Error('Local response byte budget exceeded')
+        outgoing.destroy(failure)
+        response.destroy(failure)
+        done(failure)
+        return
+      }
+      done(null, chunk)
     }
   })
   await pipeline(response, budget, outgoing)

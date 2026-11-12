@@ -186,3 +186,22 @@ describe('Opka release assets', () => {
     expect(release.jobs.qualification.if).toBe("inputs.built_run == ''")
   })
 })
+
+it('builds and validates Linux replay resources before packaging the release server', () => {
+  const workflow = parse(
+    readFileSync(
+      new URL('../../.github/workflows/opka-server-template.yml', import.meta.url),
+      'utf8'
+    )
+  )
+  const steps = workflow.jobs.desktop_template.steps
+  const replay = steps.findIndex((step) => step.run?.includes('codex-replay-ci-build.sh linux-x64'))
+  const archive = steps.findIndex(
+    (step) => step.run === 'node config/scripts/opka-release-assets.mjs server dist'
+  )
+  expect(replay).toBeGreaterThanOrEqual(0)
+  expect(steps[replay].run).toContain(
+    "assertReplayArtifact('.build/codex-routing-replay/linux-x64', 'linux-x64')"
+  )
+  expect(archive).toBeGreaterThan(replay)
+})

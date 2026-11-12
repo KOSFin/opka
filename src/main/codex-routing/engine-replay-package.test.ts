@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { ENGINE_ASSET_COMMIT, ENGINE_LICENSE_SHA256 } from './engine-asset-pin'
-import { readPackagedReplayEngineAsset } from './engine-replay-package'
+import {
+  readPackagedReplayEngineAsset,
+  resolveReplayEngineResourceRoot
+} from './engine-replay-package'
 
 let root: string | undefined
 afterEach(async () => {
@@ -46,4 +49,11 @@ it('requires the patched source, dependency and execution-host identity in the p
   manifest.patchSha256 = '0'.repeat(64)
   await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest))
   await expect(readPackagedReplayEngineAsset(root, 'linux-x64')).rejects.toThrow()
+})
+
+it('uses the immutable server bundle directory on a Node host without Electron resources', () => {
+  const bundle = join(tmpdir(), 'synthetic-orcad-resources')
+  const electron = join(tmpdir(), 'synthetic-electron-resources')
+  expect(resolveReplayEngineResourceRoot('', join(bundle, 'orcad.js'))).toBe(bundle)
+  expect(resolveReplayEngineResourceRoot(electron, join(bundle, 'orcad.js'))).toBe(electron)
 })

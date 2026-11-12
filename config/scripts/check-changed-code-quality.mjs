@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { runProcessSync } from '@orca/process-host'
 import { resolvePullRequestDiffBase } from './git-pull-request-diff-base.mjs'
 import { resolveOxlintInvocation } from './oxlint-cli-invocation.mjs'
+import { runCodeQualityScan } from './code-quality-scan-cohorts.mjs'
 
 const SOURCE_FILE_PATTERN = /\.(?:[cm]?[jt]sx?)$/
 const ROOT_CODE_QUALITY_IGNORED_PREFIXES = ['cloud/']
@@ -536,7 +537,8 @@ export function main(
 
   let failures = 0
   for (const scan of OXLINT_SCANS) {
-    const diagnostics = runOxlintScan(root, scan, files).filter(
+    const result = runCodeQualityScan(root, scan, files, runOxlintScan)
+    const diagnostics = result.diagnostics.filter(
       (diagnostic) =>
         !isSuppressedDiagnostic(diagnostic, root) &&
         !isCastingDirectiveUnusedWarning(diagnostic, root) &&
@@ -546,7 +548,10 @@ export function main(
     for (const diagnostic of diagnostics) {
       printDiagnostic(diagnostic, root)
     }
-    failures += diagnostics.length
+    for (const error of result.errors) {
+      console.error(`${scan.label} failed:`, error)
+    }
+    failures += diagnostics.length + result.errors.length
     console.log(
       `${scan.label}: ${diagnostics.length} new finding(s) across ${files.length} changed file(s).`
     )

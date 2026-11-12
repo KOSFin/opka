@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const PROJECT_TASK_DELEGATION_CAPABILITY = 'project-task-delegation-v1'
+export const PROJECT_TASK_PROJECT_AGENTS_CAPABILITY = 'project-task-project-agents-v2'
 export const TaskDelegationAction = z.enum([
   'approve-plan',
   'request-changes',
@@ -22,7 +23,7 @@ export const TaskDelegationBinding = z
     configRevision: z.string().regex(/^[a-f0-9]{64}$/)
   })
   .strict()
-export const TaskDelegationGrant = z
+const SessionTaskDelegationGrant = z
   .object({
     schema: z.literal(1),
     binding: TaskDelegationBinding,
@@ -35,6 +36,20 @@ export const TaskDelegationGrant = z
     generation: z.number().int().nonnegative()
   })
   .strict()
+export const ProjectAgentsTaskDelegationGrant = z
+  .object({
+    schema: z.literal(2),
+    binding: TaskDelegationBinding,
+    scope: z.literal('project-agents'),
+    actions: z.array(TaskDelegationAction).min(1).max(4),
+    expiresAt: z.null(),
+    generation: z.number().int().nonnegative()
+  })
+  .strict()
+export const TaskDelegationGrant = z.union([
+  SessionTaskDelegationGrant,
+  ProjectAgentsTaskDelegationGrant
+])
 export type DelegationActor = z.infer<typeof TaskDelegationActor>
 export type DelegationBinding = z.infer<typeof TaskDelegationBinding>
 export type DelegationGrant = z.infer<typeof TaskDelegationGrant>

@@ -1,3 +1,6 @@
+export const GITLAB_NATIVE_PROFILE_IMPORT_RUNTIME_CAPABILITY =
+  'gitlab.native-profile-import.v1' as const
+
 import { normalizeGitHttpsHost } from './git-https-host'
 
 export type GitLabNetworkProfile = {

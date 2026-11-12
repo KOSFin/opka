@@ -115,6 +115,28 @@ function saveButton(): HTMLButtonElement {
 }
 
 describe('repository Git network selection owner lifetime', () => {
+  it('unbinds the current provider before repository props refresh', async () => {
+    bindAccount
+      .mockResolvedValueOnce({ ...repoA, gitNetworkBinding: { provider: 'gitlab', ...alice } })
+      .mockResolvedValueOnce(repoA)
+    await renderRepo(repoA)
+    act(() => {
+      accountSelect().value = `gitlab:${alice.id}`
+      accountSelect().dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => saveButton().click())
+    act(() => {
+      accountSelect().value = '__git_network_unbound__'
+      accountSelect().dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => saveButton().click())
+    expect(bindAccount).toHaveBeenNthCalledWith(
+      2,
+      { ...repoA, gitNetworkBinding: { provider: 'gitlab', ...alice } },
+      null
+    )
+    expect(container.textContent).toContain('Using existing Git configuration for this repository.')
+  })
   it('settles a held save after a same-owner metadata refresh', async () => {
     let release: ((repo: Repo) => void) | undefined
     bindAccount.mockReturnValue(

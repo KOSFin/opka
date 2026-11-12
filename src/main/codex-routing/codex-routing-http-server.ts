@@ -18,27 +18,13 @@ import { CodexNativeAffinityCapacityError } from './codex-native-affinity-capaci
 import { CodexTurnBoundaryError } from './codex-turn-boundary-error'
 import { readCodexRequestTurnIdentity } from './codex-request-turn-identity'
 import { CodexReplayAdmissionError, type CodexReplaySpool } from './codex-replay-spool'
+import { recordLocalCodex429 } from './codex-routing-429-diagnostic'
+import { assertCodexRoutingHttpBudget } from './codex-routing-http-budget'
 
 /** Local HTTP Responses transport only; no history cache or WebSocket translation. */
 export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
-  const { maxConcurrent, maxRequestBytes, maxResponseBytes, responseHeaderTimeoutMs } = options
-  if (
-    !Number.isInteger(maxConcurrent) ||
-    maxConcurrent < 1 ||
-    maxConcurrent > 16 ||
-    !Number.isSafeInteger(maxRequestBytes) ||
-    maxRequestBytes < 1 ||
-    maxRequestBytes > 32 * 1024 * 1024 ||
-    !Number.isSafeInteger(maxResponseBytes) ||
-    maxResponseBytes < 1 ||
-    maxResponseBytes > 64 * 1024 * 1024 ||
-    maxConcurrent * maxRequestBytes > 64 * 1024 * 1024 ||
-    !Number.isSafeInteger(responseHeaderTimeoutMs) ||
-    responseHeaderTimeoutMs < 1 ||
-    responseHeaderTimeoutMs > 300_000
-  ) {
-    throw new Error('Codex routing HTTP resource budget is invalid')
-  }
+  assertCodexRoutingHttpBudget(options)
+  const { maxConcurrent, maxRequestBytes, responseHeaderTimeoutMs } = options
   let active = 0
   const server = createServer(
     {
@@ -70,6 +56,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
         return
       }
       if (active >= maxConcurrent) {
+        recordLocalCodex429('host-budget')
         reject(
           outgoing,
           429,
@@ -91,7 +78,22 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
       let failurePhase: CodexRoutingFailurePhase = 'admission'
       let providerPossible = false
       let positiveTerminal = false
-      outgoing.once('close', cancel)
+      let interruptionTimer: ReturnType<typeof setTimeout> | undefined
+      const onOutgoingClose = (): void => {
+        if (outgoing.writableFinished) {
+          return
+        }
+        if (options.replayBudget && providerPossible) {
+          if (options.onClientInterrupted) {
+            options.onClientInterrupted()
+            // Grace permits terminal trailers to arrive; expiry proves nothing about provider exit.
+            interruptionTimer = setTimeout(cancel, 200)
+          }
+        } else {
+          cancel()
+        }
+      }
+      outgoing.once('close', onOutgoingClose)
       try {
         const ingressState: { replay?: CodexReplaySpool } = {}
         const ingress = await readCodexRoutingIngress(
@@ -111,6 +113,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
         if (outgoing.destroyed) {
           return
         }
+        await options.waitForReady?.(token, requestController.signal)
         route = options.prepare(token, {
           model,
           turn: readCodexRequestTurnIdentity(incoming.headers['x-codex-turn-metadata']),
@@ -242,6 +245,11 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
           break
         }
       } catch (error) {
+        if (error instanceof CodexNativeAffinityCapacityError) {
+          recordLocalCodex429('native-affinity')
+        } else if (error instanceof CodexReplayAdmissionError && error.status === 429) {
+          recordLocalCodex429('replay-capacity')
+        }
         reject(
           outgoing,
           error instanceof CodexTurnBoundaryError
@@ -258,7 +266,8 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
             : codexRoutingFailureMessage(error, failurePhase)
         )
       } finally {
-        outgoing.off('close', cancel)
+        outgoing.off('close', onOutgoingClose)
+        clearTimeout(interruptionTimer)
         requestController.abort()
         routeSignal?.removeEventListener('abort', cancel)
         upstream?.destroy()

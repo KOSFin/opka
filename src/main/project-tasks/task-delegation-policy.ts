@@ -26,6 +26,7 @@ export type DelegationContext = {
   binding: DelegationBinding
   actor: DelegationActor
   runId: string | null
+  callerProjectId?: string
 }
 
 export class TaskDelegationPolicy {
@@ -67,12 +68,15 @@ export class TaskDelegationPolicy {
           ...grant,
           generation: expectedGeneration + 1,
           actions: [...new Set(grant.actions)].sort(),
-          taskIds: grant.taskIds ? [...new Set(grant.taskIds)].sort() : null
+          ...(grant.schema === 1
+            ? { taskIds: grant.taskIds ? [...new Set(grant.taskIds)].sort() : null }
+            : {})
         })
       : null
     if (
       normalized &&
-      (normalized.binding.projectId !== projectId || normalized.expiresAt <= this.clock())
+      (normalized.binding.projectId !== projectId ||
+        (normalized.expiresAt !== null && normalized.expiresAt <= this.clock()))
     ) {
       throw new Error('Invalid project or expired delegation proposal')
     }
@@ -157,7 +161,7 @@ export class TaskDelegationPolicy {
         if (
           grant &&
           (delegationDigest(grant.binding) !== delegationDigest(binding) ||
-            grant.expiresAt <= this.clock())
+            (grant.expiresAt !== null && grant.expiresAt <= this.clock()))
         ) {
           throw new Error('Project binding or expiry changed before confirmation')
         }
@@ -184,12 +188,13 @@ export class TaskDelegationPolicy {
     if (
       !grant ||
       grant.generation !== state.generation ||
-      grant.expiresAt <= this.clock() ||
+      (grant.expiresAt !== null && grant.expiresAt <= this.clock()) ||
       delegationDigest(grant.binding) !== delegationDigest(context.binding) ||
-      grant.actor.key !== context.actor.key ||
+      (grant.schema === 1 && grant.actor.key !== context.actor.key) ||
+      (grant.schema === 2 && context.callerProjectId !== context.binding.projectId) ||
       !grant.actions.includes(action) ||
-      (grant.taskIds && !grant.taskIds.includes(taskId)) ||
-      (grant.runId !== null && grant.runId !== context.runId)
+      (grant.schema === 1 && grant.taskIds && !grant.taskIds.includes(taskId)) ||
+      (grant.schema === 1 && grant.runId !== null && grant.runId !== context.runId)
     ) {
       throw new Error(
         'Delegation is missing, revoked, expired or outside this actor/project/action/Run scope'

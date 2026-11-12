@@ -1,13 +1,14 @@
 import type { ServerResponse } from 'node:http'
 
 export type CodexRoutingFailurePhase = 'admission' | 'engine-headers' | 'engine-body'
-const safeNetworkCodes = new Set([
+const safeFailureCodes = new Set([
   'ECONNREFUSED',
   'ECONNRESET',
   'ETIMEDOUT',
   'ABORT_ERR',
   'HPE_HEADER_OVERFLOW',
-  'ERR_STREAM_PREMATURE_CLOSE'
+  'ERR_STREAM_PREMATURE_CLOSE',
+  'RECOVERY_QUEUE_TIMEOUT'
 ])
 
 /** Report only fixed categories; provider errors may contain credentials or request contents. */
@@ -21,7 +22,7 @@ export function codexRoutingFailureMessage(
       : error instanceof Error &&
           'code' in error &&
           typeof error.code === 'string' &&
-          safeNetworkCodes.has(error.code)
+          safeFailureCodes.has(error.code)
         ? error.code
         : 'UNCLASSIFIED'
   return `Account routing failed (${phase}/${code}); check the execution host diagnostics.`

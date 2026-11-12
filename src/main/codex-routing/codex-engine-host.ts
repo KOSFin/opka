@@ -6,16 +6,16 @@ import { assertEngineWriterIdle } from './engine-writer-ownership'
 import { join, resolve } from 'node:path'
 import { z } from 'zod'
 import type { CodexPoolSelectionState } from './codex-pool-turn-session'
-import { CodexEngineHttpListener } from './codex-engine-http-listener'
+import type { CodexEngineHttpListener } from './codex-engine-http-listener'
 import type { CodexEngineSessions, NativeEngineLaunch } from './codex-engine-sessions'
 import type { CodexEngineLifecycle } from './codex-engine-lifecycle'
-import { createCodexEngineNativeSessionLifetime } from './codex-engine-native-session-lifetime'
+import { createCodexEngineHostRouting } from './codex-engine-host-routing'
 import { CodexEngineGrantService } from './engine-grant-service'
 import { CodexEngineMutations } from './codex-engine-mutation'
 import { CodexEngineAdmission } from './codex-engine-admission'
 import { readEngineGrantConnection, removeEngineGrantConnection } from './engine-grant-files'
 import type { CodexEngineHostOptions } from './codex-engine-host-options'
-import { CodexReplaySpoolBudget } from './codex-replay-spool'
+import type { CodexEngineRequestRecovery } from './codex-engine-request-recovery'
 export type { CodexEngineHostOptions } from './codex-engine-host-options'
 
 /** One execution-host/profile owner; roster, policy and canonical agent status remain external. */
@@ -30,6 +30,7 @@ export class CodexEngineHost {
   private nativeClientKey: string | undefined
   private grants: CodexEngineGrantService | undefined
   private stopping: Promise<void> | undefined
+  private readonly requestRecovery: CodexEngineRequestRecovery
   constructor(private readonly options: CodexEngineHostOptions) {
     this.profile = resolve(options.directory)
     options.assertExclusiveProfile()
@@ -41,30 +42,25 @@ export class CodexEngineHost {
     this.mutations = new CodexEngineMutations((operation) =>
       this.options.withAccountMutationLease(operation)
     )
-    const lifetime = createCodexEngineNativeSessionLifetime(
-      options,
-      () => this.admission.accepting,
-      (id) => this.selection(id),
-      (id) => this.connection(id)
-    )
-    this.lifecycle = lifetime.lifecycle
-    this.sessions = lifetime.sessions
-    const replayBudget = options.replaySpoolDirectory
-      ? new CodexReplaySpoolBudget(
-          options.replaySpoolDirectory,
-          512 * 1024 * 1024,
-          options.assertExclusiveProfile
+    const routing = createCodexEngineHostRouting(options, {
+      accepting: () => this.admission.accepting,
+      readState: (id) => this.selection(id),
+      connection: (id) => this.connection(id),
+      connections: () => this.connections(),
+      closing: () => this.admission.closing,
+      nativeClientKey: () => this.getNativeClientKey(),
+      stop: () => this.stop(),
+      transition: (parent, operation) =>
+        this.transition(
+          parent,
+          (signal) => this.mutations.run(signal, () => operation(signal)),
+          false
         )
-      : undefined
-    this.front = new CodexEngineHttpListener(
-      options.maxRequestBytes,
-      this.sessions.prepare,
-      () => {
-        void this.stop().catch(() => {})
-      },
-      () => this.getNativeClientKey(),
-      replayBudget
-    )
+    })
+    this.lifecycle = routing.lifecycle
+    this.sessions = routing.sessions
+    this.requestRecovery = routing.recovery
+    this.front = routing.front
     this.releaseProfile = claimCodexEngineProfile(this.profile)
   }
   getNativeClientKey(): string {
@@ -225,6 +221,7 @@ export class CodexEngineHost {
     )
   }
   beginShutdown(): Promise<void> | null {
+    this.requestRecovery.shutdown()
     this.admission.beginShutdown()
     this.sessions.suspend()
     this.front.cancelRequests()

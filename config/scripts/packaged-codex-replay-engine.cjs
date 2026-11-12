@@ -1,5 +1,12 @@
 const { createHash } = require('node:crypto')
-const { existsSync, lstatSync, readFileSync, writeFileSync } = require('node:fs')
+const {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync
+} = require('node:fs')
 const { join } = require('node:path')
 const { unzipSync, zipSync } = require('fflate')
 
@@ -126,6 +133,34 @@ function assertReplayArtifact(directory, target) {
   return { manifest, binary }
 }
 
+function stageReplayArtifact(source, resourceRoot, target) {
+  assertReplayArtifact(source, target)
+  const parent = join(resourceRoot, 'codex-routing-replay')
+  for (const directory of [resourceRoot, parent]) {
+    mkdirSync(directory, { recursive: true })
+    const info = lstatSync(directory)
+    if (!info.isDirectory() || info.isSymbolicLink()) {
+      throw new Error('Native replay package destination is not a regular directory')
+    }
+  }
+  const destination = join(parent, target)
+  mkdirSync(destination, { recursive: true })
+  const metadata = lstatSync(destination)
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+    throw new Error('Native replay package destination is not a regular directory')
+  }
+  for (const name of [binaryMember(target), 'engine.zip', 'manifest.json']) {
+    const file = join(destination, name)
+    const current = lstatSync(file, { throwIfNoEntry: false })
+    if (current && (!current.isFile() || current.isSymbolicLink())) {
+      throw new Error('Native replay package destination contains a link or non-file resource')
+    }
+    copyFileSync(join(source, name), file)
+  }
+  assertReplayArtifact(destination, target)
+  return destination
+}
+
 async function finalizeReplayArtifact(directory, target, signMacBinary) {
   const { manifest } = assertReplayArtifact(directory, target)
   if (target.startsWith('darwin-')) {
@@ -147,4 +182,4 @@ async function finalizeReplayArtifact(directory, target, signMacBinary) {
   assertReplayArtifact(directory, target)
 }
 
-module.exports = { assertReplayArtifact, finalizeReplayArtifact }
+module.exports = { assertReplayArtifact, finalizeReplayArtifact, stageReplayArtifact }

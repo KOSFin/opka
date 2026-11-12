@@ -68,6 +68,7 @@ it('does not transfer prior quota terminal proof to a later local error with a h
   })
   const finish = vi.fn()
   const cleanup = vi.fn()
+  const onRequestHeld = vi.fn()
   const retry = vi.fn(async () => ({
     port: enginePort,
     clientKey: 'synthetic-engine-key-1234567890123456',
@@ -85,6 +86,7 @@ it('does not transfer prior quota terminal proof to a later local error with a h
       responseHeaderTimeoutMs: 1000,
       replayBudget,
       onCleanupUnverifiable: cleanup,
+      onRequestHeld,
       prepare: () => ({
         port: enginePort,
         clientKey: 'synthetic-engine-key-1234567890123456',
@@ -104,7 +106,8 @@ it('does not transfer prior quota terminal proof to a later local error with a h
   })
   expect(response.status).toBe(500)
   await response.text()
-  await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(onRequestHeld).toHaveBeenCalledOnce())
+  expect(cleanup).not.toHaveBeenCalled()
   expect(retry).toHaveBeenCalledOnce()
   expect(engineCalls).toBe(2)
   expect(held?.destroyed).toBe(false)
@@ -115,4 +118,5 @@ it('does not transfer prior quota terminal proof to a later local error with a h
   await vi.waitFor(() => expect(finish).toHaveBeenCalledOnce())
   expect(replayBudget.snapshot()).toEqual({ active: 0, large: 0, reservedBytes: 0 })
   expect(await readdir(directory)).toEqual([])
+  expect(cleanup).not.toHaveBeenCalled()
 })
