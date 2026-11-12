@@ -222,7 +222,7 @@ export function UsageAccountRows({
             align="start"
             sideOffset={8}
             collisionPadding={8}
-            className="w-[320px] max-w-[calc(100vw-2rem)] max-h-[min(28rem,80vh,var(--radix-popover-content-available-height))] overflow-y-auto scrollbar-sleek"
+            className="w-[320px] max-w-[calc(100vw-2rem)] max-h-[min(28rem,80vh,var(--radix-popover-content-available-height))] overflow-y-auto"
             onOpenAutoFocus={(event) => {
               event.preventDefault()
               if (pendingFocusRowId.current === openRowId) {
