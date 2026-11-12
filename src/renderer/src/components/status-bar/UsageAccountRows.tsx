@@ -222,7 +222,7 @@ export function UsageAccountRows({
             align="start"
             sideOffset={8}
             collisionPadding={8}
-            className="w-[320px] max-w-[calc(100vw-2rem)] max-h-[min(28rem,80vh,var(--radix-popover-content-available-height))] overflow-y-auto"
+            className="w-[320px] max-w-[calc(100vw-2rem)]"
             onOpenAutoFocus={(event) => {
               event.preventDefault()
               if (pendingFocusRowId.current === openRowId) {
@@ -249,7 +249,7 @@ export function UsageAccountRows({
             <aside
               ref={detailRef}
               aria-label={`${providerName} ${selected.label} details`}
-              className="space-y-3 p-3"
+              className="scrollbar-sleek max-h-[min(28rem,80vh,var(--radix-popover-content-available-height))] space-y-3 overflow-y-auto p-3"
               onKeyDown={(event) => {
                 if (event.key === 'Tab') {
                   event.stopPropagation()
