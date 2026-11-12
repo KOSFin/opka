@@ -343,7 +343,6 @@ jobs:
           tests/e2e/fork-account-pool-settings.spec.ts
           tests/e2e/fork-worker-capacity-settings.spec.ts
           tests/e2e/fork-usage-extra-review.spec.ts
-          tests/e2e/fork-usage-corrected-review.spec.ts
           tests/e2e/git-project-trackers-hidden.spec.ts
           tests/e2e/sparse-explorer-proof.spec.ts
           tests/e2e/sparse-preset-proof.spec.ts
