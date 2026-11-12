@@ -60,7 +60,7 @@ export default function WorkspaceKanbanSheet({
   if (embedded) {
     return (
       <div
-        className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-worktree-sidebar"
+        className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
         data-workspace-board-embedded=""
         onKeyDown={(event) => {
           if (event.key === 'Escape' && !event.defaultPrevented && !event.nativeEvent.isComposing) {

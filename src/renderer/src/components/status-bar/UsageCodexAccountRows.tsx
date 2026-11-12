@@ -21,7 +21,7 @@ export function UsageCodexAccountRows({
   mode: StatusBarUsageMode
   onManageProvider: () => void
   inspectedRowId?: string | null
-  onInspectRow?: (rowId: string) => void
+  onInspectRow?: (rowId: string, closingRowId?: string) => void
 }): React.JSX.Element {
   const owner = useUsageAccounts()
   const { handleSelectAccount, isSwitching } = useCodexSwitcherController(codex)

@@ -38,13 +38,19 @@ export function UsageAccountRows({
   onSelectAccount?: (accountId: string | null) => void
   selecting?: boolean
   inspectedRowId?: string | null
-  onInspectRow?: (rowId: string) => void
+  onInspectRow?: (rowId: string, closingRowId?: string) => void
 }): React.JSX.Element | null {
   const owner = useUsageAccounts()
   const pools = useUsageAccountPools()
   const [localOpenRowId, setLocalOpenRowId] = useState<string | null>(null)
   const openRowId = onInspectRow ? inspectedRowId : localOpenRowId
-  const inspectRow = onInspectRow ?? setLocalOpenRowId
+  const inspectRow = (rowId: string, closingRowId?: string): void => {
+    if (onInspectRow) {
+      onInspectRow(rowId, closingRowId)
+    } else {
+      setLocalOpenRowId((current) => rowId || (current === closingRowId ? null : current))
+    }
+  }
   const detailRef = useRef<HTMLElement>(null)
   const selectedTriggerRef = useRef<HTMLButtonElement>(null)
   const detailsAnchorRef = useRef({
@@ -113,17 +119,18 @@ export function UsageAccountRows({
     )
   }
   const selected = rows.find((row) => (row.id ?? 'system') === openRowId)
+  const selectedRowId = selected ? (selected.id ?? 'system') : null
   const credits = selected?.limits?.rateLimitResetCredits?.availableCount ?? 0
   return (
     <Popover
       open={selected !== undefined}
       onOpenChange={(open) => {
-        if (!open) {
-          inspectRow('')
+        if (!open && selectedRowId) {
+          inspectRow('', selectedRowId)
         }
       }}
     >
-      <PopoverAnchor virtualRef={detailsAnchorRef} />
+      <PopoverAnchor key={openRowId ?? 'closed'} virtualRef={detailsAnchorRef} />
       <div data-usage-account-provider={provider} className="border-b border-border/50">
         <div>
           {rows.map((row) => {
