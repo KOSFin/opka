@@ -63,7 +63,7 @@ export async function importNativeGlabNetworkProfile(
     const readStatus =
       options.readStatus ??
       (async (selectedHost: string) => {
-        const env = { ...process.env, NO_COLOR: '1', CLICOLOR: '0' }
+        const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', CLICOLOR: '0' }
         if (env.PATH) {
           env.PATH = env.PATH.split(delimiter).filter(isAbsolute).join(delimiter)
         }
