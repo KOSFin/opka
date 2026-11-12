@@ -1,4 +1,5 @@
 import type { TaskPageStoreBindingsModel } from './use-task-page-store-bindings'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { TaskProvider } from '../../../shared/task-providers'
 import type { Repo } from '../../../shared/repo-types'
 import { getRepoExecutionHostId, toRuntimeExecutionHostId } from '../../../shared/execution-host'
@@ -8,8 +9,16 @@ import {
   normalizeTaskRepoSelection
 } from './task-page-default-repo-selection'
 
+export type TaskPageRepoSelectionStateBindings = Pick<
+  TaskPageStoreBindingsModel,
+  'updateSettings'
+> & {
+  settings: Partial<GlobalSettings> | null
+  pageData: Partial<TaskPageStoreBindingsModel['pageData']>
+}
+
 export function useTaskPageRepoSelectionState(
-  model: TaskPageStoreBindingsModel,
+  model: TaskPageRepoSelectionStateBindings,
   taskSource: TaskProvider,
   eligibleRepos: Repo[]
 ) {

@@ -4,7 +4,6 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../shared/repo-types'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
-import type { TaskPageStoreBindingsModel } from './use-task-page-store-bindings'
 import { useTaskPageRepoSelection } from './use-task-page-repo-selection'
 
 const hostA: Repo = {
@@ -29,7 +28,7 @@ const hostB: Repo = {
 afterEach(cleanup)
 
 function mountSelection(settings: Partial<GlobalSettings> = {}) {
-  const updateSettings = vi.fn(async () => settings)
+  const updateSettings = vi.fn(async () => {})
   const model = {
     repos: [hostA, hostB],
     settings,
@@ -41,10 +40,7 @@ function mountSelection(settings: Partial<GlobalSettings> = {}) {
     linearConnected: false,
     updateSettings
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This hook only reads the fixture fields listed above.
-  const hook = renderHook(() =>
-    useTaskPageRepoSelection(model as unknown as TaskPageStoreBindingsModel)
-  )
+  const hook = renderHook(() => useTaskPageRepoSelection(model))
   return { ...hook, updateSettings }
 }
 
@@ -110,8 +106,7 @@ it('applies a hydrated provider selection before the next repo-backed render', (
       linearConnected: false,
       updateSettings: vi.fn()
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This hook only reads the fixture fields listed above.
-    return useTaskPageRepoSelection(model as unknown as TaskPageStoreBindingsModel)
+    return useTaskPageRepoSelection(model)
   })
   expect(result.current.selectedRepos.map((repo) => repo.id)).toEqual([hostA.id, hostB.id])
   settings = { defaultRepoSelections: { local: { github: [hostB.id] } } }
@@ -139,8 +134,7 @@ it('restores separate selections after focused runtime host A → B → A', () =
       linearConnected: false,
       updateSettings: vi.fn()
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This hook only reads the fixture fields listed above.
-    return useTaskPageRepoSelection(model as unknown as TaskPageStoreBindingsModel)
+    return useTaskPageRepoSelection(model)
   })
   expect(result.current.selectedRepos.map((repo) => repo.id)).toEqual([hostA.id])
   settings = { ...settings, activeRuntimeEnvironmentId: 'host-b' }
