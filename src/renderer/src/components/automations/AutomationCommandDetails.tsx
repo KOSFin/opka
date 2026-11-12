@@ -60,7 +60,7 @@ export function AutomationCommandDetails({
               <Button variant="outline" onClick={onToggle} disabled={busy}>
                 {selected.enabled ? 'Pause' : 'Enable'}
               </Button>
-              <Button onClick={onRun} disabled={busy}>
+              <Button onClick={onRun} disabled={busy || !selected.enabled}>
                 {retrySameRequest ? 'Retry same request' : 'Run now'}
               </Button>
               <Button variant="outline" onClick={onRemove} disabled={busy}>
@@ -68,6 +68,11 @@ export function AutomationCommandDetails({
               </Button>
             </div>
           </div>
+          {!selected.enabled && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Enable this automation before running it.
+            </p>
+          )}
           <p className="mt-3 text-sm text-muted-foreground">
             {selected.runContext?.path} · {selected.rrule}
           </p>
@@ -85,6 +90,7 @@ export function AutomationCommandDetails({
               target={target}
               request={pendingRun}
               busy={busy}
+              canStartNew={selected.enabled}
               onAdmitted={onRunReconciled}
               onStartNew={onStartNewRun}
             />
