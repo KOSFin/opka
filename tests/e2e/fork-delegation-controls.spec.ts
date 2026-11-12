@@ -1,14 +1,29 @@
+import { writeFile } from 'node:fs/promises'
 import { expect, test } from './helpers/orca-app'
 import { selectTaskProject } from './helpers/task-project-picker'
 
-test.use({ trace: 'off', screenshot: 'off' })
+test.use({ orcaAppExtraEnv: { ORCA_BACKGROUND_LAUNCH: '1' }, trace: 'off', screenshot: 'off' })
 
-test('hidden desktop reviews an exact synthetic policy and preserves manual fallback', async ({
+async function capture(page: Parameters<typeof selectTaskProject>[0], path: string): Promise<void> {
+  const cdp = await page.context().newCDPSession(page)
+  try {
+    const result = await cdp.send('Page.captureScreenshot', {
+      format: 'png',
+      fromSurface: false,
+      captureBeyondViewport: false
+    })
+    await writeFile(path, Buffer.from(result.data, 'base64'))
+  } finally {
+    await cdp.detach()
+  }
+}
+
+test('hidden desktop allows project agents until explicit revocation', async ({
   orcaPage: page,
   testRepoPath
 }, testInfo) => {
   await page.waitForFunction(() => window.__store?.getState().workspaceSessionReady === true)
-  const grantee = await page.evaluate(async (folderPath) => {
+  await page.evaluate(async (folderPath) => {
     const group = await window.api.projectGroups.create({
       name: 'Delegation audit',
       parentPath: folderPath
@@ -26,28 +41,8 @@ test('hidden desktop reviews an exact synthetic policy and preserves manual fall
     if (!initialized.ok) {
       throw new Error(initialized.error.message)
     }
-    const created = await window.api.runtime.call({
-      method: 'terminal.create',
-      params: { worktree, title: 'Synthetic grantee' }
-    })
-    if (!created.ok) {
-      throw new Error(created.error.message)
-    }
-    const value = created.result
-    if (
-      !value ||
-      typeof value !== 'object' ||
-      !('terminal' in value) ||
-      !value.terminal ||
-      typeof value.terminal !== 'object' ||
-      !('handle' in value.terminal) ||
-      typeof value.terminal.handle !== 'string'
-    ) {
-      throw new Error('Synthetic terminal did not return a handle')
-    }
     await window.__store!.getState().fetchFolderWorkspaces({ runtimeEnvironmentId: null })
     window.__store!.getState().setActiveView('tasks')
-    return value.terminal.handle
   }, testRepoPath)
   await expect(page.getByRole('heading', { name: 'Project tasks', exact: true })).toBeVisible()
   await selectTaskProject(page, /Delegation audit/)
@@ -56,26 +51,28 @@ test('hidden desktop reviews an exact synthetic policy and preserves manual fall
   await page.getByRole('button', { name: 'Task approval', exact: true }).click()
   const controls = page.getByRole('region', { name: 'Project task approval mode' })
   await expect(controls.getByText(/Manual · generation 0/)).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('delegation-manual-light.png') })
-  await controls.getByLabel('Verified grantee session or terminal').fill(grantee)
-  await controls.getByRole('button', { name: 'Review delegation…' }).click()
-  const review = page.getByRole('dialog', { name: 'Confirm scoped delegation' })
+  await capture(page, testInfo.outputPath('delegation-manual-light.png'))
+  await controls.getByRole('button', { name: 'Allow agents…' }).click()
+  const review = page.getByRole('dialog', { name: 'Allow project agents' })
   await expect(review).toBeVisible()
   await expect(review.getByText(`Root: ${testRepoPath}`)).toBeVisible()
-  await expect(review.getByText(/Grantee:/)).toContainText(grantee)
-  await expect(review.getByText('Actions: Approve plans')).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('delegation-review-light.png') })
+  await expect(review.getByText(/Agents: verified agent sessions and terminals/)).toBeVisible()
+  await expect(review.getByText(/Duration: Until revoked/)).toBeVisible()
+  await capture(page, testInfo.outputPath('delegation-review-light.png'))
   await page.keyboard.press('Escape')
   await expect(review).toHaveCount(0)
-  await controls.getByRole('button', { name: 'Review delegation…' }).click()
+  await controls.getByRole('button', { name: 'Allow agents…' }).click()
   await review.getByRole('button', { name: 'Confirm on this host' }).click()
-  await expect(controls.getByText(/Delegated policy · generation 1/)).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('delegation-delegated-light.png') })
-  await controls.getByRole('button', { name: 'Revoke / return manual…' }).click()
+  await expect(controls.getByText(/Agents allowed · generation 1/)).toBeVisible()
+  await expect(controls.getByText(/until revoked/)).toBeVisible()
+  await controls.getByRole('button', { name: 'Refresh policy' }).click()
+  await expect(controls.getByText(/Agents allowed · generation 1/)).toBeVisible()
+  await capture(page, testInfo.outputPath('delegation-delegated-light.png'))
+  await controls.getByRole('button', { name: 'Manual approval…' }).click()
   const manual = page.getByRole('dialog', { name: 'Return to manual approval' })
   await expect(manual).toBeVisible()
   await expect(manual.getByText(`Root: ${testRepoPath}`)).toBeVisible()
   await manual.getByRole('button', { name: 'Confirm on this host' }).click()
   await expect(controls.getByText(/Manual · generation 2/)).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('delegation-revoked-light.png') })
+  await capture(page, testInfo.outputPath('delegation-revoked-light.png'))
 })

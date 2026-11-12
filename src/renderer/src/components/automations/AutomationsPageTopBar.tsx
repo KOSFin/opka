@@ -1,5 +1,4 @@
 import React from 'react'
-import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import { AutomationOwnerConflictNotice } from './AutomationOwnerConflictNotice'
 import { AutomationsPageBreadcrumb } from './AutomationsPageBreadcrumb'
@@ -16,8 +15,7 @@ export function AutomationsPageTopBar({
   dismissOwnerAction,
   showAutomationsList,
   showRunsDashboard,
-  showAutomationDetails,
-  openCommandMode
+  showAutomationDetails
 }: {
   pageView: 'automations' | 'runs' | 'run'
   isDetailOpen: boolean
@@ -29,7 +27,6 @@ export function AutomationsPageTopBar({
   showAutomationsList: () => void
   showRunsDashboard: () => void
   showAutomationDetails: () => void
-  openCommandMode: () => void
 }): React.JSX.Element {
   return (
     <>
@@ -55,11 +52,6 @@ export function AutomationsPageTopBar({
           <h1 className="truncate text-base font-semibold leading-8">
             {translate('auto.components.automations.AutomationsPage.77c2778945', 'Automations')}
           </h1>
-        )}
-        {pageView === 'automations' && !isDetailOpen && (
-          <Button className="ml-auto" variant="outline" size="sm" onClick={openCommandMode}>
-            Command mode (local)
-          </Button>
         )}
       </header>
       <AutomationOwnerConflictNotice

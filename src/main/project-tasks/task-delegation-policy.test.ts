@@ -359,3 +359,69 @@ it('rolls back approval if structured audit fails and denies expired grants with
     0
   )
 })
+
+it('allows verified project actors until revoked while enforcing the bound host and project', () => {
+  const { store, task, context } = setup()
+  const proposed = store.transaction(() =>
+    store.delegation.propose(
+      'project',
+      'interactive:owner',
+      'connection',
+      0,
+      {
+        schema: 2,
+        binding: context.binding,
+        scope: 'project-agents',
+        actions: ['approve-plan', 'request-changes', 'send-to-integration', 'accept-result'],
+        expiresAt: null,
+        generation: 1
+      },
+      context.binding
+    )
+  )
+  store.transaction(() =>
+    store.delegation.confirm(
+      'project',
+      'interactive:owner',
+      'connection',
+      proposed.id,
+      proposed.digest,
+      randomUUID(),
+      context.binding
+    )
+  )
+  const otherAgent = {
+    ...context,
+    actor: { key: 'other-verified-agent', aliases: ['other-verified-agent'] }
+  }
+  expect(store.delegation.require(otherAgent, task.id, 'approve-plan').expiresAt).toBeNull()
+  expect(() =>
+    store.delegation.require(
+      { ...otherAgent, binding: { ...context.binding, machineBinding: 'other-host' } },
+      task.id,
+      'approve-plan'
+    )
+  ).toThrow(/scope/)
+  expect(() =>
+    store.delegation.require(
+      { ...otherAgent, binding: { ...context.binding, projectId: 'another-project' } },
+      task.id,
+      'approve-plan'
+    )
+  ).toThrow(/scope/)
+  const revoked = store.transaction(() =>
+    store.delegation.propose('project', 'interactive:owner', 'connection', 1, null, context.binding)
+  )
+  store.transaction(() =>
+    store.delegation.confirm(
+      'project',
+      'interactive:owner',
+      'connection',
+      revoked.id,
+      revoked.digest,
+      randomUUID(),
+      context.binding
+    )
+  )
+  expect(() => store.delegation.require(otherAgent, task.id, 'approve-plan')).toThrow(/revoked/)
+})

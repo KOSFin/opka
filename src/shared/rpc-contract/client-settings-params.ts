@@ -114,6 +114,17 @@ export const SettingsUpdate = z
     experimentalNewWorktreeCardStyle: z.boolean().optional(),
     agentStatusHooksEnabled: z.boolean().optional(),
     defaultRepoSelection: z.array(z.string()).nullable().optional(),
+    defaultRepoSelections: z
+      .record(
+        z.string(),
+        z
+          .object({
+            github: z.array(z.string()).nullable().optional(),
+            gitlab: z.array(z.string()).nullable().optional()
+          })
+          .strict()
+      )
+      .optional(),
     defaultLinearTeamSelection: z.array(z.string()).nullable().optional(),
     compactWorktreeCards: z.boolean().optional(),
     minimaxGroupId: z.string().optional(),

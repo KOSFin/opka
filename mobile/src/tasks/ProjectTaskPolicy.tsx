@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Pressable, Text, TextInput, View } from 'react-native'
-import {
-  PROJECT_TASK_DELEGATION_CAPABILITY,
-  TaskDelegationAction,
-  type DelegationAction
-} from '../../../src/shared/project-task-delegation'
+import { Pressable, Text, View } from 'react-native'
+import { PROJECT_TASK_PROJECT_AGENTS_CAPABILITY } from '../../../src/shared/project-task-delegation'
 import type { RpcClient } from '../transport/rpc-client'
 import { randomV4Uuid } from '../platform/random-v4-uuid'
-import { colors } from '../theme/mobile-theme'
-import { ACTION_LABELS, styles } from './project-task-policy-presentation'
+import { styles } from './project-task-policy-presentation'
 import {
   taskPolicyConfirm,
   taskPolicyPropose,
@@ -38,11 +33,6 @@ export function ProjectTaskPolicy(props: {
   const [proposal, setProposal] = useState<TaskPolicyProposal | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [grantee, setGrantee] = useState('')
-  const [runId, setRunId] = useState('')
-  const [taskIds, setTaskIds] = useState('')
-  const [hours, setHours] = useState(8)
-  const [actions, setActions] = useState<DelegationAction[]>(['approve-plan'])
   const sameOwner = () =>
     latest.current.client === props.client &&
     latest.current.hostId === props.hostId &&
@@ -54,7 +44,7 @@ export function ProjectTaskPolicy(props: {
   const target = {
     worktree: props.worktree,
     expectedExecutionHostId: props.executionHostId,
-    capability: PROJECT_TASK_DELEGATION_CAPABILITY
+    capability: PROJECT_TASK_PROJECT_AGENTS_CAPABILITY
   } as const
 
   async function read() {
@@ -95,10 +85,13 @@ export function ProjectTaskPolicy(props: {
   }
 
   useEffect(() => {
-    if (!policy?.grant || policy.grant.expiresAt <= observedAt) {
+    if (!policy?.grant || policy.grant.expiresAt === null || policy.grant.expiresAt <= observedAt) {
       return
     }
-    const timeout = setTimeout(() => setObservedAt(Date.now()), policy.grant.expiresAt - observedAt)
+    const timeout = setTimeout(
+      () => setObservedAt(Date.now()),
+      Math.min(2_147_483_647, policy.grant.expiresAt - observedAt)
+    )
     return () => clearTimeout(timeout)
   }, [policy, observedAt])
 
@@ -125,18 +118,6 @@ export function ProjectTaskPolicy(props: {
     ) {
       return
     }
-    if (!manual && (!grantee.trim() || !actions.length)) {
-      setError('Enter a verified grantee and choose an action.')
-      return
-    }
-    const narrowed = taskIds
-      .split(',')
-      .map((id) => id.trim())
-      .filter(Boolean)
-    if (narrowed.length > 1000) {
-      setError('Choose at most 1000 task IDs.')
-      return
-    }
     busyRef.current = true
     setBusy(true)
     setError('')
@@ -145,15 +126,7 @@ export function ProjectTaskPolicy(props: {
         await taskPolicyPropose.request(props.client, {
           ...target,
           expectedGeneration: policy.generation,
-          grant: manual
-            ? null
-            : {
-                grantee: grantee.trim(),
-                actions,
-                runId: runId.trim() || null,
-                taskIds: narrowed.length ? narrowed : null,
-                expiresAt: Date.now() + hours * 60 * 60 * 1000
-              }
+          grant: manual ? null : { mode: 'project-agents' }
         })
       )
       if (actionCurrent()) {
@@ -221,110 +194,43 @@ export function ProjectTaskPolicy(props: {
       <Text style={styles.heading}>Task approval</Text>
       <Text style={styles.meta}>
         {policy
-          ? `${policy.grant && policy.grant.expiresAt > observedAt ? 'Delegated policy' : policy.grant ? 'Manual review required · grant expired' : 'Manual'} · generation ${policy.generation}`
+          ? `${policy.grant && (policy.grant.expiresAt === null || policy.grant.expiresAt > observedAt) ? (policy.grant.schema === 2 ? 'Agents allowed' : 'Delegated policy') : policy.grant ? 'Manual review required · grant expired' : 'Manual'} · generation ${policy.generation}`
           : error
             ? 'Host policy unavailable · refresh to retry'
             : 'Checking host policy…'}
       </Text>
       {policy?.grant ? (
         <Text style={styles.meta}>
-          {policy.grant.actorAddress} · expires {new Date(policy.grant.expiresAt).toLocaleString()}
+          {policy.grant.schema === 2 ? 'Verified project agents' : policy.grant.actorAddress} ·{' '}
+          {policy.grant.expiresAt === null
+            ? 'until revoked'
+            : `expires ${new Date(policy.grant.expiresAt).toLocaleString()}`}
         </Text>
       ) : null}
       {policy && !proposal ? (
-        <>
-          <Text style={styles.label}>Verified grantee session or terminal</Text>
-          <TextInput
-            accessibilityLabel="Verified grantee"
-            value={grantee}
-            onChangeText={setGrantee}
-            editable={!busy}
-            placeholder="Orca session or terminal handle"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-          <Text style={styles.label}>Run ID (optional)</Text>
-          <TextInput
-            accessibilityLabel="Run ID"
-            value={runId}
-            onChangeText={setRunId}
-            editable={!busy}
-            placeholder="Any in-scope Run"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-          <Text style={styles.label}>Task IDs (optional, comma separated)</Text>
-          <TextInput
-            accessibilityLabel="Task IDs"
-            value={taskIds}
-            onChangeText={setTaskIds}
-            editable={!busy}
-            placeholder="All in-project tasks"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-          <Text style={styles.label}>Grant duration</Text>
-          <View style={styles.actions}>
-            {[1, 8, 24].map((value) => (
-              <Pressable
-                key={value}
-                accessibilityRole="button"
-                accessibilityState={{ selected: hours === value, disabled: busy }}
-                disabled={busy}
-                onPress={() => setHours(value)}
-                style={styles.button}
-              >
-                <Text style={styles.text}>
-                  {value}h{hours === value ? ' ✓' : ''}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={styles.label}>Allowed actions</Text>
-          {TaskDelegationAction.options.map((action) => (
-            <Pressable
-              key={action}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: actions.includes(action), disabled: busy }}
-              disabled={busy}
-              onPress={() =>
-                setActions((current) =>
-                  current.includes(action)
-                    ? current.filter((item) => item !== action)
-                    : [...current, action]
-                )
-              }
-              style={styles.button}
-            >
-              <Text style={styles.text}>
-                {actions.includes(action) ? '☑' : '□'} {ACTION_LABELS[action]}
-              </Text>
-            </Pressable>
-          ))}
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy || !props.connected}
-              onPress={() => void begin(false)}
-              style={styles.button}
-            >
-              <Text style={styles.text}>Review delegation…</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy || !policy.grant || !props.connected}
-              onPress={() => void begin(true)}
-              style={styles.button}
-            >
-              <Text style={styles.text}>Revoke / manual…</Text>
-            </Pressable>
-          </View>
-        </>
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy || !props.connected}
+            onPress={() => void begin(false)}
+            style={styles.button}
+          >
+            <Text style={styles.text}>Allow agents…</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy || !policy.grant || !props.connected}
+            onPress={() => void begin(true)}
+            style={styles.button}
+          >
+            <Text style={styles.text}>Manual approval…</Text>
+          </Pressable>
+        </View>
       ) : null}
       {proposal ? (
         <View style={styles.review}>
           <Text style={styles.heading}>
-            {proposal.grant ? 'Confirm scoped delegation' : 'Return to manual approval'}
+            {proposal.grant ? 'Allow project agents' : 'Return to manual approval'}
           </Text>
           <Text style={styles.text}>
             Host: {props.hostId} · {props.executionHostId}
@@ -341,17 +247,16 @@ export function ProjectTaskPolicy(props: {
           {proposal.grant ? (
             <>
               <Text style={styles.text}>
-                Grantee: {proposal.grant.actorAddress} · {proposal.grant.actor.key}
+                Agents: verified sessions and terminals on this project
               </Text>
               <Text style={styles.text}>
-                Actions: {proposal.grant.actions.map((action) => ACTION_LABELS[action]).join(', ')}
-              </Text>
-              <Text style={styles.text}>Run: {proposal.grant.runId ?? 'Any in-scope Run'}</Text>
-              <Text style={styles.text}>
-                Tasks: {proposal.grant.taskIds?.join(', ') ?? 'All in-project tasks'}
+                Actions: task plan, changes, integration, and result decisions
               </Text>
               <Text style={styles.text}>
-                Expires: {new Date(proposal.grant.expiresAt).toLocaleString()}
+                Duration:{' '}
+                {proposal.grant.expiresAt === null
+                  ? 'Until revoked'
+                  : new Date(proposal.grant.expiresAt).toLocaleString()}
               </Text>
             </>
           ) : (

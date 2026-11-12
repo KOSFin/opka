@@ -18,6 +18,7 @@ import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-targe
 import { translate } from '@/i18n/i18n'
 import { CloneGitLabProfileDialog } from './CloneGitLabProfileDialog'
 import { CloneGitLabProfileRemovalDialog } from './CloneGitLabProfileRemovalDialog'
+import { RemoteGlabProfileImport } from '../settings/RemoteGlabProfileImport'
 
 type Mode = 'unbound' | 'github' | 'gitlab'
 
@@ -280,10 +281,20 @@ export function CloneNetworkAccountPicker({
                       ? 'No verified account for this URL on the execution host.'
                       : 'A removed account blocks bound fetch and push until another is selected.'}
           </p>
-          {mode === 'gitlab' && runtimeEnvironmentId && (
-            <p className="text-xs text-muted-foreground">
-              Add a profile in Orca on the selected execution host, then reopen this list.
-            </p>
+          {mode === 'gitlab' && runtimeEnvironmentId && urlHost && (
+            <RemoteGlabProfileImport
+              key={currentOwnerKey}
+              runtimeEnvironmentId={runtimeEnvironmentId}
+              host={urlHost}
+              disabled={disabled || loading}
+              onImported={(profile) => {
+                setProfiles((current) => [
+                  ...current.filter((entry) => entry.id !== profile.id),
+                  profile
+                ])
+                onSelect({ provider: 'gitlab', profileId: profile.id })
+              }}
+            />
           )}
         </>
       )}

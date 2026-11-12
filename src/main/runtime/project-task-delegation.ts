@@ -1,5 +1,8 @@
 import { PROJECT_TASK_CONFIG_PATH } from '../../shared/project-task-contract'
-import { PROJECT_TASK_DELEGATION_CAPABILITY } from '../../shared/project-task-delegation'
+import {
+  PROJECT_TASK_DELEGATION_CAPABILITY,
+  PROJECT_TASK_PROJECT_AGENTS_CAPABILITY
+} from '../../shared/project-task-delegation'
 import type { RpcContext } from './rpc/core'
 import { getPublishedHostDescriptor } from './host-descriptor'
 import { taskRevision } from '../project-tasks/task-document'
@@ -14,11 +17,21 @@ export function requireTaskDelegationCapability(context: RpcContext, declared?: 
   if (context.caller?.kind === 'local-cli' && declared === PROJECT_TASK_DELEGATION_CAPABILITY) {
     return
   }
-  if (!context.clientCapabilities?.includes(PROJECT_TASK_DELEGATION_CAPABILITY)) {
-    throw new Error(
-      'Project delegation is unsupported by this client; no legacy approval fallback is available'
-    )
+  if (
+    declared === PROJECT_TASK_PROJECT_AGENTS_CAPABILITY &&
+    context.clientCapabilities?.includes(PROJECT_TASK_PROJECT_AGENTS_CAPABILITY)
+  ) {
+    return
   }
+  if (
+    declared === PROJECT_TASK_DELEGATION_CAPABILITY &&
+    context.clientCapabilities?.includes(PROJECT_TASK_DELEGATION_CAPABILITY)
+  ) {
+    return
+  }
+  throw new Error(
+    'Project delegation is unsupported by this client; no legacy approval fallback is available'
+  )
 }
 export function projectTaskBinding(context: Pick<RpcContext, 'runtime'>, resources: Resources) {
   const descriptor = getPublishedHostDescriptor(context.runtime.getRuntimeId())

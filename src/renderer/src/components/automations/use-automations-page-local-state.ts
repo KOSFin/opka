@@ -11,6 +11,7 @@ import { AUTOMATION_DEFAULT_TIME } from './automation-draft-model'
 import type { AutomationActionNotice } from './automation-row-action-dispatch'
 import type { AutomationHostCatalogEntry } from './automation-host-catalog-types'
 import type { AutomationCreateDestination } from './automation-create-destination'
+import type { AutomationCommandCatalogRow } from './use-automation-command-catalog'
 import type { AutomationListRow } from './automation-list-row-identity'
 import {
   EMPTY_AUTOMATION_LIST_FILTER,
@@ -68,7 +69,15 @@ export function useAutomationsPageLocalState(store: AutomationsPageStoreState) {
   const [editingHostStableKey, setEditingHostStableKey] = useState<string | null>(null)
   const moveCreationKeysRef = useRef(new Map<string, string>())
   const [relativeNow, setRelativeNow] = useState(() => Date.now())
-  const [pageView, setPageView] = useState<AutomationsPageView>('automations')
+  const [selectedCommandAutomation, setSelectedCommandAutomation] =
+    useState<AutomationCommandCatalogRow | null>(null)
+  const [pageView, setPageViewState] = useState<AutomationsPageView>('automations')
+  const setPageView = useCallback((view: AutomationsPageView): void => {
+    if (view !== 'automations') {
+      setSelectedCommandAutomation(null)
+    }
+    setPageViewState(view)
+  }, [])
   const [runPageOrigin, setRunPageOrigin] = useState<AutomationRunPageOrigin>('runs')
   const [activePaneTab, setActivePaneTab] = useState<AutomationPaneTab>('overview')
   const [selectedAutomationRunPageId, setSelectedAutomationRunPageId] = useState<string | null>(
@@ -76,7 +85,13 @@ export function useAutomationsPageLocalState(store: AutomationsPageStoreState) {
   )
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
   const [selectedExternalKey, setSelectedExternalKey] = useState<string | null>(null)
-  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isDetailOpen, setIsDetailOpenState] = useState(false)
+  const setIsDetailOpen = useCallback((open: boolean): void => {
+    if (!open) {
+      setSelectedCommandAutomation(null)
+    }
+    setIsDetailOpenState(open)
+  }, [])
   const selectedExternalKeyRef = useRef<string | null>(null)
   useEffect(() => {
     selectedExternalKeyRef.current = selectedExternalKey
@@ -85,12 +100,16 @@ export function useAutomationsPageLocalState(store: AutomationsPageStoreState) {
   const selectAutomationId = useCallback(
     (automationId: string | null): void => {
       setSelectedAutomationRunPageId(null)
+      setSelectedCommandAutomation(null)
       setSelectedRowKey(null)
       setSelectedId(automationId)
     },
     [setSelectedId]
   )
   const selectExternalKey = useCallback((externalKey: string | null): void => {
+    if (externalKey !== null) {
+      setSelectedCommandAutomation(null)
+    }
     setSelectedExternalKey(externalKey)
   }, [])
   const [draftAtOpen, setDraftAtOpen] = useState<AutomationDraft | null>(null)
@@ -190,6 +209,8 @@ export function useAutomationsPageLocalState(store: AutomationsPageStoreState) {
     moveCreationKeysRef,
     relativeNow,
     setRelativeNow,
+    selectedCommandAutomation,
+    setSelectedCommandAutomation,
     pageView,
     setPageView,
     runPageOrigin,

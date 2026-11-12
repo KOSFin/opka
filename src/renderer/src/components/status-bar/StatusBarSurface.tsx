@@ -210,7 +210,7 @@ export function StatusBarSurface({
                   // Keep the popover (and its drill-in submenus) above the status
                   // bar instead of overlapping it — bottom padding ≈ footer height.
                   collisionPadding={{ top: 8, bottom: 32, left: 8, right: 8 }}
-                  className="w-[640px] max-w-[calc(100vw-2rem)]"
+                  className="w-[360px] max-w-[calc(100vw-2rem)]"
                   wheelScroll
                   onPointerDownOutside={usageMenuFocusHandoff.onPointerDownOutside}
                   onCloseAutoFocus={usageMenuFocusHandoff.onCloseAutoFocus}
@@ -221,6 +221,7 @@ export function StatusBarSurface({
                       snapshot={accountSnapshot ?? null}
                       verified={accountsVerified ?? false}
                       rateLimits={ownerRateLimits}
+                      dismiss={() => handleUsageMenuOpenChange(false)}
                       ownerLabel={
                         remoteOwner?.label ?? translate('usage.accounts.localHost', 'This computer')
                       }

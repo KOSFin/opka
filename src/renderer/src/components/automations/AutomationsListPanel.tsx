@@ -28,7 +28,8 @@ import {
   type AutomationListFilter,
   type AutomationListSort,
   type AutomationListSortField,
-  type AutomationListViewItem
+  type AutomationListViewItem,
+  sortAutomationListViewItems
 } from './automation-list-view'
 import { automationHostFilterStableKey } from '../../../../shared/automation-host-filter'
 import type { AutomationTemplate } from './automation-templates'
@@ -45,7 +46,7 @@ import type { AutomationHostRecoveryAction } from './automation-host-status-desc
 import type { AutomationHostCatalogEntry } from './automation-host-catalog-types'
 import { useAutomationListFocusRecovery } from './use-automation-list-focus-recovery'
 import { LIST_TABLE_CONTAINER_CLASS } from '@/lib/list-table-layout'
-import { translate } from '@/i18n/i18n'
+import { translate, getIntlLocale } from '@/i18n/i18n'
 import { AutomationTemplateEmptyState } from './AutomationTemplateEmptyState'
 import { AutomationListTableHeader } from './AutomationListTableHeader'
 import { AutomationListToolbar } from './AutomationListToolbar'
@@ -53,7 +54,17 @@ import { AutomationListToolbar } from './AutomationListToolbar'
 const TEMPLATE_EMPTY_STATES: ReadonlySet<string> = new Set(['host-empty', 'all-hosts-empty'])
 const EMPTY_AUTOMATION_RUNS: ReadonlyMap<string, AutomationRun> = new Map()
 
+export type AutomationCommandListItem = {
+  kind: 'command'
+  id: string
+  name: string
+  lastRunAt: number | null
+  content: React.ReactNode
+}
+
 export type AutomationsListPanelProps = {
+  commandRows?: readonly AutomationCommandListItem[]
+  commandRowCount?: number
   hasListItems: boolean
   hasFilteredListItems: boolean
   listSearchQuery: string
@@ -157,6 +168,9 @@ export function AutomationsListPanel(props: AutomationsListPanelProps): React.JS
     isRefreshing,
     onOpenRuns
   } = props
+  const combinedItems = sortAutomationListViewItems<
+    AutomationListViewItem | AutomationCommandListItem
+  >([...sortedListItems, ...(props.commandRows ?? [])], listSort, getIntlLocale())
   const listRef = useRef<HTMLDivElement>(null)
   // Hosts moved into the Filters menu, so its toolbar row is the focus fallback now.
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -331,12 +345,14 @@ export function AutomationsListPanel(props: AutomationsListPanelProps): React.JS
         ref={listRef}
         className={cn('scrollbar-sleek min-h-0 flex-1 overflow-auto', LIST_TABLE_CONTAINER_CLASS)}
       >
-        {hasFilteredListItems ? (
+        {hasFilteredListItems || (props.commandRowCount ?? 0) > 0 ? (
           <div className="min-w-full w-fit">
             <AutomationListTableHeader sort={listSort} onSort={onListSortChange} />
             <div className="divide-y divide-border/50">
-              {sortedListItems.map((item) =>
-                item.kind === 'local' ? (
+              {combinedItems.map((item) =>
+                item.kind === 'command' ? (
+                  <React.Fragment key={item.id}>{item.content}</React.Fragment>
+                ) : item.kind === 'local' ? (
                   <AutomationListLocalRow key={item.id} {...rowProps} row={item.row} />
                 ) : (
                   <AutomationListExternalRow
@@ -365,7 +381,7 @@ export function AutomationsListPanel(props: AutomationsListPanelProps): React.JS
           />
         )}
 
-        {!hasListItems && TEMPLATE_EMPTY_STATES.has(emptyState.kind) ? (
+        {!hasListItems && !props.commandRowCount && TEMPLATE_EMPTY_STATES.has(emptyState.kind) ? (
           <AutomationTemplateEmptyState onOpenCreate={openCreateDialog} />
         ) : null}
       </div>

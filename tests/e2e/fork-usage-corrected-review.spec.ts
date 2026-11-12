@@ -25,7 +25,7 @@ async function capture(page: Page, name: string): Promise<void> {
 async function expectPopoverHitTarget(target: Locator): Promise<void> {
   await target.scrollIntoViewIfNeeded()
   const result = await target.evaluate((element) => {
-    const popover = document.querySelector('[data-slot="popover-content"]')
+    const popover = element.closest('[data-slot="popover-content"]')
     if (!popover) {
       return { within: false, hit: false }
     }
@@ -49,6 +49,43 @@ async function expectPopoverHitTarget(target: Locator): Promise<void> {
     }
   })
   expect(result).toEqual({ within: true, hit: true })
+}
+
+async function expectDetailsPortal(
+  page: Page,
+  usage: Locator,
+  details: Locator,
+  side: 'right' | 'within-viewport'
+): Promise<void> {
+  const geometry = await details.evaluate((element) => {
+    const portal = element.closest('[data-slot="popover-content"]')
+    const usagePopover = document.querySelector('[data-slot="popover-content"][aria-label="Usage"]')
+    if (!portal || !usagePopover) {
+      return null
+    }
+    const panel = portal.getBoundingClientRect()
+    const parent = usagePopover.getBoundingClientRect()
+    return {
+      separate: portal !== usagePopover && !usagePopover.contains(element),
+      right: panel.left >= parent.right,
+      dataSide: portal.getAttribute('data-side'),
+      panel: { left: panel.left, top: panel.top, right: panel.right, bottom: panel.bottom },
+      usage: { left: parent.left, top: parent.top, right: parent.right, bottom: parent.bottom },
+      viewport: { width: innerWidth, height: innerHeight },
+      visible:
+        panel.left >= 0 &&
+        panel.top >= 0 &&
+        panel.right <= innerWidth &&
+        panel.bottom <= innerHeight
+    }
+  })
+  await expect(usage).toBeVisible()
+  const evidence = JSON.stringify(geometry)
+  expect(geometry?.separate, evidence).toBe(true)
+  expect(geometry?.visible, evidence).toBe(true)
+  if (side === 'right') {
+    expect(geometry?.right, evidence).toBe(true)
+  }
 }
 
 test('fresh hidden Electron Usage has reachable account details and nested dismissal', async ({
@@ -149,10 +186,12 @@ test('fresh hidden Electron Usage has reachable account details and nested dismi
   await detailed.click()
   await expect(alpha.getByText('42%')).toBeVisible()
   await alpha.getByRole('button').hover()
-  const details = usage.getByRole('complementary', {
+  const details = page.getByRole('complementary', {
     name: 'Codex alpha@example.test details'
   })
   await expect(details).toBeVisible()
+  await capture(page, 'usage-detail-before-right-geometry.png')
+  await expectDetailsPortal(page, usage, details, 'right')
   await expect(details.getByText(/2 manual resets available/)).toBeVisible()
   const pin = details.getByRole('button', { name: /Pin alpha@example\.test to status bar/ })
   await expectPopoverHitTarget(pin)
@@ -162,9 +201,10 @@ test('fresh hidden Electron Usage has reachable account details and nested dismi
 
   await beta.getByRole('button').focus()
   await expect(
-    usage.getByRole('complementary', { name: 'Codex beta@example.test details' })
+    page.getByRole('complementary', { name: 'Codex beta@example.test details' })
   ).toBeVisible()
   await alpha.getByRole('button').focus()
+  await expect(details).toBeVisible()
   await page.keyboard.press('Enter')
   await expect(pin).toBeFocused()
   await pin.click()
@@ -189,7 +229,7 @@ test('fresh hidden Electron Usage has reachable account details and nested dismi
   await trigger.click()
   await alpha.getByRole('button').hover()
   await expect(
-    usage
+    page
       .getByRole('complementary', { name: 'Codex alpha@example.test details' })
       .getByRole('button', { name: /Unpin alpha@example\.test from status bar/ })
   ).toBeVisible()
@@ -216,10 +256,8 @@ test('fresh hidden Electron Usage has reachable account details and nested dismi
   await alpha.getByRole('button').scrollIntoViewIfNeeded()
   await alpha.getByRole('button').hover()
   await expectPopoverHitTarget(details.getByRole('button', { name: /Unpin alpha@example\.test/ }))
-  await page.screenshot({
-    path: path.join(evidence, 'corrected-dark-narrow-scrolled.png'),
-    timeout: 15_000
-  })
+  await expectDetailsPortal(page, usage, details, 'within-viewport')
+  await capture(page, 'corrected-dark-narrow-scrolled.png')
   await page.keyboard.press('Escape')
   await expect(trigger).toBeFocused()
   expect(pageErrors).toEqual([])

@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { PROJECT_TASK_DELEGATION_CAPABILITY } from '../../shared/project-task-delegation'
+import {
+  PROJECT_TASK_DELEGATION_CAPABILITY,
+  PROJECT_TASK_PROJECT_AGENTS_CAPABILITY
+} from '../../shared/project-task-delegation'
 import { TaskWorkspace } from '../project-tasks/task-workspace'
 import { projectTaskTemplate } from '../../shared/project-task-template'
 import { RpcDispatcher } from './rpc/dispatcher'
@@ -166,6 +169,100 @@ it('accepts explicit authenticated Android confirmation, pins connection, and re
           requestId: randomUUID()
         }),
         phone
+      )
+    ).ok
+  ).toBe(true)
+  expect(
+    h.db.db.prepare('SELECT generation,grant_json FROM project_task_delegation_policy').get()
+  ).toMatchObject({ generation: 2, grant_json: null })
+})
+it('requires v2 peers for project agents and persists until revoked without a synthetic grantee', async () => {
+  const projectTarget = { ...target(), capability: PROJECT_TASK_PROJECT_AGENTS_CAPABILITY }
+  const projectProposal = {
+    ...projectTarget,
+    expectedGeneration: 0,
+    grant: { mode: 'project-agents' }
+  }
+  expect(
+    (await dispatcher.dispatch(request('projectTask.policy.propose', projectProposal), phone)).ok
+  ).toBe(false)
+  expect(
+    (
+      await dispatcher.dispatch(
+        request('projectTask.policy.propose', { ...projectProposal, capability: cap }),
+        { ...phone, clientCapabilities: [cap, PROJECT_TASK_PROJECT_AGENTS_CAPABILITY] }
+      )
+    ).ok
+  ).toBe(false)
+  const modernPhone = {
+    ...phone,
+    clientCapabilities: [cap, PROJECT_TASK_PROJECT_AGENTS_CAPABILITY]
+  }
+  const proposed = await dispatcher.dispatch(
+    request('projectTask.policy.propose', projectProposal),
+    modernPhone
+  )
+  if (!proposed.ok) {
+    throw new Error(proposed.error.message)
+  }
+  const parsed = z
+    .object({
+      id: z.string(),
+      digest: z.string(),
+      grant: z.object({ schema: z.literal(2), expiresAt: z.null() })
+    })
+    .parse(proposed.result)
+  expect(parsed.grant).toEqual({ schema: 2, expiresAt: null })
+  const confirmed = await dispatcher.dispatch(
+    request('projectTask.policy.confirm', {
+      ...projectTarget,
+      proposal: parsed.id,
+      digest: parsed.digest,
+      requestId: randomUUID()
+    }),
+    modernPhone
+  )
+  expect(confirmed.ok).toBe(true)
+  expect((await dispatcher.dispatch(request('projectTask.policy.read', target()), phone)).ok).toBe(
+    false
+  )
+  expect(
+    (
+      await dispatcher.dispatch(
+        request('projectTask.policy.propose', { ...target(), expectedGeneration: 1, grant: null }),
+        phone
+      )
+    ).ok
+  ).toBe(false)
+  const policy = await dispatcher.dispatch(
+    request('projectTask.policy.read', projectTarget),
+    modernPhone
+  )
+  if (!policy.ok) {
+    throw new Error(policy.error.message)
+  }
+  const current = z
+    .object({ grant: z.object({ schema: z.literal(2), expiresAt: z.null() }) })
+    .parse(policy.result)
+  expect(current.grant).toEqual({ schema: 2, expiresAt: null })
+  const revoke = await dispatcher.dispatch(
+    request('projectTask.policy.propose', { ...projectTarget, expectedGeneration: 1, grant: null }),
+    modernPhone
+  )
+  if (!revoke.ok) {
+    throw new Error(revoke.error.message)
+  }
+  const revoked = z.object({ id: z.string(), digest: z.string() }).parse(revoke.result)
+  expect(
+    (
+      await dispatcher.dispatch(
+        request('projectTask.policy.confirm', {
+          ...projectTarget,
+          proposal: revoked.id,
+          digest: revoked.digest,
+          requestId: randomUUID()
+        }),
+        modernPhone
       )
     ).ok
   ).toBe(true)

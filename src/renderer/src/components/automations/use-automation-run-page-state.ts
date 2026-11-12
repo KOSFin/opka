@@ -50,6 +50,7 @@ export function useAutomationRunPageState({
     selectExternalKey,
     pageView,
     setPageView,
+    selectedCommandAutomation,
     isDetailOpen,
     setIsDetailOpen
   } = local
@@ -57,7 +58,7 @@ export function useAutomationRunPageState({
   const { selectedRuns, selectedAutomationRunPage } = setup
 
   useEffect(() => {
-    if (!isDetailOpen || pendingAutomationRunNavigation) {
+    if (!isDetailOpen || selectedCommandAutomation || pendingAutomationRunNavigation) {
       return
     }
     const hasSelectedLocal = selectedRow?.key
@@ -74,6 +75,7 @@ export function useAutomationRunPageState({
     setActivePaneTab('overview')
   }, [
     isDetailOpen,
+    selectedCommandAutomation,
     list.externalAutomationEntries,
     list.visibleRows,
     pendingAutomationRunNavigation,

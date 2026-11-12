@@ -1,4 +1,13 @@
 import React from 'react'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import { AutomationDestinationField } from './AutomationDestinationField'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { getAgentCatalog } from '@/lib/agent-catalog'
 import { filterEnabledTuiAgents } from '../../../../shared/tui-agent-selection'
@@ -61,6 +70,9 @@ export type AutomationDraft = {
 
 type AutomationEditorDialogProps = {
   open: boolean
+  executionType?: 'agent' | 'command'
+  onExecutionTypeChange?: (value: 'agent' | 'command') => void
+  commandEditor?: React.ReactNode
   isEditing: boolean
   isSaving: boolean
   canSave: boolean
@@ -92,6 +104,9 @@ type AutomationEditorDialogProps = {
 
 export function AutomationEditorDialog({
   open,
+  executionType = 'agent',
+  onExecutionTypeChange,
+  commandEditor,
   isEditing,
   isSaving,
   canSave,
@@ -162,7 +177,7 @@ export function AutomationEditorDialog({
       >
         <AutomationEditorDialogHeader
           isEditing={isEditing}
-          isCreateMode={isCreateMode}
+          isCreateMode={isCreateMode && executionType === 'agent'}
           templateOpen={templateOpen}
           templates={getAutomationTemplates()}
           onTemplateOpenChange={setTemplateOpen}
@@ -172,33 +187,62 @@ export function AutomationEditorDialog({
           }}
         />
 
-        <div className="flex min-h-0 flex-1 flex-row">
-          <AutomationEditorPromptSection
-            draft={draft}
-            onDraftChange={onDraftChange}
-            onDismiss={() => onOpenChange(false)}
-          />
-          <AutomationEditorSettingsSidebar
-            destination={destination}
-            repos={repos}
-            projectHostSetups={projectHostSetups}
-            automationYamlHooksByRepoKey={automationYamlHooksByRepoKey}
-            getAutomationHooksCacheKey={getAutomationHooksCacheKey}
-            repoMap={repoMap}
-            worktrees={worktrees}
-            settings={settings}
-            draft={draft}
-            visibleAgents={visibleAgents}
-            pickerTriggerClassName={AUTOMATION_EDITOR_PICKER_TRIGGER_CLASS}
-            segmentedGroupClassName={AUTOMATION_EDITOR_SEGMENTED_GROUP_CLASS}
-            segmentedItemClassName={AUTOMATION_EDITOR_SEGMENTED_ITEM_CLASS}
-            onProjectChange={onProjectChange}
-            getRepoHostLabel={getRepoHostLabel}
-            allowAddProject={allowAddProject}
-            onDraftChange={onDraftChange}
-            onSetupDecisionTouched={onSetupDecisionTouched}
-          />
-        </div>
+        {onExecutionTypeChange && (
+          <div className="grid gap-2 border-b border-border px-5 py-3">
+            <Label htmlFor="automation-execution-type">Automation type</Label>
+            <Select
+              value={executionType}
+              disabled={isEditing || isSaving}
+              onValueChange={(value) => {
+                if (value === 'agent' || value === 'command') {
+                  onExecutionTypeChange(value)
+                }
+              }}
+            >
+              <SelectTrigger id="automation-execution-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="agent">Agent</SelectItem>
+                <SelectItem value="command">Script with optional agent</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {executionType === 'command' ? (
+          <div className="scrollbar-sleek min-h-0 flex-1 overflow-auto px-5 py-4">
+            {!isEditing && destination && <AutomationDestinationField control={destination} />}
+            {commandEditor}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-row">
+            <AutomationEditorPromptSection
+              draft={draft}
+              onDraftChange={onDraftChange}
+              onDismiss={() => onOpenChange(false)}
+            />
+            <AutomationEditorSettingsSidebar
+              destination={destination}
+              repos={repos}
+              projectHostSetups={projectHostSetups}
+              automationYamlHooksByRepoKey={automationYamlHooksByRepoKey}
+              getAutomationHooksCacheKey={getAutomationHooksCacheKey}
+              repoMap={repoMap}
+              worktrees={worktrees}
+              settings={settings}
+              draft={draft}
+              visibleAgents={visibleAgents}
+              pickerTriggerClassName={AUTOMATION_EDITOR_PICKER_TRIGGER_CLASS}
+              segmentedGroupClassName={AUTOMATION_EDITOR_SEGMENTED_GROUP_CLASS}
+              segmentedItemClassName={AUTOMATION_EDITOR_SEGMENTED_ITEM_CLASS}
+              onProjectChange={onProjectChange}
+              getRepoHostLabel={getRepoHostLabel}
+              allowAddProject={allowAddProject}
+              onDraftChange={onDraftChange}
+              onSetupDecisionTouched={onSetupDecisionTouched}
+            />
+          </div>
+        )}
 
         <AutomationOwnerConflictNotice
           notice={notice ?? null}
@@ -211,7 +255,7 @@ export function AutomationEditorDialog({
           isEditing={isEditing}
           isSaving={isSaving}
           canSave={canSave}
-          hasProjects={repos.length > 0}
+          hasProjects={executionType === 'command' || repos.length > 0}
           onOpenChange={onOpenChange}
           onSave={onSave}
         />

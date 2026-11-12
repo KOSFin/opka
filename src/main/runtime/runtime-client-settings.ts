@@ -66,6 +66,7 @@ export class RuntimeClientSettingsController {
       defaultTaskViewPreset: settings.defaultTaskViewPreset ?? 'issues',
       visibleTaskProviders: settings.visibleTaskProviders ?? [...TASK_PROVIDERS],
       defaultRepoSelection: settings.defaultRepoSelection ?? null,
+      defaultRepoSelections: settings.defaultRepoSelections ?? {},
       // Persisted settings can violate the paired client's string-array contract.
       defaultLinearTeamSelection: Array.isArray(settings.defaultLinearTeamSelection)
         ? settings.defaultLinearTeamSelection.filter((id): id is string => typeof id === 'string')

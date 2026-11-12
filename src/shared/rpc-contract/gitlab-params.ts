@@ -7,6 +7,10 @@ export const RepoSelector = z.object({
 
 export const EmptyParams = z.object({}).optional().default({})
 
+export const ImportNativeNetworkProfile = z.strictObject({
+  host: requiredString('Missing GitLab host')
+})
+
 export const GitLabRateLimit = z
   .object({
     force: z.boolean().optional(),

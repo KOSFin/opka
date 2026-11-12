@@ -1,14 +1,20 @@
 import React from 'react'
 import type { AutomationsPageController } from './use-automations-page-controller'
-import { AutomationsListPanel } from './AutomationsListPanel'
+import { AutomationsListPanel, type AutomationCommandListItem } from './AutomationsListPanel'
 import { nextAutomationListSort } from './automation-list-view'
 
 export function AutomationsPageListPanel({
   controller,
-  onOpenDetail
+  onOpenDetail,
+  commandRows,
+  commandRowCount = 0,
+  onRefreshCommands
 }: {
   controller: AutomationsPageController
   onOpenDetail: () => void
+  commandRows?: readonly AutomationCommandListItem[]
+  commandRowCount?: number
+  onRefreshCommands?: () => void
 }): React.JSX.Element {
   const {
     store,
@@ -58,6 +64,8 @@ export function AutomationsPageListPanel({
   }
   return (
     <AutomationsListPanel
+      commandRows={commandRows}
+      commandRowCount={commandRowCount}
       hasListItems={hasListItems}
       hasFilteredListItems={hasFilteredListItems}
       listSearchQuery={listSearchQuery}
@@ -111,6 +119,7 @@ export function AutomationsPageListPanel({
       canCreateAutomation={destination.canCreateAutomation}
       onOpenDetail={onOpenDetail}
       onRefresh={() => {
+        onRefreshCommands?.()
         hostCatalog.refreshHosts()
         void pageRefresh.refresh()
       }}

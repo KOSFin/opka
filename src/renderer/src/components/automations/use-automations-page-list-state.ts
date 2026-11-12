@@ -34,11 +34,13 @@ export function useAutomationsPageListState({
     listSort,
     selectedRowKey,
     selectedExternalKey,
+    selectedCommandAutomation,
     selectedAutomationRuns,
     workspaceNameCacheRef,
     selectExternalKey,
     setSelectedAutomationRunPageId,
-    setSelectedRowKey
+    setSelectedRowKey,
+    setSelectedCommandAutomation
   } = local
   const hostCatalog = useAutomationHostCatalog({ failedAuthorityKeys })
   const externalScopeEntries = useMemo(
@@ -66,11 +68,18 @@ export function useAutomationsPageListState({
   const selectAutomationRow = useCallback(
     (rowKey: string | null): void => {
       const row = rowKey === null ? null : visibleRows.find((candidate) => candidate.key === rowKey)
+      setSelectedCommandAutomation(null)
       setSelectedAutomationRunPageId(null)
       setSelectedRowKey(row?.key ?? null)
       setSelectedId(row?.automation.id ?? null)
     },
-    [setSelectedAutomationRunPageId, setSelectedId, setSelectedRowKey, visibleRows]
+    [
+      setSelectedCommandAutomation,
+      setSelectedAutomationRunPageId,
+      setSelectedId,
+      setSelectedRowKey,
+      visibleRows
+    ]
   )
   const selectedExternal =
     externalAutomationEntries.find((entry) => entry.key === selectedExternalKey) ??
@@ -101,6 +110,7 @@ export function useAutomationsPageListState({
     worktreeMap,
     selectedRowKey: selectedRow?.key ?? null,
     selectedExternalKey,
+    hasSelectedCommand: selectedCommandAutomation !== null,
     selectAutomationRow,
     selectExternalKey
   })

@@ -3,7 +3,6 @@ import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import {
   getTaskEligibleRepos,
   normalizeTaskRepoSelection,
-  getDefaultTaskRepoSelection,
   getTaskProjectPickerGroups
 } from '@/components/task-page-default-repo-selection'
 import { areStringSetsEqual } from '@/components/task-page-string-set-equality'
@@ -29,6 +28,7 @@ import type { TaskProvider } from '../../../shared/task-providers'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { getTaskPageRepoSourceContext } from './task-page-source-context'
+import { useTaskPageRepoSelectionState } from './use-task-page-repo-selection-state'
 export function useTaskPageRepoSelection(model: TaskPageStoreBindingsModel) {
   const {
     settings,
@@ -43,19 +43,36 @@ export function useTaskPageRepoSelection(model: TaskPageStoreBindingsModel) {
   } = model
   const eligibleRepos = useMemo(() => getTaskEligibleRepos(repos), [repos])
 
-  // Why: initial selection precedence — explicit preselection > persisted defaultRepoSelection > all eligible; preselection wins so "open tasks for this repo" lands single-repo.
-  const resolvedInitialSelection = useMemo<ReadonlySet<string>>(() => {
-    const preferred = pageData.preselectedRepoId
-    if (preferred && eligibleRepos.some((repo) => repo.id === preferred)) {
-      return new Set([preferred])
-    }
-    const persisted = settings?.defaultRepoSelection
-    if (Array.isArray(persisted)) {
-      return normalizeTaskRepoSelection(eligibleRepos, new Set(persisted))
-    }
-    return getDefaultTaskRepoSelection(eligibleRepos)
-  }, [eligibleRepos, pageData.preselectedRepoId, settings?.defaultRepoSelection])
-  const [repoSelection, setRepoSelection] = useState<ReadonlySet<string>>(resolvedInitialSelection)
+  const preferredVisibleTaskProviders = useMemo(
+    () => normalizeVisibleTaskProviders(settings?.visibleTaskProviders),
+    [settings?.visibleTaskProviders]
+  )
+  const defaultTaskSource = settings?.defaultTaskSource ?? 'github'
+  const visibleTaskProviders = useMemo(
+    () =>
+      restoreAvailableDefaultTaskProvider(
+        preferredVisibleTaskProviders,
+        {
+          gitlabInstalled: preflightStatusCurrent && preflightStatus?.glab?.installed === true,
+          linearConnected: linearConnected === true
+        },
+        defaultTaskSource
+      ),
+    [
+      defaultTaskSource,
+      linearConnected,
+      preferredVisibleTaskProviders,
+      preflightStatusCurrent,
+      preflightStatus?.glab?.installed
+    ]
+  )
+  const preferredTaskSource = pageData.taskSource ?? defaultTaskSource
+  const [taskSource, setTaskSource] = useState<TaskProvider>(
+    resolveVisibleTaskProvider(preferredTaskSource, visibleTaskProviders)
+  )
+
+  const { resolvedInitialSelection, repoSelection, setRepoSelection, saveRepoSelection } =
+    useTaskPageRepoSelectionState(model, taskSource, eligibleRepos)
   const taskPickerGroups = useMemo(
     () => getTaskProjectPickerGroups(eligibleRepos, repoSelection),
     [eligibleRepos, repoSelection]
@@ -92,7 +109,7 @@ export function useTaskPageRepoSelection(model: TaskPageStoreBindingsModel) {
     if (!areStringSetsEqual(normalized, repoSelection)) {
       setRepoSelection(normalized)
     }
-  }, [eligibleRepos, repoSelection, taskPickerRepos])
+  }, [eligibleRepos, repoSelection, setRepoSelection, taskPickerRepos])
   const selectedRepos = useMemo(
     () => eligibleRepos.filter((r) => repoSelection.has(r.id)),
     [eligibleRepos, repoSelection]
@@ -129,29 +146,6 @@ export function useTaskPageRepoSelection(model: TaskPageStoreBindingsModel) {
     selectedJiraSiteId && selectedJiraSiteId !== 'all'
       ? (jiraSites.find((site) => site.id === selectedJiraSiteId) ?? null)
       : null
-  const preferredVisibleTaskProviders = useMemo(
-    () => normalizeVisibleTaskProviders(settings?.visibleTaskProviders),
-    [settings?.visibleTaskProviders]
-  )
-  const defaultTaskSource = settings?.defaultTaskSource ?? 'github'
-  const visibleTaskProviders = useMemo(
-    () =>
-      restoreAvailableDefaultTaskProvider(
-        preferredVisibleTaskProviders,
-        {
-          gitlabInstalled: preflightStatusCurrent && preflightStatus?.glab?.installed === true,
-          linearConnected: linearConnected === true
-        },
-        defaultTaskSource
-      ),
-    [
-      defaultTaskSource,
-      linearConnected,
-      preferredVisibleTaskProviders,
-      preflightStatusCurrent,
-      preflightStatus?.glab?.installed
-    ]
-  )
   const sourceOptions = getSourceOptions()
   const githubModeButtons = getGitHubModeButtons()
   const linearModeOptions = getLinearModeOptions()
@@ -196,8 +190,12 @@ export function useTaskPageRepoSelection(model: TaskPageStoreBindingsModel) {
   const nextModel = model as typeof model & {
     eligibleRepos: typeof eligibleRepos
     resolvedInitialSelection: typeof resolvedInitialSelection
+    preferredTaskSource: typeof preferredTaskSource
+    taskSource: typeof taskSource
+    setTaskSource: typeof setTaskSource
     repoSelection: typeof repoSelection
     setRepoSelection: typeof setRepoSelection
+    saveRepoSelection: typeof saveRepoSelection
     taskPickerGroups: typeof taskPickerGroups
     taskPickerRepos: typeof taskPickerRepos
     prevTaskPickerCountRef: typeof prevTaskPickerCountRef
@@ -228,8 +226,12 @@ export function useTaskPageRepoSelection(model: TaskPageStoreBindingsModel) {
   }
   nextModel.eligibleRepos = eligibleRepos
   nextModel.resolvedInitialSelection = resolvedInitialSelection
+  nextModel.preferredTaskSource = preferredTaskSource
+  nextModel.taskSource = taskSource
+  nextModel.setTaskSource = setTaskSource
   nextModel.repoSelection = repoSelection
   nextModel.setRepoSelection = setRepoSelection
+  nextModel.saveRepoSelection = saveRepoSelection
   nextModel.taskPickerGroups = taskPickerGroups
   nextModel.taskPickerRepos = taskPickerRepos
   nextModel.prevTaskPickerCountRef = prevTaskPickerCountRef

@@ -17,6 +17,7 @@ type Props = {
   pendingRun: PendingCommandRun | null
   onRunReconciled(runId: string, overlap: boolean): void
   onStartNewRun(): void
+  onToggle(): void
   onEdit(): void
   onRun(): void
   onRemove(): void
@@ -35,6 +36,7 @@ export function AutomationCommandDetails({
   pendingRun,
   onRunReconciled,
   onStartNewRun,
+  onToggle,
   onEdit,
   onRun,
   onRemove,
@@ -54,6 +56,9 @@ export function AutomationCommandDetails({
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={onEdit} disabled={busy}>
                 Edit
+              </Button>
+              <Button variant="outline" onClick={onToggle} disabled={busy}>
+                {selected.enabled ? 'Pause' : 'Enable'}
               </Button>
               <Button onClick={onRun} disabled={busy}>
                 {retrySameRequest ? 'Retry same request' : 'Run now'}

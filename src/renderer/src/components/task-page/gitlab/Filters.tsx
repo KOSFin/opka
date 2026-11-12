@@ -1,7 +1,6 @@
 import type { TaskPageComposerActionsModel } from '../../use-task-page-composer-actions'
 import { cn } from '@/lib/utils'
 import TaskProjectSourceCombobox from '@/components/task-project-source-combobox'
-import { normalizeTaskRepoSelection } from '@/components/task-page-default-repo-selection'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -13,12 +12,9 @@ export function TaskPageGitLabFilters({
   model: TaskPageComposerActionsModel
 }): React.JSX.Element | null {
   const {
-    updateSettings,
-    eligibleRepos,
     repoSelection,
-    setRepoSelection,
+    saveRepoSelection,
     taskPickerGroups,
-    taskPickerRepos,
     gitLabIssueFilters,
     gitLabMRFilters,
     getTaskPickerRepoHostLabel,
@@ -60,11 +56,7 @@ export function TaskPageGitLabFilters({
             selected={repoSelection}
             getRepoHostLabel={getTaskPickerRepoHostLabel}
             onChange={(next) => {
-              const normalized = normalizeTaskRepoSelection(eligibleRepos, next)
-              setRepoSelection(normalized)
-              void updateSettings({
-                defaultRepoSelection: [...normalized]
-              }).catch(() => {
+              void saveRepoSelection(next).catch(() => {
                 toast.error(
                   translate(
                     'auto.components.TaskPage.dfd72673e7',
@@ -74,11 +66,7 @@ export function TaskPageGitLabFilters({
               })
             }}
             onSelectAll={() => {
-              const allIds = new Set(taskPickerRepos.map((r) => r.id))
-              setRepoSelection(allIds)
-              void updateSettings({
-                defaultRepoSelection: null
-              }).catch(() => {
+              void saveRepoSelection(null).catch(() => {
                 toast.error(
                   translate(
                     'auto.components.TaskPage.dfd72673e7',

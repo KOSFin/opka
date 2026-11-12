@@ -1,5 +1,6 @@
 import { defineMethod } from '../core'
 import { createGitLabNetworkProfileStore } from '../../../gitlab/gitlab-network-profile-store'
+import { importNativeGlabNetworkProfile } from '../../../gitlab/gitlab-native-profile-import'
 import { normalizeGitLabIssueListArgs } from '../../../gitlab/gitlab-preload-args'
 import { toGitLabJobLogExcerptResult } from '../../../../shared/gitlab-job-log-excerpt'
 import {
@@ -8,6 +9,7 @@ import {
   AddMRInlineComment,
   CreateIssue,
   EmptyParams,
+  ImportNativeNetworkProfile,
   GitLabRateLimit,
   IssuesList,
   JobTrace,
@@ -25,6 +27,12 @@ import {
 } from '../../../../shared/rpc-contract/gitlab-params'
 
 export const GITLAB_METHODS = [
+  defineMethod({
+    name: 'gitlab.importNativeNetworkProfile',
+    permission: 'workspace',
+    params: ImportNativeNetworkProfile,
+    handler: (params) => importNativeGlabNetworkProfile(params.host)
+  }),
   defineMethod({
     name: 'gitlab.listNetworkProfiles',
     permission: 'workspace',
