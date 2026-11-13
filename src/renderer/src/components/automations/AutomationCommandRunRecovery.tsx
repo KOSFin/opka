@@ -15,6 +15,7 @@ type Props = {
   target: AutomationHostTarget
   request: PendingCommandRun
   busy: boolean
+  canStartNew: boolean
   onAdmitted(runId: string, overlap: boolean): void
   onStartNew(): void
 }
@@ -23,6 +24,7 @@ export function AutomationCommandRunRecovery({
   target,
   request,
   busy,
+  canStartNew,
   onAdmitted,
   onStartNew
 }: Props): React.JSX.Element {
@@ -104,7 +106,7 @@ export function AutomationCommandRunRecovery({
           Reconcile request
         </Button>
         {resolution?.kind === 'safe_no_effect' && (
-          <Button size="sm" onClick={onStartNew} disabled={busy || loading}>
+          <Button size="sm" onClick={onStartNew} disabled={busy || loading || !canStartNew}>
             Start new request
           </Button>
         )}

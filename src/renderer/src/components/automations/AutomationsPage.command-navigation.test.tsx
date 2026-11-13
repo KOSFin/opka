@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act } from 'react'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import {
   api,
@@ -10,6 +10,7 @@ import {
 } from './automations-page-test-harness'
 import { makeAutomation } from './automations-page-fixtures'
 import { commandDefinitionFromDraft, emptyAutomationCommandDraft } from './automation-command-draft'
+import { AutomationCommandDetails } from './AutomationCommandDetails'
 import { AutomationCommandDefinitionV1 } from '../../../../shared/automation-command-domain'
 import type { ProjectHostSetup } from '../../../../shared/project-types'
 import {
@@ -105,5 +106,78 @@ it.each([false, true])(
       await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Runs' })))
       expect(screen.queryByRole('region', { name: 'Command automation details' })).toBeNull()
     }
+  }
+)
+
+it.each([
+  { enabled: false, retrySameRequest: false, label: 'Run now', expectedCalls: 0 },
+  { enabled: false, retrySameRequest: true, label: 'Retry same request', expectedCalls: 0 },
+  { enabled: true, retrySameRequest: false, label: 'Run now', expectedCalls: 1 }
+])(
+  'command run action respects enabled=$enabled and retry=$retrySameRequest',
+  ({ enabled, retrySameRequest, label, expectedCalls }) => {
+    const setup: ProjectHostSetup = {
+      id: 'script-setup',
+      projectId: 'project',
+      hostId: 'local',
+      repoId: 'project',
+      path: '/synthetic/folder',
+      displayName: 'Synthetic folder',
+      setupState: 'ready',
+      setupMethod: 'imported-existing-folder',
+      createdAt: 1,
+      updatedAt: 1
+    }
+    const selected = AutomationCommandDefinitionV1.parse({
+      ...commandDefinitionFromDraft(
+        {
+          ...emptyAutomationCommandDraft(),
+          name: 'Script example',
+          setupId: setup.id,
+          commandText: 'true',
+          timezone: 'UTC'
+        },
+        setup,
+        1,
+        'script-create'
+      ),
+      id: 'script-1',
+      revision: 1,
+      enabled,
+      nextRunAt: 1,
+      createdAt: 1,
+      updatedAt: 1
+    })
+    const onRun = vi.fn()
+    const view = render(
+      <AutomationCommandDetails
+        selected={selected}
+        runs={[]}
+        selectedRun={null}
+        busy={false}
+        retrySameRequest={retrySameRequest}
+        target={{ kind: 'local' }}
+        pendingRun={null}
+        onRunReconciled={vi.fn()}
+        onStartNewRun={vi.fn()}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onRun={onRun}
+        onRemove={vi.fn()}
+        onSelectRun={vi.fn()}
+        onRefreshRuns={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+    const action = screen.getByRole('button', { name: label })
+    expect(action.hasAttribute('disabled')).toBe(!enabled)
+    if (enabled) {
+      expect(screen.queryByText('Enable this automation before running it.')).toBeNull()
+    } else {
+      expect(screen.getByText('Enable this automation before running it.')).toBeTruthy()
+    }
+    fireEvent.click(action)
+    expect(onRun).toHaveBeenCalledTimes(expectedCalls)
+    view.unmount()
   }
 )

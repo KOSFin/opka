@@ -328,9 +328,15 @@ export function UsageRosterPanel({
           const accountProvider = provider.provider === 'codex' ? 'codex' : 'claude'
           const selectionScope = `${ownerKey}:${accountProvider}:${target?.runtime}:${target?.wslDistro ?? ''}`
           const inspectedRowId = inspected?.scope === selectionScope ? inspected.rowId : null
-          const onInspectRow = (rowId: string): void => {
+          const onInspectRow = (rowId: string, closingRowId?: string): void => {
             if (ownerKey) {
-              setInspected({ scope: selectionScope, rowId })
+              setInspected((current) =>
+                closingRowId
+                  ? current?.scope === selectionScope && current.rowId === closingRowId
+                    ? null
+                    : current
+                  : { scope: selectionScope, rowId }
+              )
             }
           }
           return (

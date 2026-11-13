@@ -6,12 +6,7 @@ import {
 import type { AutomationOwnerPrecondition } from '../../shared/automation-owner-precondition'
 import type { CommandRunClaimResult } from '../persistence/scheduling-automations/automation-command-claim-operations'
 import type { RuntimeStore } from './runtime-store-contract'
-
-function assertLocalOwner(expectedOwner: AutomationOwnerPrecondition): void {
-  if (expectedOwner.selector.kind !== 'self') {
-    throw new Error('Command automation execution host changed or is unsupported.')
-  }
-}
+import { assertCommandAutomationOwner } from '../../shared/automation-command-owner'
 
 /** Versioned command definitions use the same Store and service as legacy automations. */
 export class RuntimeCommandAutomationController {
@@ -34,7 +29,28 @@ export class RuntimeCommandAutomationController {
     return this.store.listCommandAutomations()
   }
 
+  ownedDefinition(id: string, expectedOwner?: AutomationOwnerPrecondition) {
+    const definition = this.store?.listCommandAutomations?.()?.find((entry) => entry.id === id)
+    if (!definition) {
+      return null
+    }
+    assertCommandAutomationOwner(definition, expectedOwner)
+    if (this.store?.listAutomations?.()?.some((entry) => entry.id === id)) {
+      throw new Error('Automation identity is ambiguous.')
+    }
+    return definition
+  }
+
+  private requireOwnedDefinition(id: string, expectedOwner?: AutomationOwnerPrecondition) {
+    const definition = this.ownedDefinition(id, expectedOwner)
+    if (!definition) {
+      throw new Error('Command automation changed or is unavailable.')
+    }
+    return definition
+  }
+
   manualReceipt(automationId: string, requestKey: string) {
+    this.requireOwnedDefinition(automationId)
     if (!this.store?.getCommandAutomationManualReceipt) {
       throw new Error('runtime_unavailable')
     }
@@ -45,6 +61,7 @@ export class RuntimeCommandAutomationController {
     if (!this.store?.createCommandAutomation || !this.store.flushPendingOrThrowAsync) {
       throw new Error('runtime_unavailable')
     }
+    assertCommandAutomationOwner(input)
     const definition = this.store.createCommandAutomation(input)
     await this.store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
     return definition
@@ -56,11 +73,10 @@ export class RuntimeCommandAutomationController {
     expectedOwner: AutomationOwnerPrecondition,
     updates: Partial<AutomationCommandDefinitionCreateV1>
   ): Promise<AutomationCommandDefinitionV1> {
-    assertLocalOwner(expectedOwner)
     if (!this.store?.replaceCommandAutomation || !this.store.flushPendingOrThrowAsync) {
       throw new Error('runtime_unavailable')
     }
-    const current = this.list().find((entry) => entry.id === id)
+    const current = this.requireOwnedDefinition(id, expectedOwner)
     if (!current || current.revision !== expectedRevision) {
       throw new Error('Command automation changed or is unavailable.')
     }
@@ -76,6 +92,7 @@ export class RuntimeCommandAutomationController {
       ...base
     } = current
     const input = AutomationCommandDefinitionCreateV1.parse({ ...base, ...updates })
+    assertCommandAutomationOwner(input, expectedOwner)
     const definition = this.store.replaceCommandAutomation(id, expectedRevision, input)
     await this.store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
     return definition
@@ -86,7 +103,7 @@ export class RuntimeCommandAutomationController {
     expectedRevision: number,
     expectedOwner: AutomationOwnerPrecondition
   ): Promise<void> {
-    assertLocalOwner(expectedOwner)
+    this.requireOwnedDefinition(id, expectedOwner)
     if (!this.store?.deleteCommandAutomation || !this.store.flushPendingOrThrowAsync) {
       throw new Error('runtime_unavailable')
     }
@@ -100,7 +117,7 @@ export class RuntimeCommandAutomationController {
     expectedOwner: AutomationOwnerPrecondition,
     manualRequest: { key: string; createdAt: number; payloadHash: string }
   ): Promise<CommandRunClaimResult> {
-    assertLocalOwner(expectedOwner)
+    this.requireOwnedDefinition(id, expectedOwner)
     if (!this.service?.commandPipelineAvailable()) {
       throw new Error('automation_command_unsupported')
     }
@@ -117,7 +134,7 @@ export class RuntimeCommandAutomationController {
     expectedOwner: AutomationOwnerPrecondition,
     requestKey: string
   ) {
-    assertLocalOwner(expectedOwner)
+    this.requireOwnedDefinition(id, expectedOwner)
     if (!this.service) {
       throw new Error('runtime_unavailable')
     }

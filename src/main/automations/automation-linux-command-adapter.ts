@@ -1,7 +1,7 @@
 import type { Store } from '../persistence'
 import { existsSync } from 'node:fs'
+import { isLocalCommandAutomationOwner } from '../../shared/automation-command-owner'
 import type { AutomationCommandDefinitionV1 } from '../../shared/automation-command-domain'
-import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type { AutomationCommandHostAdapter } from './automation-command-service'
 import type { AutomationRunWriter } from './automation-run-writer'
 import {
@@ -66,9 +66,7 @@ export function createLinuxCommandAutomationAdapter(
       if (
         !scopeReady ||
         !inputs.isCurrentOwner() ||
-        definition.executionTargetType !== 'local' ||
-        definition.executionTargetId !== LOCAL_EXECUTION_HOST_ID ||
-        definition.workspaceMode !== 'existing' ||
+        !isLocalCommandAutomationOwner(definition) ||
         (definition.execution.policy.maxAttempts !== 1 &&
           (!definition.execution.policy.idempotent || definition.execution.agent !== null))
       ) {

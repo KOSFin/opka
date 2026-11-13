@@ -156,3 +156,42 @@ If a run fails before it opens a workspace or reconnects to its target, open tha
 
 - [Orca CLI overview](/docs/cli/overview) — see the rest of the CLI surface for worktrees, terminals, and browser control.
 - [Skills registry & MCP](/docs/cli/skills) — install the Orca CLI skill so agents can call the same commands.
+
+## Scripts with an optional agent on Linux
+
+The existing **Automations** list and editor also support **Script with optional agent**. Select **Create on** first, then a ready project folder on that execution host. The host must run Linux with a reachable, lingering systemd user manager and pass its durable process-scope probe. Unsupported hosts do not advertise command execution; reconnecting alone does not install those prerequisites.
+
+Use the editor presets or a five-field cron expression for schedules. The RRULE parser supports its HOURLY/DAILY/WEEKLY subset with BYHOUR, BYMINUTE and weekly BYDAY; COUNT and second-level scheduling are not implemented. The scheduler polls once per minute.
+
+Command automations must be enabled for **Run now** as well as scheduled execution. For a manual probe, keep the schedule safely in the future before enabling it.
+
+Choose **Program**, **Shell script**, or **Python script** as the first step. **Never call an agent** with **No agent** runs entirely without a model. **Exit code 0 and changed JSON** continues only when the command exits successfully and its stdout is exactly a JSON object such as:
+
+```json
+{ "version": 1, "changed": true }
+```
+
+Return `changed: false` when there is nothing to review. Send diagnostic logs to stderr so stdout remains valid JSON. The optional agent stage currently supports **Codex, one turn** through the execution host's verified CLI, with an ephemeral session and read-only sandbox. Claude and continuing an existing agent conversation are not supported by this command pipeline. CLI availability and authentication must be configured on the execution host; this option does not establish automatic pool-account selection.
+
+### Bound the monitoring command
+
+For a small monitoring script, use **Program** with executable `/usr/bin/prlimit` and these **Arguments, one per line**, adapting the limits and script path to the job:
+
+```text
+--as=268435456
+--cpu=15
+--nproc=1024
+--
+/usr/bin/python3
+/absolute/project/monitor.py
+```
+
+Also set the editor's **Timeout, seconds** to bound elapsed time. `prlimit` supplies inherited per-process address-space, CPU-time and process-count limits; these are not an aggregate cgroup memory budget or CPU quota for an arbitrary process tree. The product currently bounds command/lifecycle time and retained output, but does not configure per-run RAM, CPU-quota or cgroup PID budgets. Start with a small script that does not spawn worker trees.
+
+### Keep reports available after restart
+
+Use **History only** for the first monitoring schedule. Its output snapshot and run identity remain in **Runs** after a host restart. Final history retains the latest 100 runs per automation, with output limited to 16 KiB; it is not a permanent audit archive. Replaying the same manual request key is deduplicated within the retained 24-hour request window.
+
+For long-term consultation, let the monitoring script maintain its existing daily files and index inside the project, and have the main agent read those files when asked. Opka does not create that file archive automatically. This mode needs no model call or external notification on each check.
+
+**Primary chat report** requires a currently registered chat on the same execution host, folder and registration generation. The target also pins the runtime incarnation: after a host restart, reselect the chat before relying on delivery. Durable automatic delivery to that chat across restarts is not supported in this version; use history and project files for that requirement. A missing or stale required report target can refuse execution, so choose **History only** when unattended checks must continue independently of chat registration.

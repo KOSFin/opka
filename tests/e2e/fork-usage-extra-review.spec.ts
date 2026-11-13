@@ -60,28 +60,36 @@ async function expectDetailsPortal(
   details: Locator,
   side: 'right' | 'within-viewport'
 ): Promise<void> {
-  const geometry = await details.evaluate((element) => {
-    const portal = element.closest('[data-slot="popover-content"]')
-    const usagePopover = document.querySelector('[data-slot="popover-content"][aria-label="Usage"]')
-    if (!portal || !usagePopover) {
-      return null
-    }
-    const panel = portal.getBoundingClientRect()
-    const parent = usagePopover.getBoundingClientRect()
-    return {
-      separate: portal !== usagePopover && !usagePopover.contains(element),
-      right: panel.left >= parent.right,
-      dataSide: portal.getAttribute('data-side'),
-      panel: { left: panel.left, top: panel.top, right: panel.right, bottom: panel.bottom },
-      usage: { left: parent.left, top: parent.top, right: parent.right, bottom: parent.bottom },
-      viewport: { width: innerWidth, height: innerHeight },
-      visible:
-        panel.left >= 0 &&
-        panel.top >= 0 &&
-        panel.right <= innerWidth &&
-        panel.bottom <= innerHeight
-    }
-  })
+  const getGeometry = () =>
+    details.evaluate((element) => {
+      const portal = element.closest('[data-slot="popover-content"]')
+      const usagePopover = document.querySelector(
+        '[data-slot="popover-content"][aria-label="Usage"]'
+      )
+      if (!portal || !usagePopover) {
+        return null
+      }
+      const panel = portal.getBoundingClientRect()
+      const parent = usagePopover.getBoundingClientRect()
+      return {
+        separate: portal !== usagePopover && !usagePopover.contains(element),
+        right: panel.left >= parent.right,
+        dataSide: portal.getAttribute('data-side'),
+        panel: { left: panel.left, top: panel.top, right: panel.right, bottom: panel.bottom },
+        usage: { left: parent.left, top: parent.top, right: parent.right, bottom: parent.bottom },
+        viewport: { width: innerWidth, height: innerHeight },
+        visible:
+          panel.left >= 0 &&
+          panel.top >= 0 &&
+          panel.right <= innerWidth &&
+          panel.bottom <= innerHeight
+      }
+    })
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  )
+  const geometry = await getGeometry()
   await expect(usage).toBeVisible()
   const evidence = JSON.stringify(geometry)
   expect(geometry?.separate, evidence).toBe(true)
@@ -195,6 +203,22 @@ test('fresh hidden Electron Usage has reachable account details and nested dismi
   await expect(details).toBeVisible()
   await expectDetailsPortal(page, usage, details, 'right')
   await expect(details.getByText(/2 manual resets available/)).toBeVisible()
+  const betaDetails = page.getByRole('complementary', {
+    name: 'Codex beta@example.test details'
+  })
+  await beta.getByRole('button').hover()
+  await expect(betaDetails).toBeVisible({ timeout: 500 })
+  await expect(details).toHaveCount(0)
+  await expectDetailsPortal(page, usage, betaDetails, 'right')
+  await alpha.getByRole('button').hover()
+  await expect(details).toBeVisible({ timeout: 500 })
+  await expect(betaDetails).toHaveCount(0)
+  await beta.getByRole('button').click()
+  await expect(betaDetails).toBeVisible({ timeout: 500 })
+  await alpha.getByRole('button').click()
+  await expect(details).toBeVisible({ timeout: 500 })
+  await expect(betaDetails).toHaveCount(0)
+  await expectDetailsPortal(page, usage, details, 'right')
   const pin = details.getByRole('button', { name: /Pin alpha@example\.test to status bar/ })
   await alpha.getByRole('button').focus()
   await page.keyboard.press('Tab')

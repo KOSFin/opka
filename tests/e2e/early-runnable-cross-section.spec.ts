@@ -122,6 +122,15 @@ test('populated project and task navigation stays rendered in a hidden disposabl
 
   await orcaPage.evaluate(() => window.__store!.getState().setActiveView('tasks'))
   await expect(orcaPage.getByRole('heading', { name: 'Project tasks', exact: true })).toBeVisible()
+  const projectCanvas = await orcaPage
+    .getByRole('heading', { name: 'Project tasks', exact: true })
+    .evaluate((heading) => {
+      const canvas = heading.closest('.bg-background')
+      if (!canvas) {
+        throw new Error('Missing Project tasks canvas')
+      }
+      return getComputedStyle(canvas).backgroundColor
+    })
   await orcaPage.getByRole('button', { name: 'Task projects', exact: true }).click()
   const options = orcaPage.getByRole('menuitemcheckbox')
   const labels = await options.allTextContents()
@@ -151,7 +160,9 @@ test('populated project and task navigation stays rendered in a hidden disposabl
   await orcaPage.getByRole('button', { name: 'Task approval', exact: true }).click()
   const approval = orcaPage.getByRole('region', { name: 'Project task approval mode' })
   await expect(approval).toBeVisible()
-  await expect(approval).toContainText('Scoped to this project and execution host')
+  await expect(approval).toContainText(
+    'Choose whether verified agents on this project can make task decisions.'
+  )
   await capture(orcaPage, 'delegation-read-only.png')
   await orcaPage.keyboard.press('Escape')
 
@@ -160,6 +171,11 @@ test('populated project and task navigation stays rendered in a hidden disposabl
     .getByRole('button', { name: 'Working copies', exact: true })
     .click()
   await expect(orcaPage.getByRole('button', { name: 'Project tasks', exact: true })).toBeVisible()
+  const workingCanvas = orcaPage.locator('[data-workspace-board-embedded]')
+  await expect(workingCanvas).toBeVisible()
+  expect(await workingCanvas.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    projectCanvas
+  )
   await capture(orcaPage, 'working-copies.png')
   await orcaPage.getByRole('button', { name: 'External trackers', exact: true }).click()
   await expect(
