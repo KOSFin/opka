@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, lstat, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { zipSync } from 'fflate'
@@ -11,7 +11,7 @@ const sourceCommit = 'e6e5708e677adb2463d45accdd24bc9fd028ddd8'
 const sourceSha = '45d766358b7e6c453031800af6f1ba6fa1a30bf06a9aca9de8e39141aeaf5b56'
 const toolchainSha = 'ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5'
 const goBinarySha = '9c2a37ae5b21ba1d5a004bb9ab4d0c64de6fc5778e9d30487adccea62678b8b5'
-const patchSha = '3bd902df9fa05bbc88c268a4b9d52a0e134f596f9e7ddf299148e2e4780a2fce'
+const patchSha = '88b51a5c4604bd85c366c24ca6aa62c18dcfef1f1d3a76f6b596db38bc8626ab'
 const goModSha = '0bde88cb0885b76451e1e000dab3ede1a2e8e37ef9800fe620d3394c1b1df941'
 const goSumSha = 'b5ea69a0a029ffd5c0f23ba6893803514a2a4b8ddfb79c223ea2a58d978a654c'
 const licenseSha = '879792e89cf1bdd6a8d446033ec87e30496f97dcafc4656dc53f641509b346a6'
@@ -70,8 +70,21 @@ try {
   await extractTar.asyncFile({ file: toolchainArchive, cwd: goRoot, strip: 1, strict: true }, [])
   const goBinary = join(goRoot, 'bin', 'go')
   await verified(goBinary, goBinarySha)
-  const cacheRoot = join(work, 'cache')
-  await mkdir(cacheRoot)
+  const cacheRoot = process.env.ORCA_REPLAY_BUILD_CACHE ?? join(work, 'cache')
+  if (!isAbsolute(cacheRoot)) {
+    throw new Error('The replay build cache must be an absolute private directory.')
+  }
+  await mkdir(cacheRoot, { recursive: true, mode: 0o700 })
+  const cacheMetadata = await lstat(cacheRoot)
+  if (
+    !cacheMetadata.isDirectory() ||
+    cacheMetadata.isSymbolicLink() ||
+    cacheMetadata.uid !== process.getuid() ||
+    (cacheMetadata.mode & 0o077) !== 0
+  ) {
+    throw new Error('The replay build cache must belong only to the current builder.')
+  }
+  await mkdir(join(cacheRoot, 'tmp'), { recursive: true, mode: 0o700 })
   const env = {
     PATH: `${dirname(goBinary)}:/usr/bin:/bin`,
     HOME: work,
@@ -83,6 +96,8 @@ try {
     GOPROXY: 'off',
     GOSUMDB: 'off',
     GOCACHE: join(cacheRoot, 'build'),
+    GOTMPDIR: join(cacheRoot, 'tmp'),
+    TMPDIR: join(cacheRoot, 'tmp'),
     GOMODCACHE: moduleCache,
     GOPATH: join(cacheRoot, 'path'),
     CGO_ENABLED: '0',
@@ -90,7 +105,7 @@ try {
     GOARCH: goarch,
     GOFLAGS: '-p=1 -mod=readonly',
     GOMAXPROCS: '2',
-    GOMEMLIMIT: '2GiB'
+    GOMEMLIMIT: '512MiB'
   }
   const results = []
   for (const name of ['first', 'second']) {
@@ -109,6 +124,15 @@ try {
     }
     const binary = join(buildRoot, member)
     command(goBinary, ['mod', 'verify'], buildRoot, env)
+    if (name === 'first' && platform === process.platform && arch === process.arch) {
+      const tests = command(
+        goBinary,
+        ['test', '-count=1', '-v', './sdk/cliproxy/executor', '-run', 'Seekable'],
+        buildRoot,
+        env
+      )
+      console.log(tests.trim())
+    }
     command(
       goBinary,
       [

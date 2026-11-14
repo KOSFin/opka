@@ -14,10 +14,7 @@ import { AgentHookServerStatusHookLifecycle } from './server-status-hook-lifecyc
 export abstract class AgentHookServerNativeCodexInventory extends AgentHookServerStatusHookLifecycle {
   private readonly nativeInventorySourceOwners = new Set<string>()
   registerNativeCodexInventorySource(options: NativeCodexInventorySourceOptions) {
-    if (
-      this.nativeInventorySourceOwners.size >= 64 ||
-      this.nativeInventorySourceOwners.has(options.launchId)
-    ) {
+    if (this.nativeInventorySourceOwners.has(options.launchId)) {
       throw new Error('Native inventory source ownership is unavailable')
     }
     const source = createNativeCodexInventorySource(this.state, options, () =>

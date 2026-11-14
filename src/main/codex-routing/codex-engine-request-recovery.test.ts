@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http'
 import { afterEach, expect, it, vi } from 'vitest'
 import { CodexEngineSessions } from './codex-engine-sessions'
 import { CodexEngineRequestRecovery } from './codex-engine-request-recovery'
-import { engineHostFixture, tick } from './codex-engine-host-fixture'
+import { engineHostFixture } from './codex-engine-host-fixture'
 
 const fixtures: ReturnType<typeof engineHostFixture>[] = []
 afterEach(async () => {
@@ -39,7 +39,7 @@ function complete(response: ServerResponse) {
   response.end('event: response.completed\ndata: {"type":"response.completed"}\n\n')
 }
 
-it('recovers the same interrupted session only after healthy in-flight work finishes and engine exit is proven', async () => {
+it('continues the cancelled native session without restarting or waiting for other healthy work', async () => {
   const failedSeen = deferred(),
     healthySeen = deferred(),
     healthyDone = deferred()
@@ -94,12 +94,6 @@ it('recovers the same interrupted session only after healthy in-flight work fini
   const healthy = post(second, 'healthy')
   await healthySeen.promise
   interrupted.abort()
-  let retried = false
-  // Submit immediately: no forced upstream error, EOF, phase wait, or manual owner exit.
-  const queued = post(first, 'retained-history').then((response) => {
-    retried = true
-    return response
-  })
   const recovery = Reflect.get(fixture.host, 'requestRecovery')
   const sessions = Reflect.get(fixture.host, 'sessions')
   if (
@@ -108,24 +102,20 @@ it('recovers the same interrupted session only after healthy in-flight work fini
   ) {
     throw new Error('Synthetic host recovery is unavailable')
   }
-  await vi.waitFor(() => expect(sessions.hasHeldRequests).toBe(true))
-  expect(recovery.phase).toBe('waiting-for-idle')
-  expect(first.readActiveRequests()).toBe(1)
-  await tick()
-  expect(retried).toBe(false)
-  expect(forwarded.filter((request) => request.input === 'retained-history')).toHaveLength(1)
-  expect(fixture.stats.stopAttempts).toBe(0)
+  await vi.waitFor(() => expect(first.readActiveRequests()).toBe(0))
+  expect(sessions.hasHeldRequests).toBe(false)
+  expect(recovery.phase).toBe('idle')
   expect(second.readActiveRequests()).toBe(1)
+  const retry = await post(first, 'retained-history')
+  expect(retry.status).toBe(200)
+  await retry.text()
+  expect(fixture.stats.stopAttempts).toBe(0)
   expect(fixture.stats.starts).toBe(1)
+  expect(second.readActiveRequests()).toBe(1)
   healthyDone.resolve()
   const healthyResponse = await healthy
   expect(healthyResponse.status).toBe(200)
   await healthyResponse.text()
-  await vi.waitFor(() => expect(fixture.stats.starts).toBe(2))
-  await vi.waitFor(() => expect(fixture.host.readConnection(fixture.a.id)?.adopted).toBe(true))
-  const retry = await queued
-  expect(retry.status).toBe(200)
-  await retry.text()
   expect({ baseUrl: first.baseUrl, apiKey: first.apiKey, routingKey: first.routingKey }).toEqual(
     original
   )
@@ -162,7 +152,7 @@ it('keeps the interrupted lease and session fenced if engine exit is unverifiabl
   expect(fixture.host.getNativeClientKey()).toBe(first.apiKey)
 })
 
-it('does not restart for completed-event readers whose positive terminal trailer follows within the drain grace', async () => {
+it('does not restart when a native caller closes after receiving a completed event', async () => {
   const fixture = engineHostFixture(2000, {
     replay: true,
     respond: async (_request, response) => {
@@ -250,4 +240,24 @@ it('queues past the short engine-transition deadline while healthy work is still
     clearTimeout(release)
     healthyDone.resolve()
   }
+})
+
+it('keeps an unrequested engine stream failure fenced until engine exit is proven', async () => {
+  const fixture = engineHostFixture(2000, {
+    replay: true,
+    respond: async (_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.write('data: {"type":"response.created"}\n\n')
+      setImmediate(() => response.destroy(new Error('Synthetic engine transport failure')))
+      return true
+    }
+  })
+  fixtures.push(fixture)
+  fixture.stats.stopVerdict = 'unverifiable'
+  const launch = await fixture.launch('unexpected-engine-disconnect')
+  const response = await post(launch, 'retained-history').catch(() => null)
+  await response?.text().catch(() => '')
+  await vi.waitFor(() => expect(fixture.stats.stopAttempts).toBe(1))
+  expect(launch.readActiveRequests()).toBe(1)
+  expect(fixture.stats.starts).toBe(1)
 })

@@ -74,15 +74,29 @@ it('releases ordinary verified local claims idempotently', () => {
   expect(() => ledger.assertUnused(f.target)).not.toThrow()
 })
 
-it('keeps a bounded sticky refusal when more than 64 distinct histories survive', () => {
+it('retains and releases 100 distinct histories without making unrelated homes sticky', () => {
   const f = fixture(),
     ledger = f.create()
-  for (let i = 0; i < 80; i++) {
-    ledger.claim({ home: join(f.directory, `home-${i}`), accountId: null })
-  }
+  const targets = Array.from({ length: 100 }, (_, index) => ({
+    home: join(f.directory, `home-${index}`),
+    accountId: null
+  }))
+  const release = targets.map((target) => ledger.claim(target))
   expect(readFileSync(f.path).byteLength).toBeLessThan(512 * 1024)
+  expect(() => ledger.assertUnused(targets[0])).toThrow(/surviving/)
+  expect(() => ledger.assertUnused(f.target)).not.toThrow()
+  release.forEach((done) => done('exited'))
+  targets.forEach((target) => expect(() => ledger.assertUnused(target)).not.toThrow())
+})
+
+it('releases a hundred simultaneous claims on one history without losing its count', () => {
+  const f = fixture(),
+    ledger = f.create()
+  const release = Array.from({ length: 100 }, () => ledger.claim(f.target))
+  release.slice(0, 99).forEach((done) => done('exited'))
   expect(() => ledger.assertUnused(f.target)).toThrow(/surviving/)
-  expect(() => f.create('synthetic-machine', 'boot-two').assertUnused(f.target)).not.toThrow()
+  release[99]('exited')
+  expect(() => ledger.assertUnused(f.target)).not.toThrow()
 })
 
 it('does not infer tree exit from wrapper release or routing capability revocation', () => {

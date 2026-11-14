@@ -27,7 +27,6 @@ export type CodexRoutingHttpOptions = {
   responseHeaderTimeoutMs: number
   onCleanupUnverifiable: () => void
   onRequestHeld?: () => void
-  onClientInterrupted?: () => void
   waitForReady?: (token: string, signal: AbortSignal) => Promise<void>
   /** Available only after a patched engine with seekable-body support is verified. */
   replayBudget?: CodexReplaySpoolBudget

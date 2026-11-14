@@ -16,8 +16,7 @@ export class CodexEngineHttpListener {
     private readonly readNativeClientKey?: () => string,
     private readonly replayBudget?: CodexReplaySpoolBudget,
     private readonly onRequestHeld?: () => void,
-    private readonly waitForReady?: CodexRoutingHttpOptions['waitForReady'],
-    private readonly onClientInterrupted?: () => void
+    private readonly waitForReady?: CodexRoutingHttpOptions['waitForReady']
   ) {}
   async listen(): Promise<void> {
     if (this.server) {
@@ -33,8 +32,7 @@ export class CodexEngineHttpListener {
       onCleanupUnverifiable: this.onCleanup,
       replayBudget: this.replayBudget,
       onRequestHeld: this.onRequestHeld,
-      waitForReady: this.waitForReady,
-      onClientInterrupted: this.onClientInterrupted
+      waitForReady: this.waitForReady
     })
     try {
       await new Promise<void>((resolve, reject) => {

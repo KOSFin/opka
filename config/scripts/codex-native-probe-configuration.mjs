@@ -79,9 +79,24 @@ export async function readNativeProbeInputs(argv) {
       throw new Error('Explicit absolute pinned binary/output/pty module paths required')
     }
   }
+  const seekable = argv.includes('--seekable')
+  let engineSha256 = '7079cd5a49adbe127f957db7528b5a002e6f9076f48b13c99864c6196ae7dba9'
+  if (seekable) {
+    const resourceRoot = argv.includes('--replay-resource-root')
+      ? argument('--replay-resource-root')
+      : null
+    if (!resourceRoot || resolve(resourceRoot) !== resourceRoot) {
+      throw new Error('Seekable native qualification requires an absolute protected resource root')
+    }
+    const { readPackagedReplayEngineAsset } =
+      await import('../../src/main/codex-routing/engine-replay-package.ts')
+    engineSha256 = (
+      await readPackagedReplayEngineAsset(resourceRoot, `${process.platform}-${process.arch}`)
+    ).binarySha256
+  }
   for (const [path, expected] of [
     [values.codex, 'b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8'],
-    [values.enginePath, '7079cd5a49adbe127f957db7528b5a002e6f9076f48b13c99864c6196ae7dba9']
+    [values.enginePath, engineSha256]
   ]) {
     const hash = createHash('sha256')
     for await (const bytes of createReadStream(path)) {
@@ -91,7 +106,7 @@ export async function readNativeProbeInputs(argv) {
       throw new Error('Wrong pinned probe binary')
     }
   }
-  return values
+  return { ...values, seekable, engineSha256 }
 }
 
 export function nativeProbeRoutingPlan(transport, builtinOpenai = false, gateway = null) {

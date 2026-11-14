@@ -7,16 +7,11 @@ import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-p
 const historyHomes = new Map<string, number>()
 const retiringHomes = new Set<string>()
 const retiringAccounts = new Set<string>()
-let historyClaims = 0
 export function claimNativeCodexHistoryHome(home: string, accountId?: string | null): () => void {
-  if (historyClaims >= 64) {
-    throw new Error('Native Codex history preparation is busy.')
-  }
   const key = normalizeRuntimePathForComparison(home)
   if (retiringHomes.has(key) || (accountId && retiringAccounts.has(accountId))) {
     throw new Error('This native history account is being removed.')
   }
-  historyClaims++
   historyHomes.set(key, (historyHomes.get(key) ?? 0) + 1)
   let released = false
   return () => {
@@ -24,7 +19,6 @@ export function claimNativeCodexHistoryHome(home: string, accountId?: string | n
       return
     }
     released = true
-    historyClaims--
     const remaining = (historyHomes.get(key) ?? 1) - 1
     if (remaining) {
       historyHomes.set(key, remaining)
@@ -80,7 +74,7 @@ type RoutingOwner = {
 const owners = new WeakMap<object, Map<string, RoutingOwner>>()
 export function assertNativeCodexRoutingCapacity(runtime: object, launchId: string): void {
   const entries = owners.get(runtime)
-  if (entries && (entries.size >= 64 || entries.has(launchId))) {
+  if (entries?.has(launchId)) {
     throw new Error('Native Codex routing ownership is busy.')
   }
 }

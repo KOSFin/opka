@@ -133,22 +133,24 @@ export function beginNativeAccountPoolEpoch(
         `SELECT owner_key,provider FROM account_pool_assignments
         INDEXED BY account_pool_native_active_scope_v2
         WHERE released_at IS NULL AND owner_key >= 'native-scope-v2:' AND owner_key < 'native-scope-v2;'
-        AND (provider=? OR (owner_key>=? AND owner_key<?)) LIMIT 65`
+        AND (provider=? OR (owner_key>=? AND owner_key<?))`
       )
-      .all(provider, partition, partitionEnd)
-    if (active.length > 64 || active.some((row) => !Owner.test(String(row.owner_key)))) {
-      throw new Error('Native assignment recovery inventory is unverifiable')
-    }
+      .iterate(provider, partition, partitionEnd)
     if (
       provider === 'claude' &&
-      (active.length ||
-        db
-          .prepare('SELECT scope_id FROM account_pool_native_scopes WHERE provider=? LIMIT 1')
-          .get(provider))
+      db
+        .prepare('SELECT scope_id FROM account_pool_native_scopes WHERE provider=? LIMIT 1')
+        .get(provider)
     ) {
       throw new Error('Claude native assignment scopes require explicit prior-process recovery')
     }
     for (const row of active) {
+      if (!Owner.test(String(row.owner_key))) {
+        throw new Error('Native assignment recovery inventory is unverifiable')
+      }
+      if (provider === 'claude') {
+        throw new Error('Claude native assignment scopes require explicit prior-process recovery')
+      }
       if (Provider.parse(row.provider) !== provider) {
         throw new Error('Native assignment recovery provider is unverifiable')
       }
@@ -230,12 +232,9 @@ export function attachClaudeNativeAccountPoolEpoch(
     }
     const retained = db
       .prepare(
-        "SELECT scope_id,provider,epoch,generation FROM account_pool_native_scopes WHERE provider='claude' LIMIT 65"
+        "SELECT scope_id,provider,epoch,generation FROM account_pool_native_scopes WHERE provider='claude'"
       )
       .all()
-    if (retained.length > 64) {
-      throw new Error('Claude native scope inventory requires explicit recovery')
-    }
     const scopes = new Map(
       retained.map((row) => {
         const scope = ScopeRow.parse(row)
@@ -249,11 +248,8 @@ export function attachClaudeNativeAccountPoolEpoch(
       .prepare(`SELECT owner_key,provider FROM account_pool_assignments
       INDEXED BY account_pool_native_active_scope_v2
       WHERE released_at IS NULL AND owner_key >= 'native-scope-v2:' AND owner_key < 'native-scope-v2;'
-      AND (provider='claude' OR (owner_key >= 'native-scope-v2:claude:' AND owner_key < 'native-scope-v2:claude;')) LIMIT 129`)
-      .all()
-    if (active.length > 128) {
-      throw new Error('Claude native assignment inventory requires explicit recovery')
-    }
+      AND (provider='claude' OR (owner_key >= 'native-scope-v2:claude:' AND owner_key < 'native-scope-v2:claude;'))`)
+      .iterate()
     const counts = new Map<string, number>()
     for (const row of active) {
       const match = Owner.exec(String(row.owner_key))

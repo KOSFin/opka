@@ -15,7 +15,9 @@ import {
   registerNativeCodexRoutingOwner,
   revokeNativeCodexRoutingLaunch,
   isNativeCodexRoutingLaunch,
-  isNativeCodexRoutingEnvironment
+  isNativeCodexRoutingEnvironment,
+  claimNativeCodexHistoryHome,
+  assertNativeCodexHistoryHomeUnused
 } from './native-codex-routing-ownership'
 import { preparePtyAccountPoolLaunch } from '../ipc/pty/account-pool-launch'
 import { NATIVE_CODEX_ROUTING_KEY_ENV } from '../../shared/native-cli-account-launch'
@@ -190,4 +192,44 @@ it('does not let a retired launch marker borrow another active launch profile cr
   await releaseNativeCliAccountLaunch(f.runtime, nativeLaunchId)
   expect(isNativeCodexRoutingEnvironment(f.runtime, first.env)).toBe(false)
   expect(isNativeCodexRoutingEnvironment(f.runtime, second.env)).toBe(true)
+})
+
+it('prepares and releases 100 native launcher capabilities with one shared history HOME', async () => {
+  const f = await fixture()
+  const policy = f.settings.accountPools?.[0]
+  if (!policy) {
+    throw new Error('Missing saved pool')
+  }
+  for (const member of policy.members) {
+    member.maxConcurrent = undefined
+  }
+  const ids = Array.from({ length: 100 }, (_, index) => `parallel-native-${index}`)
+  ids.forEach((id) => f.plans.add(id))
+  const plans = await Promise.all(
+    ids.map((launchId) =>
+      prepareNativeCliAccountLaunch(f.runtime, {
+        provider: 'codex',
+        codexExecutable: process.execPath,
+        launchId
+      })
+    )
+  )
+  expect(plans).toHaveLength(100)
+  ids.forEach((id) => expect(isNativeCodexRoutingLaunch(f.runtime, id)).toBe(true))
+  for (const plan of plans) {
+    expect((await nativePlanTurn(plan)).status).toBe(200)
+  }
+  expect(f.db.listAccountPoolAssignments()).toHaveLength(100)
+  await Promise.all(ids.map((id) => releaseNativeCliAccountLaunch(f.runtime, id)))
+  ids.forEach((id) => expect(isNativeCodexRoutingLaunch(f.runtime, id)).toBe(false))
+  expect(f.db.listAccountPoolAssignments()).toHaveLength(0)
+})
+
+it('retains the exact shared history claim until all 100 callers release it', () => {
+  const home = '/synthetic-parallel-native-history'
+  const releases = Array.from({ length: 100 }, () => claimNativeCodexHistoryHome(home))
+  releases.slice(0, 99).forEach((release) => release())
+  expect(() => assertNativeCodexHistoryHomeUnused(home)).toThrow('Close the native Codex dialog')
+  releases[99]()
+  expect(() => assertNativeCodexHistoryHomeUnused(home)).not.toThrow()
 })

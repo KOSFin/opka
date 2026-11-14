@@ -3,7 +3,6 @@ import type { NativeAccountPoolScope } from '../runtime/orchestration/db/account
 import { randomUUID } from 'node:crypto'
 import type { AccountPoolCandidate, AccountPoolPolicy } from '../../shared/account-pool-policy'
 import type { CodexRequestTurnIdentity } from './codex-request-turn-identity'
-import { CodexNativeAffinityCapacityError } from './codex-native-affinity-capacity-error'
 import { CodexTurnBoundaryError } from './codex-turn-boundary-error'
 import { replaceCodexRejectedRequest, type CodexPoolBinding } from './codex-pool-rejected-request'
 import type { CodexQuotaReplacementRequest } from './codex-host-quota-retry'
@@ -71,6 +70,7 @@ export function createCodexPoolTurnSession(args: {
       args.db.releaseAccountPoolAssignment(binding.assignment.ownerKey)
     }
     if (closed && (ownerTreeExited || revoked) && activeRequests === 0) {
+      affinities.clear()
       args.assignmentScope?.close()
     }
   }
@@ -181,15 +181,6 @@ export function createCodexPoolTurnSession(args: {
         activeRequests === 0 &&
         oldTurnsSettled(undefined, identity) &&
         (boundary?.canSwitch() ?? args.canSwitch())
-      if (
-        freshTurn &&
-        identity &&
-        !safe &&
-        !affinities.has(key(identity)) &&
-        affinities.size >= 64
-      ) {
-        throw new CodexNativeAffinityCapacityError()
-      }
       if (!binding || freshTurn || !turn) {
         if (!binding || safe) {
           const next = select(args.readState())

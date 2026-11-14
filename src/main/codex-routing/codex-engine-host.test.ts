@@ -43,6 +43,27 @@ it('owns one engine/cache/front for concurrent launches and routes saved policy 
   expect(f.stats.bindings[2].assignmentOwnerKey).toBe(f.db.listAccountPoolAssignments()[0].ownerKey)
 })
 
+it('registers 100 ordinary native launches on one engine and releases their assignments', async () => {
+  const f = fixture()
+  if (!f.state.policy) {
+    throw new Error('Missing fixture policy')
+  }
+  for (const member of f.state.policy.members) {
+    member.maxConcurrent = undefined
+  }
+  const launches = await Promise.all(
+    Array.from({ length: 100 }, (_, index) => f.launch(`parallel-${index}`))
+  )
+  expect(new Set(launches.map((launch) => launch.baseUrl)).size).toBe(100)
+  expect(f.stats).toMatchObject({ starts: 1, provisions: 1, maximum: 1 })
+  for (const launch of launches) {
+    expect((await syntheticTurn(launch, '1')).status).toBe(200)
+  }
+  expect(f.db.listAccountPoolAssignments()).toHaveLength(100)
+  launches.forEach((launch) => launch.close('exited'))
+  expect(f.db.listAccountPoolAssignments()).toHaveLength(0)
+})
+
 it('keeps manual native-default fallback native and does not provision an engine', async () => {
   const f = fixture()
   f.state.policy = undefined

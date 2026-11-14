@@ -124,11 +124,11 @@ it('keeps first missing root unrepairable and cancellation/disposal clears only 
     source.dispose()
   }
 })
-it('bounds registered source ownership and reuses capacity after explicit disposal', () => {
+it('registers 100 inventory sources while rejecting duplicate launch ownership', () => {
   const server = new AgentHookServer()
   const home = mkdtempSync(join(tmpdir(), 'native-source-capacity-'))
   directories.push(home)
-  const sources = Array.from({ length: 64 }, (_, index) =>
+  const sources = Array.from({ length: 100 }, (_, index) =>
     server.registerNativeCodexInventorySource({
       home,
       launchId: `launch-${index}`,
@@ -139,7 +139,7 @@ it('bounds registered source ownership and reuses capacity after explicit dispos
     expect(() =>
       server.registerNativeCodexInventorySource({
         home,
-        launchId: 'overflow',
+        launchId: 'launch-0',
         isCurrent: () => true
       })
     ).toThrow('ownership')

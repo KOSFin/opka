@@ -40,10 +40,12 @@ export function createNativeProbeGateway(report, directory) {
         body: JSON.stringify({ model: 'gpt-6.1-sol', input: [] }),
         signal: AbortSignal.timeout(2000)
       })
-      await response.body?.cancel()
+      const refusal = await response.text()
       evidence.retiredRejected = response.status === 502
       if (!evidence.retiredRejected) {
-        throw new Error('Retired nonce did not reach closed production session refusal')
+        throw new Error(
+          `Retired nonce did not reach closed production session refusal: HTTP ${response.status}; ${refusal.slice(0, 256)}`
+        )
       }
     },
     scrub(text) {

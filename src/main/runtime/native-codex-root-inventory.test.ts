@@ -92,16 +92,19 @@ it('does not let a late old source or revoked capability prove the new ROOT boun
   f.inventory.dispose()
   expect(f.sources[1].dispose).toHaveBeenCalledOnce()
 })
-it('keeps missing metadata pinned and refuses more than64 unresolved ROOT sources', () => {
+it('keeps missing metadata pinned while tracking 100 unresolved ROOT sources', () => {
   const f = fixture()
   f.inventory.bindRoot(null)
   expect(f.inventory.retainedSettled([])).toBe(false)
   const bounded = fixture()
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < 100; i++) {
     bounded.inventory.bindRoot(`root-${i}`)
   }
-  expect(() => bounded.inventory.bindRoot('overflow')).toThrow(/capacity/)
-  expect(bounded.sources).toHaveLength(64)
+  expect(bounded.sources).toHaveLength(100)
+  bounded.inventory.dispose()
+  for (const source of bounded.sources) {
+    expect(source.dispose).toHaveBeenCalledOnce()
+  }
 })
 
 it('shares one cumulative catch-up byte budget across all retained ROOT readers', async () => {

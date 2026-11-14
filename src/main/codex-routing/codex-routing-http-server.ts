@@ -14,7 +14,6 @@ import { readCodexRoutingIngress } from './codex-routing-http-ingress'
 import { finishCodexRoutingRequest } from './codex-routing-http-cleanup'
 import type { CodexHttpAccountRoute, CodexRoutingHttpOptions } from './codex-routing-http-types'
 export type { CodexHttpAccountRoute, CodexRoutingHttpOptions } from './codex-routing-http-types'
-import { CodexNativeAffinityCapacityError } from './codex-native-affinity-capacity-error'
 import { CodexTurnBoundaryError } from './codex-turn-boundary-error'
 import { readCodexRequestTurnIdentity } from './codex-request-turn-identity'
 import { CodexReplayAdmissionError, type CodexReplaySpool } from './codex-replay-spool'
@@ -55,7 +54,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
         reject(outgoing, 415, 'Compressed requests are not supported by this local transport.')
         return
       }
-      if (active >= maxConcurrent) {
+      if (!options.replayBudget && active >= maxConcurrent) {
         recordLocalCodex429('host-budget')
         reject(
           outgoing,
@@ -78,20 +77,22 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
       let failurePhase: CodexRoutingFailurePhase = 'admission'
       let providerPossible = false
       let positiveTerminal = false
-      let interruptionTimer: ReturnType<typeof setTimeout> | undefined
+      let hostFailure = false
+      let localDeliveryCancelled = false
+      let engineClosed: Promise<void> | undefined
       const onOutgoingClose = (): void => {
         if (outgoing.writableFinished) {
           return
         }
-        if (options.replayBudget && providerPossible) {
-          if (options.onClientInterrupted) {
-            options.onClientInterrupted()
-            // Grace permits terminal trailers to arrive; expiry proves nothing about provider exit.
-            interruptionTimer = setTimeout(cancel, 200)
-          }
-        } else {
-          cancel()
-        }
+        localDeliveryCancelled = Boolean(
+          options.replayBudget &&
+          !hostFailure &&
+          !outgoing.errored &&
+          !upstream?.destroyed &&
+          !requestController.signal.aborted &&
+          !routeSignal?.aborted
+        )
+        cancel()
       }
       outgoing.once('close', onOutgoingClose)
       try {
@@ -187,6 +188,7 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
             }
           })
           upstream = engineRequest
+          engineClosed = new Promise<void>((resolve) => engineRequest.once('close', resolve))
           const responsePromise = new Promise<IncomingMessage>((resolve, reject) => {
             const timeout = setTimeout(
               () => engineRequest.destroy(new Error('Local engine header deadline')),
@@ -245,39 +247,38 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
           break
         }
       } catch (error) {
-        if (error instanceof CodexNativeAffinityCapacityError) {
-          recordLocalCodex429('native-affinity')
-        } else if (error instanceof CodexReplayAdmissionError && error.status === 429) {
+        hostFailure = true
+        if (error instanceof CodexReplayAdmissionError && error.status === 429) {
           recordLocalCodex429('replay-capacity')
         }
         reject(
           outgoing,
           error instanceof CodexTurnBoundaryError
             ? 409
-            : error instanceof CodexNativeAffinityCapacityError
-              ? 429
-              : error instanceof CodexReplayAdmissionError
-                ? error.status
-                : 502,
-          error instanceof CodexTurnBoundaryError ||
-            error instanceof CodexNativeAffinityCapacityError ||
-            error instanceof CodexReplayAdmissionError
+            : error instanceof CodexReplayAdmissionError
+              ? error.status
+              : 502,
+          error instanceof CodexTurnBoundaryError || error instanceof CodexReplayAdmissionError
             ? error.message
             : codexRoutingFailureMessage(error, failurePhase)
         )
       } finally {
         outgoing.off('close', onOutgoingClose)
-        clearTimeout(interruptionTimer)
         requestController.abort()
         routeSignal?.removeEventListener('abort', cancel)
         upstream?.destroy()
         try {
+          // A cancelled native caller cannot receive tool calls; never replay that request.
+          if (localDeliveryCancelled) {
+            await engineClosed
+          }
           await finishCodexRoutingRequest(
             options,
             route,
             replay,
             providerPossible,
-            positiveTerminal
+            positiveTerminal,
+            localDeliveryCancelled
           )
         } finally {
           active--
@@ -285,7 +286,10 @@ export function createCodexRoutingHttpServer(options: CodexRoutingHttpOptions) {
       }
     }
   )
-  server.maxConnections = 64
+  // Buffered legacy requests retain their admission bound; native streams use backpressure.
+  if (!options.replayBudget) {
+    server.maxConnections = 64
+  }
   server.on('upgrade', (_incoming, socket) => {
     socket.end('HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
   })

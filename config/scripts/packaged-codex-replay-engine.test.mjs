@@ -49,10 +49,10 @@ async function packageFixture(target) {
   const manifest = {
     schema: 1,
     target,
-    version: '8.0.55-orca-replay-3bd902df9fa0',
+    version: '8.0.55-orca-replay-88b51a5c4604',
     sourceCommit: 'e6e5708e677adb2463d45accdd24bc9fd028ddd8',
     sourceArchiveSha256: '45d766358b7e6c453031800af6f1ba6fa1a30bf06a9aca9de8e39141aeaf5b56',
-    patchSha256: '3bd902df9fa05bbc88c268a4b9d52a0e134f596f9e7ddf299148e2e4780a2fce',
+    patchSha256: '88b51a5c4604bd85c366c24ca6aa62c18dcfef1f1d3a76f6b596db38bc8626ab',
     goModSha256: '0bde88cb0885b76451e1e000dab3ede1a2e8e37ef9800fe620d3394c1b1df941',
     goSumSha256: 'b5ea69a0a029ffd5c0f23ba6893803514a2a4b8ddfb79c223ea2a58d978a654c',
     goVersion: '1.26.10',
@@ -78,7 +78,7 @@ it('rejects a missing, wrong-host, tampered or wrong-source packaged replay arti
   manifest.patchSha256 = '0'.repeat(64)
   await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest))
   expect(() => assertReplayArtifact(directory, 'linux-x64')).toThrow('provenance')
-  manifest.patchSha256 = '3bd902df9fa05bbc88c268a4b9d52a0e134f596f9e7ddf299148e2e4780a2fce'
+  manifest.patchSha256 = '88b51a5c4604bd85c366c24ca6aa62c18dcfef1f1d3a76f6b596db38bc8626ab'
   await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest))
   await writeFile(join(directory, 'engine.zip'), 'damaged')
   expect(() => assertReplayArtifact(directory, 'linux-x64')).toThrow('byte count')

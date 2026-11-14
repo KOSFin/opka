@@ -68,8 +68,8 @@ export async function startNativeCliStdio(
     entries = new Map()
     sessions.set(runtime, entries)
   }
-  if (entries.has(params.launchId) || entries.size >= 64) {
-    throw new NativeCliControlError(entries.has(params.launchId) ? 'owner_changed' : 'capacity')
+  if (entries.has(params.launchId)) {
+    throw new NativeCliControlError('owner_changed')
   }
   const owner = stageNativeCliStdioOwner(runtime, params.launchId)
   let lease: Awaited<ReturnType<typeof reserveNativeCliStdioLease>> | undefined

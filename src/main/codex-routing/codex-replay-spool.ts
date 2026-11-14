@@ -6,7 +6,7 @@ import { CodexReplayJsonScanner, type CodexReplayMetadata } from './codex-replay
 
 const SMALL_RESERVE_BYTES = 64 * 1024 * 1024
 const LARGE_THRESHOLD_BYTES = 16 * 1024 * 1024
-const FREE_DISK_FLOOR_BYTES = 256 * 1024 * 1024
+const FREE_DISK_FLOOR_BYTES = 2 * 1024 * 1024 * 1024
 
 export class CodexReplayAdmissionError extends Error {
   constructor(
@@ -20,7 +20,6 @@ export class CodexReplayAdmissionError extends Error {
 export class CodexReplaySpoolBudget {
   private active = 0
   private large = 0
-  private largeRequests = 0
   private reserved = 0
 
   constructor(
@@ -28,8 +27,13 @@ export class CodexReplaySpoolBudget {
     private readonly capacityBytes: number,
     private readonly assertOwner: () => void
   ) {
-    if (!Number.isSafeInteger(capacityBytes) || capacityBytes < 4 * SMALL_RESERVE_BYTES) {
-      throw new Error('A finite aggregate replay spool budget is required.')
+    if (
+      !Number.isSafeInteger(capacityBytes) ||
+      (capacityBytes !== 0 && capacityBytes < 4 * SMALL_RESERVE_BYTES)
+    ) {
+      throw new Error(
+        'Replay capacity must be zero for physical disk admission or a finite byte budget.'
+      )
     }
   }
 
@@ -40,9 +44,6 @@ export class CodexReplaySpoolBudget {
         422,
         'Native replay spool requires verified owner-only Windows ACLs.'
       )
-    }
-    if (this.active >= 8) {
-      throw new CodexReplayAdmissionError(429, 'The native replay admission queue is full.')
     }
     ensurePrivateEngineDirectory(this.directory)
     this.active++
@@ -55,17 +56,9 @@ export class CodexReplaySpoolBudget {
       throw new Error('Native replay reservation is invalid.')
     }
     const becomesLarge = !spool.isLarge && spool.bytes + delta > LARGE_THRESHOLD_BYTES
-    if (becomesLarge) {
-      if (this.large >= 4 || (spool.kind === 'request' && this.largeRequests >= 2)) {
-        throw new CodexReplayAdmissionError(
-          429,
-          'Large native replay capacity is busy; small requests remain available.'
-        )
-      }
-    }
     const ceiling =
       spool.isLarge || becomesLarge ? this.capacityBytes - SMALL_RESERVE_BYTES : this.capacityBytes
-    if (this.reserved + 2 * delta > ceiling) {
+    if (this.capacityBytes !== 0 && this.reserved + 2 * delta > ceiling) {
       throw new CodexReplayAdmissionError(
         413,
         'Aggregate native replay disk capacity is exhausted.'
@@ -73,9 +66,6 @@ export class CodexReplaySpoolBudget {
     }
     if (becomesLarge) {
       this.large++
-      if (spool.kind === 'request') {
-        this.largeRequests++
-      }
       spool.isLarge = true
     }
     this.reserved += 2 * delta
@@ -92,9 +82,6 @@ export class CodexReplaySpoolBudget {
     this.reserved -= 2 * spool.bytes
     if (spool.isLarge) {
       this.large--
-      if (spool.kind === 'request') {
-        this.largeRequests--
-      }
     }
   }
 
@@ -161,7 +148,6 @@ export class CodexReplaySpool {
       } else {
         scanner.finishValidJson()
       }
-      await file.sync()
       this.complete = true
       return this.metadata
     } catch (error) {
