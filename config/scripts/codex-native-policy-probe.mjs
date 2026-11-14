@@ -29,7 +29,8 @@ import { once } from 'node:events'
 import { spawnProcess } from '@orca/process-host'
 import { redactTranscript } from './pty-transcript-secret-scan.mjs'
 
-const { codex, enginePath, output, ptyModule } = await readNativeProbeInputs(process.argv)
+const { codex, enginePath, output, ptyModule, seekable, engineSha256 } =
+  await readNativeProbeInputs(process.argv)
 const check = (value, message) => {
   if (!value) {
     throw new Error(message)
@@ -293,7 +294,7 @@ try {
   await new Promise((done) => reserve.close(done))
   engine = await startEngineRuntime({
     binaryPath: enginePath,
-    expectedSha256: '7079cd5a49adbe127f957db7528b5a002e6f9076f48b13c99864c6196ae7dba9',
+    expectedSha256: engineSha256,
     memoryMiB: 128,
     directory: join(root, 'engine'),
     port: enginePort,
@@ -367,7 +368,13 @@ try {
       join(root, 'native-gateway-profile')
     )
   }
+  const { CodexReplaySpoolBudget } =
+    await import('../../src/main/codex-routing/codex-replay-spool.ts')
+  const replayBudget = seekable
+    ? new CodexReplaySpoolBudget(join(root, 'replay-spool'), 0, () => {})
+    : undefined
   front = createCodexRoutingHttpServer({
+    replayBudget,
     nativeClientKey: gateway?.apiKey,
     maxConcurrent: 2,
     maxRequestBytes: 1024 * 1024,

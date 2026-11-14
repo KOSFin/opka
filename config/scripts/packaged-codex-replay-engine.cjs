@@ -12,7 +12,7 @@ const { unzipSync, zipSync } = require('fflate')
 
 const SOURCE_COMMIT = 'e6e5708e677adb2463d45accdd24bc9fd028ddd8'
 const SOURCE_SHA = '45d766358b7e6c453031800af6f1ba6fa1a30bf06a9aca9de8e39141aeaf5b56'
-const PATCH_SHA = '3bd902df9fa05bbc88c268a4b9d52a0e134f596f9e7ddf299148e2e4780a2fce'
+const PATCH_SHA = '88b51a5c4604bd85c366c24ca6aa62c18dcfef1f1d3a76f6b596db38bc8626ab'
 const MOD_SHA = '0bde88cb0885b76451e1e000dab3ede1a2e8e37ef9800fe620d3394c1b1df941'
 const SUM_SHA = 'b5ea69a0a029ffd5c0f23ba6893803514a2a4b8ddfb79c223ea2a58d978a654c'
 const LICENSE_SHA = '879792e89cf1bdd6a8d446033ec87e30496f97dcafc4656dc53f641509b346a6'

@@ -130,6 +130,8 @@ export function captureNativeProbeRequests(server, report) {
         chunks.push(bytes)
       }
     })
+    // Observation must not drain a body while the production reader awaits its file.
+    request.pause()
     request.on('end', () => {
       const evidence = {
         path: request.url?.replace(

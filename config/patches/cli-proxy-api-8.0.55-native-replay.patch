@@ -858,7 +858,7 @@
 +}
 --- /dev/null
 +++ b/sdk/api/handlers/seekable_request.go
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,148 @@
 +package handlers
 +
 +import (
@@ -968,7 +968,7 @@
 +		return SeekableRequest{}, errors.New("seekable replay model extent is invalid")
 +	}
 +	seekableBudgetOnce.Do(func() {
-+		seekableBudget, seekableBudgetError = coreexecutor.NewSeekableBodyBudget(2 << 30)
++		seekableBudget, seekableBudgetError = coreexecutor.NewSeekableBodyBudget(0)
 +	})
 +	if seekableBudgetError != nil {
 +		return SeekableRequest{}, seekableBudgetError
@@ -1001,7 +1001,11 @@
 +}
 +
 +func SeekableRequestError(c *gin.Context, err error) {
-+	c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: ErrorDetail{Message: err.Error(), Type: "invalid_request_error"}})
++	status := http.StatusUnprocessableEntity
++	if errors.Is(err, coreexecutor.ErrSeekableDiskPressure) {
++		status = http.StatusInsufficientStorage
++	}
++	c.JSON(status, ErrorResponse{Error: ErrorDetail{Message: err.Error(), Type: "invalid_request_error"}})
 +}
 --- a/sdk/cliproxy/auth/conductor_execution.go
 +++ b/sdk/cliproxy/auth/conductor_execution.go
@@ -1017,7 +1021,7 @@
 +		}
 --- /dev/null
 +++ b/sdk/cliproxy/executor/seekable_body.go
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,280 @@
 +package executor
 +
 +import (
@@ -1085,7 +1089,9 @@
 +	return p != nil && p.current.Load() != 0 && p.complete.Load() == p.current.Load()
 +}
 +
-+// SeekableBodyBudget bounds all host-owned request and response replay files.
++var ErrSeekableDiskPressure = errors.New("private replay storage has less than the host free-space reserve")
++
++// SeekableBodyBudget admits native streams by disk availability, not request count.
 +// A reserve is charged before each write, including room for one transformed copy.
 +type SeekableBodyBudget struct {
 +	mu       sync.Mutex
@@ -1096,8 +1102,8 @@
 +}
 +
 +func NewSeekableBodyBudget(capacity int64) (*SeekableBodyBudget, error) {
-+	if capacity < 256<<20 {
-+		return nil, errors.New("seekable body needs a finite aggregate disk budget")
++	if capacity != 0 && capacity < 256<<20 {
++		return nil, errors.New("seekable body needs physical disk admission or a finite byte budget")
 +	}
 +	return &SeekableBodyBudget{capacity: capacity}, nil
 +}
@@ -1106,19 +1112,21 @@
 +	b.mu.Lock()
 +	defer b.mu.Unlock()
 +	becomesLarge := !body.large && body.size+next > 16<<20
-+	if becomesLarge && b.large >= 4 {
-+		return errors.New("seekable body large admission is busy")
-+	}
 +	ceiling := b.capacity
 +	if body.large || becomesLarge {
 +		ceiling -= 64 << 20
 +	}
-+	if next <= 0 || next > (ceiling-b.reserved)/2 {
++	if next <= 0 || (b.capacity != 0 && next > (ceiling-b.reserved)/2) {
 +		return errors.New("seekable body aggregate disk budget is busy")
 +	}
 +	if becomesLarge {
 +		body.large = true
 +		b.large++
++	}
++	if b.capacity == 0 {
++		if err := assertSeekableDiskFree(os.TempDir(), 2*next); err != nil {
++			return err
++		}
 +	}
 +	b.reserved += 2 * next
 +	return nil
@@ -1158,10 +1166,6 @@
 +		return nil, errors.New("seekable body needs verified Windows owner-only ACLs")
 +	}
 +	b.mu.Lock()
-+	if b.active >= 8 {
-+		b.mu.Unlock()
-+		return nil, errors.New("seekable body admission is busy")
-+	}
 +	b.active++
 +	b.mu.Unlock()
 +	body := &privateSeekableBody{budget: b}
@@ -1228,9 +1232,6 @@
 +	}
 +	if err == nil && expectedSHA256 != "" && hex.EncodeToString(digest.Sum(nil)) != expectedSHA256 {
 +		err = errors.New("seekable body digest mismatch")
-+	}
-+	if err == nil {
-+		err = file.Sync()
 +	}
 +	if err != nil {
 +		_ = body.Close()
@@ -1508,7 +1509,7 @@
 +}
 --- /dev/null
 +++ b/sdk/cliproxy/executor/seekable_json_shadow.go
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,228 @@
 +package executor
 +
 +import (
@@ -1526,7 +1527,6 @@
 +const (
 +	seekableInlineStringBytes = 64 << 10
 +	seekableShadowBytes       = 8 << 20
-+	seekableShadowMarkers     = 4096
 +)
 +
 +type SeekableJSONMarker struct {
@@ -1655,9 +1655,6 @@
 +			if closing {
 +				inString = false
 +				if omitted {
-+					if len(markers) >= seekableShadowMarkers {
-+						return SeekableJSONShadow{}, errors.New("seekable JSON has too many opaque values")
-+					}
 +					literal := []byte(fmt.Sprintf(`"__orca_replay_%s_%d__"`, seed, len(markers)))
 +					_, _ = shadow.Write(literal)
 +					markers = append(markers, SeekableJSONMarker{Literal: literal, Start: stringStart, End: offset + 1})
@@ -1860,3 +1857,132 @@
 -	Payload []byte
 +	Payload         []byte
 +	SeekablePayload SeekableBody
+--- /dev/null
++++ b/sdk/cliproxy/executor/seekable_disk_unix.go
+@@ -0,0 +1,21 @@
++//go:build linux || darwin
++
++package executor
++
++import (
++	"fmt"
++	"syscall"
++)
++
++func assertSeekableDiskFree(directory string, next int64) error {
++	var info syscall.Statfs_t
++	if err := syscall.Statfs(directory, &info); err != nil {
++		return fmt.Errorf("%w: cannot measure private spool storage", ErrSeekableDiskPressure)
++	}
++	const floor = uint64(2 << 30)
++	available := uint64(info.Bavail) * uint64(info.Bsize)
++	if next < 1 || available < floor || uint64(next) > available-floor {
++		return ErrSeekableDiskPressure
++	}
++	return nil
++}
+--- /dev/null
++++ b/sdk/cliproxy/executor/seekable_disk_unsupported.go
+@@ -0,0 +1,5 @@
++//go:build !linux && !darwin
++
++package executor
++
++func assertSeekableDiskFree(_ string, _ int64) error { return ErrSeekableDiskPressure }
+--- /dev/null
++++ b/sdk/cliproxy/executor/seekable_parallel_test.go
+@@ -0,0 +1,94 @@
++package executor
++
++import (
++	"context"
++	"io"
++	"os"
++	"strings"
++	"testing"
++)
++
++func TestSeekableHundredSimultaneousBodiesReleaseDisk(t *testing.T) {
++	directory := t.TempDir()
++	t.Setenv("TMPDIR", directory)
++	budget, err := NewSeekableBodyBudget(0)
++	if err != nil {
++		t.Fatal(err)
++	}
++	type result struct {
++		body SeekableBody
++		err  error
++	}
++	results := make(chan result, 100)
++	for i := 0; i < 100; i++ {
++		go func() {
++			body, err := budget.IngestSeekableResponse(context.Background(), strings.NewReader(`{"synthetic":"retained history"}`))
++			results <- result{body, err}
++		}()
++	}
++	bodies := make([]SeekableBody, 0, 100)
++	defer func() {
++		for _, body := range bodies {
++			_ = body.Close()
++		}
++	}()
++	for i := 0; i < 100; i++ {
++		result := <-results
++		if result.err != nil {
++			t.Error(result.err)
++			continue
++		}
++		bodies = append(bodies, result.body)
++	}
++	if active, _ := budget.Snapshot(); active != 100 {
++		t.Fatalf("only %d simultaneous bodies admitted", active)
++	}
++	entries, err := os.ReadDir(directory)
++	if err != nil || len(entries) != 0 {
++		t.Fatalf("private spool names survived: entries=%d err=%v", len(entries), err)
++	}
++	for _, body := range bodies {
++		if err := body.Close(); err != nil {
++			t.Error(err)
++		}
++	}
++	if active, reserved := budget.Snapshot(); active != 0 || reserved != 0 {
++		t.Fatalf("retained storage: active=%d reserved=%d", active, reserved)
++	}
++}
++
++func TestSeekableImagesHaveNoOpaqueValueCountCeiling(t *testing.T) {
++	budget, err := NewSeekableBodyBudget(0)
++	if err != nil {
++		t.Fatal(err)
++	}
++	readers := []io.Reader{strings.NewReader(`{"model":"probe","stream":true,"input":[{"role":"user","content":[`)}
++	for index := 0; index < 5000; index++ {
++		if index != 0 {
++			readers = append(readers, strings.NewReader(","))
++		}
++		readers = append(readers, strings.NewReader(`{"type":"input_image","image_url":"data:image/png;base64,`), io.LimitReader(repeatingA{}, (64<<10)+1), strings.NewReader(`"}`))
++	}
++	readers = append(readers, strings.NewReader(`]}]}`))
++	body, err := budget.IngestSeekableResponse(context.Background(), io.MultiReader(readers...))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer body.Close()
++	shadow, err := BuildSeekableJSONShadow(context.Background(), body)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(shadow.Markers) != 5000 {
++		t.Fatalf("opaque images truncated: %d", len(shadow.Markers))
++	}
++	if len(shadow.JSON) > 1<<20 {
++		t.Fatalf("opaque image bytes retained in metadata: %d", len(shadow.JSON))
++	}
++	if err := body.Close(); err != nil {
++		t.Fatal(err)
++	}
++	if active, reserved := budget.Snapshot(); active != 0 || reserved != 0 {
++		t.Fatalf("large images retained storage: %d/%d", active, reserved)
++	}
++}

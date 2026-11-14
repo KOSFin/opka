@@ -48,9 +48,6 @@ export class NativeCodexRootInventory {
       }
     }
     if (!this.roots.has(threadId)) {
-      if (this.roots.size >= 64) {
-        throw new Error('Native ROOT inventory capacity is unavailable.')
-      }
       this.roots.set(threadId, {})
     }
     if (this.current !== threadId) {

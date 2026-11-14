@@ -24,7 +24,7 @@ import { planNativeHomeResources } from './codex-native-home-resources'
 import { copyNativeHomeResources } from './codex-native-home-resource-copy'
 import { NativeCliControlError } from '../../shared/native-cli-control-error'
 
-const preparing = new Set<string>()
+const preparing = new Map<string, Promise<void>>()
 export type PrepareCodexNativeHomeOptions = {
   storageRoot: string
   homeDirectory: string
@@ -56,14 +56,21 @@ export async function prepareCodexNativeHome(
   options: PrepareCodexNativeHomeOptions
 ): Promise<PreparedCodexNativeHome> {
   const { home, storageRoot } = await nativeHomePaths(options)
-  if (preparing.has(home) || preparing.size >= 64) {
-    throw new Error('Native Codex HOME preparation is busy.')
-  }
-  preparing.add(home)
+  const previous = preparing.get(home)
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  preparing.set(home, current)
   try {
+    // Serialize mutations of one HOME; independent CLI sessions do not share execution locks.
+    await previous
     return await prepare(options, home, storageRoot)
   } finally {
-    preparing.delete(home)
+    release()
+    if (preparing.get(home) === current) {
+      preparing.delete(home)
+    }
   }
 }
 async function prepare(

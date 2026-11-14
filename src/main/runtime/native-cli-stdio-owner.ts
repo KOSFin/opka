@@ -28,8 +28,8 @@ export function stageNativeCliStdioOwner(runtime: object, launchId: string) {
     entries = new Map()
     slots.set(runtime, entries)
   }
-  if (entries.has(launchId) || entries.size >= 64) {
-    throw new NativeCliControlError(entries.has(launchId) ? 'owner_changed' : 'capacity')
+  if (entries.has(launchId)) {
+    throw new NativeCliControlError('owner_changed')
   }
   let notify!: () => void
   const ready = new Promise<void>((resolve) => {

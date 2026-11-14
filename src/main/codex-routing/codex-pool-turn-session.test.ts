@@ -503,16 +503,13 @@ it('keeps unresolved old-root children on their account across new roots, then r
   ready.finish()
 })
 
-it('refuses affinity expansion at its bound while preserving existing roots and their lease', () => {
+it('retains a hundred unresolved roots without dropping their account affinity', () => {
   const { session, boundary, db } = fixture()
   boundary.safe = false
   boundary.safeRetained = false
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < 100; i++) {
     session.begin({ threadId: `thread-${i}`, turnId: `turn-${i}` }).finish()
   }
-  expect(() => session.begin({ threadId: 'over-capacity', turnId: 'overflow' })).toThrow(
-    'affinity capacity'
-  )
   expect(session.activeRequests).toBe(0)
   expect(db.listAccountPoolAssignments()).toHaveLength(1)
   const old = session.begin({

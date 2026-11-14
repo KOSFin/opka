@@ -416,3 +416,18 @@ it('accepts an aliased storage root without following symlinked target descendan
     })
   ).rejects.toThrow('symlinks')
 })
+
+it('prepares 100 simultaneous launches sharing one owned HOME without racing configuration writes', async () => {
+  const f = await fixture()
+  await writeFile(join(f.sourceHome, 'config.toml'), 'model="gpt-6.1-sol"\n', { mode: 0o600 })
+  const results = await Promise.all(
+    Array.from({ length: 100 }, () => prepareCodexNativeHome(f.options))
+  )
+  expect(new Set(results.map((result) => result.home))).toEqual(new Set([f.homeDirectory]))
+  expect(await readdir(f.homeDirectory)).not.toContain('.opka-native-home-pending.json')
+  expect(await readdir(f.homeDirectory)).not.toContain('auth.json')
+  expect(parse(await readFile(join(f.homeDirectory, 'config.toml'), 'utf8')).model).toBe(
+    'gpt-6.1-sol'
+  )
+  expect(await readFile(join(f.sourceHome, 'auth.json'), 'utf8')).toBe('MUST NOT COPY')
+})

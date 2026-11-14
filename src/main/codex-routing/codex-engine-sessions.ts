@@ -62,11 +62,8 @@ export class CodexEngineSessions {
     }
   ) {}
   register(launch: NativeEngineLaunch) {
-    if (
-      this.sessions.size >= 64 ||
-      [...this.sessions.values()].some((e) => e.launch.launchId === launch.launchId)
-    ) {
-      throw new Error('Native routing session capacity or launch ownership is unavailable.')
+    if ([...this.sessions.values()].some((e) => e.launch.launchId === launch.launchId)) {
+      throw new Error('Native routing launch ownership is unavailable.')
     }
     const token = randomBytes(32).toString('hex')
     const entry = {

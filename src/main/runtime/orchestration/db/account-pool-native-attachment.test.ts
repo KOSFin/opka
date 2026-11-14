@@ -109,20 +109,25 @@ it('uses the original host proof for old objects even while their retained DB ge
     f.store.db.prepare('SELECT COUNT(*) AS count FROM account_pool_native_scopes').get()
   ).toEqual({ count: 1 })
 })
-it('preserves the global64 scope cap including the other provider after attachment', () => {
+it('attaches a hundred retained scopes without consuming the other provider scope', () => {
   const f = fixture()
   f.store.db
     .prepare(
       "INSERT INTO account_pool_native_scopes(scope_id,provider,epoch,generation) VALUES('00000000-0000-4000-8000-000000000000','codex',1,0)"
     )
     .run()
-  for (let index = 0; index < 63; index++) {
+  for (let index = 0; index < 100; index++) {
     f.epoch.registerScope()
   }
-  const before = f.snapshot()
   const attached = attachClaudeNativeAccountPoolEpoch(f.store.db, f.proof)
-  expect(() => attached.registerScope()).toThrow(/capacity/)
-  expect(f.snapshot()).toEqual(before)
+  const fresh = attached.registerScope()
+  expect(
+    f.store.db.prepare('SELECT COUNT(*) AS count FROM account_pool_native_scopes').get()
+  ).toEqual({ count: 102 })
+  fresh.close()
+  expect(
+    f.store.db.prepare('SELECT COUNT(*) AS count FROM account_pool_native_scopes').get()
+  ).toEqual({ count: 101 })
 })
 it.each([
   'orphan',

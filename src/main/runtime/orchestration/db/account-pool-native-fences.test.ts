@@ -100,10 +100,9 @@ it('unverifiable writer and stale profile cannot advance epoch or free a lease',
   expect(() => scope.close()).toThrow(/stale profile/)
   expect(store.listAccountPoolAssignments()).toHaveLength(1)
 })
-it('registration is explicit, bounded at 64, and released quota maxima survive cleanup', () => {
+it('registers 100 explicit scopes and preserves released quota maxima during cleanup', () => {
   const { store, epoch, args } = fixture()
-  const scopes = Array.from({ length: 64 }, () => epoch.registerScope())
-  expect(() => epoch.registerScope()).toThrow(/capacity/)
+  const scopes = Array.from({ length: 100 }, () => epoch.registerScope())
   expect(() =>
     store.acquireAccountPoolAssignment({
       ...args,
@@ -115,7 +114,7 @@ it('registration is explicit, bounded at 64, and released quota maxima survive c
   compactReleasedNativeAccountPoolRows(store.db)
   expect(
     store.db.prepare('SELECT COUNT(*) AS count FROM account_pool_native_scopes').get()
-  ).toEqual({ count: 64 })
+  ).toEqual({ count: 100 })
 })
 
 it('recovery rolls back on a proof lost before commit and refuses orphaned active scope records', () => {

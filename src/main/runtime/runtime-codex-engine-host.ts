@@ -182,8 +182,8 @@ export async function prepareRuntimeCodexNativeLaunch(
   if (!entry || !host) {
     return null
   }
-  if (entry.selections.size >= 64 || entry.selections.has(launch.launchId)) {
-    throw new Error('Native routing launch capacity or ownership is unavailable.')
+  if (entry.selections.has(launch.launchId)) {
+    throw new Error('Native routing launch ownership is unavailable.')
   }
   const context = {
     accountId: launch.accountId,

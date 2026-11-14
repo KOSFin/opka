@@ -23,7 +23,7 @@ const Home = z
   .object({
     home: z.string().min(1).max(4096),
     accountId: z.string().min(1).max(256).nullable(),
-    active: z.number().int().min(0).max(64),
+    active: z.number().int().nonnegative(),
     orphan: z.boolean()
   })
   .strict()
@@ -34,7 +34,7 @@ const Ledger = z
     machine: z.string().nullable(),
     boot: z.string().nullable(),
     protectAll: z.boolean(),
-    homes: z.array(Home).max(64)
+    homes: z.array(Home)
   })
   .strict()
 type HistoryLedger = z.infer<typeof Ledger>
@@ -158,13 +158,11 @@ export class NativeCodexHistoryLedger {
       (entry) => normalizeRuntimePathForComparison(entry.home) === key
     )
     if (existing) {
-      if (existing.active >= 64) {
+      if (!Number.isSafeInteger(existing.active + 1)) {
         value.protectAll = true
       } else {
         existing.active++
       }
-    } else if (value.homes.length >= 64) {
-      value.protectAll = true
     } else {
       value.homes.push({ ...target, active: 1, orphan: false })
     }

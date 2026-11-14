@@ -152,10 +152,10 @@ describe('private Codex request replay spool', () => {
     expect(await readdir(owner.directory)).toEqual([])
   }, 90_000)
 
-  it('frees queue admission after eight simultaneous owned spools settle', async () => {
+  it('releases a hundred simultaneous spools without a request-count ceiling', async () => {
     const owner = await budget()
-    const spools = Array.from({ length: 8 }, () => owner.acquire())
-    expect(() => owner.acquire()).toThrow('native replay admission queue is full')
+    const spools = Array.from({ length: 100 }, () => owner.acquire())
+    expect(owner.snapshot().active).toBe(100)
     await Promise.all(spools.map((spool) => spool.dispose()))
     expect(owner.snapshot()).toEqual({ active: 0, large: 0, reservedBytes: 0 })
     const next = owner.acquire()

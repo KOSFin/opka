@@ -6,10 +6,16 @@ export async function finishCodexRoutingRequest(
   route: CodexHttpAccountRoute | undefined,
   replay: CodexReplaySpool | undefined,
   providerPossible: boolean,
-  positiveTerminal: boolean
+  positiveTerminal: boolean,
+  localDeliveryCancelled = false
 ): Promise<void> {
   try {
-    if (providerPossible && !positiveTerminal && route?.holdUntilOwnerExit) {
+    if (
+      providerPossible &&
+      !positiveTerminal &&
+      !localDeliveryCancelled &&
+      route?.holdUntilOwnerExit
+    ) {
       const held = route.holdUntilOwnerExit()
       if (held) {
         void held.then(

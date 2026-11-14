@@ -47,12 +47,6 @@ export function createNativeAccountPoolScopeRegistry(
       db.exec('BEGIN IMMEDIATE')
       try {
         assertCurrent()
-        const count = z
-          .object({ count: z.number() })
-          .parse(db.prepare('SELECT COUNT(*) AS count FROM account_pool_native_scopes').get()).count
-        if (count >= 64) {
-          throw new Error('Native account assignment scope capacity is unavailable')
-        }
         db.prepare(
           'INSERT INTO account_pool_native_scopes(scope_id,provider,epoch,generation) VALUES(?,?,?,0)'
         ).run(scopeId, provider, epoch)

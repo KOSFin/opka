@@ -35,11 +35,7 @@ export function createCodexEngineHostRouting(options: CodexEngineHostOptions, ow
     transition: owner.transition
   })
   const replayBudget = options.replaySpoolDirectory
-    ? new CodexReplaySpoolBudget(
-        options.replaySpoolDirectory,
-        512 * 1024 * 1024,
-        options.assertExclusiveProfile
-      )
+    ? new CodexReplaySpoolBudget(options.replaySpoolDirectory, 0, options.assertExclusiveProfile)
     : undefined
   const front = new CodexEngineHttpListener(
     options.maxRequestBytes,
@@ -50,8 +46,7 @@ export function createCodexEngineHostRouting(options: CodexEngineHostOptions, ow
     owner.nativeClientKey,
     replayBudget,
     () => recovery.request(),
-    (_token, signal) => recovery.waitForReady(signal),
-    () => recovery.request()
+    (_token, signal) => recovery.waitForReady(signal)
   )
   return { ...lifetime, recovery, front }
 }

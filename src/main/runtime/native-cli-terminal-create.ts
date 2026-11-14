@@ -53,9 +53,6 @@ export async function createNativeCliTerminal(
       worktreeId: existing.worktreeId
     }
   }
-  if (pending.size + nativeCliTerminalBindings(runtime).size >= 128) {
-    throw new Error('Too many native CLI terminals are retained on this host')
-  }
   const operation = createNativeCliTerminalOnce(runtime, params, signal)
   pending.set(params.launchId, operation)
   try {
