@@ -177,7 +177,7 @@ jobs:
           set -euo pipefail
           bash config/scripts/codex-replay-ci-build.sh linux-x64
           sha256sum .build/codex-routing-replay/linux-x64/{cli-proxy-api,engine.zip,manifest.json} > out/native-transport/engine-hashes.txt
-          printf '%s  %s\n' 'e94a00b52f2889369f663e5ec72be141ccaaaf943a3ebf039df44330cffc487f' '.build/codex-routing-replay/linux-x64/cli-proxy-api' '07cb29062e910eb7047d23a70b71caae32e112b4dd3a341bc4a1a5651c17b89d' '.build/codex-routing-replay/linux-x64/engine.zip' 'a83672b2e5e3ce564e936c128bad15313f97ca68874053c971141a42d8b0bbd7' '.build/codex-routing-replay/linux-x64/manifest.json' | sha256sum -c -
+          printf '%s  %s\n' 'c1d99badcaeaa40dc7f7b304053ffd4586289710fc81b31743d171b2fcb2a077' '.build/codex-routing-replay/linux-x64/cli-proxy-api' 'd99c92e20ca5b4f529eb8493391ea1b6caad9feaeba8a34718ed8410d68e843c' '.build/codex-routing-replay/linux-x64/engine.zip' 'a6940772785e11e6b59b185a441f737510206811833e99e04be0b8c49425d16c' '.build/codex-routing-replay/linux-x64/manifest.json' | sha256sum -c -
       - name: Qualify public Codex opaque compact and resumed request in isolation
         if: matrix.group == 'shared'
         shell: bash
