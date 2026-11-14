@@ -1,4 +1,7 @@
-import { SYNTHETIC_REASONING_CIPHERTEXT } from './codex-native-probe-ciphertext.mjs'
+import {
+  SYNTHETIC_REASONING_CIPHERTEXT,
+  SYNTHETIC_COMPACTION_CIPHERTEXT
+} from './codex-native-probe-ciphertext.mjs'
 export function writeNativeProbeResponse(
   res,
   body,
@@ -14,32 +17,35 @@ export function writeNativeProbeResponse(
     : account === 'synthetic-A'
       ? 'SYNTHETIC_A_MARKER'
       : 'SYNTHETIC_B_MARKER'
-  const item = toolCall
-    ? {
-        id: `fc_${index}`,
-        type: 'function_call',
-        call_id: 'synthetic_exec_1',
-        name: 'exec_command',
-        arguments: JSON.stringify({
-          cmd: 'printf SYNTHETIC_TOOL_EXECUTED',
-          yield_time_ms: 1000,
-          max_output_tokens: 100,
-          ...(approval
-            ? {
-                sandbox_permissions: 'require_escalated',
-                justification: 'Synthetic fixed local printf qualification'
-              }
-            : {})
-        }),
-        status: 'completed'
-      }
-    : {
-        id: `msg_${index}`,
-        type: 'message',
-        role: 'assistant',
-        status: 'completed',
-        content: [{ type: 'output_text', text, annotations: [] }]
-      }
+  const includeReasoning = encrypted && !compact
+  const item = compact
+    ? { id: `cmp_${index}`, type: 'compaction', encrypted_content: SYNTHETIC_COMPACTION_CIPHERTEXT }
+    : toolCall
+      ? {
+          id: `fc_${index}`,
+          type: 'function_call',
+          call_id: 'synthetic_exec_1',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'printf SYNTHETIC_TOOL_EXECUTED',
+            yield_time_ms: 1000,
+            max_output_tokens: 100,
+            ...(approval
+              ? {
+                  sandbox_permissions: 'require_escalated',
+                  justification: 'Synthetic fixed local printf qualification'
+                }
+              : {})
+          }),
+          status: 'completed'
+        }
+      : {
+          id: `msg_${index}`,
+          type: 'message',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text, annotations: [] }]
+        }
   const reasoning = {
     id: `reasoning_${index}`,
     type: 'reasoning',
@@ -52,7 +58,7 @@ export function writeNativeProbeResponse(
     created_at: 1,
     status: 'completed',
     model: body.model,
-    output: encrypted ? [reasoning, item] : [item],
+    output: includeReasoning ? [reasoning, item] : [item],
     usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }
   }
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
@@ -83,7 +89,10 @@ export function writeNativeProbeResponse(
     ['response.output_item.done', { output_index: 0, item }],
     ['response.completed', { response: complete }]
   ]
-  if (encrypted) {
+  if (compact) {
+    events.splice(1, events.length - 2, ['response.output_item.done', { output_index: 0, item }])
+  }
+  if (includeReasoning) {
     events.splice(
       1,
       0,
