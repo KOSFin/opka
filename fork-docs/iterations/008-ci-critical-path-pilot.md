@@ -39,3 +39,7 @@ Remote diagnostic Linux/macOS/Windows success:2758cases при asserted no-node_
 ### 2026-11-23 03:16:00 +05:00 — обнаружен пустой changed-code diff manual-run
 
 Проверка fallback выявила: workflow_dispatch ставит scope.base=head, а quality script сравнивает с этим HEAD. Поэтому success full static доказывает types, но не новый changed-code diff. Добавлен одноразовый pilot_quality job на synchronize draft pilot после конкретного before=f85636800d: сравнивает с approved7d7a8ffa/реальным PR merge parent. Уже отправленные tests/types/full qualification не повторяются. Последующие report-only pushes не удовлетворяют one-shot before и тяжёлый job не повторяют. Это diagnostic job, не замена verify, на обычные PR/main/release не влияет.
+
+### 2026-11-23 03:18:00 +05:00 — meaningful changed-code gate passed
+
+PR run45076783719/source714525fa4b исполнил только одноразовый quality job137375678104, success; полный qualification не дублировался. Сохранены run/jobs/log receipt и точные findings. Временный pilot_quality удалён из итогового pr.yml, возвращая исходную regular draft admission; merge gate/код/обязательства не менялись. Исторические manual pr.yml diagnostics2runs отдельно стоят7.7167runner-min и не входят в PR/main/release cohorts. Full45075379341 ещё выполняется.

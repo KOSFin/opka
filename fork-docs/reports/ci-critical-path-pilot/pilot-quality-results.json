@@ -1,0 +1,20 @@
+{
+  "runId": 45076783719,
+  "attempt": 1,
+  "sourceHead": "714525fa4b604558cb6fc378ba85006bd448d56b",
+  "jobId": 137375678104,
+  "conclusion": "success",
+  "lines": [
+    "2026-11-22T22:16:41.8667811Z HEAD is now at d869cb13 Merge 714525fa4b604558cb6fc378ba85006bd448d56b into 7d7a8ffa83fdff34df5211a294f6b076bbee44b4",
+    "2026-11-22T22:16:41.8736089Z [command]/usr/bin/git log -1 --format=%H",
+    "2026-11-22T22:16:55.3918969Z   ORCA_CODE_QUALITY_BASE: 7d7a8ffa83fdff34df5211a294f6b076bbee44b4",
+    "2026-11-22T22:16:56.8718643Z code quality: 0 new finding(s) across 6 changed file(s).",
+    "2026-11-22T22:16:56.9186640Z casting code quality: 0 new finding(s) across 6 changed file(s).",
+    "2026-11-22T22:16:57.1524579Z focused plugins: 0 new finding(s) across 6 changed file(s).",
+    "2026-11-22T22:16:57.6441373Z type-aware code quality: 0 new finding(s) across 6 changed file(s).",
+    "2026-11-22T22:16:58.0214426Z React Doctor: 0 new finding(s) across 6 changed file(s).",
+    "2026-11-22T22:16:58.1344723Z design system: 0 new finding(s) across 6 changed file(s).",
+    "2026-11-22T22:16:58.1351463Z casting SAFETY: rationale: 0 new finding(s) across 6 changed file(s).",
+    "2026-11-22T22:16:58.1351942Z Changed-code quality gate passed since 7d7a8ffa83fd."
+  ]
+}

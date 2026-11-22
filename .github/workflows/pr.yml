@@ -33,6 +33,31 @@ env:
   HUSKY: '0'
 
 jobs:
+  aggregate_probe:
+        description: Run the aggregate before/after diagnostic alongside full qualification
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      release_version:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: opka-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+  ORCA_TELEMETRY_DISABLED: '1'
+  ORCA_DIAGNOSTICS_DISABLED: '1'
+  HUSKY: '0'
+
+jobs:
   pilot_quality:
     name: Pilot changed-code quality against the approved base
     if: >-
