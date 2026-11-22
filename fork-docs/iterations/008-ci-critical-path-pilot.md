@@ -43,3 +43,7 @@ Remote diagnostic Linux/macOS/Windows success:2758cases при asserted no-node_
 ### 2026-11-23 03:18:00 +05:00 — meaningful changed-code gate passed
 
 PR run45076783719/source714525fa4b исполнил только одноразовый quality job137375678104, success; полный qualification не дублировался. Сохранены run/jobs/log receipt и точные findings. Временный pilot_quality удалён из итогового pr.yml, возвращая исходную regular draft admission; merge gate/код/обязательства не менялись. Исторические manual pr.yml diagnostics2runs отдельно стоят7.7167runner-min и не входят в PR/main/release cohorts. Full45075379341 ещё выполняется.
+
+### 2026-11-23 03:19:00 +05:00 — исправление удаления временного job
+
+Source equality check обнаружил ошибку моего substring-удаления temporary job: совпало имя dispatch input aggregate_probe раньше jobs, и YAML header был продублирован в68b326. До дальнейшей проверки файл восстановлен byte-for-byte из уже tested6f4a8d2cac, без изменений production логики. Этот промежуточный head не является валидным qualification. Далее проверяется ровное source equality; full original run не повторяется.
