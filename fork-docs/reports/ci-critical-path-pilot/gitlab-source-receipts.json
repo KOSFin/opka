@@ -1,0 +1,29 @@
+[
+  {
+    "name": "gitlab-dag",
+    "requested_url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/master/doc/ci/yaml/needs.md",
+    "fetched_at": "2026-11-22T21:59:37.914878+00:00",
+    "status": 200,
+    "final_url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/master/doc/ci/yaml/needs.md",
+    "bytes": 13403,
+    "sha256": "36f3cd0d5b1f194948072a1139d71e8fbc82bc8ab948a29272366bcbf372d79b"
+  },
+  {
+    "name": "gitlab-cache",
+    "requested_url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/master/doc/ci/caching/_index.md",
+    "fetched_at": "2026-11-22T21:59:38.523202+00:00",
+    "status": 200,
+    "final_url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/master/doc/ci/caching/_index.md",
+    "bytes": 20412,
+    "sha256": "ecc020cf31017e2ccd828ff667bcdf1742f8955db8943f9e11f2598d2d69bd6c"
+  },
+  {
+    "name": "gitlab-rules",
+    "requested_url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/master/doc/ci/yaml/_index.md",
+    "fetched_at": "2026-11-22T21:59:39.147632+00:00",
+    "status": 200,
+    "final_url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/master/doc/ci/yaml/_index.md",
+    "bytes": 254866,
+    "sha256": "95dd42f32039da80b3955638656824bc0e7177441811a7aab4ce8a3cc217371f"
+  }
+]

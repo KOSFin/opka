@@ -1,0 +1,10 @@
+{
+  "runId": 45076968894,
+  "sourceHead": "68b326331a9ec707e4b9cf3439c5a9f630b29c2d",
+  "event": "push",
+  "conclusion": "failure",
+  "createdAt": "2026-11-22T22:18:23Z",
+  "completedAt": "2026-11-22T22:18:23Z",
+  "jobCount": 0,
+  "interpretation": "Transient invalid YAML; no runners/checks executed; restored from tested source"
+}

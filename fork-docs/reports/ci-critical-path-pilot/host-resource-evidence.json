@@ -1,0 +1,18 @@
+{
+  "observedAt": "2026-11-22T22:07:53.761303+00:00",
+  "sourceRevision": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "parentPythonCgroup": "0::/system.slice/opka-ci-audit.scope",
+  "actualNodeChildCgroup": "0::/system.slice/opka-ci-audit.scope",
+  "sameCgroup": true,
+  "limits": {
+    "memory.max": "2684354560",
+    "memory.swap.max": "0",
+    "memory.peak": "210694144"
+  },
+  "admittedHeavyJob": false,
+  "admissionRefusal": {
+    "command": "sudo -n /usr/local/sbin/opka-dev-resources run --cwd \"$PWD\" --memory-mib 2048 --timeout 900 -- node --test config/scripts/opka-ci-aggregate.test.mjs",
+    "result": "Refused: Less than 8GiB free development disk reserve; no unit created, planned test entry not executed"
+  },
+  "afterOwnerCleanup": "df showed9.0GiB; remote checks already dispatched, not duplicated locally"
+}

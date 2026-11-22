@@ -1,0 +1,12 @@
+{
+  "candidate": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "runId": "45075379341",
+  "attempt": "1",
+  "os": "linux",
+  "cache": "after-dependency-install",
+  "noNodeModules": false,
+  "cases": 2760,
+  "candidateMs": 7.274372,
+  "baselineMs": 4.4602879999999985,
+  "routingComparisons": 10
+}

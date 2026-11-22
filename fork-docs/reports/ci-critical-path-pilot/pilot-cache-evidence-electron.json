@@ -1,0 +1,13 @@
+{
+  "runId": 45075379341,
+  "jobId": 137371523965,
+  "job": "Hidden Electron journeys and Swift",
+  "lines": [
+    "2026-11-22T22:03:03.5180920Z node: v24.22.3",
+    "2026-11-22T22:03:04.0981270Z Cache not found for input keys: node-cache-macOS-arm64-pnpm-b92c8f2462e8e41a37462f0f15a316c8a1290946fc7ef4c81c26b48775c09519",
+    "2026-11-22T22:03:22.7236910Z Done in 18.3s using pnpm v12.14.0",
+    "2026-11-22T22:03:23.9650180Z Done in 976ms using pnpm v12.14.0",
+    "2026-11-22T22:03:25.5425160Z Cache not found for input keys: electron-package-macOS-ARM64-43.7.8",
+    "2026-11-22T22:03:26.1619380Z Cache not found for input keys: native-modules-macOS-macos15-ARM64-electron-nodev24.22.3-pnpm12.14.0-526e285d86f699d974d9da7022c240b2e48171f32824e41c5e2cbe39516a8ead"
+  ]
+}

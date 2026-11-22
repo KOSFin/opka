@@ -1,0 +1,201 @@
+{
+  "runId": 45075379341,
+  "attempt": 1,
+  "sha": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "workflow": ".github/workflows/pr.yml",
+  "event": "workflow_dispatch",
+  "status": "completed",
+  "conclusion": "success",
+  "url": "https://github.com/KOSFin/opka/actions/runs/45075379341",
+  "createdAt": "2026-11-22T22:02:00Z",
+  "jobCount": 37,
+  "runnerBusyMinutes": 141.43333333333334,
+  "diagnosticRunnerMinutes": 3.1666666666666665,
+  "firstRunnerQueueSeconds": 4.0,
+  "jobQueueSumSeconds": 324.0,
+  "verifyJobId": 137381531994,
+  "verifyConclusion": "success",
+  "verifyDurationSeconds": 15.0,
+  "aggregateElapsedSeconds": 2081.0,
+  "jobDurations": [
+    {
+      "name": "Aggregate diagnostic (ubuntu-24.04)",
+      "seconds": 39.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Determine required component checks",
+      "seconds": 37.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Aggregate diagnostic (macos-15)",
+      "seconds": 71.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Aggregate diagnostic (windows-2022)",
+      "seconds": 80.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Desktop assets (windows-2022)",
+      "seconds": 136.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Desktop assets (macos-15)",
+      "seconds": 201.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Desktop assets (ubuntu-24.04)",
+      "seconds": 76.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Hidden Electron journeys and Swift",
+      "seconds": 581.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Fork regression tests (automation physical scope)",
+      "seconds": 258.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Fork regression tests (1/4)",
+      "seconds": 148.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Fork regression tests (mobile and integration)",
+      "seconds": 423.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Fork regression tests (3/4)",
+      "seconds": 168.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Fork regression tests (4/4)",
+      "seconds": 157.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Fork regression tests (2/4)",
+      "seconds": 143.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Types and changed-code quality",
+      "seconds": 113.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / Pinned Darwin arm64 replay engine",
+      "seconds": 156.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Android component acceptance / Opka Android installer confirmation and retained state",
+      "seconds": 2020.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / mobile_web_bundle",
+      "seconds": 40.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / linux_glibc217_compat",
+      "seconds": 91.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / linux_glibc_floor (ubuntu-22.04)",
+      "seconds": 188.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / linux_glibc_floor (ubuntu-24.04-arm)",
+      "seconds": 177.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / linux_musl (ubuntu-24.04-arm)",
+      "seconds": 135.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / linux_musl (ubuntu-22.04)",
+      "seconds": 151.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / persistence (ubuntu-22.04)",
+      "seconds": 179.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / persistence (macos-15)",
+      "seconds": 169.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / persistence (ubuntu-24.04-arm)",
+      "seconds": 119.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / persistence (windows-11-arm)",
+      "seconds": 613.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / persistence (windows-2022)",
+      "seconds": 486.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / persistence (macos-15-intel)",
+      "seconds": 363.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / server_template / desktop_template",
+      "seconds": 319.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / Unsigned Mac arm64 beta",
+      "seconds": 628.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "Beta installer qualification / Installer qualification passed",
+      "seconds": 6.0,
+      "conclusion": "success"
+    },
+    {
+      "name": "PR checks passed",
+      "seconds": 15.0,
+      "conclusion": "success"
+    }
+  ],
+  "verifiedQualification": {
+    "head": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+    "tree": "3ffc6c07a56d3d30f47062130fad008abd9f0a6e",
+    "event": "workflow_dispatch",
+    "selectedLanes": [
+      "static",
+      "regression",
+      "desktop",
+      "electron",
+      "installers",
+      "android"
+    ]
+  },
+  "pullRequestQualification": false
+}

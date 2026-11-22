@@ -2,9 +2,11 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { runProcessSync } from '@orca/process-host'
 import { isDirectInvocation } from './script-entry-detection.mjs'
 import { findReusableQualification } from './opka-ci-qualification-proof.mjs'
-import { findReusableFollowupProof, isFollowupProof } from './opka-ci-followup-proof.mjs'
+import { findReusableFollowupProof } from './opka-ci-followup-proof.mjs'
+import { isFollowupProof } from './opka-ci-followup-policy.mjs'
+import { CI_LANES, writeQualification } from './opka-ci-aggregate.mjs'
+export { CI_LANES, evaluateCiResults } from './opka-ci-aggregate.mjs'
 
-export const CI_LANES = ['static', 'regression', 'desktop', 'electron', 'installers', 'android']
 const allLanes = () => Object.fromEntries(CI_LANES.map((lane) => [lane, true]))
 
 export function classifyCiPaths(paths) {
@@ -59,36 +61,6 @@ export function classifyCiPaths(paths) {
     }
   }
   return { ...lanes, full, docs_only: reasons.size === 0, reasons: [...reasons] }
-}
-
-export function evaluateCiResults(scope, needs) {
-  if (!scope || needs.scope?.result !== 'success') {
-    throw new Error('CI scope did not succeed')
-  }
-  if (Object.keys(needs).length !== CI_LANES.length + 1) {
-    throw new Error('Unexpected CI dependency set')
-  }
-  if (scope.followupProof) {
-    const proof = scope.followupProof
-    if (
-      !isFollowupProof(proof) ||
-      proof.head !== scope.head ||
-      proof.sourceTree !== scope.tree ||
-      proof.base !== scope.base ||
-      scope.reused !== false ||
-      scope.static !== true ||
-      scope.regression !== true ||
-      CI_LANES.some((lane) => scope[lane] !== !proof.reusedLanes.includes(lane))
-    ) {
-      throw new Error('Invalid test-only follow-up qualification')
-    }
-  }
-  for (const lane of CI_LANES) {
-    const expected = scope.reused ? 'skipped' : scope[lane] ? 'success' : 'skipped'
-    if (needs[lane]?.result !== expected) {
-      throw new Error(`Unexpected ${lane} result; required ${expected}`)
-    }
-  }
 }
 
 export function describeCiScope(scope) {
@@ -226,20 +198,7 @@ export async function detectCiScope(env = process.env, findFollowup = findReusab
 async function main() {
   mkdirSync('out/opka-ci', { recursive: true })
   if (process.argv.includes('--verify')) {
-    const scope = JSON.parse(process.env.OPKA_CI_SCOPE)
-    evaluateCiResults(scope, JSON.parse(process.env.OPKA_CI_RESULTS))
-    writeFileSync(
-      'out/opka-ci/qualification.json',
-      `${JSON.stringify({
-        schemaVersion: 1,
-        tree: scope.tree,
-        head: scope.head,
-        runId: Number(process.env.GITHUB_RUN_ID),
-        attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
-        event: process.env.GITHUB_EVENT_NAME,
-        scope
-      })}\n`
-    )
+    writeQualification()
     return
   }
   const scope = await detectCiScope()

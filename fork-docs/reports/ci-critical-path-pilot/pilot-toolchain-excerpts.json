@@ -1,0 +1,17 @@
+{
+  "runId": 45075379341,
+  "jobId": 137371332366,
+  "scope": "Retained Linux setup/install log only; all versions compared within diagnostic on same runner",
+  "lines": [
+    "2026-11-22T22:02:16.0020017Z Found in cache @ /opt/hostedtoolcache/node/24.22.3/x64",
+    "2026-11-22T22:02:19.6525776Z node: v24.22.3",
+    "2026-11-22T22:02:28.9869503Z Found in cache @ /opt/hostedtoolcache/node/24.22.3/x64",
+    "2026-11-22T22:02:29.1300821Z node: v24.22.3",
+    "2026-11-22T22:02:29.1855435Z ##[start-action display=Restore pnpm verification record;id=__self.verification-cache]",
+    "2026-11-22T22:02:29.3057353Z ##[start-action display=Resolve pnpm verification cache;id=__self.verification-cache.verification-cache]",
+    "2026-11-22T22:02:29.3062800Z ##[start-action display=Restore pnpm verification record;id=__self.verification-cache.verification-cache-restore]",
+    "2026-11-22T22:02:34.7561531Z Done in 5.4s using pnpm v12.14.0",
+    "2026-11-22T22:02:36.2590448Z Done in 1.4s using pnpm v12.14.0",
+    "2026-11-22T22:02:36.7952168Z ##[start-action display=Save pnpm verification record on main;id=__self.__actions_cache]"
+  ]
+}

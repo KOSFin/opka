@@ -1,0 +1,29 @@
+{
+  "run": 43242425126,
+  "artifacts": [
+    {
+      "id": 13959110694,
+      "name": "opka-android-os-update-35a45c9eac8e9bb07e34742bc3be7b50f216b4fe",
+      "size_in_bytes": 5670946,
+      "expired": false,
+      "created_at": "2026-11-12T15:28:00Z",
+      "expires_at": "2026-11-26T15:27:58Z"
+    },
+    {
+      "id": 13958850728,
+      "name": "opka-macos-35a45c9eac8e9bb07e34742bc3be7b50f216b4fe",
+      "size_in_bytes": 794340628,
+      "expired": false,
+      "created_at": "2026-11-12T15:26:13Z",
+      "expires_at": "2026-11-26T15:25:45Z"
+    },
+    {
+      "id": 13957065544,
+      "name": "opka-server-35a45c9eac8e9bb07e34742bc3be7b50f216b4fe",
+      "size_in_bytes": 103297078,
+      "expired": false,
+      "created_at": "2026-11-12T15:11:00Z",
+      "expires_at": "2026-11-26T15:10:56Z"
+    }
+  ]
+}

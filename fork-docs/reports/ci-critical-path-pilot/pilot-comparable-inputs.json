@@ -1,0 +1,21 @@
+{
+  "baseline": "7d7a8ffa83fdff34df5211a294f6b076bbee44b4",
+  "candidate": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "baselineTree": "58981fcbc3250ddb2608bf9ac03e93cb71c37d1c",
+  "historicalGreenRun": 43628616296,
+  "historicalProofTree": "58981fcbc3250ddb2608bf9ac03e93cb71c37d1c",
+  "baselineMatchesHistoricalQualifiedTree": true,
+  "changedPaths": [
+    ".github/workflows/pr.yml",
+    "config/scripts/fork-ci-contract.test.mjs",
+    "config/scripts/opka-ci-aggregate-probe.mjs",
+    "config/scripts/opka-ci-aggregate.mjs",
+    "config/scripts/opka-ci-component-scope.mjs",
+    "config/scripts/opka-ci-followup-policy.mjs",
+    "config/scripts/opka-ci-followup-proof.mjs",
+    "fork-docs/iterations/008-ci-critical-path-pilot.md",
+    "fork-docs/reports/ci-critical-path-pilot/aggregate-historical-inputs.json"
+  ],
+  "applicationSourceChanges": [],
+  "limit": "Same application/dependency inputs do not establish same cache, runner or changed-test selection; whole-workflow comparison remains observational"
+}

@@ -1,0 +1,37 @@
+{
+  "run": 43628616296,
+  "artifacts": [
+    {
+      "id": 14128551266,
+      "name": "opka-ci-proof-43628616296-1",
+      "size_in_bytes": 989,
+      "expired": false,
+      "created_at": "2026-11-14T19:22:55Z",
+      "expires_at": "2026-12-14T19:22:55Z"
+    },
+    {
+      "id": 14128246633,
+      "name": "opka-macos-87b2dd3cf75ad238a9647dfd80b4fe9ce1dfa2ba",
+      "size_in_bytes": 794324961,
+      "expired": false,
+      "created_at": "2026-11-14T19:15:50Z",
+      "expires_at": "2026-11-28T19:15:21Z"
+    },
+    {
+      "id": 14127432999,
+      "name": "opka-server-87b2dd3cf75ad238a9647dfd80b4fe9ce1dfa2ba",
+      "size_in_bytes": 103301834,
+      "expired": false,
+      "created_at": "2026-11-14T19:06:28Z",
+      "expires_at": "2026-11-28T19:06:24Z"
+    },
+    {
+      "id": 14127408695,
+      "name": "opka-android-os-update-87b2dd3cf75ad238a9647dfd80b4fe9ce1dfa2ba",
+      "size_in_bytes": 5646814,
+      "expired": false,
+      "created_at": "2026-11-14T19:22:25Z",
+      "expires_at": "2026-11-28T19:22:23Z"
+    }
+  ]
+}

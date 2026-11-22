@@ -1,0 +1,12 @@
+{
+  "testedImplementation": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "paths": [
+    ".github/workflows/pr.yml",
+    "config/scripts/"
+  ],
+  "sourceDiffExitCode": 0,
+  "reason": "Report/journal commits change full tree; future non-draft PR exact-head qualification still required",
+  "headAtObservation": "d77588a997469e6a4bf4ddc6c47a2df40d174025",
+  "qualificationForObservedHead": false,
+  "scopeOfEquality": "Only workflow/scripts; reports/journal differ and whole-tree qualification is not implied"
+}

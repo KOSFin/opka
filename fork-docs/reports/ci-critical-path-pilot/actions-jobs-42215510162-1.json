@@ -1,0 +1,257 @@
+{
+  "total_count": 8,
+  "jobs": [
+    {
+      "id": 127884402442,
+      "name": "Determine required component checks",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-06T12:09:28Z",
+      "started_at": "2026-11-06T12:09:30Z",
+      "completed_at": "2026-11-06T12:10:09Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884402442",
+      "labels": [
+        "ubuntu-24.04"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-06T12:09:31Z",
+          "completed_at": "2026-11-06T12:09:32Z"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-06T12:09:32Z",
+          "completed_at": "2026-11-06T12:09:43Z"
+        },
+        {
+          "name": "Run ./.github/actions/install-node-dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-06T12:09:43Z",
+          "completed_at": "2026-11-06T12:09:58Z"
+        },
+        {
+          "name": "Resolve exact inputs and previous PR qualification",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-06T12:09:58Z",
+          "completed_at": "2026-11-06T12:10:04Z"
+        },
+        {
+          "name": "Run actions/upload-artifact@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-06T12:10:04Z",
+          "completed_at": "2026-11-06T12:10:06Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/install-node-dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-06T12:10:06Z",
+          "completed_at": "2026-11-06T12:10:06Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-06T12:10:06Z",
+          "completed_at": "2026-11-06T12:10:06Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-06T12:10:06Z",
+          "completed_at": "2026-11-06T12:10:07Z"
+        }
+      ]
+    },
+    {
+      "id": 127884687099,
+      "name": "PR checks passed",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-06T12:10:09Z",
+      "started_at": "2026-11-06T12:10:12Z",
+      "completed_at": "2026-11-06T12:10:50Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884687099",
+      "labels": [
+        "ubuntu-24.04"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-06T12:10:13Z",
+          "completed_at": "2026-11-06T12:10:14Z"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-06T12:10:14Z",
+          "completed_at": "2026-11-06T12:10:22Z"
+        },
+        {
+          "name": "Run ./.github/actions/install-node-dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-06T12:10:22Z",
+          "completed_at": "2026-11-06T12:10:45Z"
+        },
+        {
+          "name": "Require every selected check and reject unexplained skips",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-06T12:10:45Z",
+          "completed_at": "2026-11-06T12:10:45Z"
+        },
+        {
+          "name": "Preserve successful source qualification",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-06T12:10:45Z",
+          "completed_at": "2026-11-06T12:10:47Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/install-node-dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-06T12:10:47Z",
+          "completed_at": "2026-11-06T12:10:48Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-06T12:10:48Z",
+          "completed_at": "2026-11-06T12:10:48Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-06T12:10:48Z",
+          "completed_at": "2026-11-06T12:10:48Z"
+        }
+      ]
+    },
+    {
+      "id": 127884688087,
+      "name": "Desktop assets (${{ matrix.os }})",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-06T12:10:09Z",
+      "started_at": "2026-11-06T12:10:09Z",
+      "completed_at": "2026-11-06T12:10:09Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884688087",
+      "labels": [],
+      "steps": []
+    },
+    {
+      "id": 127884688154,
+      "name": "Types and changed-code quality",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-06T12:10:09Z",
+      "started_at": "2026-11-06T12:10:09Z",
+      "completed_at": "2026-11-06T12:10:09Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884688154",
+      "labels": [
+        "ubuntu-24.04"
+      ],
+      "steps": []
+    },
+    {
+      "id": 127884688354,
+      "name": "Hidden Electron journeys and Swift",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-06T12:10:09Z",
+      "started_at": "2026-11-06T12:10:09Z",
+      "completed_at": "2026-11-06T12:10:09Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884688354",
+      "labels": [
+        "macos-15"
+      ],
+      "steps": []
+    },
+    {
+      "id": 127884688430,
+      "name": "Beta installer qualification",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-06T12:10:09Z",
+      "started_at": "2026-11-06T12:10:09Z",
+      "completed_at": "2026-11-06T12:10:09Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884688430",
+      "labels": [],
+      "steps": []
+    },
+    {
+      "id": 127884688461,
+      "name": "Fork regression tests (${{ matrix.label }})",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-06T12:10:09Z",
+      "started_at": "2026-11-06T12:10:09Z",
+      "completed_at": "2026-11-06T12:10:09Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884688461",
+      "labels": [
+        "ubuntu-24.04"
+      ],
+      "steps": []
+    },
+    {
+      "id": 127884688466,
+      "name": "Android component acceptance",
+      "head_sha": "0b327b2d9a7ba7792bbebb356be3d2b20dcb6507",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-06T12:10:09Z",
+      "started_at": "2026-11-06T12:10:09Z",
+      "completed_at": "2026-11-06T12:10:09Z",
+      "html_url": "https://github.com/KOSFin/opka/actions/runs/42215510162/job/127884688466",
+      "labels": [],
+      "steps": []
+    }
+  ]
+}
