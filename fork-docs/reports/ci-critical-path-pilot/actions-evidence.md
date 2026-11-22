@@ -11,7 +11,7 @@ The bounded index contains all217 repository runs. The natural cohort is every p
 | main successful aggregate |12|1:05|1:23|
 | successful release publication |9|40:53|82:44|
 
-Attempt1 initial scheduling (run creation -> first runner start) is PR n46 p50=3s/p95=23s, main n14 p50=3s/p95=4s, release n11 p50=4s/p95=5s. Retry request timestamp is unavailable; retry elapsed from the original run includes prior attempts and human delay, so it is never labeled queue. Per-job scheduler delay is measured from job creation to start, with carried records excluded.
+Attempt1 initial scheduling (run creation -> first runner start) is PR n45 with an actual runner start (one pre-execution cancellation excluded) p50=3s/p95=23s, main n14 p50=3s/p95=4s, release n11 p50=4s/p95=5s. Retry request timestamp is unavailable; retry elapsed from the original run includes prior attempts and human delay, so it is never labeled queue. Per-job scheduler delay is measured from job creation to start, with carried records excluded.
 
 Nearest-rank percentiles. Small n and changing workflows substantially limit generalization. Main is usually fast because existing exact-tree PR qualification is reused; it is not a comparable cold full qualification. These numbers describe historical behavior, not pilot results.
 
@@ -82,3 +82,5 @@ python3 fork-docs/reports/ci-critical-path-pilot/actions-gate-inputs.py
 Collection is resumable and reuses captured gzip datasets; it does not repeat all APIs on rerun. The initial page snapshots intentionally fix the historical cohort. Gate-input recovery downloads only public job logs and an explicitly bounded tiny proof archive. Scripts never install dependencies, dispatch, rerun, publish or change protections. See `actions-events.md` for event coverage and pending-context risks. Raw JSON compression is lossless and recorded in `actions-compression.json`.
 
 Метрика первой ошибки уточнена: берётся самый ранний failed step/job среди **всех attempts одного исходного PR run**, включая затем успешно исправленные retry. Поэтому n34/p50 4:02, а не n31/p50 3:58 по одним последним attempts; per-attempt исходные значения сохранены.
+
+Отмена43095942157 до запуска не считается нулевой очередью: initial scheduling там null, поэтому natural initial-queue n45. Runner-cost p50/p95 в JSON теперь суммируют все attempts каждого run, а не только последний; общие totals не изменились.

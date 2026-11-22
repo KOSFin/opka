@@ -16,5 +16,6 @@
     "2026-11-22T22:16:58.1344723Z design system: 0 new finding(s) across 6 changed file(s).",
     "2026-11-22T22:16:58.1351463Z casting SAFETY: rationale: 0 new finding(s) across 6 changed file(s).",
     "2026-11-22T22:16:58.1351942Z Changed-code quality gate passed since 7d7a8ffa83fd."
-  ]
+  ],
+  "testedMergeSha": "d869cb13f330ab6e06f3fc633416f45526687396"
 }

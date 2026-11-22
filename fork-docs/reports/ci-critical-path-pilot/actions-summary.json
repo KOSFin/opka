@@ -29,8 +29,8 @@
   },
   "PR runner busy minutes": {
     "n": 52,
-    "p50": 101.13333333333334,
-    "p95": 185.6,
+    "p50": 108.26666666666667,
+    "p95": 209.48333333333332,
     "sum_all_attempts": 5720.483333333334
   },
   "main runner busy minutes": {
@@ -41,8 +41,8 @@
   },
   "release runner busy minutes": {
     "n": 11,
-    "p50": 89.5,
-    "p95": 103.75,
+    "p50": 93.25,
+    "p95": 136.08333333333334,
     "sum_all_attempts": 941.9333333333334
   },
   "PR successful critical predecessor counts": {
@@ -74,7 +74,7 @@
       "p95_seconds": 4964.0
     },
     "PR attempt1 initial scheduling": {
-      "n": 46,
+      "n": 45,
       "p50_seconds": 3.0,
       "p95_seconds": 23.0
     },
@@ -87,6 +87,22 @@
       "n": 11,
       "p50_seconds": 4.0,
       "p95_seconds": 5.0
+    }
+  },
+  "natural_PR_first_failing_steps": {
+    "n": 34,
+    "counts": {
+      "Keep exact synthetic native transport evidence": 2,
+      "Require every selected check and reject unexplained skips": 4,
+      "Check changed code": 4,
+      "Check types": 4,
+      "Verify command automation physical scope and fresh-process recovery": 6,
+      "Build the current synthetic host and generated mobile pages": 1,
+      "Test host accounts, mobile state and generated pages": 6,
+      "Exercise project navigation and task boards": 1,
+      "Run pnpm test:node-server --artifact ": 1,
+      "Exercise actual Codex command tools with local scripted responses": 1,
+      "Exercise Android confirmation and data retention": 4
     }
   },
   "sample": {

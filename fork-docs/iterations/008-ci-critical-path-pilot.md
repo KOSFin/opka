@@ -8,7 +8,9 @@
 
 ## Checkpoint и следующий шаг
 
-История и official-source review делегированы двум лёгким нативным сабагентам. Worktree чистый на заданной базе. Предварительные данные не подтверждают 10×: PR43628616296 занял34m46s, Android критический33m25s; scope28s/verify25s. Пилот: удалить package installation только из aggregate, переиспользуя существующий валидатор без изменения политики. Далее targeted CI, независимое ревью, отчёт.
+Завершено исследование79runs/86attempts и пилот. Полный manual45075379341/attempt1/source6f4a8d2cacsuccess, все6lanes, verify15s, elapsed34:41, runner141.43min с diagnostic3.17. Исторический comparable app-input PR34:46/verify25s; это наблюдение, не controlled full A/B.10× и общая cost saving не доказаны. Diagnostics3OS2758/2760cases,171targeted tests passed; отдельный meaningful diff-quality45076783719passed6files/0findings. Source/scripts и workflow восстановлены byte-identical6f4a8d2cac, независимое review подтверждает. Draft PR25 открыт, current-head PR qualification отсутствует и merge запрещён до будущего non-draft exact-head run. Report, datasets, sources, event matrix, GitLab и CI-v2 оценка в reports/ci-critical-path-pilot/README.md.
+
+Следующий шаг: review отрицательного10× результата и небольшого обратимого aggregate-пилота; затем отдельный согласованный shadow эксперимент на реальном малом PR, измеряющий indirect-input/native result reuse и first-failure порядок. Не запускать повторный полный CI лишь ради docs commits. Не merge/release/install services/protections.
 
 ## Журнал
 
@@ -47,3 +49,15 @@ PR run45076783719/source714525fa4b исполнил только однораз�
 ### 2026-11-23 03:19:00 +05:00 — исправление удаления временного job
 
 Source equality check обнаружил ошибку моего substring-удаления temporary job: совпало имя dispatch input aggregate_probe раньше jobs, и YAML header был продублирован в68b326. До дальнейшей проверки файл восстановлен byte-for-byte из уже tested6f4a8d2cac, без изменений production логики. Этот промежуточный head не является валидным qualification. Далее проверяется ровное source equality; full original run не повторяется.
+
+### 2026-11-23 03:21:00 +05:00 — уточнение queue/cost без повторных CI
+
+В выборке одна отмена43095942157 до исполнения: её initial queue переведена из фиктивного0 вnull; natural runner-start queue n45. Cost percentiles теперь по всем attempts каждого run, не только final attempt; totals не менялись. Raw datasets сохранены; исполнялась только лёгкая агрегация JSON, тесты не дублировались.
+
+### 2026-11-23 03:41:00 +05:00 — полный remote qualification завершён
+
+Run45075379341/attempt1/source6f4a8d2cac success:37jobs/33executed/4expectedskips; все6selectedlanes. Verify137381531994success15s; source proof head6f4a8d2cac/tree3ffc6c07a56d3d30f47062130fad008abd9f0a6e/run/attempt/event проверены. Elapsed2081s=34:41, Android2020s=33:40; comparable historical app tree34:46/Android33:25/verify25s. Общий elapsed -5s, не controlled causal claim. Cost141.43runner-min, diagnostic3.17, без diagnostic138.27 vs historical131.80: общего cost saving/10× не доказано. Сохранены raw metadata/step timestamps/artifacts и exact qualification JSON, full watch завершился exit0. Следующий шаг — финальный docs checkpoint/PR description, без повторных tests и merge.
+
+### 2026-11-23T03:44:59+05:00 — финальные данные и draft PR
+
+PR25 описание переписано вокруг результата:10× и cost saving не доказаны, tiny aggregate25→15s, общий34:46→34:41 несинхронно. gh pr edit отказал из-за устаревшего Projects(classic) GraphQL; корректный body/title сохранён и применён через REST PATCH, draft=true. Сохранены exact proof/37job step timestamps/artifacts/cache excerpts, source equality и6OS diagnostics receipts,171tests иmeaningful6file quality. Неверный68b head дал parser failure45076968894/0jobs; исправлен, fullcheck не дублировался. Следующий шаг — review draft и отдельный real-small-PR shadow experiment, без merge/release/changes-to-protections.

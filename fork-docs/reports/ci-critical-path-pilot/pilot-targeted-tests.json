@@ -1,0 +1,15 @@
+{
+  "runId": 45075379341,
+  "attempt": 1,
+  "sourceHead": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "jobId": 137371332366,
+  "os": "ubuntu-24.04",
+  "result": "success",
+  "files": 5,
+  "testsPassed": 171,
+  "logExcerpts": [
+    "2026-11-22T22:02:40.5496208Z  Test Files  5 passed (5)",
+    "2026-11-22T22:02:40.5496975Z       Tests  171 passed (171)",
+    "2026-11-22T22:02:40.5500238Z    Duration  2.79s (tests 70%, import 16%, transform 10%, setup 3%, worker 1%)"
+  ]
+}

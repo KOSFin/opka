@@ -2,7 +2,7 @@
 
 На исходной конфигурации цель 10× **не подтверждена**. В последних 100 repository runs нашлось 12 зелёных PR: p50 **34:06**, p95 **50:30**. Нельзя сравнивать с main p50 1:05: main обычно использует уже заработанное exact-tree PR qualification. Представительный PR тратит 33:25 на Android из общих 34:46; это обязательная работа до merge. Удаление ВСЕГО scope+verify сократило бы его максимум в **1.026×**.
 
-Реализован меньший безопасный пилот: тот же aggregate validator и follow-up policy выделены в модули без установленных пакетов; `pr.yml:verify` использует Node без установки зависимостей приложения. Никакая выбранная проверка, платформа или provenance не исключена. [Draft PR #25](https://github.com/KOSFin/opka/pull/25), исходный исполняемый candidate `6f4a8d2cacd12439e60077637b76c836bde5cc6a`, база `7d7a8ffa83fdff34df5211a294f6b076bbee44b4`, [эксперимент 45075379341, attempt 1](https://github.com/KOSFin/opka/actions/runs/45075379341). Full qualification ещё выполняется; результат ниже обновляется по факту. Draft-skipped PR context и manual dispatch не являются pull_request qualification для merge. Перед возможным merge понадобится новый non-draft pull_request run на тогдашнем exact head/tested merge; этот пилот PR оставляет draft и ничего не merge.
+Реализован меньший безопасный пилот: тот же aggregate validator и follow-up policy выделены в модули без установленных пакетов; `pr.yml:verify` использует Node без установки зависимостей приложения. Никакая выбранная проверка, платформа или provenance не исключена. [Draft PR #25](https://github.com/KOSFin/opka/pull/25), исходный исполняемый candidate `6f4a8d2cacd12439e60077637b76c836bde5cc6a`, база `7d7a8ffa83fdff34df5211a294f6b076bbee44b4`, [эксперимент 45075379341, attempt 1](https://github.com/KOSFin/opka/actions/runs/45075379341). Full qualification завершился **success**:34:41 до aggregate, сам verify15s. Все6lanes пройдены; qualification head/tree/run/attempt/event проверены. Draft-skipped PR context и manual dispatch не являются pull_request qualification для merge. Перед возможным merge понадобится новый non-draft pull_request run на тогдашнем exact head/tested merge; этот пилот PR оставляет draft и ничего не merge.
 
 ## Измерения, входы и ограничения
 
@@ -19,9 +19,30 @@
 
 Elapsed считается от API run.created_at: точный push receipt неизвестен. Первая failed step completion — доступная верхняя оценка первого actionable failure, а не момент первой строки error в stdout. PR review approvals, обязательные внешние статусы и человеческие решения не входят в CI-ready метрику. Nearest-rank p95 при n12 — почти максимум; причинной оценки всего CI по этой выборке нет.
 
-Runner work суммируется по реально исполненным job intervals; elapsed — конечная точка критической ветви, без суммы параллельных стадий. Jobs, перенесённые API в retry с новыми ID и старыми timestamps, дедуплицированы. В естественной выборке: 46 PR runs / 50 attempts — **5350.83 runner-min**, 14 main — **20.47**, 11 release / 14 attempts — **941.93**. Это занятость runners, без тарифов, OS-множителей и платёжных округлений. Сумма очередей jobs описывает спрос, её нельзя прибавлять к elapsed. Initial queue для первой попытки PR n46: p50 3s / p95 23s; retry waiting отдельно, точный rerun-request timestamp неизвестен.
+Runner work суммируется по реально исполненным job intervals; elapsed — конечная точка критической ветви, без суммы параллельных стадий. Jobs, перенесённые API в retry с новыми ID и старыми timestamps, дедуплицированы. В естественной выборке: 46 PR runs / 50 attempts — **5350.83 runner-min**, 14 main — **20.47**, 11 release / 14 attempts — **941.93**. Это занятость runners, без тарифов, OS-множителей и платёжных округлений. Сумма очередей jobs описывает спрос, её нельзя прибавлять к elapsed. Initial queue для первой попытки PR n45 с фактическим runner start (ещё1run отменён до исполнения): p50 3s / p95 23s; retry waiting отдельно, точный rerun-request timestamp неизвестен.
 
 Красный [43242425126](https://github.com/KOSFin/opka/actions/runs/43242425126): первая ошибка changed-code 2:53, regression 4:41, Electron 13:31, Android 31:38, aggregate red 32:08. Зелёный [43628616296](https://github.com/KOSFin/opka/actions/runs/43628616296): runner 0:23, scope 0:51, Electron 9:02, installers 27:49, Android 34:19, aggregate 34:46. Для быстрой обратной связи полезен первый actionable error, а не ожидание финального red aggregate.
+
+Для обычного PR после scope все выбранные ветви идут параллельно; verify ждёт самую длинную. Это зависимости текущей конфигурации, а не сумма длительностей:
+
+```mermaid
+flowchart LR
+  E["open / synchronize / reopen / ready"] --> S["scope: exact source + plan"]
+  S --> ST["static"]
+  S --> R["regression: 6 jobs"]
+  S --> D["desktop: Linux / macOS / Windows"]
+  S --> EL["hidden Electron"]
+  S --> I["installer qualification + native matrix"]
+  S --> A["Android build + OS acceptance"]
+  ST --> V["pr.yml:verify — all selected obligations"]
+  R --> V
+  D --> V
+  EL --> V
+  I --> V
+  A --> V
+```
+
+Невыбранные ветви должны быть именно skipped, выбранные — success; unexplained skipped/failure/cancelled не дают qualification. Main reuse и release имеют отдельные trust/needs ветви, описанные в history/DAG данных; они не используются для сравнения холодного PR времени.
 
 ## Качество решений по типам изменений
 
@@ -49,15 +70,34 @@ Linux запускает пять существующих regression files: **1
 
 Время evaluator-loop после imports — Linux 7.27ms candidate / 4.46ms baseline, macOS 6.44 / 4.22, Windows 12.11 / 9.77, каждый n1. **Это не ускорение evaluator** и не время CI: выигрывает отсутствие setup/install/internal-package-build. На cold candidate loop 7.07/12.65/11.80ms Linux/macOS/Windows; startup и setup измеряются job/step timestamps отдельно. Эти миллисекунды не используются для обещания ×скорости.
 
-Cold здесь означает нет dependency installation/node_modules; второй проход после install, с теми же obligations. Candidate не зависит от dependency cache в обоих случаях. Baseline dependency store и verification-cache отключены в diagnostic. Полного контролируемого cold/warm A/B всей Android/installers цепочки нет; исторические warm/miss receipts не подменяют такой эксперимент. Новый run не называется сопоставимым общим PR latency A/B: manual выбирает полный план, исторические source trees отличаются.
+Cold здесь означает нет dependency installation/node_modules; второй проход после install, с теми же obligations. Candidate не зависит от dependency cache в обоих случаях. В diagnostic переданы `cache-pnpm-store=false` и `cache-pnpm-verification=false`; это настройки нашего composite, не доказательство отсутствия любого внутреннего кэша вложенного pnpm/setup. Полного контролируемого cold/warm A/B всей Android/installers цепочки нет; исторические warm/miss receipts не подменяют такой эксперимент. Новый run не называется сопоставимым общим PR latency A/B: manual выбирает полный план, application/dependency inputs совпадают, но cache, runners и changed-test selection не контролировались. Baseline7d7a8ffa имеет ровно tree58981fcbc3250ddb2608bf9ac03e93cb71c37d1c из исторического green proof43628616296; candidate меняет только CI/scripts/docs, без src/mobile/cloud/native/resources/manifests. Receipt — `pilot-comparable-inputs.json`. Это улучшает сопоставимость, но не превращает весь run в контролируемый A/B. В новом Linux setup измерен Node24.22.3; исторический native-cache receipt использовал24.22.2. Same-run diagnostic использует один24.22.3 для обоих вариантов, но historical whole-run toolchain не идентичен; excerpts сохранены.
 
-После завершения full run итог будет дополнен measured verify duration, selected lanes, artifacts/provenance и first failures. Пока full run не завершён, зелёный required aggregate не заявляется.
+### Итог реального run
+
+Полный `.github/workflows/pr.yml` run45075379341/attempt1 **success**, source6f4a8d2cac.37jobs:33исполнены,4планово skipped; все6selected lanes прошли. Production verify job137381531994success за15s. Proof: head6f4a8d2cacd12439e60077637b76c836bde5cc6a, tree3ffc6c07a56d3d30f47062130fad008abd9f0a6e, run45075379341, attempt1, eventworkflow_dispatch. Saved JSON — `pilot-qualification/qualification.json`, metadata/steps/artifacts — `pilot-run.json(.gz)`, `pilot-jobs.json.gz`, `pilot-artifacts.json.gz`, итог — `pilot-summary.json`.
+
+| Наблюдение, каждый n1 | Исторический PR43628616296 | Candidate manual45075379341 |
+| --- | ---: | ---: |
+| Initial scheduling |23s|4s|
+| scope |28s|37s|
+| Android job |33:25|33:40|
+| verify |25s|15s|
+| До aggregate |34:46|34:41|
+| Runner busy minutes без diagnostic |131.80|138.27|
+| Diagnostic overhead |0|3.17|
+
+Общее наблюдаемое elapsed уменьшилось всего на5s (1.0024×), verify на10s. Это **не** причинная оценка полного ускорения: другой event, Node patch, cache state, scheduler и changed-test selection. В same-run diagnostic измерен удаляемый9s Linux dependency composite. Полный новый run израсходовал141.43runner-min с диагностикой; сам selected qualification138.27 против исторических131.80. Таким образом, экономии общих затрат и10× этот эксперимент **не доказал**. First upstream failure у нового green run отсутствует; для red истории replay доказал сохранение отказа, а не более раннее исполнение теста.
+
+Только этот manual source commit имеет исполненный зелёный aggregate. Последующие commit меняют reports/journal; workflow/scripts побайтово совпадают с6f4a8d2cac, подтверждено независимо и `pilot-source-equality.json`. Текущий PR остаётся draft: manual proof с eventworkflow_dispatch не проходит existing PR-only reuse и **не разрешает merge** текущего head. Перед любым будущим merge требуется non-draft PR exact-head/tested-tree qualification.
+
 
 ## Почему setup/cache tuning недостаточно
 
 В исходном Android controller есть и проверяемый source-level предел: `mobile/scripts/compare-android-idle-performance.py` последовательно измеряет два APK × foreground/background по60s и ждёт10s после каждого запуска. Это минимум260s измерительных окон/ожидания, ещё до установки, boot, UI, native updater и build. Это **вывод из конфигурации**, не отдельный измеренный benchmark. Для all-lane примера10× означало бы208.6s на весь CI — меньше одного этого последовательного этапа. Сократить окно60s до6s означало бы изменить качество проверки; пилот этого не делает. Параллелизация независимых устройств/доказанное reuse — другая гипотеза, требующая отдельной проверки сопоставимости измерений.
 
 APK download/build cache может уменьшить611s компиляции в примере, но не выполняет native unit tests или727s emulator acceptance. GitHub cache branch scopes также мешают считать следующий чужой PR «тёплым»: PR-local cache другого PR не становится trusted default-branch cache. Быстрый main с exact-tree proof не обязан заново прогревать все пропущенные build caches. Поэтому cache-hit rate, trust boundary и выбранные обязательства нужно измерять отдельно. Для card-only Android уже не выбран; эти Android пределы не переносятся на card latency, где isolated n=0.
+
+Для первого полезного отказа следующий малый эксперимент — порядок static-проверок. В red43242425126 types66s + mobile types22s предшествовали quality24s. Перенос quality раньше дал бы **прогноз**1:25 вместо2:53 при тех же длительностях, сохраняя все команды на зелёном пути. Но в естественной выборке и quality, и types первыми падали по4раза; другой порядок может задержать type error. Поэтому это trade-off, а не автоматически лучший вариант. Сам этот aggregate-пилот не ускоряет первый upstream failure, он сокращает финальное подтверждение результата. Частоты всех первых failed steps сохранены в summary, включая regressions/physical-scope/Android/artifacts/gate failures; такая ошибка не обязательно означает дефект исходного кода.
 
 ## Следующий шаг и CI-v2
 
@@ -79,6 +119,8 @@ APK download/build cache может уменьшить611s компиляции 
 
 Команды read-only истории приведены в [actions-evidence.md](actions-evidence.md), SHA256/URL источников — в receipts. `actions_dataset.py` читает lossless JSON.gz; compression receipt подтверждает roundtrip. [Независимое ревью](independent-review.md) подтвердило неизменность policy и evaluator; найденный import исправлен до remote experiment.
 
+Итог одного существующего run без dispatch/rerun: `python3 -B fork-docs/reports/ci-critical-path-pilot/pilot-results.py 45075379341` (после завершения сохраняет jobs, artifacts, elapsed/cost и сверяет qualification head/tree/run/attempt/event).
+
 Source-only equivalence, без установки зависимостей: `python3 -B fork-docs/reports/ci-critical-path-pilot/source-parity.py`.
 
 Remote experiment (повторять только при новой необходимости, не дублировать активные runs):
@@ -93,3 +135,5 @@ gh run download 45075379341 --repo KOSFin/opka --pattern 'aggregate-diagnostic-*
 Локально запуск тяжёлой проверки первоначально отказал admission из-за <8GiB свободного диска; unit не создан. После сообщения владельца df подтвердил9.0GiB. Уже исполняемые Actions проверки локально не дублировались. Новая локальная проверка должна заново пройти root-owned admission. Parent/реальные gh/python descendants находились в `opka-ci-audit.scope`, MemoryMax2.5GiB/SwapMax0; cgroup receipts сохранены. Установка SDK, services, изменение protections/рабочей Orca/старого хоста/корпоративных проектов/Codex не выполнялись.
 
 Метрика первой ошибки уточнена: берётся самый ранний failed step/job среди **всех attempts одного исходного PR run**, включая затем успешно исправленные retry. Поэтому n34/p50 4:02, а не n31/p50 3:58 по одним последним attempts; per-attempt исходные значения сохранены.
+
+Отмена43095942157 до запуска не считается нулевой очередью: initial scheduling там null, поэтому natural initial-queue n45. Runner-cost p50/p95 в JSON теперь суммируют все attempts каждого run, а не только последний; общие totals не изменились.

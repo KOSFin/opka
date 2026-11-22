@@ -49,3 +49,11 @@ README accurately separates evaluator-loop timings from startup/setup and whole 
 PR-first limitation: the full manual qualification and cross-platform probe do not establish an ordinary `pull_request` exact-head qualification. The automatic draft run skips obligations. Any later merge still requires the then-current non-draft PR source to pass `.github/workflows/pr.yml:verify`; neither this review, the manual run, nor a later documentation-only commit inherits the claim automatically. This is a remaining delivery gate, not a reason to remove draft status during this authorized experiment.
 
 Minor report clarifications sent to parent: add explicit foreign-fork PR coverage/limitation to event matrix (unit proof-refusal cases exist; no actual foreign-fork run was measured), and name retained compressed `actions-dags.json.gz` accurately. No local repeated tests, installations or external mutations were performed.
+
+## Restored-tree and metric-correction audit — 2026-11-23T03:26:57+05:00
+
+Read-only `git diff 6f4a8d2cac -- .github/workflows/pr.yml config/scripts` produced no differences: the current executable workflow/scripts tree is identical to the diagnostic-tested candidate. Temporary one-shot quality workflow changes are absent. No tests or build were repeated.
+
+Independently recomputed the revised report figures from saved `actions-metrics.json.gz` and the fixed natural-cohort page snapshot without invoking the writing analysis script: 46 PR runs / 50 attempts, 5350.83 runner-minutes; earliest error over all attempts n34, nearest-rank p50 242s / p95 2321s; initial queue excluding unexecuted cancellation n45, p50 3s / p95 23s. These agree with README and `actions-summary.json`. Runner per-run totals now aggregate deduplicated attempts rather than taking the last attempt alone; all-attempt grand totals remain unchanged.
+
+Remaining minor report correction sent to parent: `actions-evidence.md`'s initial-scheduling paragraph still said PR n46 while its appended correction and current data say n45. The main prose should also use n45. This is a documentation inconsistency, not a source/aggregate blocker. Full remote qualification was still ongoing according to the parent's status; neither restored source equality nor this report audit claims an exact-current-head PR aggregate passed.
