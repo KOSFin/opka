@@ -1,0 +1,129 @@
+{
+  "run": 43628616296,
+  "attempt": 1,
+  "url": "https://github.com/KOSFin/opka/actions/runs/43628616296",
+  "workflow": ".github/workflows/pr.yml",
+  "run_head_sha": "87a01be0d7b06e6af4fdf0419d7a1cc06e1aa3b4",
+  "checked_merge_sha": "87b2dd3cf75ad238a9647dfd80b4fe9ce1dfa2ba",
+  "source": "Exact gate environment as emitted in public verify job log, not reconstructed results",
+  "gate_job_id": 132559668992,
+  "gate_conclusion": "success",
+  "scope": {
+    "static": true,
+    "regression": true,
+    "desktop": true,
+    "electron": true,
+    "installers": true,
+    "android": true,
+    "full": true,
+    "docs_only": false,
+    "reasons": [
+      "build-policy-native-or-unknown",
+      "ci-contract-test",
+      "host-or-shared"
+    ],
+    "comparison_valid": true,
+    "reused": false,
+    "base": "e332896b9d51d079912d9f82890589d229471ec5",
+    "head": "87b2dd3cf75ad238a9647dfd80b4fe9ce1dfa2ba",
+    "tree": "58981fcbc3250ddb2608bf9ac03e93cb71c37d1c",
+    "paths": [
+      ".github/workflows/pr.yml",
+      "config/patches/cli-proxy-api-8.0.55-native-replay.md",
+      "config/patches/cli-proxy-api-8.0.55-native-replay.patch",
+      "config/patches/cli-proxy-api-8.0.55-native-replay.source-sha256",
+      "config/scripts/build-codex-replay-engine.mjs",
+      "config/scripts/codex-native-policy-probe.mjs",
+      "config/scripts/codex-native-probe-configuration.mjs",
+      "config/scripts/codex-native-probe-evidence.mjs",
+      "config/scripts/codex-native-probe-evidence.test.mjs",
+      "config/scripts/codex-native-probe-gateway.mjs",
+      "config/scripts/codex-native-probe-response.mjs",
+      "config/scripts/codex-native-probe-response.test.mjs",
+      "config/scripts/packaged-codex-replay-engine.cjs",
+      "config/scripts/packaged-codex-replay-engine.test.mjs",
+      "src/main/agent-hooks/native-codex-inventory-source.test.ts",
+      "src/main/agent-hooks/server/server-native-codex-inventory.ts",
+      "src/main/codex-routing/codex-engine-host-routing.ts",
+      "src/main/codex-routing/codex-engine-host.test.ts",
+      "src/main/codex-routing/codex-engine-http-listener.ts",
+      "src/main/codex-routing/codex-engine-request-recovery.test.ts",
+      "src/main/codex-routing/codex-engine-sessions.ts",
+      "src/main/codex-routing/codex-native-affinity-capacity-error.ts",
+      "src/main/codex-routing/codex-native-home.test.ts",
+      "src/main/codex-routing/codex-native-home.ts",
+      "src/main/codex-routing/codex-native-large-body.test.ts",
+      "src/main/codex-routing/codex-native-packaged-parallel.test.ts",
+      "src/main/codex-routing/codex-native-parallel-streams.test.ts",
+      "src/main/codex-routing/codex-pool-turn-session.test.ts",
+      "src/main/codex-routing/codex-pool-turn-session.ts",
+      "src/main/codex-routing/codex-replay-spool.test.ts",
+      "src/main/codex-routing/codex-replay-spool.ts",
+      "src/main/codex-routing/codex-routing-http-cleanup.ts",
+      "src/main/codex-routing/codex-routing-http-server.ts",
+      "src/main/codex-routing/codex-routing-http-types.ts",
+      "src/main/codex-routing/engine-replay-package.test.ts",
+      "src/main/codex-routing/engine-replay-package.ts",
+      "src/main/runtime/native-cli-stdio-host.ts",
+      "src/main/runtime/native-cli-stdio-owner.test.ts",
+      "src/main/runtime/native-cli-stdio-owner.ts",
+      "src/main/runtime/native-cli-terminal-create.ts",
+      "src/main/runtime/native-codex-history-ledger.test.ts",
+      "src/main/runtime/native-codex-history-ledger.ts",
+      "src/main/runtime/native-codex-root-inventory.test.ts",
+      "src/main/runtime/native-codex-root-inventory.ts",
+      "src/main/runtime/native-codex-routing-ownership.test.ts",
+      "src/main/runtime/native-codex-routing-ownership.ts",
+      "src/main/runtime/orchestration/db/account-pool-native-attachment.test.ts",
+      "src/main/runtime/orchestration/db/account-pool-native-fences.test.ts",
+      "src/main/runtime/orchestration/db/account-pool-native-fences.ts",
+      "src/main/runtime/orchestration/db/account-pool-native-parallel-recovery.test.ts",
+      "src/main/runtime/orchestration/db/account-pool-native-scope.ts",
+      "src/main/runtime/runtime-codex-engine-host.ts"
+    ]
+  },
+  "needs": {
+    "scope": {
+      "result": "success",
+      "outputs": {
+        "desktop": "true",
+        "electron": "true",
+        "base": "e332896b9d51d079912d9f82890589d229471ec5",
+        "full": "true",
+        "installers": "true",
+        "android": "true",
+        "docs_only": "false",
+        "reused": "false",
+        "head": "87b2dd3cf75ad238a9647dfd80b4fe9ce1dfa2ba",
+        "comparison_valid": "true",
+        "plan": "{\"static\":true,\"regression\":true,\"desktop\":true,\"electron\":true,\"installers\":true,\"android\":true,\"full\":true,\"docs_only\":false,\"reasons\":[\"build-policy-native-or-unknown\",\"ci-contract-test\",\"host-or-shared\"],\"comparison_valid\":true,\"reused\":false,\"base\":\"e332896b9d51d079912d9f82890589d229471ec5\",\"head\":\"87b2dd3cf75ad238a9647dfd80b4fe9ce1dfa2ba\",\"tree\":\"58981fcbc3250ddb2608bf9ac03e93cb71c37d1c\",\"paths\":[\".github/workflows/pr.yml\",\"config/patches/cli-proxy-api-8.0.55-native-replay.md\",\"config/patches/cli-proxy-api-8.0.55-native-replay.patch\",\"config/patches/cli-proxy-api-8.0.55-native-replay.source-sha256\",\"config/scripts/build-codex-replay-engine.mjs\",\"config/scripts/codex-native-policy-probe.mjs\",\"config/scripts/codex-native-probe-configuration.mjs\",\"config/scripts/codex-native-probe-evidence.mjs\",\"config/scripts/codex-native-probe-evidence.test.mjs\",\"config/scripts/codex-native-probe-gateway.mjs\",\"config/scripts/codex-native-probe-response.mjs\",\"config/scripts/codex-native-probe-response.test.mjs\",\"config/scripts/packaged-codex-replay-engine.cjs\",\"config/scripts/packaged-codex-replay-engine.test.mjs\",\"src/main/agent-hooks/native-codex-inventory-source.test.ts\",\"src/main/agent-hooks/server/server-native-codex-inventory.ts\",\"src/main/codex-routing/codex-engine-host-routing.ts\",\"src/main/codex-routing/codex-engine-host.test.ts\",\"src/main/codex-routing/codex-engine-http-listener.ts\",\"src/main/codex-routing/codex-engine-request-recovery.test.ts\",\"src/main/codex-routing/codex-engine-sessions.ts\",\"src/main/codex-routing/codex-native-affinity-capacity-error.ts\",\"src/main/codex-routing/codex-native-home.test.ts\",\"src/main/codex-routing/codex-native-home.ts\",\"src/main/codex-routing/codex-native-large-body.test.ts\",\"src/main/codex-routing/codex-native-packaged-parallel.test.ts\",\"src/main/codex-routing/codex-native-parallel-streams.test.ts\",\"src/main/codex-routing/codex-pool-turn-session.test.ts\",\"src/main/codex-routing/codex-pool-turn-session.ts\",\"src/main/codex-routing/codex-replay-spool.test.ts\",\"src/main/codex-routing/codex-replay-spool.ts\",\"src/main/codex-routing/codex-routing-http-cleanup.ts\",\"src/main/codex-routing/codex-routing-http-server.ts\",\"src/main/codex-routing/codex-routing-http-types.ts\",\"src/main/codex-routing/engine-replay-package.test.ts\",\"src/main/codex-routing/engine-replay-package.ts\",\"src/main/runtime/native-cli-stdio-host.ts\",\"src/main/runtime/native-cli-stdio-owner.test.ts\",\"src/main/runtime/native-cli-stdio-owner.ts\",\"src/main/runtime/native-cli-terminal-create.ts\",\"src/main/runtime/native-codex-history-ledger.test.ts\",\"src/main/runtime/native-codex-history-ledger.ts\",\"src/main/runtime/native-codex-root-inventory.test.ts\",\"src/main/runtime/native-codex-root-inventory.ts\",\"src/main/runtime/native-codex-routing-ownership.test.ts\",\"src/main/runtime/native-codex-routing-ownership.ts\",\"src/main/runtime/orchestration/db/account-pool-native-attachment.test.ts\",\"src/main/runtime/orchestration/db/account-pool-native-fences.test.ts\",\"src/main/runtime/orchestration/db/account-pool-native-fences.ts\",\"src/main/runtime/orchestration/db/account-pool-native-parallel-recovery.test.ts\",\"src/main/runtime/orchestration/db/account-pool-native-scope.ts\",\"src/main/runtime/runtime-codex-engine-host.ts\"]}",
+        "static": "true",
+        "regression": "true"
+      }
+    },
+    "static": {
+      "result": "success",
+      "outputs": {}
+    },
+    "regression": {
+      "result": "success",
+      "outputs": {}
+    },
+    "desktop": {
+      "result": "success",
+      "outputs": {}
+    },
+    "electron": {
+      "result": "success",
+      "outputs": {}
+    },
+    "installers": {
+      "result": "success",
+      "outputs": {}
+    },
+    "android": {
+      "result": "success",
+      "outputs": {}
+    }
+  }
+}

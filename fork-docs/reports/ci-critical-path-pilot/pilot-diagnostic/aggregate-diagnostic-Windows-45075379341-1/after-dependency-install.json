@@ -1,0 +1,12 @@
+{
+  "candidate": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "runId": "45075379341",
+  "attempt": "1",
+  "os": "win32",
+  "cache": "after-dependency-install",
+  "noNodeModules": false,
+  "cases": 2760,
+  "candidateMs": 12.1053,
+  "baselineMs": 9.767799999999994,
+  "routingComparisons": 10
+}

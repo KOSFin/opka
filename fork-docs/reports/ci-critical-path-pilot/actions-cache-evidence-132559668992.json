@@ -1,0 +1,25 @@
+{
+  "run": 43628616296,
+  "job_id": 132559668992,
+  "job": "PR checks passed",
+  "endpoint": "repos/KOSFin/opka/actions/jobs/132559668992/logs",
+  "exit": 0,
+  "matching_lines": [
+    "2026-11-14T19:22:45.0600908Z Cache hit for: pnpm-lockfile-verified-Linux-x64-b92c8f2462e8e41a37462f0f15a316c8a1290946fc7ef4c81c26b48775c09519",
+    "2026-11-14T19:22:45.1377505Z Cache restored successfully",
+    "2026-11-14T19:22:45.1381538Z Lockfile verification cache restored from key: pnpm-lockfile-verified-Linux-x64-b92c8f2462e8e41a37462f0f15a316c8a1290946fc7ef4c81c26b48775c09519",
+    "2026-11-14T19:22:46.1853641Z Cache hit for: pnpm-verification-v1-Linux-X64-12.14.0-f46a165da973b0387429f6fbd13e8c10254084331eb32051acf715d4fde575f4",
+    "2026-11-14T19:22:46.3030960Z Cache restored successfully",
+    "2026-11-14T19:22:46.3189342Z Cache restored from key: pnpm-verification-v1-Linux-X64-12.14.0-f46a165da973b0387429f6fbd13e8c10254084331eb32051acf715d4fde575f4",
+    "2026-11-14T19:22:46.5641263Z Lockfile is up to date, resolution step is skipped",
+    "2026-11-14T19:22:48.7908242Z Progress: resolved 1307, reused 0, downloaded 982, added 963",
+    "2026-11-14T19:22:49.7944067Z Progress: resolved 1307, reused 0, downloaded 1270, added 1248",
+    "2026-11-14T19:22:51.9156624Z Progress: resolved 1307, reused 0, downloaded 1296, added 1280",
+    "2026-11-14T19:22:52.4153011Z Packages: +1307",
+    "2026-11-14T19:22:52.5856444Z Progress: resolved 1307, reused 0, downloaded 1297, added 1307, done",
+    "2026-11-14T19:22:53.0181179Z Done in 6.6s using pnpm v12.14.0",
+    "2026-11-14T19:22:53.3895455Z Already up to date",
+    "2026-11-14T19:22:54.1717849Z Done in 1.1s using pnpm v12.14.0",
+    "      \"reused\": \"false\","
+  ]
+}

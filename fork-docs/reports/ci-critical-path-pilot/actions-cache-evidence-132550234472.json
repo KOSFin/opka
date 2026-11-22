@@ -1,0 +1,8 @@
+{
+  "run": 43628616296,
+  "job_id": 132550234472,
+  "job": "Android component acceptance / Opka Android installer confirmation and retained state",
+  "endpoint": "repos/KOSFin/opka/actions/jobs/132550234472/logs",
+  "exit": 1,
+  "matching_lines": []
+}

@@ -1,0 +1,98 @@
+{
+  "fetched_at": "2026-11-22T21:54:50.888028+00:00",
+  "revision": "7d7a8ffa83fdff34df5211a294f6b076bbee44b4",
+  "cgroups": {
+    "python": "0::/system.slice/opka-ci-audit.scope",
+    "child": "0::/system.slice/opka-ci-audit.scope"
+  },
+  "sources": [
+    {
+      "name": "github-cache",
+      "requested_url": "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching",
+      "status": 200,
+      "final_url": "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching",
+      "bytes": 480301,
+      "sha256": "b280b77501c5b42b57e3353776c71053856fadcda61feef827239c221e4bb18b"
+    },
+    {
+      "name": "github-required",
+      "requested_url": "https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks",
+      "status": 200,
+      "final_url": "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks",
+      "bytes": 181099,
+      "sha256": "4176100e6b24812fa4f75942506546bad9cbf08a8352c7548afc14f66b0ccb6b"
+    },
+    {
+      "name": "github-workflow",
+      "requested_url": "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+      "status": 200,
+      "final_url": "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+      "bytes": 2117682,
+      "sha256": "bcde6d3510ce3ab678875b37faf5e80af11fdfac48dfdb84d2d173595220dd21"
+    },
+    {
+      "name": "gradle-build",
+      "requested_url": "https://docs.gradle.org/current/userguide/build_cache.html",
+      "status": 200,
+      "final_url": "https://docs.gradle.org/current/userguide/build_cache.html",
+      "bytes": 198208,
+      "sha256": "ffa300cf9fc99b6f77b2f37eda84468d207d3c42fca973e196e1e50db5b435e5"
+    },
+    {
+      "name": "gradle-configuration",
+      "requested_url": "https://docs.gradle.org/current/userguide/configuration_cache.html",
+      "status": 200,
+      "final_url": "https://docs.gradle.org/current/userguide/configuration_cache.html",
+      "bytes": 195616,
+      "sha256": "be69ba92c94d417a73aa08e05457d523dab0b7bdc826f3b3557a1e73fc8ebfcd"
+    },
+    {
+      "name": "nx-affected",
+      "requested_url": "https://nx.dev/ci/features/affected",
+      "status": 200,
+      "final_url": "https://nx.dev/docs/features/ci-features/affected",
+      "bytes": 336625,
+      "sha256": "7ac2dd83e596c2ebbadd540913275398180cc6f5181eb416479d70f8ce7b87c2"
+    },
+    {
+      "name": "nx-inputs",
+      "requested_url": "https://nx.dev/docs/guides/tasks--caching/configure-inputs",
+      "status": 200,
+      "final_url": "https://nx.dev/docs/kb/configure-inputs",
+      "bytes": 220595,
+      "sha256": "ccd6561c74be1ac4d8a05b90cb8e6645d6da9ae3360b2a69d70a6784899e2f7a"
+    },
+    {
+      "name": "turbo-caching",
+      "requested_url": "https://turborepo.com/docs/crafting-your-repository/caching",
+      "status": 200,
+      "final_url": "https://turborepo.dev/docs/crafting-your-repository/caching",
+      "bytes": 445658,
+      "sha256": "e81e0bdc9b5ba168a70fa79c60aeb428f57cf4252bd82d31d9ec73e3243654e0"
+    },
+    {
+      "name": "turbo-environment",
+      "requested_url": "https://turborepo.com/docs/crafting-your-repository/using-environment-variables",
+      "status": 200,
+      "final_url": "https://turborepo.dev/docs/crafting-your-repository/using-environment-variables",
+      "bytes": 438579,
+      "sha256": "1e6c4a6490e68281ba95748d24527ddf4670f0f39edc681c41441467523d728e"
+    },
+    {
+      "name": "vitest-cli",
+      "requested_url": "https://vitest.dev/guide/cli.html",
+      "status": 200,
+      "final_url": "https://vitest.dev/guide/cli.html",
+      "bytes": 164431,
+      "sha256": "5f164b4c46e1b3252ac43aaf8fa1128e236818ba8de6e4e95a26ed41c757cb31"
+    },
+    {
+      "name": "vitest-performance",
+      "requested_url": "https://vitest.dev/guide/improving-performance.html",
+      "status": 200,
+      "final_url": "https://vitest.dev/guide/improving-performance.html",
+      "bytes": 106056,
+      "sha256": "3d1cf1dd4f50f0b9750be8282e71229993227d8c200663e63faed9ce4cb2805f"
+    }
+  ]
+}

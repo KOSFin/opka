@@ -4,7 +4,7 @@
 
 ## Продолжение работы
 
-Текущий план, разрешённый объём, проверки и следующий шаг: [итерация 7 — идентификация обычного терминального агента](iterations/007-terminal-task-identity.md). Предыдущие результаты: [обычный чат и полный цикл карточки](iterations/006-chat-task-lifecycle.md), [установщики и обновления](iterations/005-installers-and-updates.md), [публикация и CI](iterations/004-publication-and-ci.md). Наличие пункта в [roadmap](ROADMAP.md) не разрешает его реализацию, установку или деплой.
+Текущий CI-пилот этой ветки: [итерация 8 — критический путь CI](iterations/008-ci-critical-path-pilot.md). Продуктовый checkpoint: [итерация 7 — идентификация обычного терминального агента](iterations/007-terminal-task-identity.md). Предыдущие результаты: [обычный чат и полный цикл карточки](iterations/006-chat-task-lifecycle.md), [установщики и обновления](iterations/005-installers-and-updates.md), [публикация и CI](iterations/004-publication-and-ci.md). Наличие пункта в [roadmap](ROADMAP.md) не разрешает его реализацию, установку или деплой.
 
 Руководства:
 

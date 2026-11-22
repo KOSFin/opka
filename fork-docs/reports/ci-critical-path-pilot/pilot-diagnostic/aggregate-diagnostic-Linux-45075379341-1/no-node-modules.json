@@ -1,0 +1,10 @@
+{
+  "candidate": "6f4a8d2cacd12439e60077637b76c836bde5cc6a",
+  "runId": "45075379341",
+  "attempt": "1",
+  "os": "linux",
+  "cache": "no-node-modules",
+  "noNodeModules": true,
+  "cases": 2758,
+  "candidateMs": 7.070496000000002
+}
