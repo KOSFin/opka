@@ -36,7 +36,7 @@ for (let mask = 0; mask < 64; mask++) {
     }
   }
 }
-const fixture = context()
+const { state: fixture } = context()
 const proof = {
   schemaVersion: 1,
   kind: 'test-only-followup',
