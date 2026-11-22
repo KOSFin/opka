@@ -95,6 +95,22 @@ if (baselineDirectory) {
     assert.equal(verdict(baseline.evaluateCiResults, row), row.accepted, row.name)
   }
   receipt.baselineMs = performance.now() - before
+  const candidateScope = await import('./opka-ci-component-scope.mjs')
+  for (const paths of [
+    ['fork-docs/README.md'],
+    ['src/renderer/src/components/task-page/ProjectTaskCard.tsx'],
+    ['cloud/push/src/index.ts'],
+    ['src/main/runtime/project-task-policy.ts'],
+    ['src/shared/pairing.ts'],
+    ['pnpm-lock.yaml'],
+    ['.github/workflows/pr.yml'],
+    ['mobile/src/accounts/MobileAccountsScreen.tsx'],
+    ['unknown/input.file'],
+    ['src/shared/indirect-input.ts', 'src/renderer/src/components/task-page/ProjectTaskCard.tsx']
+  ]) {
+    assert.deepEqual(candidateScope.classifyCiPaths(paths), baseline.classifyCiPaths(paths))
+  }
+  receipt.routingComparisons = 10
 }
 const scope = { ...all, head, tree }
 Object.assign(process.env, {

@@ -69,6 +69,15 @@ jobs:
           cache-pnpm-verification: 'false'
       - name: Compare the old and new gates on identical inputs
         run: node config/scripts/opka-ci-aggregate-probe.mjs .aggregate-baseline fork-docs/reports/ci-critical-path-pilot/aggregate-historical-inputs.json
+      - name: Check routing, fork-proof and aggregate regressions
+        if: matrix.os == 'ubuntu-24.04'
+        run: >-
+          pnpm exec vitest run --config config/vitest.config.ts
+          config/scripts/opka-ci-component-scope.test.mjs
+          config/scripts/opka-ci-followup-proof.test.mjs
+          config/scripts/opka-ci-accounts-lifetime-followup.test.mjs
+          config/scripts/opka-ci-qualification-proof.test.mjs
+          config/scripts/fork-ci-contract.test.mjs --maxWorkers=1
       - name: Save diagnostic evidence separately from qualification
         if: always()
         uses: actions/upload-artifact@v7
