@@ -35,3 +35,7 @@ Remote diagnostic Linux/macOS/Windows success:2758cases при asserted no-node_
 ### 2026-11-23 03:13:00 +05:00 — source-level нижний предел Android
 
 Исследован только текущий acceptance controller, без SDK/запуска:2APK×2scenario×60s +2×10s serial idle windows=260s, больше208.6s всего CI, нужных для10× представительного all-lane PR. Это конфигурационный вывод, не benchmark; уменьшать окна было бы потерей качества. APK cache не заменяет OS/native tests. Для карточек Android уже исключён, их isolated n0 не подменяем all-lane выводом.
+
+### 2026-11-23 03:16:00 +05:00 — обнаружен пустой changed-code diff manual-run
+
+Проверка fallback выявила: workflow_dispatch ставит scope.base=head, а quality script сравнивает с этим HEAD. Поэтому success full static доказывает types, но не новый changed-code diff. Добавлен одноразовый pilot_quality job на synchronize draft pilot после конкретного before=f85636800d: сравнивает с approved7d7a8ffa/реальным PR merge parent. Уже отправленные tests/types/full qualification не повторяются. Последующие report-only pushes не удовлетворяют one-shot before и тяжёлый job не повторяют. Это diagnostic job, не замена verify, на обычные PR/main/release не влияет.

@@ -33,6 +33,28 @@ env:
   HUSKY: '0'
 
 jobs:
+  pilot_quality:
+    name: Pilot changed-code quality against the approved base
+    if: >-
+      github.event_name == 'pull_request' && github.event.pull_request.draft == true &&
+      github.event.pull_request.head.ref == 'codex/ci-critical-path-pilot' &&
+      github.event.before == 'f85636800d6e0a8f09d301bfa14948adb8861d91'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Check the actual pilot source changes
+        env:
+          ORCA_CODE_QUALITY_BASE: 7d7a8ffa83fdff34df5211a294f6b076bbee44b4
+          GOMEMLIMIT: 6GiB
+          GOMAXPROCS: '1'
+          RAYON_NUM_THREADS: '1'
+        run: pnpm run check:code-quality:changed
+
   aggregate_probe:
     name: Aggregate diagnostic (${{ matrix.os }})
     if: github.event_name == 'workflow_dispatch' && inputs.aggregate_probe == true
