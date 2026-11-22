@@ -308,7 +308,7 @@ describe('fork CI safety and required checks', () => {
   })
   it('executes the aggregate gate against success, missing, failed, cancelled and skipped checks', () => {
     const command = workflow.jobs.verify.steps.find((step) => step.run).run.trim()
-    expect(command).toBe('node config/scripts/opka-ci-component-scope.mjs --verify')
+    expect(command).toBe('node config/scripts/opka-ci-aggregate.mjs')
     const scope = classifyCiPaths(['src/shared/pairing.ts'])
     const results = Object.fromEntries(
       workflow.jobs.verify.needs.map((name) => [name, { result: 'success' }])
