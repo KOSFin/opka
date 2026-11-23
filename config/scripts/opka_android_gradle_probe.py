@@ -60,6 +60,8 @@ def main():
               ('candidate-warm', True, 'candidate'), ('baseline-warm', False, 'baseline')]
     if production_cache:
         phases = [('baseline-fresh', False, 'baseline'), ('candidate-restored', True, 'candidate')]
+        if int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')) % 2 == 0:
+            phases.reverse()
     restored_home = Path(os.environ.get('GRADLE_USER_HOME', str(Path.home() / '.gradle')))
     try:
         for label, cached, home in phases:
