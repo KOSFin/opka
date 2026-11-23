@@ -21,6 +21,7 @@ describe('fork CI safety and required checks', () => {
           { shard: 2, group: 'root', label: '2/4' },
           { shard: 3, group: 'root', label: '3/4' },
           { shard: 4, group: 'root', label: '4/4' },
+          { shard: 1, group: 'native-replay', label: 'pinned native replay' },
           { shard: 1, group: 'shared', label: 'mobile and integration' },
           { shard: 1, group: 'automation-containment', label: 'automation physical scope' }
         ]
@@ -28,7 +29,7 @@ describe('fork CI safety and required checks', () => {
     })
     expect(job.name).toBe('Fork regression tests (${{ matrix.label }})')
     expect(job['timeout-minutes']).toBe(
-      "${{ matrix.group == 'automation-containment' && 40 || matrix.group == 'shared' && 55 || 25 }}"
+      "${{ matrix.group == 'automation-containment' && 40 || (matrix.group == 'shared' || matrix.group == 'native-replay') && 55 || 25 }}"
     )
     expect(job.env).toEqual({
       OPKA_FORK_TEST_GROUP: '${{ matrix.group }}',
@@ -45,7 +46,7 @@ describe('fork CI safety and required checks', () => {
     }
     expect(
       job.steps.find((entry) => entry.uses === './.github/actions/install-mobile-dependencies').if
-    ).toBe("matrix.group != 'automation-containment'")
+    ).toBe("matrix.group != 'automation-containment' && matrix.group != 'native-replay'")
     const mobileEvidence = job.steps.find(
       (entry) => entry.name === 'Save synthetic mobile page evidence'
     )
@@ -333,7 +334,7 @@ describe('fork CI safety and required checks', () => {
     expect(workflow.jobs.installers.with.build_android).toBe(false)
     expect(workflow.jobs.android.if).toContain("needs.scope.outputs.android == 'true'")
     expect(workflow.jobs.verify.needs).toContain('android')
-    expect(workflow.jobs.electron.steps.map((step) => step.run ?? '').join('\n')).toContain(
+    expect(workflow.jobs.electron_shards.steps.map((step) => step.run ?? '').join('\n')).toContain(
       'tests/e2e/fork-beta-update.spec.ts'
     )
     expect(installer.jobs.android.if).toBe('inputs.build_android')
@@ -418,7 +419,7 @@ describe('fork CI safety and required checks', () => {
     ]) {
       expect(FORK_TEST_FILTERS).toContain(filter)
     }
-    const journey = workflow.jobs.electron.steps.find(
+    const journey = workflow.jobs.electron_shards.steps.find(
       (step) => step.name === 'Exercise project navigation and task boards'
     ).run
     expect(journey).toContain('tests/e2e/fork-project-tasks.spec.ts')
@@ -439,7 +440,7 @@ describe('fork CI safety and required checks', () => {
   })
 
   it('requires actual Codex command-tool execution without model credentials before release', () => {
-    const steps = workflow.jobs.electron.steps
+    const steps = workflow.jobs.electron_shards.steps
     const install = steps.find(
       (step) => step.name === 'Install pinned Codex for the account-free terminal contract'
     )
@@ -476,7 +477,7 @@ describe('fork CI safety and required checks', () => {
     ])
     expect(workflow.env.ORCA_BACKGROUND_LAUNCH).toBe('1')
     expect(
-      workflow.jobs.electron.steps.find((step) => step.name === 'Build test renderer').run
+      workflow.jobs.electron_shards.steps.find((step) => step.name === 'Build test renderer').run
     ).toContain('pnpm run build:cli')
     expect(workflow.permissions).toEqual({ contents: 'read', actions: 'read' })
     const text = readFileSync('.github/workflows/pr.yml', 'utf8')
