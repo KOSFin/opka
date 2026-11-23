@@ -52,6 +52,7 @@ export const PROJECT_TASK_METHODS = [
         params.worktree
       )
       const snapshot = await workspace.snapshot()
+      const end = params.offset + params.limit
       return {
         project: snapshot.project,
         executionHostId,
@@ -59,7 +60,7 @@ export const PROJECT_TASK_METHODS = [
         total: snapshot.tasks.length,
         offset: params.offset,
         tasks: snapshot.tasks
-          .slice(params.offset, params.offset + params.limit)
+          .slice(params.offset, end)
           .map(({ content: _content, body: _body, ...task }) => task)
       }
     }
