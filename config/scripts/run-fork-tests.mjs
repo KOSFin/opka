@@ -158,6 +158,7 @@ export const FORK_TEST_FILTERS = [
   'config/scripts/packaged-cli-dependency-copy.test.mjs',
   'config/scripts/check-root-directory-entries.test.mjs',
   'config/scripts/fork-ci-contract.test.mjs',
+  'config/scripts/ci-parallel-execution.test.mjs',
   'config/scripts/fork-test-',
   'config/scripts/code-quality-scan-cohorts.test.mjs',
   'config/scripts/ci-unit-dependency-graph.test.mjs',

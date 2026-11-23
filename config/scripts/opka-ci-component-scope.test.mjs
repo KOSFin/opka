@@ -61,7 +61,7 @@ describe('component CI routing', () => {
       expect(scope.reasons.length, path).toBeGreaterThan(0)
     }
   })
-  it('retains both first-run regressions and narrows the Android-only repair', () => {
+  it('retains first-run and policy-repair qualification', () => {
     const firstRun = classifyCiPaths([
       'mobile/src/accounts/MobileAccountsScreen.tsx',
       'src/main/rate-limits/codex-fetcher.ts',
@@ -77,22 +77,14 @@ describe('component CI routing', () => {
       'config/scripts/opka_android_target_viewport.py',
       'config/scripts/fixtures/android-webview-accessibility/accounts-offscreen.xml'
     ])
-    expect(CI_LANES.filter((lane) => viewportRepair[lane])).toEqual([
-      'static',
-      'regression',
-      'android'
-    ])
-    expect(viewportRepair.full).toBe(false)
+    expect(CI_LANES.filter((lane) => viewportRepair[lane])).toEqual(CI_LANES)
+    expect(viewportRepair.full).toBe(true)
     const deepScrollRepair = classifyCiPaths([
       'config/scripts/opka-release-qualification.mjs',
       'config/scripts/opka_android_target_viewport.py',
       'config/scripts/fixtures/android-webview-accessibility/accounts-deep-offscreen.xml'
     ])
-    expect(CI_LANES.filter((lane) => deepScrollRepair[lane])).toEqual([
-      'static',
-      'regression',
-      'android'
-    ])
+    expect(CI_LANES.filter((lane) => deepScrollRepair[lane])).toEqual(CI_LANES)
   })
   it('covers shared host behavior on desktop, mobile and packaged hosts', () => {
     const scope = classifyCiPaths(['src/shared/pairing.ts'])
@@ -126,14 +118,14 @@ describe('component CI routing', () => {
     }
     expect(classifyCiPaths(['src/renderer/src/App.tsx', 'pnpm-lock.yaml']).full).toBe(true)
   })
-  it('routes only exact CI contract test files without rebuilding native applications', () => {
+  it('requires full qualification when CI contracts change', () => {
     for (const path of [
       'config/scripts/build-orcad.test.mjs',
       '.github/scripts/check-pr.test.mjs'
     ]) {
       const scope = classifyCiPaths([path])
-      expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static', 'regression'])
-      expect(scope.full).toBe(false)
+      expect(CI_LANES.filter((lane) => scope[lane])).toEqual(CI_LANES)
+      expect(scope.full).toBe(true)
     }
     for (const path of [
       'config/scripts/build-orcad.mjs',
@@ -145,7 +137,7 @@ describe('component CI routing', () => {
     }
     expect(classifyCiPaths(['config/scripts/contract.test.mjs', 'pnpm-lock.yaml']).full).toBe(true)
   })
-  it('checks release admission and viewport repairs without rebuilding application artifacts', () => {
+  it('requires full qualification for admission changes mixed with viewport repairs', () => {
     const paths = [
       'config/scripts/opka-release-qualification.mjs',
       'config/scripts/opka-release-qualification.test.mjs',
@@ -156,14 +148,11 @@ describe('component CI routing', () => {
       'config/scripts/fixtures/android-webview-accessibility/accounts-deep-offscreen.xml'
     ]
     for (const path of paths.slice(0, 4)) {
-      expect(CI_LANES.filter((lane) => classifyCiPaths([path])[lane])).toEqual([
-        'static',
-        'regression'
-      ])
+      expect(CI_LANES.filter((lane) => classifyCiPaths([path])[lane])).toEqual(CI_LANES)
     }
     const scope = classifyCiPaths(paths)
-    expect(CI_LANES.filter((lane) => scope[lane])).toEqual(['static', 'regression', 'android'])
-    expect(scope.full).toBe(false)
+    expect(CI_LANES.filter((lane) => scope[lane])).toEqual(CI_LANES)
+    expect(scope.full).toBe(true)
     for (const path of [
       'mobile/src/accounts/MobileAccountPoolCard.tsx',
       'src/main/index.ts',
@@ -348,7 +337,7 @@ function followupScope(proof = followupProof()) {
 
 describe('verified test-only follow-up qualification', () => {
   it('keeps current static and regression checks mandatory and reused platform jobs skipped', () => {
-    const scope = followupScope()
+    const scope = followupScope(followupProof('account-pool-readiness-followup'))
     expect(() => evaluateCiResults(scope, results(scope))).not.toThrow()
     for (const lane of ['static', 'regression']) {
       for (const result of ['failure', 'cancelled', 'skipped']) {
@@ -364,7 +353,7 @@ describe('verified test-only follow-up qualification', () => {
   })
 
   it('rejects incomplete, stale or broadened component evidence', () => {
-    const scope = followupScope()
+    const scope = followupScope(followupProof('account-pool-readiness-followup'))
     for (const altered of [
       { ...scope, tree: 'e'.repeat(40) },
       { ...scope, head: 'e'.repeat(40) },
@@ -409,6 +398,12 @@ describe('verified test-only follow-up qualification', () => {
       try {
         const proof = followupProof(kind)
         const scope = await detectCiScope(env, async () => proof)
+        if (kind === 'test-only-followup') {
+          expect(scope.followupProof).toBeUndefined()
+          expect(CI_LANES.every((lane) => scope[lane])).toBe(true)
+          expect(() => evaluateCiResults(followupScope(proof), results(followupScope(proof)))).toThrow()
+          return
+        }
         expect(scope.base).toBe(proof.base)
         expect(scope.comparison_valid).toBe(true)
         expect(scope.paths).toEqual(proof.paths)

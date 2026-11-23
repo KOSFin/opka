@@ -22,15 +22,7 @@ export function classifyCiPaths(paths) {
     if (/^(?:docs\/|fork-docs\/)|^(?:README|AGENTS|CONTRIBUTING|LICENSE)(?:\.md)?$/.test(path)) {
       continue
     }
-    if (/^(?:config\/scripts|\.github\/scripts)\/[^/]+\.test\.mjs$/.test(path)) {
-      enable('ci-contract-test', ['regression'])
-    } else if (
-      path === 'config/scripts/opka-release-qualification.mjs' ||
-      path === 'config/scripts/opka-ci-component-scope.mjs' ||
-      path === 'config/scripts/opka-ci-followup-proof.mjs'
-    ) {
-      enable('ci-admission-contract', ['regression'])
-    } else if (
+    if (
       /^config\/scripts\/opka[-_]android[^/]*\.py$/.test(path) ||
       path === 'config/scripts/build-android-update-handoff.py' ||
       path.startsWith('config/android-update-handoff/') ||
@@ -46,6 +38,9 @@ export function classifyCiPaths(paths) {
       enable('renderer', ['regression', 'desktop', 'electron'])
     } else if (/^src\/(?:main|cli|preload|shared|packages)\//.test(path)) {
       enable('host-or-shared', ['regression', 'desktop', 'electron', 'installers', 'android'])
+    } else if (/^cloud\/packages\/(?:push|relay)-contract\//.test(path)) {
+      full = true
+      enable('shared-cloud-contract', CI_LANES)
     } else if (path.startsWith('cloud/')) {
       enable('cloud', ['regression'])
     } else if (path.startsWith('tests/e2e/')) {
@@ -62,7 +57,12 @@ export function classifyCiPaths(paths) {
 }
 
 export function evaluateCiResults(scope, needs) {
-  if (!scope || needs.scope?.result !== 'success') {
+  if (
+    !scope ||
+    CI_LANES.some((lane) => typeof scope[lane] !== 'boolean') ||
+    (scope.reused !== undefined && typeof scope.reused !== 'boolean') ||
+    needs.scope?.result !== 'success'
+  ) {
     throw new Error('CI scope did not succeed')
   }
   if (Object.keys(needs).length !== CI_LANES.length + 1) {
@@ -72,6 +72,7 @@ export function evaluateCiResults(scope, needs) {
     const proof = scope.followupProof
     if (
       !isFollowupProof(proof) ||
+      classifyCiPaths(proof.paths).full ||
       proof.head !== scope.head ||
       proof.sourceTree !== scope.tree ||
       proof.base !== scope.base ||
@@ -144,6 +145,7 @@ export async function detectCiScope(env = process.env, findFollowup = findReusab
       })
       if (
         isFollowupProof(proof) &&
+        !classifyCiPaths(proof.paths).full &&
         proof.head === head &&
         proof.sourceTree === tree &&
         proof.repository === env.GITHUB_REPOSITORY &&
@@ -223,11 +225,18 @@ export async function detectCiScope(env = process.env, findFollowup = findReusab
   }
 }
 
+export function verifyCiCheckout(scope, readGit = git) {
+  if (scope.head !== readGit('rev-parse', 'HEAD') || scope.tree !== readGit('rev-parse', 'HEAD^{tree}')) {
+    throw new Error('CI qualification does not match the checked-out source')
+  }
+}
+
 async function main() {
   mkdirSync('out/opka-ci', { recursive: true })
   if (process.argv.includes('--verify')) {
     const scope = JSON.parse(process.env.OPKA_CI_SCOPE)
     evaluateCiResults(scope, JSON.parse(process.env.OPKA_CI_RESULTS))
+    verifyCiCheckout(scope)
     writeFileSync(
       'out/opka-ci/qualification.json',
       `${JSON.stringify({
