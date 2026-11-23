@@ -123,6 +123,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/install-node-dependencies
+      - name: Check the existing CI safety contracts
+        run: pnpm exec vitest run --config config/vitest.config.ts config/scripts/fork-ci-contract.test.mjs --maxWorkers=1
       - name: Prepare identical pinned download inputs
         run: bash config/scripts/codex-replay-ci-build.sh linux-x64 --prepare-only
       - name: Compare cold replay builds
