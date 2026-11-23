@@ -29,6 +29,11 @@ on:
         description: Isolated identical-input Gradle cold and warm A/B (no qualification)
         type: boolean
         default: false
+      gradle_probe_scope:
+        description: Restrict follow-up proof to native tests or include both APKs
+        type: choice
+        options: [all, native]
+        default: all
       residency_only:
         description: Compare exact published rc7/rc8 RAM residency without building installers
         type: boolean
@@ -98,6 +103,8 @@ jobs:
         env:
           OPKA_GOOGLE_SERVICES_JSON: ${{ secrets.OPKA_GOOGLE_SERVICES_JSON }}
       - name: Replay unchanged native obligations with pristine project outputs
+        env:
+          OPKA_GRADLE_PROBE_SCOPE: ${{ inputs.gradle_probe_scope }}
         run: python3 config/scripts/opka_android_gradle_probe.py
       - name: Keep compact A/B receipts and build diagnostics
         if: always()
