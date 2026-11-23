@@ -25,6 +25,15 @@ on:
         default: ''
   workflow_dispatch:
     inputs:
+      gradle_probe:
+        description: Isolated identical-input Gradle cold and warm A/B (no qualification)
+        type: boolean
+        default: false
+      gradle_probe_scope:
+        description: Restrict follow-up proof to native tests or include both APKs
+        type: choice
+        options: [all, native, native-cache, replay]
+        default: all
       residency_only:
         description: Compare exact published rc7/rc8 RAM residency without building installers
         type: boolean
@@ -69,9 +78,94 @@ env:
   EXPO_NO_TELEMETRY: '1'
   HUSKY: '0'
 jobs:
+  gradle_probe:
+    name: Android Gradle intermediate A/B
+    if: github.event_name == 'workflow_dispatch' && inputs.gradle_probe == true && inputs.gradle_probe_scope != 'replay'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: opka-android-ci
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-android-build-storage
+      - uses: ./.github/actions/install-node-dependencies
+      - uses: ./.github/actions/install-mobile-dependencies
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
+          log-accepted-android-sdk-licenses: 'false'
+      - uses: ./.github/actions/prepare-opka-firebase
+        env:
+          OPKA_GOOGLE_SERVICES_JSON: ${{ secrets.OPKA_GOOGLE_SERVICES_JSON }}
+      - name: Generate the same wrapper before production cache setup
+        if: inputs.gradle_probe_scope == 'native-cache'
+        working-directory: mobile
+        env:
+          OPKA_VERSION: 1.4.236-rc.6
+        run: pnpm exec expo prebuild --platform android --no-install
+      - name: Restore the production Gradle cache for the native-only comparison
+        if: inputs.gradle_probe_scope == 'native-cache'
+        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          cache-read-only: false
+          dependency-graph: disabled
+      - name: Replay unchanged native obligations with pristine project outputs
+        env:
+          OPKA_GRADLE_PROBE_SCOPE: ${{ inputs.gradle_probe_scope }}
+        run: python3 config/scripts/opka_android_gradle_probe.py
+      - name: Keep compact A/B receipts and build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-gradle-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/android-gradle-probe/
+          retention-days: 7
+  replay_probe:
+    name: Pinned replay Go intermediate A/B
+    if: github.event_name == 'workflow_dispatch' && inputs.gradle_probe == true && inputs.gradle_probe_scope == 'replay'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Check the existing CI safety contracts
+        run: pnpm exec vitest run --config config/vitest.config.ts config/scripts/fork-ci-contract.test.mjs --maxWorkers=1
+      - name: Prepare identical pinned download inputs
+        run: bash config/scripts/codex-replay-ci-build.sh linux-x64 --prepare-only
+      - name: Compare cold replay builds
+        run: python3 config/scripts/opka_replay_go_probe.py cold
+      - name: Save the measured compiler cache
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/opka-replay-go-cache/build
+          key: opka-replay-go-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Remove only the probe compiler cache before restoring it
+        run: python3 config/scripts/opka_replay_go_probe.py clear
+      - name: Restore the measured compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/opka-replay-go-cache/build
+          key: opka-replay-go-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+      - name: Compare warm replay builds
+        run: python3 config/scripts/opka_replay_go_probe.py warm
+      - name: Keep replay equivalence and cost receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: replay-go-probe-${{ github.run_id }}
+          path: out/replay-go-probe/
+          retention-days: 7
   residency_comparison:
     name: Published Android residency comparison
-    if: github.event_name == 'workflow_dispatch' && inputs.residency_only == true
+    if: github.event_name == 'workflow_dispatch' && inputs.residency_only == true && inputs.gradle_probe != true
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -150,7 +244,7 @@ jobs:
           retention-days: 14
   update_confirmation:
     name: Opka Android installer confirmation and retained state
-    if: inputs.residency_only != true
+    if: inputs.residency_only != true && inputs.gradle_probe != true
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     environment: ${{ github.event_name != 'pull_request' && inputs.release_signer && 'opka-android-release' || 'opka-android-ci' }}
@@ -243,10 +337,16 @@ jobs:
         env:
           OPKA_VERSION: ${{ env.CANDIDATE_VERSION }}
         run: pnpm exec expo prebuild --platform android --no-install
+      - name: Restore Gradle intermediates
+        if: inputs.candidate_artifact == ''
+        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          dependency-graph: disabled
       - name: Test native update ownership, validation and cleanup
         if: inputs.candidate_artifact == ''
         working-directory: mobile/android
-        run: ./gradlew :opka-app-update:testReleaseUnitTest :orca-mobile-web-shell:testReleaseUnitTest --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m
+        run: ./gradlew :opka-app-update:testReleaseUnitTest --rerun :orca-mobile-web-shell:testReleaseUnitTest --rerun --build-cache --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m
       - name: Acquire and verify the published performance baseline
         env:
           GH_TOKEN: ${{ github.token }}
@@ -284,7 +384,7 @@ jobs:
           for artifact in rc5 candidate; do
             if [ "$artifact" = rc5 ]; then export OPKA_VERSION=1.4.236-rc.5; else export OPKA_VERSION="$CANDIDATE_VERSION"; fi
             (cd mobile && pnpm exec expo prebuild --platform android --no-install)
-            (cd mobile/android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m)
+            (cd mobile/android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --build-cache --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx2048m)
             cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/android-update-fixtures/$artifact-unsigned.apk"
           done
       - name: Save unsigned Android fixtures

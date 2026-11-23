@@ -1,0 +1,28 @@
+name: Cache pinned replay Go compilation
+description: Reuse compiler intermediates while retaining source verification, tests and both builds.
+inputs:
+  target:
+    description: Pinned replay target
+    required: true
+outputs:
+  cache-hit:
+    description: Whether the exact compilation cache was restored
+    value: ${{ steps.cache.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Prepare private Go compiler cache
+      shell: bash
+      env:
+        REPLAY_TARGET: ${{ inputs.target }}
+      run: |
+        set -euo pipefail
+        test "$(uname -s)" = Linux
+        case "$REPLAY_TARGET" in linux-x64|darwin-arm64) ;; *) exit 78 ;; esac
+        mkdir -p "$RUNNER_TEMP/opka-replay-go-cache"
+        chmod 700 "$RUNNER_TEMP/opka-replay-go-cache"
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ${{ runner.temp }}/opka-replay-go-cache/build
+        key: opka-replay-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ hashFiles('.github/actions/cache-replay-go-build/action.yml', 'config/scripts/codex-replay-ci-build.sh', 'config/scripts/build-codex-replay-engine.mjs', 'config/patches/cli-proxy-api-8.0.55-native-replay.patch', 'config/patches/cli-proxy-api-8.0.55-native-replay.source-sha256', 'resources/licenses/cli-proxy-api/LICENSE') }}
