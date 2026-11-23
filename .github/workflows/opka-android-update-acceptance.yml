@@ -32,7 +32,7 @@ on:
       gradle_probe_scope:
         description: Restrict follow-up proof to native tests or include both APKs
         type: choice
-        options: [all, native, replay]
+        options: [all, native, native-cache, replay]
         default: all
       residency_only:
         description: Compare exact published rc7/rc8 RAM residency without building installers
@@ -102,6 +102,18 @@ jobs:
       - uses: ./.github/actions/prepare-opka-firebase
         env:
           OPKA_GOOGLE_SERVICES_JSON: ${{ secrets.OPKA_GOOGLE_SERVICES_JSON }}
+      - name: Generate the same wrapper before production cache setup
+        if: inputs.gradle_probe_scope == 'native-cache'
+        working-directory: mobile
+        env:
+          OPKA_VERSION: 1.4.236-rc.6
+        run: pnpm exec expo prebuild --platform android --no-install
+      - name: Restore the production Gradle cache for the native-only comparison
+        if: inputs.gradle_probe_scope == 'native-cache'
+        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          cache-read-only: false
+          dependency-graph: disabled
       - name: Replay unchanged native obligations with pristine project outputs
         env:
           OPKA_GRADLE_PROBE_SCOPE: ${{ inputs.gradle_probe_scope }}
@@ -110,7 +122,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-gradle-probe-${{ github.run_id }}
+          name: android-gradle-probe-${{ github.run_id }}-${{ github.run_attempt }}
           path: out/android-gradle-probe/
           retention-days: 7
   replay_probe:

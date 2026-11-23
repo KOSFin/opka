@@ -27,6 +27,7 @@ def main():
         archive.add(root / 'mobile', arcname='mobile')
     receipt = {
         'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+        'tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
         'event': os.environ['GITHUB_EVENT_NAME'],
         'scope': os.environ.get('OPKA_GRADLE_PROBE_SCOPE', 'all'),
         'toolchain': {program: subprocess.run([program, flag], text=True, capture_output=True,
@@ -39,6 +40,13 @@ def main():
         'phases': [],
         'qualification': False,
     }
+    receipt['generatedNativeInputs'] = {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (root / 'mobile/android').rglob('*')
+        if path.is_file() and path.name in ('gradle-wrapper.properties', 'gradle-wrapper.jar',
+                                           'settings.gradle', 'build.gradle', 'gradle.properties',
+                                           'google-services.json')
+    }
     receipt['toolchain']['java'] = subprocess.run(['java', '-version'], text=True,
                                                 capture_output=True, check=True).stderr.strip()
     receipt['sdkProperties'] = {str(path.relative_to(os.environ['ANDROID_HOME'])):
@@ -46,20 +54,26 @@ def main():
                                 for path in Path(os.environ['ANDROID_HOME']).rglob('source.properties')}
     with pristine.open('rb') as stream:
         receipt['pristineSha256'] = hashlib.file_digest(stream, 'sha256').hexdigest()
+    native_only = receipt['scope'] in ('native', 'native-cache')
+    production_cache = receipt['scope'] == 'native-cache'
+    phases = [('baseline-cold', False, 'baseline'), ('candidate-cold', True, 'candidate'),
+              ('candidate-warm', True, 'candidate'), ('baseline-warm', False, 'baseline')]
+    if production_cache:
+        phases = [('baseline-fresh', False, 'baseline'), ('candidate-restored', True, 'candidate')]
+    restored_home = Path(os.environ.get('GRADLE_USER_HOME', str(Path.home() / '.gradle')))
     try:
-        for label, cached, home in [('baseline-cold', False, 'baseline'),
-                                     ('candidate-cold', True, 'candidate'),
-                                     ('candidate-warm', True, 'candidate'),
-                                     ('baseline-warm', False, 'baseline')]:
+        for label, cached, home in phases:
             shutil.rmtree(root / 'mobile')
             with tarfile.open(pristine) as archive:
                 archive.extractall(root, filter='fully_trusted')
             metro_temp = temporary / f'{label}-tmp'
             metro_temp.mkdir()
-            environment = {**os.environ, 'TMPDIR': str(metro_temp), 'GRADLE_USER_HOME': str(temporary / home),
+            gradle_home = restored_home if production_cache and cached else temporary / home
+            environment = {**os.environ, 'TMPDIR': str(metro_temp), 'GRADLE_USER_HOME': str(gradle_home),
                            'OPKA_VERSION': '1.4.236-rc.6', 'NODE_OPTIONS': '--max-old-space-size=4096'}
             print(f'Starting {label}', flush=True)
             phase = {'name': label, 'buildCache': cached, 'steps': [], 'tests': [], 'apks': []}
+            phase['initialGradleHomeBytes'] = sum(p.stat().st_size for p in gradle_home.rglob('*') if p.is_file())
             receipt['phases'].append(phase)
             def run(name, command, cwd):
                 started = time.monotonic()
@@ -70,7 +84,7 @@ def main():
                                        'exitCode': result.returncode})
                 (output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
                 assert result.returncode == 0, f'{label}/{name} failed; inspect retained diagnostics'
-            if receipt['scope'] != 'native':
+            if not native_only:
                 run('export', ['pnpm', 'exec', 'expo', 'export', '--platform', 'android', '--no-bytecode',
                                '--max-workers', '1', '--output-dir', str(temporary / f'{label}-js')],
                     root / 'mobile')
@@ -97,7 +111,7 @@ def main():
                            for suite in phase['tests']), f'Fresh tests required for {module}'
             assert all(suite['failures'] == suite['errors'] == suite['skipped'] == 0
                        for suite in phase['tests']), 'Every native test must pass'
-            variants = [] if receipt['scope'] == 'native' else [
+            variants = [] if native_only else [
                 ('rc5', '1.4.236-rc.5'), ('candidate', '1.4.236-rc.6')]
             for artifact, version in variants:
                 environment['OPKA_VERSION'] = version
@@ -121,7 +135,7 @@ def main():
             if len(receipt['phases']) > 1:
                 normalized = lambda value: sorted((s['module'], s['suite'], s['tests']) for s in value['tests'])
                 assert normalized(phase) == normalized(receipt['phases'][0]), 'Native suites changed across phases'
-            phase['gradleHomeBytes'] = sum(p.stat().st_size for p in (temporary / home).rglob('*') if p.is_file())
+            phase['gradleHomeBytes'] = sum(p.stat().st_size for p in gradle_home.rglob('*') if p.is_file())
             (output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     finally:
         (output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
