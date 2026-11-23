@@ -211,6 +211,56 @@ describe('fork CI safety and required checks', () => {
     expect(commands).toContain('[ "$published" = "$OPKA_RELEASE_SOURCE" ]')
     expect(commands).not.toContain('--target "$GITHUB_SHA"')
   })
+  it('reuses Gradle compilation without reusing native test results or enabling fork cache writes', () => {
+    const steps = parse(
+      readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
+    ).jobs.update_confirmation.steps
+    const cache = steps.findIndex(
+      (step) => step.name === 'Reuse Gradle compilation while keeping native tests fresh'
+    )
+    const native = steps.findIndex(
+      (step) => step.name === 'Test native update ownership, validation and cleanup'
+    )
+    const generate = steps.findIndex((step) => step.name === 'Generate native regression project')
+    expect(cache).toBeGreaterThan(generate)
+    expect(cache).toBeLessThan(native)
+    expect(steps[cache].uses).toBe(
+      'gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d'
+    )
+    expect(steps[cache].with).toEqual({ 'cache-read-only': false, 'dependency-graph': 'disabled' })
+    for (const [event, source, artifact, expected] of [
+      ['pull_request', 'KOSFin/opka', '', true],
+      ['pull_request', 'another/fork', '', false],
+      ['pull_request', '', '', false],
+      ['pull_request', 'KOSFin/opka', 'qualified-installer', false],
+      ['push', '', '', true],
+      ['workflow_dispatch', '', '', true],
+      ['workflow_dispatch', '', 'qualified-installer', false]
+    ]) {
+      expect(
+        runInNewContext(steps[cache].if, {
+          inputs: { candidate_artifact: artifact },
+          github: {
+            event_name: event,
+            repository: 'KOSFin/opka',
+            event: { pull_request: { head: { repo: { full_name: source } } } }
+          }
+        })
+      ).toBe(expected)
+    }
+    expect(steps[native].if).toBe("inputs.candidate_artifact == ''")
+    expect(steps[native].run).toContain(
+      ':opka-app-update:testReleaseUnitTest --rerun :orca-mobile-web-shell:testReleaseUnitTest --rerun --build-cache'
+    )
+    expect(steps[native].run).not.toContain('--rerun-tasks')
+    expect(steps[native].run).not.toContain('--configuration-cache')
+    expect(steps[native]['continue-on-error']).toBeUndefined()
+    const evidence = steps.find((step) => step.name === 'Save acceptance evidence')
+    for (const module of ['opka-app-update', 'orca-mobile-web-shell']) {
+      expect(evidence.with.path).toContain(`mobile/modules/${module}/android/build/test-results/`)
+    }
+    expect(workflow.jobs.verify.needs).toContain('android')
+  })
   it('caches only unsigned fixtures under an exact Android input key', () => {
     const acceptance = parse(
       readFileSync('.github/workflows/opka-android-update-acceptance.yml', 'utf8')
