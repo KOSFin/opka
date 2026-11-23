@@ -2,6 +2,7 @@
 set -euo pipefail
 if [ "$(uname -s)" != Linux ]; then exit 78; fi
 case "${1-}" in linux-x64|darwin-arm64) ;; *) exit 78 ;; esac
+case "${2-}" in ""|--prepare-only) ;; *) exit 78 ;; esac
 : "${RUNNER_TEMP:?Runner temporary directory required}"
 
 work="$RUNNER_TEMP/opka-replay-ci"
@@ -24,6 +25,7 @@ tar -xf "$work/go.tar.gz" -C "$work/go" --strip-components=1
 tar -xf "$work/source.tar.gz" -C "$work/source" --strip-components=1
 (cd "$work/source" && GOMODCACHE="$work/modules" \
   timeout --signal=TERM --kill-after=10s 600s "$work/go/bin/go" mod download)
+if [ "${2-}" = --prepare-only ]; then exit 0; fi
 GOMODCACHE="$work/modules" timeout --signal=TERM --kill-after=10s 1080s \
   node config/scripts/build-codex-replay-engine.mjs "$1" \
   "$work/source.tar.gz" "$work/go.tar.gz" "$PWD/.build/codex-routing-replay"

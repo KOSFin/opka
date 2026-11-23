@@ -32,7 +32,7 @@ on:
       gradle_probe_scope:
         description: Restrict follow-up proof to native tests or include both APKs
         type: choice
-        options: [all, native]
+        options: [all, native, replay]
         default: all
       residency_only:
         description: Compare exact published rc7/rc8 RAM residency without building installers
@@ -80,7 +80,7 @@ env:
 jobs:
   gradle_probe:
     name: Android Gradle intermediate A/B
-    if: github.event_name == 'workflow_dispatch' && inputs.gradle_probe == true
+    if: github.event_name == 'workflow_dispatch' && inputs.gradle_probe == true && inputs.gradle_probe_scope != 'replay'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: opka-android-ci
@@ -113,9 +113,45 @@ jobs:
           name: android-gradle-probe-${{ github.run_id }}
           path: out/android-gradle-probe/
           retention-days: 7
+  replay_probe:
+    name: Pinned replay Go intermediate A/B
+    if: github.event_name == 'workflow_dispatch' && inputs.gradle_probe == true && inputs.gradle_probe_scope == 'replay'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Prepare identical pinned download inputs
+        run: bash config/scripts/codex-replay-ci-build.sh linux-x64 --prepare-only
+      - name: Compare cold replay builds
+        run: python3 config/scripts/opka_replay_go_probe.py cold
+      - name: Save the measured compiler cache
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/opka-replay-go-cache/build
+          key: opka-replay-go-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Remove only the probe compiler cache before restoring it
+        run: python3 config/scripts/opka_replay_go_probe.py clear
+      - name: Restore the measured compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/opka-replay-go-cache/build
+          key: opka-replay-go-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+      - name: Compare warm replay builds
+        run: python3 config/scripts/opka_replay_go_probe.py warm
+      - name: Keep replay equivalence and cost receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: replay-go-probe-${{ github.run_id }}
+          path: out/replay-go-probe/
+          retention-days: 7
   residency_comparison:
     name: Published Android residency comparison
-    if: github.event_name == 'workflow_dispatch' && inputs.residency_only == true
+    if: github.event_name == 'workflow_dispatch' && inputs.residency_only == true && inputs.gradle_probe != true
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
