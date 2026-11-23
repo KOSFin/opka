@@ -85,13 +85,16 @@ def main():
                     continue
                 suite = ET.parse(xml).getroot()
                 relative = xml.relative_to(root / 'mobile')
-                phase['tests'].append({'suite': suite.get('name'),
+                native_root = next(parent for parent in relative.parents if parent.name == 'android')
+                phase['tests'].append({'module': str(native_root.parent), 'suite': suite.get('name'),
                                        **{key: int(suite.get(key, '0')) for key in
                                           ('tests', 'failures', 'errors', 'skipped')}})
                 target = output / label / 'tests' / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(xml, target)
-            assert sum(suite['tests'] for suite in phase['tests']) > 0, 'Fresh native test XML required'
+            for module in ('opka-app-update', 'orca-mobile-web-shell'):
+                assert any(module in Path(suite['module']).parts and suite['tests'] > 0
+                           for suite in phase['tests']), f'Fresh tests required for {module}'
             assert all(suite['failures'] == suite['errors'] == suite['skipped'] == 0
                        for suite in phase['tests']), 'Every native test must pass'
             variants = [] if receipt['scope'] == 'native' else [
@@ -103,17 +106,21 @@ def main():
                 apk = root / 'mobile/android/app/build/outputs/apk/release/app-release.apk'
                 with zipfile.ZipFile(apk) as archive:
                     contents = {name: hashlib.sha256(archive.read(name)).hexdigest()
-                                for name in archive.namelist() if name in
-                                ('AndroidManifest.xml', 'resources.arsc', 'assets/index.android.bundle')
-                                or name.startswith('classes') and name.endswith('.dex')
-                                or name.startswith('lib/') and name.endswith('.so')}
+                                for name in archive.namelist() if not name.endswith('/')}
                 analyzer = Path(os.environ['ANDROID_HOME']) / 'cmdline-tools/latest/bin/apkanalyzer'
                 identity = {field: subprocess.check_output([str(analyzer), 'manifest', field, str(apk)],
                                                           text=True).strip()
                             for field in ('application-id', 'version-name', 'version-code')}
                 assert identity['application-id'] == 'com.kosfin.opka.mobile'
                 assert identity['version-name'] == version
+                expected_code = subprocess.check_output(
+                    ['node', '-e', 'process.stdout.write(String(require("./mobile/scripts/opka-version-code.cjs")(process.argv[1])))', version],
+                    cwd=root, text=True)
+                assert identity['version-code'] == expected_code
                 phase['apks'].append({'artifact': artifact, 'identity': identity, 'contents': contents})
+            if len(receipt['phases']) > 1:
+                normalized = lambda value: sorted((s['module'], s['suite'], s['tests']) for s in value['tests'])
+                assert normalized(phase) == normalized(receipt['phases'][0]), 'Native suites changed across phases'
             phase['gradleHomeBytes'] = sum(p.stat().st_size for p in (temporary / home).rglob('*') if p.is_file())
             (output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     finally:
