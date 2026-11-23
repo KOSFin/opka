@@ -92,53 +92,54 @@ export function ProjectTaskBoard({
               </span>
             </h2>
             <div className="scrollbar-sleek min-h-0 flex-1 space-y-2 overflow-y-auto pb-2">
-              {rows.map((task) => (
-                <button
-                  key={taskViewKey(task)}
-                  type="button"
-                  draggable={!task.workflow.attempts.length && !task.workflow.archived}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData('application/x-orca-project-task', taskViewKey(task))
-                    event.dataTransfer.effectAllowed = 'move'
-                  }}
-                  data-testid="project-task-card"
-                  data-current={selected === taskViewKey(task)}
-                  className={cn(
-                    'block w-full space-y-3 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                    selected === taskViewKey(task) && 'bg-accent'
-                  )}
-                  onClick={() => onSelect(taskViewKey(task))}
-                >
-                  <span className="block break-words text-sm font-medium">{task.title}</span>
-                  {task.projectLabel && (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {task.projectLabel}
-                    </span>
-                  )}
-                  <span className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                    <span>
-                      {task.workflow.phase === 'draft'
-                        ? 'Plan to refine'
-                        : task.workflow.phase === 'ready'
-                          ? 'Plan approved'
-                          : task.workflow.phase === 'integration'
-                            ? 'Integration'
-                            : task.workflow.phase}
-                    </span>
-                    {task.workflow.revisionChanged && <span>Plan changed</span>}
-                    {task.workflow.phase === 'active' &&
-                      projectTaskNeedsDecision(task.workflow) && <span>Needs your decision</span>}
-                    {task.workflow.archived && <span>Archived</span>}
-                    {task.workflow.attempts[0]?.session?.blocker && (
-                      <span>Waiting: {task.workflow.attempts[0].session.blocker}</span>
+              {rows.map((task) => {
+                const nextAction = projectTaskNextAction(task.workflow)
+                return (
+                  <button
+                    key={taskViewKey(task)}
+                    type="button"
+                    draggable={!task.workflow.attempts.length && !task.workflow.archived}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('application/x-orca-project-task', taskViewKey(task))
+                      event.dataTransfer.effectAllowed = 'move'
+                    }}
+                    data-testid="project-task-card"
+                    data-current={selected === taskViewKey(task)}
+                    className={cn(
+                      'block w-full space-y-3 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                      selected === taskViewKey(task) && 'bg-accent'
                     )}
-                    {projectTaskNextAction(task.workflow) && (
-                      <span>Next: {projectTaskNextAction(task.workflow)}</span>
+                    onClick={() => onSelect(taskViewKey(task))}
+                  >
+                    <span className="block break-words text-sm font-medium">{task.title}</span>
+                    {task.projectLabel && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {task.projectLabel}
+                      </span>
                     )}
-                    {task.parent && <span>Subtask</span>}
-                  </span>
-                </button>
-              ))}
+                    <span className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>
+                        {task.workflow.phase === 'draft'
+                          ? 'Plan to refine'
+                          : task.workflow.phase === 'ready'
+                            ? 'Plan approved'
+                            : task.workflow.phase === 'integration'
+                              ? 'Integration'
+                              : task.workflow.phase}
+                      </span>
+                      {task.workflow.revisionChanged && <span>Plan changed</span>}
+                      {task.workflow.phase === 'active' &&
+                        projectTaskNeedsDecision(task.workflow) && <span>Needs your decision</span>}
+                      {task.workflow.archived && <span>Archived</span>}
+                      {task.workflow.attempts[0]?.session?.blocker && (
+                        <span>Waiting: {task.workflow.attempts[0].session.blocker}</span>
+                      )}
+                      {nextAction && <span>Next: {nextAction}</span>}
+                      {task.parent && <span>Subtask</span>}
+                    </span>
+                  </button>
+                )
+              })}
               {!rows.length && (
                 <p className="px-1 py-3 text-xs text-muted-foreground">
                   {id === 'planned'
